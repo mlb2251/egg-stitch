@@ -3,8 +3,9 @@ use std::collections::BinaryHeap;
 
 use crate::lang::StitchLang;
 use crate::pattern::Pattern;
-use crate::search::{self, SearchState, SharedSearchData, Subst};
-use egg::{Analysis, Id, Language};
+use crate::revexpr::RevExpr;
+use crate::search::{SearchState, SharedSearchData, Subst};
+use egg::{Analysis, ENodeOrVar, Id, Language};
 use priority_queue::PriorityQueue;
 use rand::Rng;
 use rustc_hash::{FxHashMap};
@@ -34,15 +35,18 @@ impl Analysis<StitchLang> for StitchAnalysis {
 
 pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
 
-pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> {
-    let shared = SharedSearchData { egraph };
+pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<(usize, SearchState)> {
+    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = follow.map(|s|
+        s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
+    );
+    let shared = SharedSearchData { egraph, follow: follow_expr };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
     println!("original size of egraph: {}", original_size);
 
     let num_particles = 10_000;
     let num_steps = 1000;
-    let temperature = 100.0;
+    let temperature = 1.0;
     let dead_runs = 50;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
@@ -62,7 +66,6 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
             .iter()
             .map(|search_state| compute_cost(&shared.egraph, root, search_state))
             .collect();
-
         for (i, cost) in costs.iter().enumerate() {
             if best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
                 println!("[iteration {}] new best: {} {}", step, cost, search_states[i].pattern);
@@ -82,6 +85,15 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
         for (i, state) in search_states.iter().enumerate() {
             if state.pattern.vars.is_empty() {
                 weights[i] = 0.0;
+            }
+        }
+
+        // filter out particles inconsistent with the follow target
+        if let Some(ref follow) = shared.follow {
+            for (i, state) in search_states.iter().enumerate() {
+                if !state.matches_follow(follow) {
+                    weights[i] = 0.0;
+                }
             }
         }
 

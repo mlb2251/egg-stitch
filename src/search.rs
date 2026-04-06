@@ -1,11 +1,13 @@
 use crate::{lang::StitchLang, smc::StitchEgraph};
 use crate::pattern::Pattern;
-use egg::{Id, Language};
+use crate::revexpr::RevExpr;
+use egg::{ENodeOrVar, Id, Language};
 use rand::Rng;
 
 #[derive(Debug)]
 pub struct SharedSearchData {
     pub egraph: StitchEgraph,
+    pub follow: Option<RevExpr<ENodeOrVar<StitchLang>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -24,7 +26,7 @@ pub struct Subst {
 pub struct SearchState {
     pub pattern: Pattern,
     // each match represents a different eclass at which `pattern` can be rooted
-    pub matches: Vec<MatchAtEClass>
+    pub matches: Vec<MatchAtEClass>,
 }
 
 impl SearchState {
@@ -47,6 +49,35 @@ impl SearchState {
 
         self.expand(var_idx, &target_node, shared);
     }
+    /// Check if this particle's pattern is a valid prefix of the follow target.
+    /// A partial pattern is consistent if every non-variable node matches the
+    /// corresponding node in the target (same op/arity), and no variable in the
+    /// pattern corresponds to a position where the target has a variable
+    /// (which would mean we over-expanded past the target).
+    pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
+        fn check(
+            pattern: &RevExpr<ENodeOrVar<StitchLang>>,
+            pid: Id,
+            follow: &RevExpr<ENodeOrVar<StitchLang>>,
+            fid: Id,
+        ) -> bool {
+            match &pattern[pid] {
+                // A hole in the pattern matches anything in the target
+                ENodeOrVar::Var(_) => true,
+                ENodeOrVar::ENode(p_node) => match &follow[fid] {
+                    // Pattern has structure where target has a var — over-expanded
+                    ENodeOrVar::Var(_) => false,
+                    ENodeOrVar::ENode(f_node) => {
+                        p_node.matches(f_node)
+                            && p_node.children.iter().zip(f_node.children.iter())
+                                .all(|(&pc, &fc)| check(pattern, pc, follow, fc))
+                    }
+                },
+            }
+        }
+        check(&self.pattern.pattern, Id::from(0), follow, Id::from(0))
+    }
+
     pub fn expand(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
         self.pattern.expand(var_idx, target);
         self.subset_matches(var_idx, target, shared);
@@ -100,7 +131,7 @@ impl SearchState {
     pub fn new(shared: &SharedSearchData) -> Self {
         Self {
             pattern: Pattern::single_var(),
-            matches: identity_matches(&shared.egraph)
+            matches: identity_matches(&shared.egraph),
         }
     }
 }

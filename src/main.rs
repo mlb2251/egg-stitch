@@ -15,7 +15,7 @@ fn main() {
     let rules = "../babble/harness/data/benchmark-dsrs/list.rewrites";
     let (egraph, root) = util::load_egraph("data/domains/list/list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0.json", Some(rules));
 
-    smc::smc(egraph, root);
+    smc::smc(egraph, root, None);
 
     // let extractor = egg::Extractor::new(&egraph, egg::AstSize);
     // let (_, term) = extractor.find_best(root);
