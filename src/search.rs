@@ -30,18 +30,30 @@ pub struct SearchState {
 }
 
 impl SearchState {
-    pub fn expand_random(&mut self, shared: &SharedSearchData) {
+    pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
         // randomly select a match to base the expansion on
+        let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
         let match_idx = rand::rng().random_range(0..self.matches.len());
         let m = &self.matches[match_idx];
+        if verbose {
+            let (_cost, minimal_term) = extractor.find_best(m.root_eclass);
+            println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
+        }
         // randomly select a subst within the match to base the expansion on
         let subst_idx = rand::rng().random_range(0..m.substs.len());
         let subst = &m.substs[subst_idx];
 
         // randomly select a var within the subst to expand (length of vars in subst is same as num vars in pattern)
         let var_idx = rand::rng().random_range(0..self.pattern.vars.len());
+        if verbose {
+            println!("Expanding variable {} in pattern {}", self.pattern.vars[var_idx], self.pattern);
+        }
         let target_id = subst.vars[var_idx];
         let target_eclass = &shared.egraph[target_id];
+        
+        if verbose {
+            println!("Target eclass is represented by minimal term {}", extractor.find_best(target_id).1);
+        }
 
         // randomly select an enode within the eclass to expand
         let node_idx = rand::rng().random_range(0..target_eclass.len());

@@ -15,7 +15,8 @@ fn main() {
     let rules = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
     let (egraph, root) = util::load_egraph("data/domains/cogsci/dials.json", Some(rules));
 
-    smc::smc(egraph, root, None);
+    // smc::smc(egraph, root, None);
+    smc::smc(egraph, root, Some("(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ π 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ π 4)))) (* #0 (* 0.5 (sin (/ π 4)))))))"));
 
     // let extractor = egg::Extractor::new(&egraph, egg::AstSize);
     // let (_, term) = extractor.find_best(root);

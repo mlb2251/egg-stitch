@@ -46,7 +46,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
 
     let num_particles = 10_000;
     let num_steps = 1000;
-    let temperature = 1.0;
+    let temperature = 100.0;
     let dead_runs = 50;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
@@ -58,8 +58,17 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
         .collect();
 
     for step in 0..num_steps {
+        let mut i = 0;
         for search_state in &mut search_states {
-            search_state.expand_random(&shared);
+            let verb = false;
+            if verb {
+                println!("Expanding particle {} with pattern: {}", i, search_state.pattern);
+            }
+            search_state.expand_random(&shared, verb);
+            if verb {
+                println!("Expanded particle {} to pattern: {}", i, search_state.pattern);
+            }
+            i += 1;
         }
 
         let costs: Vec<usize> = search_states
@@ -77,8 +86,12 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
 
         let mut weights: Vec<f64> = costs.iter().map(|cost| (-(*cost as f64)/temperature)).collect();
         let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let mut j = 0;
         for w in &mut weights {
+            // println!("Before reweighting particle {} with cost {}: weight={}", j, costs[j], w);
             *w = (*w - max_weight).exp();
+            // println!("After reweighting particle {} with cost {}: weight={}", j, costs[j], w);
+            j += 1;
         }
 
         // force no resampling of completed patterns
@@ -90,10 +103,19 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
 
         // filter out particles inconsistent with the follow target
         if let Some(ref follow) = shared.follow {
+            let mut found = false;
             for (i, state) in search_states.iter().enumerate() {
                 if !state.matches_follow(follow) {
+                    // println!("Particle {} with pattern {} does not match follow pattern, killing it", i, state.pattern);
                     weights[i] = 0.0;
+                } else {
+                    found = true;
                 }
+            }
+            if (found) {
+                println!("Found {} particles matching follow pattern", weights.iter().filter(|&&w| w > 0.0).count());
+            } else {
+                println!("No particles match the follow pattern");
             }
         }
 
@@ -119,6 +141,12 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
             let idx = weighted_choice(&weights);
             search_states[idx].clone()
         }).collect();
+
+        println!("Step {}: resampled all particles", step);
+        for i in 0..min(5, search_states.len()) {
+            println!("Sample particle {}: {}; cost={} weight={}", i, search_states[i].pattern, compute_cost(&shared.egraph, root, &search_states[i]), weights[i]);
+        }
+
     }
 
     let (cost) = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
