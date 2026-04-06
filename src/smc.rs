@@ -122,6 +122,8 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
     }
 
     let (cost) = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
+    println!("best found at iteration {}: {}", best_found_at.unwrap(), cost);
+    println!("program: {}", best_so_far.as_ref().unwrap().1.pattern);
     println!("best: {}", cost);
     println!("Compression ratio: {}", original_size as f64 / cost as f64);
     // crate::util::print_programs(&term);
