@@ -3,6 +3,7 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use egg::{ENodeOrVar, Id, Language};
 use rand::Rng;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct SharedSearchData {
@@ -81,28 +82,40 @@ impl SearchState {
     /// corresponding node in the target (same op/arity), and no variable in the
     /// pattern corresponds to a position where the target has a variable
     /// (which would mean we over-expanded past the target).
+    /// Check if this particle's pattern is a valid prefix of the follow target.
+    /// A partial pattern is consistent if every non-variable node matches the
+    /// corresponding node in the target (same op/arity), no variable in the
+    /// pattern corresponds to a position where the target has a variable
+    /// (which would mean we over-expanded past the target), and shared variables
+    /// (from reuse) map to the same subtree in the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
         fn check(
             pattern: &RevExpr<ENodeOrVar<StitchLang>>,
             pid: Id,
             follow: &RevExpr<ENodeOrVar<StitchLang>>,
             fid: Id,
+            var_bindings: &mut HashMap<egg::Var, Id>,
         ) -> bool {
             match &pattern[pid] {
-                // A hole in the pattern matches anything in the target
-                ENodeOrVar::Var(_) => true,
+                ENodeOrVar::Var(v) => {
+                    // Shared variables must map to the same follow subtree
+                    match var_bindings.entry(*v) {
+                        std::collections::hash_map::Entry::Vacant(e) => { e.insert(fid); true }
+                        std::collections::hash_map::Entry::Occupied(e) => *e.get() == fid,
+                    }
+                }
                 ENodeOrVar::ENode(p_node) => match &follow[fid] {
-                    // Pattern has structure where target has a var — over-expanded
                     ENodeOrVar::Var(_) => false,
                     ENodeOrVar::ENode(f_node) => {
                         p_node.matches(f_node)
                             && p_node.children.iter().zip(f_node.children.iter())
-                                .all(|(&pc, &fc)| check(pattern, pc, follow, fc))
+                                .all(|(&pc, &fc)| check(pattern, pc, follow, fc, var_bindings))
                     }
                 },
             }
         }
-        check(&self.pattern.pattern, Id::from(0), follow, Id::from(0))
+        let mut var_bindings = HashMap::new();
+        check(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
 
     pub fn expand(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
