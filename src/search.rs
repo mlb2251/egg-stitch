@@ -46,14 +46,29 @@ impl SearchState {
         // randomly select a var within the subst to expand (length of vars in subst is same as num vars in pattern)
         let var_idx = rand::rng().random_range(0..self.pattern.vars.len());
         if verbose {
-            println!("Expanding variable {} in pattern {}", self.pattern.vars[var_idx], self.pattern);
+            println!("Expanding variable {:?} in pattern {}", self.pattern.vars[var_idx], self.pattern);
         }
         let target_id = subst.vars[var_idx];
-        let target_eclass = &shared.egraph[target_id];
         
         if verbose {
             println!("Target eclass is represented by minimal term {}", extractor.find_best(target_id).1);
         }
+
+        // consider reuse – look for vars in the subst that point to the same eclass
+        let p_reuse = 0.5;
+        if rand::rng().random_bool(p_reuse) {
+            // optmization: could get rid of this allocation.
+            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)|  *idx != var_idx && **id == target_id).collect::<Vec<_>>();
+            if reuse_candidates.len() > 0 {
+                let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
+                let candidate_var_idx = reuse_candidates[candidate_idx].0;
+                
+                self.reuse(var_idx, candidate_var_idx, shared);
+                return
+            }
+        }
+
+        let target_eclass = &shared.egraph[target_id];
 
         // randomly select an enode within the eclass to expand
         let node_idx = rand::rng().random_range(0..target_eclass.len());
@@ -94,6 +109,12 @@ impl SearchState {
         self.pattern.expand(var_idx, target);
         self.subset_matches(var_idx, target, shared);
     }
+
+    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData) {
+        self.pattern.reuse(var_idx, second_var_idx);
+        self.subset_matches_reuse(var_idx, second_var_idx, shared);
+    }
+
     pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
         for m in &mut self.matches {
             let mut new_substs: Vec<Subst> = vec![];
@@ -116,6 +137,20 @@ impl SearchState {
         // filter out empty matches
         self.matches.retain(|m| !m.substs.is_empty());
     }
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData) {
+        for m in &mut self.matches {
+            // just filter down substs to ones where the two vars are same eclass
+            let mut new_substs: Vec<Subst> = m.substs.clone().into_iter().filter(|subst| subst.vars[var_idx] == subst.vars[second_var_idx]).collect();
+            // then cut the second one out of the subst
+            for subst in new_substs.iter_mut() {
+                subst.vars.remove(second_var_idx);
+            }
+            m.substs = new_substs;
+        }
+        // filter out empty matches
+        self.matches.retain(|m| !m.substs.is_empty());
+    }
+
 }
 
 

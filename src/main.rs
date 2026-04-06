@@ -14,6 +14,7 @@ use smc::compute_cost;
 fn main() {
     let rules = Some("../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites");
     let follow = Some("(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ π 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ π 4)))) (* #0 (* 0.5 (sin (/ π 4)))))))");
+    // let follow = None;
     let (egraph, root) = util::load_egraph("data/domains/cogsci/dials.json", rules);
 
     // smc::smc(egraph, root, None);

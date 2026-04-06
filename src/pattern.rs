@@ -5,7 +5,7 @@ use crate::revexpr::RevExpr;
 #[derive(Debug, Clone)]
 pub struct Pattern {
     pub pattern: RevExpr<ENodeOrVar<StitchLang>>,
-    pub vars: Vec<Id>,
+    pub vars: Vec<Vec<Id>>, // each var is a vector of Ids that index into the locations in the pattern where that var is used
     pub max_var: u32, // not same as arity because can expand away a var
 }
 
@@ -16,7 +16,7 @@ impl Pattern {
         let e: RevExpr<ENodeOrVar<StitchLang>>  = RevExpr::new(vec![ENodeOrVar::Var(egg::Var::from(0))]);
         Pattern {
             pattern: e,
-            vars: vec![0.into()],
+            vars: vec![vec![0.into()]],
             max_var: 0,
         }
     }
@@ -27,7 +27,7 @@ impl Pattern {
         let arg_node = ENodeOrVar::Var(egg::Var::from(self.max_var));
         self.pattern.nodes.push(arg_node);
         let new_id = Id::from(self.pattern.nodes.len()-1);
-        self.vars.push(new_id);
+        self.vars.push(vec![new_id]);
         new_id
     }
 
@@ -39,8 +39,20 @@ impl Pattern {
         for j in 0..num_vars {
             new_node.children[j] = self.new_var();
         }
-        assert!(matches!(self.pattern[var], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
-        self.pattern[var] = ENodeOrVar::ENode(new_node);
+        assert!(matches!(self.pattern[var[0]], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
+        for var_id in var {
+            // could optimze
+            self.pattern[var_id] = ENodeOrVar::ENode(new_node.clone());
+        }
+    }
+
+    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+        for var_id in &self.vars[second_var_idx] {
+            self.pattern[*var_id] = self.pattern[self.vars[var_idx][0]].clone();
+        }
+        let second_var_ids = self.vars[second_var_idx].clone();
+        self.vars[var_idx].extend(second_var_ids);
+        self.vars.remove(second_var_idx);
     }
 }
 
