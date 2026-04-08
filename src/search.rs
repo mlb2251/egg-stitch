@@ -14,6 +14,10 @@ pub struct SharedSearchData {
     pub weight_by_usage: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
+    /// Probability of attempting variable reuse during expansion.
+    pub p_reuse: f64,
+    /// Enable slow rewrite check (assert fast == slow computation).
+    pub check_slow: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +37,51 @@ pub struct SearchState {
     pub pattern: Pattern,
     // each match represents a different eclass at which `pattern` can be rooted
     pub matches: Vec<MatchAtEClass>,
+}
+
+/// Checks structural equality of two subtrees in a follow RevExpr.
+fn follow_subtrees_equal(
+    follow: &RevExpr<ENodeOrVar<StitchLang>>,
+    a: Id,
+    b: Id,
+) -> bool {
+    if a == b { return true; }
+    match (&follow[a], &follow[b]) {
+        (ENodeOrVar::Var(va), ENodeOrVar::Var(vb)) => va == vb,
+        (ENodeOrVar::ENode(na), ENodeOrVar::ENode(nb)) => {
+            na.matches(nb)
+                && na.children.iter().zip(nb.children.iter())
+                    .all(|(&ca, &cb)| follow_subtrees_equal(follow, ca, cb))
+        }
+        _ => false,
+    }
+}
+
+/// Recursively checks whether a pattern is a valid prefix of the follow target.
+fn check_follow(
+    pattern: &RevExpr<ENodeOrVar<StitchLang>>,
+    pid: Id,
+    follow: &RevExpr<ENodeOrVar<StitchLang>>,
+    fid: Id,
+    var_bindings: &mut HashMap<egg::Var, Id>,
+) -> bool {
+    match &pattern[pid] {
+        ENodeOrVar::Var(v) => {
+            // Shared variables must map to structurally equal follow subtrees
+            match var_bindings.entry(*v) {
+                std::collections::hash_map::Entry::Vacant(e) => { e.insert(fid); true }
+                std::collections::hash_map::Entry::Occupied(e) => follow_subtrees_equal(follow, *e.get(), fid),
+            }
+        }
+        ENodeOrVar::ENode(p_node) => match &follow[fid] {
+            ENodeOrVar::Var(_) => false,
+            ENodeOrVar::ENode(f_node) => {
+                p_node.matches(f_node)
+                    && p_node.children.iter().zip(f_node.children.iter())
+                        .all(|(&pc, &fc)| check_follow(pattern, pc, follow, fc, var_bindings))
+            }
+        },
+    }
 }
 
 impl SearchState {
@@ -68,8 +117,7 @@ impl SearchState {
         }
 
         // consider reuse – look for vars in the subst that point to the same eclass
-        let p_reuse = 0.5;
-        if rand::rng().random_bool(p_reuse) {
+        if rand::rng().random_bool(shared.p_reuse) {
             // optmization: could get rid of this allocation.
             let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)|  *idx != var_idx && **id == target_id).collect::<Vec<_>>();
             if reuse_candidates.len() > 0 {
@@ -91,61 +139,13 @@ impl SearchState {
     }
     /// Check if this particle's pattern is a valid prefix of the follow target.
     /// A partial pattern is consistent if every non-variable node matches the
-    /// corresponding node in the target (same op/arity), and no variable in the
-    /// pattern corresponds to a position where the target has a variable
-    /// (which would mean we over-expanded past the target).
-    /// Check if this particle's pattern is a valid prefix of the follow target.
-    /// A partial pattern is consistent if every non-variable node matches the
     /// corresponding node in the target (same op/arity), no variable in the
     /// pattern corresponds to a position where the target has a variable
     /// (which would mean we over-expanded past the target), and shared variables
     /// (from reuse) map to the same subtree in the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
-        /// Checks structural equality of two subtrees in the follow RevExpr.
-        fn subtrees_equal(
-            follow: &RevExpr<ENodeOrVar<StitchLang>>,
-            a: Id,
-            b: Id,
-        ) -> bool {
-            if a == b { return true; }
-            match (&follow[a], &follow[b]) {
-                (ENodeOrVar::Var(va), ENodeOrVar::Var(vb)) => va == vb,
-                (ENodeOrVar::ENode(na), ENodeOrVar::ENode(nb)) => {
-                    na.matches(nb)
-                        && na.children.iter().zip(nb.children.iter())
-                            .all(|(&ca, &cb)| subtrees_equal(follow, ca, cb))
-                }
-                _ => false,
-            }
-        }
-
-        fn check(
-            pattern: &RevExpr<ENodeOrVar<StitchLang>>,
-            pid: Id,
-            follow: &RevExpr<ENodeOrVar<StitchLang>>,
-            fid: Id,
-            var_bindings: &mut HashMap<egg::Var, Id>,
-        ) -> bool {
-            match &pattern[pid] {
-                ENodeOrVar::Var(v) => {
-                    // Shared variables must map to structurally equal follow subtrees
-                    match var_bindings.entry(*v) {
-                        std::collections::hash_map::Entry::Vacant(e) => { e.insert(fid); true }
-                        std::collections::hash_map::Entry::Occupied(e) => subtrees_equal(follow, *e.get(), fid),
-                    }
-                }
-                ENodeOrVar::ENode(p_node) => match &follow[fid] {
-                    ENodeOrVar::Var(_) => false,
-                    ENodeOrVar::ENode(f_node) => {
-                        p_node.matches(f_node)
-                            && p_node.children.iter().zip(f_node.children.iter())
-                                .all(|(&pc, &fc)| check(pattern, pc, follow, fc, var_bindings))
-                    }
-                },
-            }
-        }
         let mut var_bindings = HashMap::new();
-        check(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
 
     pub fn expand(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
@@ -153,45 +153,50 @@ impl SearchState {
         self.subset_matches(var_idx, target, shared);
     }
 
-    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData) {
+    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize, _shared: &SharedSearchData) {
         self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx, shared);
+        self.subset_matches_reuse(var_idx, second_var_idx);
     }
 
-    pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
+    /// Updates all matches by transforming each substitution via the given closure,
+    /// which may produce zero or more new substitutions per input. Removes matches
+    /// with no remaining substitutions.
+    fn update_matches(&mut self, mut f: impl FnMut(&Subst, &mut Vec<Subst>)) {
         for m in &mut self.matches {
             let mut new_substs: Vec<Subst> = vec![];
             for subst in &m.substs {
-                let var_id = subst.vars[var_idx];
-                let var_eclass = &shared.egraph[var_id];
-                for node in &var_eclass.nodes {
-                    if node.matches(target) { // this is egg::Language::matches
-                        let mut new_subst = subst.clone();
-                        new_subst.vars.remove(var_idx); // pop the expanded var
-                        for child_id in &node.children {
-                            new_subst.vars.push(*child_id);
-                        }
-                        new_substs.push(new_subst);
-                    }
-                }
+                f(subst, &mut new_substs);
             }
             m.substs = new_substs;
         }
-        // filter out empty matches
         self.matches.retain(|m| !m.substs.is_empty());
     }
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData) {
-        for m in &mut self.matches {
-            // just filter down substs to ones where the two vars are same eclass
-            let mut new_substs: Vec<Subst> = m.substs.clone().into_iter().filter(|subst| subst.vars[var_idx] == subst.vars[second_var_idx]).collect();
-            // then cut the second one out of the subst
-            for subst in new_substs.iter_mut() {
-                subst.vars.remove(second_var_idx);
+
+    pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
+        self.update_matches(|subst, out| {
+            let var_id = subst.vars[var_idx];
+            let var_eclass = &shared.egraph[var_id];
+            for node in &var_eclass.nodes {
+                if node.matches(target) { // this is egg::Language::matches
+                    let mut new_subst = subst.clone();
+                    new_subst.vars.remove(var_idx); // pop the expanded var
+                    for child_id in &node.children {
+                        new_subst.vars.push(*child_id);
+                    }
+                    out.push(new_subst);
+                }
             }
-            m.substs = new_substs;
-        }
-        // filter out empty matches
-        self.matches.retain(|m| !m.substs.is_empty());
+        });
+    }
+
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+        self.update_matches(|subst, out| {
+            if subst.vars[var_idx] == subst.vars[second_var_idx] {
+                let mut new_subst = subst.clone();
+                new_subst.vars.remove(second_var_idx);
+                out.push(new_subst);
+            }
+        });
     }
 
 }

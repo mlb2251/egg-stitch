@@ -42,9 +42,9 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
     );
     let usage_counts = crate::search::compute_usage_counts(&egraph, root);
-    let shared = SharedSearchData { egraph, follow: follow_expr, weight_by_usage: args.weight_by_usage, usage_counts };
+    let shared = SharedSearchData { egraph, follow: follow_expr, weight_by_usage: args.weight_by_usage, usage_counts, p_reuse: args.p_reuse, check_slow: args.check_slow };
 
-    let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
+    let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared), shared.check_slow);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = args.num_particles;
@@ -77,7 +77,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
 
         let costs: Vec<usize> = search_states
             .iter()
-            .map(|search_state| compute_cost(&shared.egraph, root, search_state))
+            .map(|search_state| compute_cost(&shared.egraph, root, search_state, shared.check_slow))
             .collect();
         for (i, cost) in costs.iter().enumerate() {
             if search_states[i].pattern.vars.len() <= max_arity
@@ -145,16 +145,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         normalize_and_accumulate(&mut weights);
 
         println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-        for i in 0..min(5, search_states.len()) {
-            let usage_matches: usize = search_states[i].matches.iter()
-                .map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
-                .sum();
-            let pat_size = compute_pattern_size(&search_states[i].pattern);
-            let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
-            let ratio = original_size as f64 / costs[i] as f64;
-            println!("  {} {}", format!("p{}:", i).dimmed(), search_states[i].pattern.to_string().cyan());
-            println!("      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}", costs[i], ratio, weights[i], search_states[i].matches.len(), usage_matches, pat_size, appx_cost);
-        }
+        print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
 
         search_states = (0..num_particles).map(|_| {
             let idx = weighted_choice(&weights);
@@ -162,21 +153,13 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         }).collect();
 
         println!("{}", format!("Step {}: resampled all particles", step).dimmed());
-        for i in 0..min(5, search_states.len()) {
-            let usage_matches: usize = search_states[i].matches.iter()
-                .map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
-                .sum();
-            let pat_size = compute_pattern_size(&search_states[i].pattern);
-            let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
-            let cost_i = compute_cost(&shared.egraph, root, &search_states[i]);
-            let ratio = original_size as f64 / cost_i as f64;
-            println!("  {} {}", format!("p{}:", i).dimmed(), search_states[i].pattern.to_string().cyan());
-            println!("      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}", cost_i, ratio, weights[i], search_states[i].matches.len(), usage_matches, pat_size, appx_cost);
-        }
+        print_top_particles(&search_states, &weights, &shared, original_size, |i| {
+            compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow)
+        });
 
     }
 
-    let (cost) = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
+    let (cost) = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1, shared.check_slow);
     println!("\n{}", "═══ RESULT ═══".green().bold());
     println!("{} {}", "best found at iteration:".dimmed(), best_found_at.unwrap().to_string().yellow());
     println!("{} {}", "pattern:".dimmed(), best_so_far.as_ref().unwrap().1.pattern.to_string().cyan().bold());
@@ -212,12 +195,34 @@ pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
     }
 }
 
+/// Prints summary info for the top particles (up to 5).
+fn print_top_particles(
+    states: &[SearchState],
+    weights: &[f64],
+    shared: &SharedSearchData,
+    original_size: usize,
+    get_cost: impl Fn(usize) -> usize,
+) {
+    for i in 0..min(5, states.len()) {
+        let usage_matches: usize = states[i].matches.iter()
+            .map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
+            .sum();
+        let pat_size = compute_pattern_size(&states[i].pattern);
+        let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
+        let cost_i = get_cost(i);
+        let ratio = original_size as f64 / cost_i as f64;
+        println!("  {} {}", format!("p{}:", i).dimmed(), states[i].pattern.to_string().cyan());
+        println!("      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}", cost_i, ratio, weights[i], states[i].matches.len(), usage_matches, pat_size, appx_cost);
+    }
+}
+
 pub fn compute_cost(
     egraph: &StitchEgraph,
     root: egg::Id,
     search_state: &SearchState,
+    check_slow: bool,
 ) -> usize {
-    let cost = compute_size(egraph, root, search_state);
+    let cost = compute_size(egraph, root, search_state, check_slow);
     let pattern_size = compute_pattern_size(&search_state.pattern);
     cost + pattern_size
 }
@@ -230,8 +235,8 @@ fn compute_size(
     egraph: &StitchEgraph,
     root: egg::Id,
     search_state: &SearchState,
+    check_slow: bool,
 ) -> usize {
-    // rewrite_slow(egraph, root, search_state)
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
@@ -281,42 +286,10 @@ fn compute_size(
         }
     }
     let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
-    // let slow_size = rewrite_slow(egraph, root, search_state) as i64;
-    // assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
+    if check_slow {
+        let slow_size = crate::rewrite_slow::rewrite_slow(egraph, root, search_state) as i64;
+        assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
+    }
     final_size as usize
 }
 
-pub fn rewrite_slow(
-    egraph: &StitchEgraph,
-    root: egg::Id,
-    search_state: &SearchState,
-) -> usize {
-    let mut egraph = egraph.clone(); // todo be smarter
-
-    // println!("search state: {}", search_state);
-    // let mut nodes = vec![];
-    for m in &search_state.matches {
-        // println!("match at eclass {}: {:?}", m.root_eclass, m.substs);
-        for subst in &m.substs {
-            let node: StitchLang = StitchLang {
-                op: "inv_0".into(),
-                children: subst.vars.clone(),
-            };
-            let x = egraph.add(node);
-            egraph.union(x, m.root_eclass);
-            // nodes.push(x);
-        }
-    }
-    egraph.rebuild();
-    // let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    // let (cost, term) = extractor.find_best(root);
-    // for n in nodes {
-    //     egraph
-    // }
-    // assert_eq!(egraph[root].data as usize, cost);
-    // println!("cost from extractor: {}", cost);
-    // println!("cost from egraph: {}", egraph[root].data);
-    let cost = egraph[root].data as usize;
-    cost
-    // return (cost, term);
-}

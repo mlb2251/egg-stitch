@@ -5,6 +5,7 @@ mod search;
 mod revexpr;
 mod smc;
 mod rewrites;
+mod rewrite_slow;
 
 use clap::Parser;
 
@@ -47,6 +48,14 @@ pub struct Args {
     /// Weight match selection by usage count during expansion.
     #[arg(long, default_value_t = false)]
     pub weight_by_usage: bool,
+
+    /// Probability of attempting variable reuse during expansion.
+    #[arg(long, default_value_t = 0.5)]
+    pub p_reuse: f64,
+
+    /// Enable slow rewrite check (assert fast == slow computation).
+    #[arg(long, default_value_t = false)]
+    pub check_slow: bool,
 }
 
 fn main() {
