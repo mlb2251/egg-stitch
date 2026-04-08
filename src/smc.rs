@@ -48,6 +48,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
     let num_steps = 1000;
     let temperature = 100.0;
     let dead_runs = 50;
+    let max_arity = 2;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
@@ -76,7 +77,9 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
             .map(|search_state| compute_cost(&shared.egraph, root, search_state))
             .collect();
         for (i, cost) in costs.iter().enumerate() {
-            if best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
+            if search_states[i].pattern.vars.len() <= max_arity
+                && best_so_far.as_ref().is_none_or(|best| *cost < best.0)
+            {
                 println!("[iteration {}] new best: {} {}", step, cost, search_states[i].pattern);
                 best_so_far = Some((*cost, search_states[i].clone()));
                 best_found_at = Some(step);
