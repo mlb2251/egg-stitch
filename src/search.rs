@@ -10,6 +10,8 @@ use std::collections::HashMap;
 pub struct SharedSearchData {
     pub egraph: StitchEgraph,
     pub follow: Option<RevExpr<ENodeOrVar<StitchLang>>>,
+    /// Whether to weight match selection by usage count during expansion.
+    pub weight_by_usage: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
 }
@@ -35,21 +37,16 @@ pub struct SearchState {
 
 impl SearchState {
     pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
-        // select a match weighted by usage count
         let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
-        let weights: Vec<usize> = self.matches.iter()
-            .map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
-            .collect();
-        let total: usize = weights.iter().sum();
-        let mut r = rand::rng().random_range(0..total);
-        let mut match_idx = 0;
-        for (i, &w) in weights.iter().enumerate() {
-            if r < w {
-                match_idx = i;
-                break;
-            }
-            r -= w;
-        }
+        let match_idx = if shared.weight_by_usage {
+            let mut weights: Vec<f64> = self.matches.iter()
+                .map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64)
+                .collect();
+            crate::smc::normalize_and_accumulate(&mut weights);
+            crate::smc::weighted_choice(&weights)
+        } else {
+            rand::rng().random_range(0..self.matches.len())
+        };
         let m = &self.matches[match_idx];
         if verbose {
             let (_cost, minimal_term) = extractor.find_best(m.root_eclass);
