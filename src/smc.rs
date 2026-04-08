@@ -39,7 +39,8 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
     let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = follow.map(|s|
         s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
     );
-    let shared = SharedSearchData { egraph, follow: follow_expr };
+    let usage_counts = crate::search::compute_usage_counts(&egraph, root);
+    let shared = SharedSearchData { egraph, follow: follow_expr, usage_counts };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
     println!("original size of egraph: {}", original_size);
