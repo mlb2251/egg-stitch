@@ -1,6 +1,8 @@
 use std::cmp::{Reverse, min};
 use std::collections::BinaryHeap;
 
+use colored::Colorize;
+
 use crate::lang::StitchLang;
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
@@ -43,13 +45,13 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
     let shared = SharedSearchData { egraph, follow: follow_expr, usage_counts };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
-    println!("original size of egraph: {}", original_size);
+    println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = 10_000;
     let num_steps = 1000;
     let temperature = 100.0;
     let dead_runs = 50;
-    let max_arity = 2;
+    let max_arity = 1000;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
@@ -81,7 +83,10 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
             if search_states[i].pattern.vars.len() <= max_arity
                 && best_so_far.as_ref().is_none_or(|best| *cost < best.0)
             {
-                println!("[iteration {}] new best: {} {}", step, cost, search_states[i].pattern);
+                println!("{} {} {}",
+                    format!("[iteration {}]", step).yellow().bold(),
+                    format!("new best: {}", cost).green().bold(),
+                    search_states[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, search_states[i].clone()));
                 best_found_at = Some(step);
             }
@@ -117,28 +122,28 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
                 }
             }
             if (found) {
-                println!("Found {} particles matching follow pattern", weights.iter().filter(|&&w| w > 0.0).count());
+                println!("{} {}", "follow:".dimmed(), format!("{} particles match", weights.iter().filter(|&&w| w > 0.0).count()).blue());
             } else {
-                println!("No particles match the follow pattern");
+                println!("{}", "No particles match the follow pattern".red().bold());
             }
         }
 
         if weights.iter().sum::<f64>() == 0.0 {
-            println!("all particles died, stopping");
+            println!("{}", "all particles died, stopping".red().bold());
             break;
         }
 
         if best_found_at.is_some_and(|best_found_at| (step as i64) - (best_found_at as i64) > dead_runs) {
-            println!("no progress in 100 steps, stopping at {}", step);
+            println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
         }
 
         // resample
         normalize_and_accumulate(&mut weights);
 
-        println!("Step {}: expanded all particles", step);
+        println!("{}", format!("Step {}: expanded all particles", step).dimmed());
         for i in 0..min(5, search_states.len()) {
-            println!("Sample particle {}: {}; cost={} weight={} matches={}", i, search_states[i].pattern, costs[i], weights[i], search_states[i].matches.len());
+            println!("  {} {} cost={} weight={:.4} matches={}", format!("p{}:", i).dimmed(), search_states[i].pattern.to_string().cyan(), costs[i], weights[i], search_states[i].matches.len());
         }
 
         search_states = (0..num_particles).map(|_| {
@@ -146,18 +151,19 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
             search_states[idx].clone()
         }).collect();
 
-        println!("Step {}: resampled all particles", step);
+        println!("{}", format!("Step {}: resampled all particles", step).dimmed());
         for i in 0..min(5, search_states.len()) {
-            println!("Sample particle {}: {}; cost={} weight={} matches={}", i, search_states[i].pattern, compute_cost(&shared.egraph, root, &search_states[i]), weights[i], search_states[i].matches.len());
+            println!("  {} {} cost={} weight={:.4} matches={}", format!("p{}:", i).dimmed(), search_states[i].pattern.to_string().cyan(), compute_cost(&shared.egraph, root, &search_states[i]), weights[i], search_states[i].matches.len());
         }
 
     }
 
     let (cost) = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
-    println!("best found at iteration {}: {}", best_found_at.unwrap(), cost);
-    println!("program: {}", best_so_far.as_ref().unwrap().1.pattern);
-    println!("best: {}", cost);
-    println!("Compression ratio: {}", original_size as f64 / cost as f64);
+    println!("\n{}", "═══ RESULT ═══".green().bold());
+    println!("{} {}", "best found at iteration:".dimmed(), best_found_at.unwrap().to_string().yellow());
+    println!("{} {}", "pattern:".dimmed(), best_so_far.as_ref().unwrap().1.pattern.to_string().cyan().bold());
+    println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
+    println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
     // crate::util::print_programs(&term);
 
     best_so_far
