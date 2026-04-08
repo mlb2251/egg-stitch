@@ -134,17 +134,17 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
 
         println!("Step {}: expanded all particles", step);
         for i in 0..min(5, search_states.len()) {
-            println!("Sample particle {}: {}; cost={} weight={}", i, search_states[i].pattern, costs[i], weights[i]);
+            println!("Sample particle {}: {}; cost={} weight={} matches={}", i, search_states[i].pattern, costs[i], weights[i], search_states[i].matches.len());
         }
 
-        search_states = (0..num_particles).map(|i| {
+        search_states = (0..num_particles).map(|_| {
             let idx = weighted_choice(&weights);
             search_states[idx].clone()
         }).collect();
 
         println!("Step {}: resampled all particles", step);
         for i in 0..min(5, search_states.len()) {
-            println!("Sample particle {}: {}; cost={} weight={}", i, search_states[i].pattern, compute_cost(&shared.egraph, root, &search_states[i]), weights[i]);
+            println!("Sample particle {}: {}; cost={} weight={} matches={}", i, search_states[i].pattern, compute_cost(&shared.egraph, root, &search_states[i]), weights[i], search_states[i].matches.len());
         }
 
     }
