@@ -37,22 +37,21 @@ impl Analysis<StitchLang> for StitchAnalysis {
 
 pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
 
-pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<(usize, SearchState)> {
-    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = follow.map(|s|
+pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(usize, SearchState)> {
+    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args.follow.as_deref().map(|s|
         s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
     );
-    let weight_by_usage = false;
     let usage_counts = crate::search::compute_usage_counts(&egraph, root);
-    let shared = SharedSearchData { egraph, follow: follow_expr, weight_by_usage, usage_counts };
+    let shared = SharedSearchData { egraph, follow: follow_expr, weight_by_usage: args.weight_by_usage, usage_counts };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
-    let num_particles = 10_000;
-    let num_steps = 1000;
-    let temperature = 100.0;
-    let dead_runs = 50;
-    let max_arity = 1000;
+    let num_particles = args.num_particles;
+    let num_steps = args.num_steps;
+    let temperature = args.temperature;
+    let dead_runs = args.dead_runs;
+    let max_arity = args.max_arity;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
@@ -134,7 +133,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, follow: Option<&str>) -> Option<
             break;
         }
 
-        if best_found_at.is_some_and(|best_found_at| (step as i64) - (best_found_at as i64) > dead_runs) {
+        if best_found_at.is_some_and(|best_found_at| (step as i64) - (best_found_at as i64) > dead_runs as i64) {
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
         }

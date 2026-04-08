@@ -6,45 +6,54 @@ mod revexpr;
 mod smc;
 mod rewrites;
 
-use lang::StitchLang;
-use pattern::Pattern;
-use search::{SharedSearchData, SearchState};
-use smc::compute_cost;
+use clap::Parser;
 
-fn main() {
-    let rules = Some("../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites");
-    let follow = Some("(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4)))))))");
-    // let follow = None;
-    let (egraph, root) = util::load_egraph("data/domains/cogsci/dials.json", rules);
+/// E-graph based program synthesis via SMC.
+#[derive(Parser, Debug)]
+#[command(version)]
+pub struct Args {
+    /// Path to the input JSON file containing programs.
+    #[arg(short, long, default_value = "data/domains/cogsci/dials.json")]
+    pub input: String,
 
-    // smc::smc(egraph, root, None);
-    smc::smc(egraph, root, follow);
+    /// Path to rewrite rules file.
+    #[arg(short, long)]
+    pub rules: Option<String>,
 
-    // let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    // let (_, term) = extractor.find_best(root);
-    // util::print_programs(&term);
+    /// Follow pattern to constrain particle expansion.
+    #[arg(short, long)]
+    pub follow: Option<String>,
 
-    // let mut pattern = Pattern::single_var();
-    // println!("before expansion: {:?}", pattern.pattern.nodes);
-    // println!("before expansion: {}", pattern.pattern);
+    /// Number of particles.
+    #[arg(long, default_value_t = 10_000)]
+    pub num_particles: usize,
 
-    // pattern.expand(0, &StitchLang{op: "+".into(), children: vec![2.into(), 3.into()]});
-    // println!("after expansion: {:?}", pattern.pattern.nodes);
-    // println!("after expansion: {}", pattern.pattern);
+    /// Number of SMC steps.
+    #[arg(long, default_value_t = 1000)]
+    pub num_steps: usize,
 
-    // let shared = SharedSearchData { egraph };
-    // let mut search_state = SearchState::new(&shared);
-    // println!("search state: {}", search_state);
+    /// Softmax temperature for resampling weights.
+    #[arg(long, default_value_t = 100.0)]
+    pub temperature: f64,
 
-    // println!("****************************");
+    /// Stop after this many steps with no improvement.
+    #[arg(long, default_value_t = 50)]
+    pub dead_runs: usize,
 
-    // while search_state.pattern.vars.len() > 0 {
-    //     search_state.expand_random(&shared);
-    //     println!("cost: {}", compute_cost(&shared.egraph, root, &search_state));
-    // }
+    /// Maximum arity of patterns to consider as "best".
+    #[arg(long, default_value_t = 1000)]
+    pub max_arity: usize,
 
-
+    /// Weight match selection by usage count during expansion.
+    #[arg(long, default_value_t = false)]
+    pub weight_by_usage: bool,
 }
 
+fn main() {
+    let args = Args::parse();
 
+    let rules = args.rules.as_deref();
+    let (egraph, root) = util::load_egraph(&args.input, rules);
 
+    smc::smc(egraph, root, &args);
+}
