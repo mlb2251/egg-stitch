@@ -14,7 +14,7 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
 
     for expr_str in &exprs {
         let expr: egg::RecExpr<StitchLang> = expr_str.parse().expect("Failed to parse expression");
-        println!("Loaded expression: {:?}", expr);
+        // println!("Loaded expression: {:?}", expr);
         expr_ids.push(egraph.add_expr(&expr));
     }
 
