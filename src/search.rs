@@ -89,6 +89,24 @@ impl SearchState {
     /// (which would mean we over-expanded past the target), and shared variables
     /// (from reuse) map to the same subtree in the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
+        /// Checks structural equality of two subtrees in the follow RevExpr.
+        fn subtrees_equal(
+            follow: &RevExpr<ENodeOrVar<StitchLang>>,
+            a: Id,
+            b: Id,
+        ) -> bool {
+            if a == b { return true; }
+            match (&follow[a], &follow[b]) {
+                (ENodeOrVar::Var(va), ENodeOrVar::Var(vb)) => va == vb,
+                (ENodeOrVar::ENode(na), ENodeOrVar::ENode(nb)) => {
+                    na.matches(nb)
+                        && na.children.iter().zip(nb.children.iter())
+                            .all(|(&ca, &cb)| subtrees_equal(follow, ca, cb))
+                }
+                _ => false,
+            }
+        }
+
         fn check(
             pattern: &RevExpr<ENodeOrVar<StitchLang>>,
             pid: Id,
@@ -98,10 +116,10 @@ impl SearchState {
         ) -> bool {
             match &pattern[pid] {
                 ENodeOrVar::Var(v) => {
-                    // Shared variables must map to the same follow subtree
+                    // Shared variables must map to structurally equal follow subtrees
                     match var_bindings.entry(*v) {
                         std::collections::hash_map::Entry::Vacant(e) => { e.insert(fid); true }
-                        std::collections::hash_map::Entry::Occupied(e) => *e.get() == fid,
+                        std::collections::hash_map::Entry::Occupied(e) => subtrees_equal(follow, *e.get(), fid),
                     }
                 }
                 ENodeOrVar::ENode(p_node) => match &follow[fid] {
