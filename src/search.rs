@@ -1,4 +1,5 @@
-use crate::{lang::StitchLang, smc::StitchEgraph};
+use crate::lang::{StitchLang, StitchEgraph};
+use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use egg::{ENodeOrVar, Id, Language};
@@ -21,71 +22,12 @@ pub struct SharedSearchData {
     pub check_slow: bool,
 }
 
-/// All the ways the current pattern can match at a specific e-class.
-#[derive(Debug, Clone)]
-pub struct MatchAtEClass {
-    pub root_eclass: egg::Id,
-    // variables[i][j] represents the j'th variable in the i'th way to match the pattern
-    pub substs: Vec<Subst>,
-}
-
-/// One assignment of pattern variables to e-class ids.
-#[derive(Debug, Clone)]
-pub struct Subst {
-    pub vars: Vec<Id>,
-}
-
 /// One SMC particle: a pattern and the set of e-classes where it currently matches.
 #[derive(Debug, Clone)]
 pub struct SearchState {
     pub pattern: Pattern,
     // each match represents a different eclass at which `pattern` can be rooted
     pub matches: Vec<MatchAtEClass>,
-}
-
-/// Checks structural equality of two subtrees in a follow RevExpr.
-fn follow_subtrees_equal(
-    follow: &RevExpr<ENodeOrVar<StitchLang>>,
-    a: Id,
-    b: Id,
-) -> bool {
-    if a == b { return true; }
-    match (&follow[a], &follow[b]) {
-        (ENodeOrVar::Var(va), ENodeOrVar::Var(vb)) => va == vb,
-        (ENodeOrVar::ENode(na), ENodeOrVar::ENode(nb)) => {
-            na.matches(nb)
-                && na.children.iter().zip(nb.children.iter())
-                    .all(|(&ca, &cb)| follow_subtrees_equal(follow, ca, cb))
-        }
-        _ => false,
-    }
-}
-
-/// Recursively checks whether a pattern is a valid prefix of the follow target.
-fn check_follow(
-    pattern: &RevExpr<ENodeOrVar<StitchLang>>,
-    pid: Id,
-    follow: &RevExpr<ENodeOrVar<StitchLang>>,
-    fid: Id,
-    var_bindings: &mut HashMap<egg::Var, Id>,
-) -> bool {
-    match &pattern[pid] {
-        ENodeOrVar::Var(v) => {
-            // Shared variables must map to structurally equal follow subtrees
-            match var_bindings.entry(*v) {
-                std::collections::hash_map::Entry::Vacant(e) => { e.insert(fid); true }
-                std::collections::hash_map::Entry::Occupied(e) => follow_subtrees_equal(follow, *e.get(), fid),
-            }
-        }
-        ENodeOrVar::ENode(p_node) => match &follow[fid] {
-            ENodeOrVar::Var(_) => false,
-            ENodeOrVar::ENode(f_node) => {
-                p_node.matches(f_node)
-                    && p_node.children.iter().zip(f_node.children.iter())
-                        .all(|(&pc, &fc)| check_follow(pattern, pc, follow, fc, var_bindings))
-            }
-        },
-    }
 }
 
 impl SearchState {
@@ -106,51 +48,40 @@ impl SearchState {
             let (_cost, minimal_term) = extractor.find_best(m.root_eclass);
             println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
         }
-        // randomly select a subst within the match to base the expansion on
         let subst_idx = rand::rng().random_range(0..m.substs.len());
         let subst = &m.substs[subst_idx];
 
-        // randomly select a var within the subst to expand (length of vars in subst is same as num vars in pattern)
         let var_idx = rand::rng().random_range(0..self.pattern.vars.len());
         if verbose {
             println!("Expanding variable {:?} in pattern {}", self.pattern.vars[var_idx], self.pattern);
         }
         let target_id = subst.vars[var_idx];
-        
+
         if verbose {
             println!("Target eclass is represented by minimal term {}", extractor.find_best(target_id).1);
         }
 
-        // consider reuse – look for vars in the subst that point to the same eclass
         if rand::rng().random_bool(shared.p_reuse) {
-            // optmization: could get rid of this allocation.
-            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)|  *idx != var_idx && **id == target_id).collect::<Vec<_>>();
+            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)| *idx != var_idx && **id == target_id).collect::<Vec<_>>();
             if !reuse_candidates.is_empty() {
                 let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx].0;
-                
                 self.reuse(var_idx, candidate_var_idx, shared);
-                return
+                return;
             }
         }
 
         let target_eclass = &shared.egraph[target_id];
-
-        // randomly select an enode within the eclass to expand
         let node_idx = rand::rng().random_range(0..target_eclass.len());
         let target_node = &target_eclass.nodes[node_idx];
 
         self.expand(var_idx, target_node, shared);
     }
+
     /// Check if this particle's pattern is a valid prefix of the follow target.
-    /// A partial pattern is consistent if every non-variable node matches the
-    /// corresponding node in the target (same op/arity), no variable in the
-    /// pattern corresponds to a position where the target has a variable
-    /// (which would mean we over-expanded past the target), and shared variables
-    /// (from reuse) map to the same subtree in the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
         let mut var_bindings = HashMap::new();
-        check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        crate::follow::check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
@@ -185,9 +116,9 @@ impl SearchState {
             let var_id = subst.vars[var_idx];
             let var_eclass = &shared.egraph[var_id];
             for node in &var_eclass.nodes {
-                if node.matches(target) { // this is egg::Language::matches
+                if node.matches(target) {
                     let mut new_subst = subst.clone();
-                    new_subst.vars.remove(var_idx); // pop the expanded var
+                    new_subst.vars.remove(var_idx);
                     for child_id in &node.children {
                         new_subst.vars.push(*child_id);
                     }
@@ -208,32 +139,6 @@ impl SearchState {
         });
     }
 
-}
-
-
-impl std::fmt::Display for SearchState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SearchState {{ pattern: {}, matches: {} }}", self.pattern, self.matches.len())
-    }
-}
-
-
-impl MatchAtEClass {
-    /// Creates a match for e-class `c` with a single substitution mapping the root variable to `c`.
-    pub fn identity_match(c: egg::Id) -> Self {
-        Self {
-            root_eclass: c,
-            substs: vec![Subst { vars: vec![c] }],
-        }
-    }
-}
-
-/// Returns one identity match per e-class in the egraph.
-fn identity_matches(egraph: &StitchEgraph) -> Vec<MatchAtEClass> {
-    egraph.classes().map(|c| MatchAtEClass::identity_match(c.id)).collect()
-}
-
-impl SearchState {
     /// Creates the initial search state: a single-variable pattern matching every e-class.
     pub fn new(shared: &SharedSearchData) -> Self {
         Self {
@@ -243,12 +148,17 @@ impl SearchState {
     }
 }
 
+impl std::fmt::Display for SearchState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SearchState {{ pattern: {}, matches: {} }}", self.pattern, self.matches.len())
+    }
+}
+
 /// Computes how many times each e-class appears in the fully-expanded corpus tree.
 /// Top-down pass: root gets count 1, then propagate to children of the best (first) enode.
 pub fn compute_usage_counts(egraph: &StitchEgraph, root: Id) -> FxHashMap<Id, usize> {
     let mut counts = FxHashMap::<Id, usize>::default();
     counts.insert(root, 1);
-    // Iterate in reverse id order (parents before children, since children have smaller ids)
     let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
     for i in (0..=max_id).rev() {
         let id = Id::from(i);

@@ -1,5 +1,7 @@
-use crate::{lang::StitchLang, rewrites::from_file, smc::{StitchAnalysis, StitchEgraph}};
-use egg::FromOp;
+use crate::lang::{StitchLang, StitchAnalysis, StitchEgraph};
+use anyhow::anyhow;
+use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
+use std::{error::Error, fs, path::Path};
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
 /// All programs are combined into a single term (programs A B C ...).
@@ -14,7 +16,6 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
 
     for expr_str in &exprs {
         let expr: egg::RecExpr<StitchLang> = expr_str.parse().expect("Failed to parse expression");
-        // println!("Loaded expression: {:?}", expr);
         expr_ids.push(egraph.add_expr(&expr));
     }
 
@@ -29,14 +30,13 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
         None => vec![],
     };
     println!("{:#?}", rules);
-        //  from_file(rule_file).expect("Failed to parse rules file");
-    egraph.rebuild(); // might be unnecessary
+    egraph.rebuild();
     let mut runner: egg::Runner<StitchLang, StitchAnalysis> = egg::Runner::default();
     runner = runner.with_egraph(egraph)
         .with_iter_limit(10)
         .run(&rules);
 
-    runner.egraph.rebuild(); // might be unnecessary
+    runner.egraph.rebuild();
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
     (runner.egraph, root)
@@ -80,4 +80,44 @@ fn print_expr(term: &egg::RecExpr<StitchLang>, id: usize) {
         }
         print!(")");
     }
+}
+
+/// Loads rewrite rules from a file in `name: lhs => rhs` format.
+pub fn from_file<L, A, P>(path: P) -> anyhow::Result<Vec<Rewrite<L, A>>>
+where
+    L: Language + FromOp + Sync + Send + 'static,
+    A: Analysis<L>,
+    P: AsRef<Path>,
+    L::Error: Send + Sync + Error,
+{
+    let contents = fs::read_to_string(path)?;
+    parse(&contents)
+}
+
+/// Parses rewrite rules from a string in `name: lhs => rhs` format.
+pub fn parse<L, A>(file: &str) -> anyhow::Result<Vec<Rewrite<L, A>>>
+where
+    L: Language + FromOp + Sync + Send + 'static,
+    A: Analysis<L>,
+    L::Error: Send + Sync + Error,
+{
+    let mut rewrites = Vec::new();
+    for line in file
+        .lines()
+        .map(|line| {
+            let line = line.split_once("//").map_or(line, |(line, _comment)| line);
+            line.trim()
+        })
+        .filter(|line| !line.is_empty())
+    {
+        let (name, rewrite) = line.split_once(':').ok_or(anyhow!("missing colon"))?;
+        let (lhs, rhs) = rewrite.split_once("=>").ok_or(anyhow!("missing arrow"))?;
+        let name = name.trim();
+        let lhs = lhs.trim();
+        let rhs = rhs.trim();
+        let lhs: Pattern<L> = lhs.parse()?;
+        let rhs: Pattern<L> = rhs.parse()?;
+        rewrites.push(Rewrite::new(name, lhs, rhs).map_err(|e| anyhow!("{}", e))?);
+    }
+    Ok(rewrites)
 }

@@ -1,11 +1,12 @@
 mod lang;
-mod util;
-mod pattern;
-mod search;
 mod revexpr;
+mod pattern;
+mod matching;
+mod follow;
+mod search;
+mod cost;
 mod smc;
-mod rewrites;
-mod rewrite_slow;
+mod io;
 
 use clap::Parser;
 
@@ -62,7 +63,7 @@ fn main() {
     let args = Args::parse();
 
     let rules = args.rules.as_deref();
-    let (egraph, root) = util::load_egraph(&args.input, rules);
+    let (egraph, root) = io::load_egraph(&args.input, rules);
 
     smc::smc(egraph, root, &args);
 }

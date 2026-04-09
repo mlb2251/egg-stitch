@@ -1,4 +1,4 @@
-use egg::{FromOp, Id, Language, Symbol};
+use egg::{Analysis, FromOp, Id, Language, Symbol};
 use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
@@ -51,3 +51,31 @@ impl FromOp for StitchLang {
         })
     }
 }
+
+/// Egg analysis that tracks the minimum AST size of each e-class.
+#[derive(Clone, Debug, Default)]
+pub struct StitchAnalysis;
+
+impl Analysis<StitchLang> for StitchAnalysis {
+    type Data = u32;
+
+    /// Computes the minimum AST size of a new enode as 1 + sum of children's sizes.
+    fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: Id) -> Self::Data {
+        1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+    }
+
+    /// Keeps the minimum size when two e-classes are merged.
+    fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
+        if from < *to {
+            *to = from;
+            egg::DidMerge(true, false)
+        } else if from == *to {
+            egg::DidMerge(false, false)
+        } else {
+            egg::DidMerge(false, true)
+        }
+    }
+}
+
+/// Type alias for the e-graph used throughout this codebase.
+pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;

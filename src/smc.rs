@@ -1,47 +1,17 @@
-use std::cmp::{Reverse, min};
-use std::collections::BinaryHeap;
+use std::cmp::min;
 
 use colored::Colorize;
 
-use crate::lang::StitchLang;
-use crate::pattern::Pattern;
+use crate::cost::{compute_cost, compute_pattern_size, compute_size};
+use crate::lang::StitchEgraph;
 use crate::revexpr::RevExpr;
-use crate::search::{SearchState, SharedSearchData, Subst};
-use egg::{Analysis, ENodeOrVar, Id, Language};
+use crate::search::{SearchState, SharedSearchData};
+use egg::ENodeOrVar;
 use rand::Rng;
-use rustc_hash::{FxHashMap};
-
-/// Egg analysis that tracks the minimum AST size of each e-class.
-#[derive(Clone, Debug, Default)]
-pub struct StitchAnalysis;
-
-impl Analysis<StitchLang> for StitchAnalysis {
-    type Data = u32;
-
-    /// Computes the minimum AST size of a new enode as 1 + sum of children's sizes.
-    fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: egg::Id) -> Self::Data {
-        1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
-    }
-
-    /// Keeps the minimum size when two e-classes are merged.
-    fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
-        if from < *to {
-            *to = from;
-            egg::DidMerge(true, false)
-        } else if from == *to {
-            egg::DidMerge(false, false)
-        } else {
-            // from = *to; but we don't do this because types; idk it seems like they don't want us to
-            egg::DidMerge(false, true)
-        }
-    }
-}
-
-pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
 
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(usize, SearchState)> {
-    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args.follow.as_deref().map(|s|
+    let follow_expr: Option<RevExpr<ENodeOrVar<crate::lang::StitchLang>>> = args.follow.as_deref().map(|s|
         s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
     );
     let usage_counts = crate::search::compute_usage_counts(&egraph, root);
@@ -59,7 +29,6 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
 
-    // make a bunch of search states
     let mut search_states: Vec<SearchState> = (0..num_particles)
         .map(|_i| SearchState::new(&shared))
         .collect();
@@ -93,33 +62,29 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
             }
         }
 
-
-        let mut weights: Vec<f64> = costs.iter().map(|cost| -(*cost as f64)/temperature ).collect();
+        let mut weights: Vec<f64> = costs.iter().map(|cost| -(*cost as f64) / temperature).collect();
         let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         for w in &mut weights {
             *w = (*w - max_weight).exp();
         }
 
-        // force no resampling of completed patterns
         for (i, state) in search_states.iter().enumerate() {
             if state.pattern.vars.is_empty() {
                 weights[i] = 0.0;
             }
         }
 
-        // filter out particles inconsistent with the follow target
         if let Some(ref follow) = shared.follow {
             let total_weight: f64 = weights.iter().sum();
             let mut found = false;
             for (i, state) in search_states.iter().enumerate() {
                 if !state.matches_follow(follow) {
-                    // println!("Particle {} with pattern {} does not match follow pattern, killing it", i, state.pattern);
                     weights[i] = 0.0;
                 } else {
                     found = true;
                 }
             }
-            if found  {
+            if found {
                 let matching_weight: f64 = weights.iter().sum();
                 let weight_frac = if total_weight > 0.0 { matching_weight / total_weight } else { 0.0 };
                 println!("{} {}", "follow:".dimmed(), format!("{} / {} particles match ({:.1}% of weight)", weights.iter().filter(|&&w| w > 0.0).count(), weights.len(), weight_frac * 100.0).blue());
@@ -138,7 +103,6 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
             break;
         }
 
-        // resample
         normalize_and_accumulate(&mut weights);
 
         println!("{}", format!("Step {}: expanded all particles", step).dimmed());
@@ -153,28 +117,24 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         print_top_particles(&search_states, &weights, &shared, original_size, |i| {
             compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow)
         });
-
     }
 
-    let cost  = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1, shared.check_slow);
+    let cost = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1, shared.check_slow);
     println!("\n{}", "═══ RESULT ═══".green().bold());
     println!("{} {}", "best found at iteration:".dimmed(), best_found_at.unwrap().to_string().yellow());
     println!("{} {}", "pattern:".dimmed(), best_so_far.as_ref().unwrap().1.pattern.to_string().cyan().bold());
     println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
     println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
-    // crate::util::print_programs(&term);
 
     best_so_far
 }
 
 /// Samples an index from a normalized cumulative weight array.
 pub fn weighted_choice(acc_weights: &[f64]) -> usize {
-    // println!("Choosing from weights: {:?}", cum_weights);
     let r: f64 = rand::rng().random_range(0.0..1.0);
-    // println!("r: {:?}", r);
     match acc_weights.binary_search_by(|&w| w.partial_cmp(&r).unwrap()) {
         Ok(idx) => idx,
-        Err(idx) => idx, // it could be inserted at idx, which means it's <= cum_weights[idx]
+        Err(idx) => idx,
     }
 }
 
@@ -214,84 +174,3 @@ fn print_top_particles(
         println!("      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}", cost_i, ratio, weights[i], states[i].matches.len(), usage_matches, pat_size, appx_cost);
     }
 }
-
-/// Returns the total cost: compressed corpus size plus the pattern's own size.
-pub fn compute_cost(
-    egraph: &StitchEgraph,
-    root: egg::Id,
-    search_state: &SearchState,
-    check_slow: bool,
-) -> usize {
-    let cost = compute_size(egraph, root, search_state, check_slow);
-    let pattern_size = compute_pattern_size(&search_state.pattern);
-    cost + pattern_size
-}
-
-/// Returns the AST size of the pattern (counting each node and edge once).
-pub fn compute_pattern_size(pattern: &Pattern) -> usize {
-    1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
-}
-
-/// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
-fn compute_size(
-    egraph: &StitchEgraph,
-    root: egg::Id,
-    search_state: &SearchState,
-    check_slow: bool,
-) -> usize {
-    let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
-    let mut work_queue = BinaryHeap::new();
-    let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
-
-    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 {
-        s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64)
-    };
-
-    for m in &search_state.matches {
-        work_queue.push(Reverse(m.root_eclass));
-        eclass_to_matches.insert(m.root_eclass, &m.substs);
-    }
-    while let Some(Reverse(eclass)) = work_queue.pop() {
-        // we assume that small numbers are children of large numbers, so when we pop we have already computed children
-        if size_under_rewrite.contains_key(&eclass)  {
-            continue;
-        }
-        let size_current = get_size(eclass, &size_under_rewrite);
-        let mut best = size_current;
-        // trying a rewrite; (fn_i arg0 ...)
-        if let Some(substs) = eclass_to_matches.get(&eclass) {
-            for subst in *substs {
-                let mut size_new: i64 = 1;
-                for &var in &subst.vars {
-                    size_new += get_size(var, &size_under_rewrite);
-                }
-                if size_new < best {
-                    best = size_new;
-                }
-            }
-        }
-        // not doing a rewrite (just try all the enocdes)
-        if let Some(enode) = egraph[eclass].nodes.first() {
-            let mut size_no_rewrite: i64 = 1;
-            for &child in &enode.children {
-                size_no_rewrite += get_size(child, &size_under_rewrite);
-            }
-            if size_no_rewrite < best {
-                best = size_no_rewrite;
-            }
-        }
-        if best < size_current {
-            for parent in egraph[eclass].parents() {
-                work_queue.push(Reverse(parent));
-            }
-            size_under_rewrite.insert(eclass, best);
-        }
-    }
-    let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
-    if check_slow {
-        let slow_size = crate::rewrite_slow::rewrite_slow(egraph, root, search_state) as i64;
-        assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
-    }
-    final_size as usize
-}
-
