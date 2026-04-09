@@ -50,6 +50,7 @@ fn extract_root_size(egraph: &StitchEgraph, root: egg::Id) -> usize {
 
 /// Prints a programs term with each child on a new line.
 /// If the term is not a programs node, prints it normally.
+#[allow(dead_code)]
 pub fn print_programs(term: &egg::RecExpr<StitchLang>) {
     let root_node = &term.as_ref()[term.as_ref().len() - 1];
     if root_node.op.as_str() == "programs" {

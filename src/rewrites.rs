@@ -13,7 +13,7 @@
 
 use anyhow::anyhow;
 use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
-use std::{error::Error, fs, io::ErrorKind, path::Path};
+use std::{error::Error, fs, path::Path};
 
 /// Returns all the rewrites in the specified file.
 ///
@@ -30,29 +30,6 @@ where
 {
     let contents = fs::read_to_string(path)?;
     parse(&contents)
-}
-
-/// If the file specified by `path` exists, parse the file and return the
-/// resulting rewrites. If the file does not exist, return `None`.
-///
-/// # Errors
-/// This function will return an error if the file exists but can't be opened.
-///
-/// It will also return an error if it could not parse the file.
-pub fn try_from_file<L, A, P>(path: P) -> anyhow::Result<Option<Vec<Rewrite<L, A>>>>
-where
-    L: Language + FromOp + Sync + Send + 'static,
-    A: Analysis<L>,
-    P: AsRef<Path>,
-    L::Error: Send + Sync + Error,
-{
-    Ok(match fs::read_to_string(path) {
-        Ok(contents) => Some(parse(&contents)?),
-        Err(e) => match e.kind() {
-            ErrorKind::NotFound => None,
-            _ => Err(e)?,
-        },
-    })
 }
 
 /// Parse a rewrites file.

@@ -61,8 +61,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         .collect();
 
     for step in 0..num_steps {
-        let mut i = 0;
-        for search_state in &mut search_states {
+        for (i, search_state) in search_states.iter_mut().enumerate() {
             let verb = false;
             if verb {
                 println!("Expanding particle {} with pattern: {}", i, search_state.pattern);
@@ -71,7 +70,6 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
             if verb {
                 println!("Expanded particle {} to pattern: {}", i, search_state.pattern);
             }
-            i += 1;
         }
 
         let costs: Vec<usize> = search_states
@@ -94,12 +92,8 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
 
         let mut weights: Vec<f64> = costs.iter().map(|cost| -(*cost as f64)/temperature ).collect();
         let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let mut j = 0;
         for w in &mut weights {
-            // println!("Before reweighting particle {} with cost {}: weight={}", j, costs[j], w);
             *w = (*w - max_weight).exp();
-            // println!("After reweighting particle {} with cost {}: weight={}", j, costs[j], w);
-            j += 1;
         }
 
         // force no resampling of completed patterns
