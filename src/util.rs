@@ -42,6 +42,7 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
     (runner.egraph, root)
 }
 
+/// Returns the minimum AST size of the expression rooted at `root`.
 fn extract_root_size(egraph: &StitchEgraph, root: egg::Id) -> usize {
     let extractor = egg::Extractor::new(egraph, egg::AstSize);
     let (expr, _) = extractor.find_best(root);

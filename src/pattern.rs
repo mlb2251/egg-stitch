@@ -2,6 +2,7 @@ use crate::lang::StitchLang;
 use egg::{Language, ENodeOrVar, Id};
 use crate::revexpr::RevExpr;
 
+/// A partially-built pattern over `StitchLang`, tracking which nodes are open variables.
 #[derive(Debug, Clone)]
 pub struct Pattern {
     pub pattern: RevExpr<ENodeOrVar<StitchLang>>,
@@ -46,6 +47,7 @@ impl Pattern {
         }
     }
 
+    /// Merges `second_var_idx` into `var_idx`, replacing all occurrences with the first var's node.
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
         for var_id in &self.vars[second_var_idx] {
             self.pattern[*var_id] = self.pattern[self.vars[var_idx][0]].clone();

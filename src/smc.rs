@@ -11,16 +11,19 @@ use egg::{Analysis, ENodeOrVar, Id, Language};
 use rand::Rng;
 use rustc_hash::{FxHashMap};
 
+/// Egg analysis that tracks the minimum AST size of each e-class.
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis;
 
 impl Analysis<StitchLang> for StitchAnalysis {
     type Data = u32;
 
+    /// Computes the minimum AST size of a new enode as 1 + sum of children's sizes.
     fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: egg::Id) -> Self::Data {
         1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
     }
 
+    /// Keeps the minimum size when two e-classes are merged.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
         if from < *to {
             *to = from;
@@ -36,6 +39,7 @@ impl Analysis<StitchLang> for StitchAnalysis {
 
 pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
 
+/// Runs SMC to find a pattern that minimizes compressed corpus size.
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(usize, SearchState)> {
     let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args.follow.as_deref().map(|s|
         s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
@@ -163,6 +167,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
     best_so_far
 }
 
+/// Samples an index from a normalized cumulative weight array.
 pub fn weighted_choice(acc_weights: &[f64]) -> usize {
     // println!("Choosing from weights: {:?}", cum_weights);
     let r: f64 = rand::rng().random_range(0.0..1.0);
@@ -173,6 +178,7 @@ pub fn weighted_choice(acc_weights: &[f64]) -> usize {
     }
 }
 
+/// Normalizes weights to sum to 1 then converts to a cumulative distribution in-place.
 pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
     let weight_sum = weights.iter().sum::<f64>();
     if weight_sum == 0.0 {
@@ -209,6 +215,7 @@ fn print_top_particles(
     }
 }
 
+/// Returns the total cost: compressed corpus size plus the pattern's own size.
 pub fn compute_cost(
     egraph: &StitchEgraph,
     root: egg::Id,
@@ -220,10 +227,12 @@ pub fn compute_cost(
     cost + pattern_size
 }
 
+/// Returns the AST size of the pattern (counting each node and edge once).
 pub fn compute_pattern_size(pattern: &Pattern) -> usize {
     1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
 }
 
+/// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
 fn compute_size(
     egraph: &StitchEgraph,
     root: egg::Id,

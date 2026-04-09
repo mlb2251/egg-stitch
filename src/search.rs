@@ -6,6 +6,7 @@ use rand::Rng;
 use rustc_hash::FxHashMap;
 use std::collections::HashMap;
 
+/// Shared read-only context passed to all search operations.
 #[derive(Debug)]
 pub struct SharedSearchData {
     pub egraph: StitchEgraph,
@@ -20,6 +21,7 @@ pub struct SharedSearchData {
     pub check_slow: bool,
 }
 
+/// All the ways the current pattern can match at a specific e-class.
 #[derive(Debug, Clone)]
 pub struct MatchAtEClass {
     pub root_eclass: egg::Id,
@@ -27,11 +29,13 @@ pub struct MatchAtEClass {
     pub substs: Vec<Subst>,
 }
 
+/// One assignment of pattern variables to e-class ids.
 #[derive(Debug, Clone)]
 pub struct Subst {
     pub vars: Vec<Id>,
 }
 
+/// One SMC particle: a pattern and the set of e-classes where it currently matches.
 #[derive(Debug, Clone)]
 pub struct SearchState {
     pub pattern: Pattern,
@@ -85,6 +89,7 @@ fn check_follow(
 }
 
 impl SearchState {
+    /// Randomly selects a match and variable, then expands or reuses the variable.
     pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
         let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
         let match_idx = if shared.weight_by_usage {
@@ -148,11 +153,13 @@ impl SearchState {
         check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
 
+    /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
     pub fn expand(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
         self.pattern.expand(var_idx, target);
         self.subset_matches(var_idx, target, shared);
     }
 
+    /// Merges two pattern variables and filters matches to those where both point to the same e-class.
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize, _shared: &SharedSearchData) {
         self.pattern.reuse(var_idx, second_var_idx);
         self.subset_matches_reuse(var_idx, second_var_idx);
@@ -172,6 +179,7 @@ impl SearchState {
         self.matches.retain(|m| !m.substs.is_empty());
     }
 
+    /// Filters matches to those where `var_idx` can be expanded with `target`, updating substitutions.
     pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
@@ -189,6 +197,7 @@ impl SearchState {
         });
     }
 
+    /// Filters matches to those where `var_idx` and `second_var_idx` point to the same e-class.
     pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize) {
         self.update_matches(|subst, out| {
             if subst.vars[var_idx] == subst.vars[second_var_idx] {
@@ -210,6 +219,7 @@ impl std::fmt::Display for SearchState {
 
 
 impl MatchAtEClass {
+    /// Creates a match for e-class `c` with a single substitution mapping the root variable to `c`.
     pub fn identity_match(c: egg::Id) -> Self {
         Self {
             root_eclass: c,
@@ -218,11 +228,13 @@ impl MatchAtEClass {
     }
 }
 
+/// Returns one identity match per e-class in the egraph.
 fn identity_matches(egraph: &StitchEgraph) -> Vec<MatchAtEClass> {
     egraph.classes().map(|c| MatchAtEClass::identity_match(c.id)).collect()
 }
 
 impl SearchState {
+    /// Creates the initial search state: a single-variable pattern matching every e-class.
     pub fn new(shared: &SharedSearchData) -> Self {
         Self {
             pattern: Pattern::single_var(),
