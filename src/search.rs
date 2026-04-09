@@ -120,7 +120,7 @@ impl SearchState {
         if rand::rng().random_bool(shared.p_reuse) {
             // optmization: could get rid of this allocation.
             let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)|  *idx != var_idx && **id == target_id).collect::<Vec<_>>();
-            if reuse_candidates.len() > 0 {
+            if !reuse_candidates.is_empty() {
                 let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx].0;
                 
@@ -135,7 +135,7 @@ impl SearchState {
         let node_idx = rand::rng().random_range(0..target_eclass.len());
         let target_node = &target_eclass.nodes[node_idx];
 
-        self.expand(var_idx, &target_node, shared);
+        self.expand(var_idx, target_node, shared);
     }
     /// Check if this particle's pattern is a valid prefix of the follow target.
     /// A partial pattern is consistent if every non-variable node matches the

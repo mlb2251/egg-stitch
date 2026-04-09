@@ -8,7 +8,6 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::search::{SearchState, SharedSearchData, Subst};
 use egg::{Analysis, ENodeOrVar, Id, Language};
-use priority_queue::PriorityQueue;
 use rand::Rng;
 use rustc_hash::{FxHashMap};
 
@@ -58,7 +57,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
 
     // make a bunch of search states
     let mut search_states: Vec<SearchState> = (0..num_particles)
-        .map(|i| SearchState::new(&shared))
+        .map(|_i| SearchState::new(&shared))
         .collect();
 
     for step in 0..num_steps {
@@ -93,7 +92,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         }
 
 
-        let mut weights: Vec<f64> = costs.iter().map(|cost| (-(*cost as f64)/temperature)).collect();
+        let mut weights: Vec<f64> = costs.iter().map(|cost| -(*cost as f64)/temperature ).collect();
         let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let mut j = 0;
         for w in &mut weights {
@@ -122,7 +121,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
                     found = true;
                 }
             }
-            if (found) {
+            if found  {
                 let matching_weight: f64 = weights.iter().sum();
                 let weight_frac = if total_weight > 0.0 { matching_weight / total_weight } else { 0.0 };
                 println!("{} {}", "follow:".dimmed(), format!("{} / {} particles match ({:.1}% of weight)", weights.iter().filter(|&&w| w > 0.0).count(), weights.len(), weight_frac * 100.0).blue());
@@ -159,7 +158,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
 
     }
 
-    let (cost) = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1, shared.check_slow);
+    let cost  = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1, shared.check_slow);
     println!("\n{}", "═══ RESULT ═══".green().bold());
     println!("{} {}", "best found at iteration:".dimmed(), best_found_at.unwrap().to_string().yellow());
     println!("{} {}", "pattern:".dimmed(), best_so_far.as_ref().unwrap().1.pattern.to_string().cyan().bold());
@@ -251,7 +250,7 @@ fn compute_size(
     }
     while let Some(Reverse(eclass)) = work_queue.pop() {
         // we assume that small numbers are children of large numbers, so when we pop we have already computed children
-        if(size_under_rewrite.contains_key(&eclass)) {
+        if size_under_rewrite.contains_key(&eclass)  {
             continue;
         }
         let size_current = get_size(eclass, &size_under_rewrite);
