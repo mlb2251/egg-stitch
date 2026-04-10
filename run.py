@@ -2,7 +2,7 @@
 """Run a named experiment from the README. Usage: python run.py <name>"""
 
 import sys
-
+import json
 from expts import compress, run_domain, runall
 
 
@@ -44,8 +44,29 @@ def dials_temp_sweep():
 
 
 def dev():
-    """Whatever I'm currently playing with."""
-    dials_follow()
+    """Current expt"""
+
+    rows = []
+
+    for t in [2**i for i in range(11)]:
+        rows.append(dict(
+            name=f"T={t}",
+            config=dict(num_steps=10, num_particles=100, temperature=t),
+            output=None
+        ))
+
+    for row in rows:
+        print(f"Running {row['name']} ===")
+        row["output"] = run_domain("dials", **row["config"])
+    
+    for row in rows:
+        print(f"{row['name']}:")
+        res = json.load(open(row["output"]))
+        print(f"  compression ratio: {res['compression_ratio']}")
+        print(f"  pattern: {res['pattern']}")
+    
+
+
 
 
 EXPTS = {

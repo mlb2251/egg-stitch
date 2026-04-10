@@ -29,7 +29,8 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
         Some(rule_file) => from_file(rule_file).expect("Failed to parse rules file"),
         None => vec![],
     };
-    println!("{:#?}", rules);
+    println!("loaded {} rules", rules.len());
+    // println!("{:#?}", rules);
     egraph.rebuild();
     let mut runner: egg::Runner<StitchLang, StitchAnalysis> = egg::Runner::default();
     runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);

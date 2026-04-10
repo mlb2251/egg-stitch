@@ -42,6 +42,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let temperature = args.temperature;
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;
+    let verbose = args.verbose;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
@@ -83,7 +84,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         // logweight=-inf for programs that don't match the follow pattern (if provided)
         if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&search_states, &mut log_weights, follow, &shared, original_size, &costs);
+            apply_follow_constraint(&search_states, &mut log_weights, follow, &shared, original_size, &costs, verbose);
         }
 
         // normalize
@@ -107,8 +108,10 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             break;
         }
 
-        println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-        print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
+        if verbose {
+            println!("{}", format!("Step {}: expanded all particles", step).dimmed());
+            print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
+        }
 
         // === RESAMPLE ===
         let weights_acc = normalize_and_accumulate(&mut weights);
@@ -126,8 +129,10 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             });
         }
 
-        println!("{}", format!("Step {}: resampled all particles", step).dimmed());
-        print_top_particles(&search_states, &weights, &shared, original_size, |i| compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow));
+        if verbose {
+            println!("{}", format!("Step {}: resampled all particles", step).dimmed());
+            print_top_particles(&search_states, &weights, &shared, original_size, |i| compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow));
+        }
         steps_run = step + 1;
     }
 

@@ -44,8 +44,8 @@ NON_BABBLE_DOMAINS = ["bridge", "castle", "city", "house"]
 
 def compress(input, output="out.json", rewrites=None, **kwargs):
     """Run `cargo run --release` with the given input/output (relative to results dir)/optional rewrites."""
-    folder_dir = current_folder_path()
-    cmd = ["cargo", "run", "--release", "--", "-i", input, "--output", str(folder_dir / output)]
+    output_path = current_folder_path() / output
+    cmd = ["cargo", "run", "--release", "--", "-i", input, "--output", str(output_path)]
     if rewrites is not None:
         cmd += ["-r", rewrites]
     for k, v in kwargs.items():
@@ -57,11 +57,12 @@ def compress(input, output="out.json", rewrites=None, **kwargs):
         cmd += [f"--{k}", str(v)]
     print("+", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True, env=dict(os.environ, RUST_BACKTRACE="1"))
+    return output_path
 
 
 def run_domain(domain, rewrites=True, **kwargs):
     """Run a cogsci domain benchmark, optionally with its rewrite set."""
-    compress(
+    return compress(
         input=f"data/domains/cogsci/{domain}.json",
         rewrites=f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites" if rewrites else None,
         output=f"{domain}.json" if rewrites else f"{domain}_no_rewrites.json",
