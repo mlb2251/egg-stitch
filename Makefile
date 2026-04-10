@@ -5,5 +5,4 @@ dev:
 
 .PHONY: server
 server:
-	@echo "serving on http://localhost:$(PORT)/viz/"
-	python3 -m http.server $(PORT)
+	python3 viz/server.py $(PORT)

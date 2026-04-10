@@ -1,8 +1,10 @@
-// Fetch viz/results/**/*.json from a running `python3 -m http.server` and
-// render. Directory listing is parsed from http.server's auto-generated HTML
-// index. Results are grouped by their containing subfolder under results/:
-// the expts module drops each session into a timestamp-named folder, and we
-// render one <details> section per folder, expanded by default.
+// Fetch viz/results/**/*.json from viz/server.py (a tiny stdlib-only static
+// server with DELETE support under viz/results/). The directory listing is
+// parsed from http.server's auto-generated HTML index. Results are grouped by
+// their containing subfolder under results/: the expts module drops each
+// session into a timestamp-named folder, and we render one <details> section
+// per folder, expanded by default. Each row and each folder summary has a ×
+// button that issues a DELETE to the server and re-loads on success.
 
 const meta = document.getElementById('meta');
 const container = document.getElementById('groups');
@@ -81,6 +83,7 @@ async function load() {
 }
 
 const COLUMNS = [
+  [null, ''],
   ['timestamp', 'when'],
   ['name', 'run'],
   [null, 'debug'],
@@ -99,6 +102,34 @@ const COLUMNS = [
   ['best_iteration', 'best iter'],
 ];
 
+/** DELETE a path under results/ and reload on success. */
+async function deletePath(path, label) {
+  if (!confirm(`Delete ${label}? This can't be undone.`)) return false;
+  const res = await fetch(path, { method: 'DELETE' });
+  if (!res.ok) { alert(`delete failed (${res.status}): ${await res.text()}`); return false; }
+  await load();
+  return true;
+}
+
+/** Delete a single run JSON (and its _debug.json sibling if present). */
+async function deleteRun(r) {
+  const base = r.folder ? `results/${r.folder}/${r.name}` : `results/${r.name}`;
+  if (!confirm(`Delete run "${r.name}"${r.folder ? ` in ${r.folder}` : ''}?`)) return;
+  const res = await fetch(`${base}.json`, { method: 'DELETE' });
+  if (!res.ok) { alert(`delete failed (${res.status}): ${await res.text()}`); return; }
+  if (r.debug_log_file) {
+    // Best-effort: ignore 404 if there's no debug file.
+    await fetch(r.folder ? `results/${r.folder}/${r.debug_log_file}` : `results/${r.debug_log_file}`, { method: 'DELETE' });
+  }
+  await load();
+}
+
+/** Delete an entire session folder. */
+async function deleteFolder(folder) {
+  if (!folder) return;
+  await deletePath(`results/${folder}`, `folder "${folder}" and all runs inside`);
+}
+
 /** Render one folder group as an expanded <details> with its own table. */
 function renderGroup(g, maxRatio) {
   const rows = [...g.rows].sort((a, b) => {
@@ -113,7 +144,12 @@ function renderGroup(g, maxRatio) {
   details.open = true;
 
   const summary = document.createElement('summary');
-  summary.innerHTML = `<span class="folder-name">${g.folder || '(ungrouped)'}</span> <span class="folder-count">${rows.length} run${rows.length === 1 ? '' : 's'}</span>`;
+  const delFolderBtn = g.folder
+    ? `<button class="del del-folder" title="delete folder">×</button>`
+    : '';
+  summary.innerHTML = `<span class="folder-name">${g.folder || '(ungrouped)'}</span> <span class="folder-count">${rows.length} run${rows.length === 1 ? '' : 's'}</span>${delFolderBtn}`;
+  const folderBtn = summary.querySelector('.del-folder');
+  if (folderBtn) folderBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); deleteFolder(g.folder); };
   details.appendChild(summary);
 
   const table = document.createElement('table');
@@ -145,6 +181,7 @@ function renderGroup(g, maxRatio) {
       ? (r.folder ? `${r.folder}/${r.debug_log_file}` : r.debug_log_file)
       : null;
     tr.innerHTML = `
+      <td><button class="del del-run" title="delete run">×</button></td>
       <td>${fmtTime(r.timestamp)}</td>
       <td><b>${r.name}</b></td>
       <td>${debugPath ? `<a class="debug-link" href="debug.html?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
@@ -162,6 +199,7 @@ function renderGroup(g, maxRatio) {
       <td>${fmt(r.num_expansions)}</td>
       <td>${r.best_iteration ?? ''}</td>
     `;
+    tr.querySelector('.del-run').onclick = (e) => { e.stopPropagation(); deleteRun(r); };
     tr.onclick = () => toggleDetail(tr, r);
     tbody.appendChild(tr);
   }

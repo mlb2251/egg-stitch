@@ -26,6 +26,9 @@ details > summary { cursor: pointer; color: var(--accent); font-size: .85rem; ma
 .err { color: #dc2626; }
 .debug-link { color: var(--accent); text-decoration: none; font-weight: 600; font-size: .8rem; padding: .15rem .5rem; border: 1px solid var(--accent); border-radius: 4px; }
 .debug-link:hover { background: var(--accent); color: #fff; }
+.del { cursor: pointer; background: transparent; border: 1px solid transparent; color: #9ca3af; font-size: 1rem; line-height: 1; padding: .1rem .4rem; border-radius: 4px; }
+.del:hover { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+.del-folder { margin-left: .75rem; font-size: .95rem; }
 details.group { margin-bottom: 1.25rem; }
 details.group > summary { cursor: pointer; padding: .5rem .75rem; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; color: var(--fg); font-size: .95rem; margin-bottom: .5rem; list-style: none; }
 details.group > summary::-webkit-details-marker { display: none; }
