@@ -80,9 +80,6 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         let successors = nodes[node_id].state.enumerate_successors(&shared);
 
         for (action, child_state) in successors {
-            if child_state.pattern.vars.len() > max_arity {
-                continue;
-            }
             if let Some(ref follow) = shared.follow {
                 if !child_state.matches_follow(follow) {
                     continue;
@@ -96,7 +93,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             let child_cost = compute_cost(&shared.egraph, root, &child_state, shared.check_slow);
             let child_id = nodes.len();
 
-            if best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
+            if child_state.pattern.vars.len() <= max_arity && best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
                 println!(
                     "{} {} {}",
                     format!("[expansion {}]", num_expansions).yellow().bold(),

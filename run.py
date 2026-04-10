@@ -45,6 +45,7 @@ def dev():
         search="best-first",
         num_steps=500,
         debug_log=True,
+        max_arity=2,
     )
 
 
