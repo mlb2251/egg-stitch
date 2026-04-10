@@ -74,17 +74,28 @@ fn main() {
 
     let elapsed_secs = start.elapsed().as_secs_f64();
 
-    let (final_cost, compression_ratio, pattern, arity, pattern_size, rewritten_programs) =
+    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) =
         match &smc_result.best {
-            Some((cost, state)) => (
-                Some(*cost),
-                Some(smc_result.original_size as f64 / *cost as f64),
-                Some(state.pattern.to_string()),
-                Some(state.pattern.vars.len()),
-                Some(cost::compute_pattern_size(&state.pattern)),
-                Some(cost::extract_rewritten_programs(&smc_result.egraph, root, state)),
-            ),
-            None => (None, None, None, None, None, None),
+            Some((cost, state)) => {
+                let pat_size = cost::compute_pattern_size(&state.pattern);
+                let usage_counts = search::compute_usage_counts(&smc_result.egraph, root);
+                let um: usize = state.matches.iter()
+                    .map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
+                    .sum();
+                let appx = smc_result.original_size as i64 - pat_size as i64 * (um as i64 - 1);
+                (
+                    Some(*cost),
+                    Some(smc_result.original_size as f64 / *cost as f64),
+                    Some(state.pattern.to_string()),
+                    Some(state.pattern.vars.len()),
+                    Some(pat_size),
+                    Some(state.matches.len()),
+                    Some(um),
+                    Some(appx),
+                    Some(cost::extract_rewritten_programs(&smc_result.egraph, root, state)),
+                )
+            }
+            None => (None, None, None, None, None, None, None, None, None),
         };
 
     let timestamp = std::time::SystemTime::now()
@@ -102,6 +113,9 @@ fn main() {
         pattern,
         arity,
         pattern_size,
+        num_matches,
+        usage_matches,
+        approx_cost,
         num_expansions: smc_result.best_found_at.map(|n| n + 1),
         best_iteration: smc_result.best_found_at,
         num_steps_run: smc_result.num_steps_run,

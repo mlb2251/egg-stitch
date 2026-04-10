@@ -55,6 +55,9 @@ function render() {
       <td>${(r.elapsed_secs||0).toFixed(2)}</td>
       <td>${r.arity ?? ''}</td>
       <td>${r.pattern_size ?? ''}</td>
+      <td>${fmt(r.num_matches)}</td>
+      <td>${fmt(r.usage_matches)}</td>
+      <td>${fmt(r.approx_cost)}</td>
       <td>${fmt(r.num_expansions)}</td>
       <td>${r.best_iteration ?? ''}</td>
     `;

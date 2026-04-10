@@ -14,6 +14,12 @@ pub struct RunResult {
     pub pattern: Option<String>,
     pub arity: Option<usize>,
     pub pattern_size: Option<usize>,
+    /// Number of distinct e-classes where the best pattern matches.
+    pub num_matches: Option<usize>,
+    /// Sum of corpus usage counts across all matching e-classes.
+    pub usage_matches: Option<usize>,
+    /// Approximate cost estimate: `initial_cost - pattern_size * (usage_matches - 1)`.
+    pub approx_cost: Option<i64>,
     pub num_expansions: Option<usize>,
     pub best_iteration: Option<usize>,
     pub num_steps_run: usize,
