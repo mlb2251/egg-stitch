@@ -51,15 +51,17 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(&shared)).collect();
 
     for step in 0..num_steps {
+
         // === PROPOSE ===
         for ss in search_states.iter_mut() {
             ss.expand_random(&shared, false);
         }
 
-        // === WEIGHT ===
+        // === COST ===
         let costs: Vec<usize> = search_states.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
+        
+        // === BEST-SO-FAR ===
         for (i, cost) in costs.iter().enumerate() {
-            // update best-so-far
             if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), search_states[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, search_states[i].clone()));
@@ -67,17 +69,22 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             }
         }
 
+        // === WEIGHT ===
+        // weight = exp(-cost / temperature) / total_weight
         let mut weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
         let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         for w in &mut weights {
             *w = (*w - max_weight).exp();
         }
+
+        // weight=0 for programs without holes (to make space for new ones)
         for (i, s) in search_states.iter().enumerate() {
             if s.pattern.vars.is_empty() {
                 weights[i] = 0.0;
             }
         }
 
+        // weight=0 for programs that don't match the follow pattern
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&search_states, &mut weights, follow);
         }
