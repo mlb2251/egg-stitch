@@ -1,10 +1,9 @@
-use std::cmp::min;
-
 use colored::Colorize;
 
-use crate::cost::{compute_cost, compute_pattern_size, compute_size};
-use crate::debug_log::{DebugLog, ParticleLog, StepLog};
+use crate::cost::{compute_cost, compute_size};
+use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::StitchEgraph;
+use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::revexpr::RevExpr;
 use crate::search::{SearchState, SharedSearchData};
 use egg::ENodeOrVar;
@@ -49,7 +48,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
-    let mut search_states: Vec<SearchState> = (0..num_particles).map(|_i| SearchState::new(&shared)).collect();
+    let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(&shared)).collect();
 
     for step in 0..num_steps {
         // === PROPOSE ===
@@ -163,49 +162,10 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     }
 }
 
-/// Zeros the weight of particles that don't match the follow pattern, and prints status.
-fn apply_follow_constraint(states: &[SearchState], weights: &mut [f64], follow: &RevExpr<ENodeOrVar<crate::lang::StitchLang>>) {
-    let total_weight: f64 = weights.iter().sum();
-    let mut found = false;
-    for (i, state) in states.iter().enumerate() {
-        if !state.matches_follow(follow) {
-            weights[i] = 0.0;
-        } else {
-            found = true;
-        }
-    }
-    if found {
-        let matching_weight: f64 = weights.iter().sum();
-        let frac = if total_weight > 0.0 { matching_weight / total_weight } else { 0.0 };
-        println!(
-            "{} {}",
-            "follow:".dimmed(),
-            format!("{} / {} particles match ({:.1}% of weight)", weights.iter().filter(|&&w| w > 0.0).count(), weights.len(), frac * 100.0).blue()
-        );
-    } else {
-        println!("{}", "No particles match the follow pattern".red().bold());
-    }
-}
-
 /// Returns weights normalized to sum to 1 (or all zeros if sum is zero).
 fn normalize_weights(weights: &[f64]) -> Vec<f64> {
     let sum: f64 = weights.iter().sum();
     if sum == 0.0 { vec![0.0; weights.len()] } else { weights.iter().map(|w| w / sum).collect() }
-}
-
-/// Appends a debug step log if debug mode is on.
-#[allow(clippy::too_many_arguments)]
-fn log_debug_step(debug: bool, steps: &mut Vec<StepLog>, step: usize, states: &[SearchState], costs: &[usize], weights: &[f64], best: &Option<(usize, SearchState)>, resample_indices: &[usize]) {
-    if !debug {
-        return;
-    }
-    steps.push(StepLog {
-        step,
-        particles: build_particle_logs(states, costs, weights),
-        resample_indices: resample_indices.to_vec(),
-        best_cost: best.as_ref().map(|(c, _)| *c),
-        best_pattern: best.as_ref().map(|(_, s)| s.pattern.to_string()),
-    });
 }
 
 /// Samples an index from a normalized cumulative weight array.
@@ -230,42 +190,5 @@ pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
     for w in weights {
         accum += *w;
         *w = accum;
-    }
-}
-
-/// Builds a ParticleLog for each particle (pre-resample snapshot).
-fn build_particle_logs(states: &[SearchState], costs: &[usize], weights: &[f64]) -> Vec<ParticleLog> {
-    states
-        .iter()
-        .enumerate()
-        .map(|(i, s)| ParticleLog {
-            pattern: s.pattern.to_string(),
-            num_matches: s.matches.len(),
-            arity: s.pattern.vars.len(),
-            cost: costs[i],
-            weight: weights[i],
-        })
-        .collect()
-}
-
-/// Prints summary info for the top particles (up to 5).
-fn print_top_particles(states: &[SearchState], weights: &[f64], shared: &SharedSearchData, original_size: usize, get_cost: impl Fn(usize) -> usize) {
-    for i in 0..min(5, states.len()) {
-        let usage_matches: usize = states[i].matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
-        let pat_size = compute_pattern_size(&states[i].pattern);
-        let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
-        let cost_i = get_cost(i);
-        let ratio = original_size as f64 / cost_i as f64;
-        println!("  {} {}", format!("p{}:", i).dimmed(), states[i].pattern.to_string().cyan());
-        println!(
-            "      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
-            cost_i,
-            ratio,
-            weights[i],
-            states[i].matches.len(),
-            usage_matches,
-            pat_size,
-            appx_cost
-        );
     }
 }

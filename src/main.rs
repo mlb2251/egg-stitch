@@ -3,6 +3,7 @@ mod debug_log;
 mod follow;
 mod io;
 mod lang;
+mod logging;
 mod matching;
 mod pattern;
 mod results;
