@@ -36,8 +36,8 @@ impl SearchState {
         let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
-            crate::smc::normalize_and_accumulate(&mut weights);
-            crate::smc::weighted_choice(&weights)
+            let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
+            crate::smc::weighted_choice(&weights_acc)
         } else {
             rand::rng().random_range(0..self.matches.len())
         };

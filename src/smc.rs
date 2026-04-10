@@ -86,7 +86,9 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             apply_follow_constraint(&search_states, &mut log_weights, follow);
         }
 
-        let mut weights = normalize_log_weights(&log_weights);
+        // normalize
+        let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
+        let mut weights: Vec<f64> = log_weights.iter().map(|lw| (lw - total_weight).exp()).collect();
 
         if weights.iter().sum::<f64>() == 0.0 {
             log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);
@@ -103,7 +105,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &weights)) } else { None };
 
-        normalize_and_accumulate(&mut weights);
+        let weights_acc = normalize_and_accumulate(&mut weights);
         println!("{}", format!("Step {}: expanded all particles", step).dimmed());
         print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
 
@@ -111,7 +113,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         let mut resample_indices: Vec<usize> = Vec::new();
         search_states = (0..num_particles)
             .map(|_| {
-                let idx = weighted_choice(&weights);
+                let idx = weighted_choice(&weights_acc);
                 resample_indices.push(idx);
                 search_states[idx].clone()
             })
@@ -179,8 +181,8 @@ pub fn weighted_choice(acc_weights: &[f64]) -> usize {
     }
 }
 
-/// Normalizes weights to sum to 1 then converts to a cumulative distribution in-place.
-pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
+/// Normalizes `weights` to sum to 1 in-place and returns a fresh cumulative distribution.
+pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
     let weight_sum = weights.iter().sum::<f64>();
     if weight_sum == 0.0 {
         let len = weights.len();
@@ -188,9 +190,11 @@ pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
     } else {
         weights.iter_mut().for_each(|w| *w /= weight_sum);
     }
+    let mut weights_acc = Vec::with_capacity(weights.len());
     let mut accum = 0.0;
-    for w in weights {
+    for w in weights.iter() {
         accum += *w;
-        *w = accum;
+        weights_acc.push(accum);
     }
+    weights_acc
 }
