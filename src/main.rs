@@ -5,6 +5,7 @@ mod io;
 mod lang;
 mod logging;
 mod matching;
+mod math;
 mod pattern;
 mod results;
 mod revexpr;

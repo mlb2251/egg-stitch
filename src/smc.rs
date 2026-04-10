@@ -4,6 +4,7 @@ use crate::cost::{compute_cost, compute_size};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::StitchEgraph;
 use crate::logging::{apply_follow_constraint, print_top_particles};
+use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
 use crate::search::{SearchState, SharedSearchData};
 use egg::ENodeOrVar;
@@ -70,41 +71,37 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         }
 
         // === WEIGHT ===
-        // weight = exp(-cost / temperature) / total_weight
-        let mut weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
-        let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        for w in &mut weights {
-            *w = (*w - max_weight).exp();
-        }
+        // logweight = -cost / temperature
+        let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
 
-        // weight=0 for programs without holes (to make space for new ones)
+        // logweight=-inf for programs without holes (to make space for new ones)
         for (i, s) in search_states.iter().enumerate() {
             if s.pattern.vars.is_empty() {
-                weights[i] = 0.0;
+                log_weights[i] = f64::NEG_INFINITY;
             }
         }
 
-        // weight=0 for programs that don't match the follow pattern
+        // logweight=-inf for programs that don't match the follow pattern (if provided)
         if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&search_states, &mut weights, follow);
+            apply_follow_constraint(&search_states, &mut log_weights, follow);
         }
 
-        let norm_weights = normalize_weights(&weights);
+        let mut weights = normalize_log_weights(&log_weights);
 
         if weights.iter().sum::<f64>() == 0.0 {
-            log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &norm_weights, &best_so_far, &[]);
+            log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
         if best_found_at.is_some_and(|bf| (step as i64) - (bf as i64) > dead_runs as i64) {
-            log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &norm_weights, &best_so_far, &[]);
+            log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
         }
 
-        let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &norm_weights)) } else { None };
+        let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &weights)) } else { None };
 
         normalize_and_accumulate(&mut weights);
         println!("{}", format!("Step {}: expanded all particles", step).dimmed());
@@ -163,10 +160,14 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     }
 }
 
-/// Returns weights normalized to sum to 1 (or all zeros if sum is zero).
-fn normalize_weights(weights: &[f64]) -> Vec<f64> {
-    let sum: f64 = weights.iter().sum();
-    if sum == 0.0 { vec![0.0; weights.len()] } else { weights.iter().map(|w| w / sum).collect() }
+/// Softmax: converts log weights to normalized probabilities via log-sum-exp.
+/// Returns all zeros if every log weight is -inf.
+fn normalize_log_weights(log_weights: &[f64]) -> Vec<f64> {
+    let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
+    if log_total == f64::NEG_INFINITY {
+        return vec![0.0; log_weights.len()];
+    }
+    log_weights.iter().map(|lw| (lw - log_total).exp()).collect()
 }
 
 /// Samples an index from a normalized cumulative weight array.
