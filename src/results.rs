@@ -3,6 +3,8 @@ use serde::Serialize;
 /// The result of a single egg-stitch run, suitable for JSON export.
 #[derive(Serialize)]
 pub struct RunResult {
+    /// Unix epoch seconds at which this run finished writing its result.
+    pub timestamp: f64,
     pub input_file: String,
     pub rules_file: Option<String>,
     pub elapsed_secs: f64,

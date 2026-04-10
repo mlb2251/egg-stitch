@@ -87,7 +87,12 @@ fn main() {
             None => (None, None, None, None, None, None),
         };
 
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
     let run_result = results::RunResult {
+        timestamp,
         input_file: args.input.clone(),
         rules_file: args.rules.clone(),
         elapsed_secs,
