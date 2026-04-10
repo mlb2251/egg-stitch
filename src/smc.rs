@@ -83,7 +83,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         // logweight=-inf for programs that don't match the follow pattern (if provided)
         if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&search_states, &mut log_weights, follow);
+            apply_follow_constraint(&search_states, &mut log_weights, follow, &shared, original_size, &costs);
         }
 
         // normalize

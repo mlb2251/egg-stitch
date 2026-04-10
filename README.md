@@ -28,5 +28,12 @@ compress a json directly
 python3 -c 'from expts import *; compress("data/domains/cogsci/dials.json", rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites", num_steps=10, num_particles=100, debug_log=False)'
 ```
 
+Follow:
+
+```
+python3 -c 'from expts import *; compress("data/domains/cogsci/dials.json", rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites", num_steps=10, num_particles=100, debug_log=False, follow="(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))")'
+```
+
+
 
 

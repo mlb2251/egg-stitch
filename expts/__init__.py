@@ -8,7 +8,6 @@ session-wide folder helpers (``current_folder``, ``new_folder``,
 
 import os
 import argparse
-import shlex
 import subprocess
 
 from .folders import (
@@ -46,19 +45,18 @@ NON_BABBLE_DOMAINS = ["bridge", "castle", "city", "house"]
 def compress(input, output="out.json", rewrites=None, **kwargs):
     """Run `cargo run --release` with the given input/output (relative to results dir)/optional rewrites."""
     folder_dir = current_folder_path()
-    cmd = f"cargo run --release -- -i {input} --output {folder_dir / output}"
+    cmd = ["cargo", "run", "--release", "--", "-i", input, "--output", str(folder_dir / output)]
     if rewrites is not None:
-        cmd += f" -r {rewrites}"
+        cmd += ["-r", rewrites]
     for k, v in kwargs.items():
         k = k.replace("_", "-")
         if isinstance(v, bool):
             if v:
-                v = "" # simply pass the flag in
-            else:
-                continue # don't pass the flag in
-        cmd += f" --{k} {v}"
-    print("+", cmd, flush=True)
-    subprocess.run(shlex.split(cmd), check=True, env=dict(os.environ, RUST_BACKTRACE="1"))
+                cmd.append(f"--{k}")
+            continue
+        cmd += [f"--{k}", str(v)]
+    print("+", " ".join(cmd), flush=True)
+    subprocess.run(cmd, check=True, env=dict(os.environ, RUST_BACKTRACE="1"))
 
 
 def run_domain(domain, rewrites=True, **kwargs):
