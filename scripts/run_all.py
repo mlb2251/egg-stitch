@@ -8,42 +8,48 @@ from pathlib import Path
 
 RESULTS_DIR = Path(__file__).parent.parent / "viz" / "results"
 
+# Domains that have a matching drawings.<name>.rewrites file in ../babble.
+DOMAINS_WITH_REWRITES = ["dials", "furniture", "nuts-bolts", "wheels"]
+# All cogsci domains (with and without available rewrites).
+ALL_DOMAINS = ["bridge", "castle", "city", "dials", "furniture", "house", "nuts-bolts", "wheels"]
 
-def _run(cmd):
-    """Invoke a shell-style command string after splitting with shlex."""
+
+def compress(*, input, output, rewrites=None):
+    """Run `cargo run --release` with the given input/output (relative to results dir)/optional rewrites."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    cmd = f"cargo run --release -- -i {input} --output {RESULTS_DIR / output}"
+    if rewrites is not None:
+        cmd += f" -r {rewrites}"
     print("+", cmd, flush=True)
     subprocess.run(shlex.split(cmd), check=True)
 
 
-def dials():
-    """Dials benchmark with rewrites."""
-    _run(f"cargo run --release -- -i data/domains/cogsci/dials.json -r ../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites --output {RESULTS_DIR / 'dials.json'}")
-
-
-def dials_no_rewrites():
-    """Dials benchmark without rewrites."""
-    _run(f"cargo run --release -- -i data/domains/cogsci/dials.json --output {RESULTS_DIR / 'dials_no_rewrites.json'}")
+def run_domain(domain, rewrites):
+    """Run a cogsci domain benchmark, optionally with its rewrite set."""
+    compress(
+        input=f"data/domains/cogsci/{domain}.json",
+        rewrites=f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites" if rewrites else None,
+        output=f"{domain}.json" if rewrites else f"{domain}_no_rewrites.json",
+    )
 
 
 def runall():
     """Run all experiments."""
-    dials()
-    dials_no_rewrites()
-
-
-EXPERIMENTS = {
-    "dials": dials,
-    "dials_no_rewrites": dials_no_rewrites,
-    "all": runall,
-}
+    for d in ALL_DOMAINS:
+        run_domain(d, rewrites=False)
+    for d in DOMAINS_WITH_REWRITES:
+        run_domain(d, rewrites=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("experiment", choices=EXPERIMENTS.keys(), nargs="?", default="all")
+    parser.add_argument("domain", nargs="?", default="all", help="domain name, or 'all'")
+    parser.add_argument("--rewrites", action="store_true", help="use the domain's rewrite set")
     args = parser.parse_args()
-    EXPERIMENTS[args.experiment]()
+    if args.domain == "all":
+        runall()
+    else:
+        run_domain(args.domain, rewrites=args.rewrites)
 
 
 if __name__ == "__main__":
