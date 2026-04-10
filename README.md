@@ -25,7 +25,7 @@ python3 -c 'from expts import *; run_domain("dials", num_steps=10, num_particles
 compress a json directly
 
 ```
-python3 -c 'from expts import *; compress("data/domains/cogsci/dials.json", rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites", num_steps=10, num_particles=100, debug_log=False)'
+python3 -c 'from expts import *; compress("data/domains/cogsci/dials.json", rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites", num_steps=100, num_particles=1000, debug_log=False, max_arity=2, temperature=1000)'
 ```
 
 Follow:
