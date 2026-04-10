@@ -105,11 +105,11 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &weights)) } else { None };
 
-        let weights_acc = normalize_and_accumulate(&mut weights);
         println!("{}", format!("Step {}: expanded all particles", step).dimmed());
         print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
 
         // === RESAMPLE ===
+        let weights_acc = normalize_and_accumulate(&mut weights);
         let resample_indices: Vec<usize> = (0..num_particles).map(|_| weighted_choice(&weights_acc)).collect();
         search_states = resample_indices.iter().map(|&idx| search_states[idx].clone()).collect();
 
