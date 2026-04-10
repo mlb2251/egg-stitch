@@ -103,8 +103,6 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             break;
         }
 
-        let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &weights)) } else { None };
-
         println!("{}", format!("Step {}: expanded all particles", step).dimmed());
         print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
 
@@ -113,6 +111,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         let resample_indices: Vec<usize> = (0..num_particles).map(|_| weighted_choice(&weights_acc)).collect();
         search_states = resample_indices.iter().map(|&idx| search_states[idx].clone()).collect();
 
+        let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &weights)) } else { None };
         if let Some(particles) = debug_particles {
             debug_steps.push(StepLog {
                 step,
@@ -154,16 +153,6 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         egraph: shared.egraph,
         debug_log,
     }
-}
-
-/// Softmax: converts log weights to normalized probabilities via log-sum-exp.
-/// Returns all zeros if every log weight is -inf.
-fn normalize_log_weights(log_weights: &[f64]) -> Vec<f64> {
-    let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-    if log_total == f64::NEG_INFINITY {
-        return vec![0.0; log_weights.len()];
-    }
-    log_weights.iter().map(|lw| (lw - log_total).exp()).collect()
 }
 
 /// Samples an index from a normalized cumulative weight array.
