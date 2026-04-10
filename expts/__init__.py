@@ -9,7 +9,6 @@ session-wide folder helpers (``current_folder``, ``new_folder``,
 import os
 import argparse
 import subprocess
-from pathlib import Path
 
 from .folders import (
     RESULTS_DIR,
@@ -17,6 +16,7 @@ from .folders import (
     current_folder_path,
     new_folder,
     set_folder,
+    unique_path,
 )
 
 __all__ = [
@@ -43,22 +43,9 @@ ALL_DOMAINS = ["dials", "furniture", "nuts-bolts", "wheels"]
 NON_BABBLE_DOMAINS = ["bridge", "castle", "city", "house"]
 
 
-def _unique_path(path: Path) -> Path:
-    """Return `path` if it doesn't exist yet, else append `_1`, `_2`, ... before the suffix."""
-    if not path.exists():
-        return path
-    stem, suffix = path.stem, path.suffix
-    i = 1
-    while True:
-        candidate = path.with_name(f"{stem}_{i}{suffix}")
-        if not candidate.exists():
-            return candidate
-        i += 1
-
-
 def compress(input, output="out.json", rewrites=None, **kwargs):
     """Run `cargo run --release` with the given input/output (relative to results dir)/optional rewrites."""
-    output_path = _unique_path(current_folder_path() / output)
+    output_path = unique_path(current_folder_path() / output)
     cmd = ["cargo", "run", "--release", "--", "-i", input, "--output", str(output_path)]
     if rewrites is not None:
         cmd += ["-r", rewrites]

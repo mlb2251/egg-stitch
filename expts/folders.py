@@ -53,3 +53,16 @@ def set_folder(name: str) -> str:
     (RESULTS_DIR / name).mkdir(parents=True, exist_ok=True)
     print(f"[expts] results folder: {name}", flush=True)
     return name
+
+
+def unique_path(path: Path) -> Path:
+    """Return `path` if it doesn't exist yet, else append `_1`, `_2`, ... before the suffix."""
+    if not path.exists():
+        return path
+    stem, suffix = path.stem, path.suffix
+    i = 1
+    while True:
+        candidate = path.with_name(f"{stem}_{i}{suffix}")
+        if not candidate.exists():
+            return candidate
+        i += 1

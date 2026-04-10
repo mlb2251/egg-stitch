@@ -159,7 +159,7 @@ function renderGroup(g, maxRatio) {
       <td>${fmt(r.num_expansions)}</td>
       <td>${r.best_iteration ?? ''}</td>
     `;
-    tr.onclick = () => showDetail(r);
+    tr.onclick = () => toggleDetail(tr, r);
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
@@ -185,13 +185,21 @@ function fmtTime(ts) {
   return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-/** Render the per-run detail card below the table. */
-function showDetail(r) {
-  const d = document.getElementById('detail');
+/** Toggle an inline detail row immediately below the clicked run row. */
+function toggleDetail(tr, r) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('detail-row')) {
+    next.remove();
+    tr.classList.remove('expanded');
+    return;
+  }
   const progs = r.rewritten_programs || [];
-  d.innerHTML = `
+  const detailTr = document.createElement('tr');
+  detailTr.className = 'detail-row';
+  const td = document.createElement('td');
+  td.colSpan = COLUMNS.length;
+  td.innerHTML = `
     <div class="card">
-      <h3>${r.folder ? r.folder + ' / ' : ''}${r.name}</h3>
       <div class="kv">
         <span>input</span><b>${r.input_file || ''}</b>
         <span>rules</span><b>${r.rules_file || '—'}</b>
@@ -201,7 +209,9 @@ function showDetail(r) {
       <details><summary>${progs.length} rewritten programs</summary><pre>${esc(progs.join('\n'))}</pre></details>
     </div>
   `;
-  d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  detailTr.appendChild(td);
+  tr.parentNode.insertBefore(detailTr, tr.nextSibling);
+  tr.classList.add('expanded');
 }
 
 /** Minimal HTML escape for untrusted text inserted via innerHTML. */

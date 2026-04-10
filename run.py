@@ -50,14 +50,19 @@ def dev():
 
     for t in [2**i for i in range(11)]:
         rows.append(dict(
-            name=f"T={t}",
-            config=dict(num_steps=10, num_particles=100, temperature=t),
+            name=f"T{t}",
+            config=dict(num_steps=100, num_particles=1000, temperature=t, max_arity=2, ),
             output=None
         ))
 
     for row in rows:
         print(f"Running {row['name']} ===")
-        row["output"] = run_domain("dials", **row["config"])
+        row["output"] = compress(
+            "data/domains/cogsci/dials.json",
+            rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+            output=f"dials_{row['name']}.json",
+            **row["config"],
+        )
     
     for row in rows:
         print(f"{row['name']}:")

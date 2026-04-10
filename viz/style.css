@@ -9,6 +9,9 @@ th { background: #f3f4f6; font-weight: 600; font-size: .85rem; text-transform: u
 tr:last-child td { border-bottom: none; }
 tr.run { cursor: pointer; }
 tr.run:hover { background: #f9fafb; }
+tr.run.expanded { background: #eff6ff; }
+tr.detail-row > td { padding: 0 .8rem 1rem; background: #f9fafb; }
+tr.detail-row .card { margin-top: .5rem; }
 .bar { display: inline-block; height: 10px; background: var(--accent); border-radius: 3px; vertical-align: middle; }
 .ratio { display: inline-block; min-width: 3.5em; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; margin-top: 1rem; }
