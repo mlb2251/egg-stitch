@@ -110,14 +110,8 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
 
         // === RESAMPLE ===
-        let mut resample_indices: Vec<usize> = Vec::new();
-        search_states = (0..num_particles)
-            .map(|_| {
-                let idx = weighted_choice(&weights_acc);
-                resample_indices.push(idx);
-                search_states[idx].clone()
-            })
-            .collect();
+        let resample_indices: Vec<usize> = (0..num_particles).map(|_| weighted_choice(&weights_acc)).collect();
+        search_states = resample_indices.iter().map(|&idx| search_states[idx].clone()).collect();
 
         if let Some(particles) = debug_particles {
             debug_steps.push(StepLog {
