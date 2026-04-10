@@ -6,6 +6,6 @@ set -euo pipefail
 RESULTS_DIR="$(dirname "$0")/../viz/results"
 mkdir -p "$RESULTS_DIR"
 
-# Example:
-# cargo run --release -- --input data/domains/simple-arithmetic/aplusbplusc.json \
-#     --num-particles 1000 > "$RESULTS_DIR/variant_a.json"
+cargo run --release -- -i data/domains/cogsci/dials.json -r ../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites --output "$RESULTS_DIR/dials.json"
+cargo run --release -- -i data/domains/cogsci/dials.json --output "$RESULTS_DIR/dials_no_rewrites.json"
+

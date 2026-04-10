@@ -9,8 +9,17 @@ use crate::search::{SearchState, SharedSearchData};
 use egg::ENodeOrVar;
 use rand::Rng;
 
+/// Output of a completed SMC run.
+pub struct SmcResult {
+    pub best: Option<(usize, SearchState)>,
+    pub original_size: usize,
+    pub best_found_at: Option<usize>,
+    pub num_steps_run: usize,
+    pub egraph: StitchEgraph,
+}
+
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
-pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(usize, SearchState)> {
+pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
     let follow_expr: Option<RevExpr<ENodeOrVar<crate::lang::StitchLang>>> = args.follow.as_deref().map(|s|
         s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
     );
@@ -28,6 +37,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
+    let mut steps_run = 0;
 
     let mut search_states: Vec<SearchState> = (0..num_particles)
         .map(|_i| SearchState::new(&shared))
@@ -94,11 +104,13 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         }
 
         if weights.iter().sum::<f64>() == 0.0 {
+            steps_run = step + 1;
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
 
         if best_found_at.is_some_and(|best_found_at| (step as i64) - (best_found_at as i64) > dead_runs as i64) {
+            steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
         }
@@ -117,16 +129,18 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         print_top_particles(&search_states, &weights, &shared, original_size, |i| {
             compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow)
         });
+        steps_run = step + 1;
     }
 
-    let cost = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1, shared.check_slow);
     println!("\n{}", "═══ RESULT ═══".green().bold());
-    println!("{} {}", "best found at iteration:".dimmed(), best_found_at.unwrap().to_string().yellow());
-    println!("{} {}", "pattern:".dimmed(), best_so_far.as_ref().unwrap().1.pattern.to_string().cyan().bold());
-    println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
-    println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
+    if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
+        println!("{} {}", "best found at iteration:".dimmed(), iter.to_string().yellow());
+        println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
+        println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
+        println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
+    }
 
-    best_so_far
+    SmcResult { best: best_so_far, original_size, best_found_at, num_steps_run: steps_run, egraph: shared.egraph }
 }
 
 /// Samples an index from a normalized cumulative weight array.

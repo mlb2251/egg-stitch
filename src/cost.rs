@@ -1,4 +1,4 @@
-use crate::lang::StitchEgraph;
+use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -78,15 +78,15 @@ pub(crate) fn compute_size(
     }
     let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
     if check_slow {
-        let slow_size = rewrite_slow(egraph, root, search_state) as i64;
+        let slow_size = build_rewritten_egraph(egraph, search_state)[root].data as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
     }
     final_size as usize
 }
 
-/// Slow but simple rewrite cost computation via egraph cloning; used to validate `compute_size`.
-fn rewrite_slow(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> usize {
-    use crate::lang::StitchLang;
+/// Clones the egraph and unions each match root with an `inv_0(args...)` node, then rebuilds.
+/// Used for validating `compute_size` and for extracting rewritten programs.
+pub(crate) fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &SearchState) -> StitchEgraph {
     let mut egraph = egraph.clone();
     for m in &search_state.matches {
         for subst in &m.substs {
@@ -96,5 +96,14 @@ fn rewrite_slow(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState
         }
     }
     egraph.rebuild();
-    egraph[root].data as usize
+    egraph
+}
+
+/// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
+pub fn extract_rewritten_programs(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> Vec<String> {
+    let rewritten = build_rewritten_egraph(egraph, search_state);
+    let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
+    rewritten[root].nodes[0].children.iter()
+        .map(|&child| extractor.find_best(child).1.to_string())
+        .collect()
 }

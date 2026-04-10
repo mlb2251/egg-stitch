@@ -7,6 +7,7 @@ mod search;
 mod cost;
 mod smc;
 mod io;
+mod results;
 
 use clap::Parser;
 
@@ -57,13 +58,53 @@ pub struct Args {
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]
     pub check_slow: bool,
+
+    /// Path to write JSON output.
+    #[arg(short, long)]
+    pub output: Option<String>,
 }
 
 fn main() {
     let args = Args::parse();
+    let start = std::time::Instant::now();
 
     let rules = args.rules.as_deref();
     let (egraph, root) = io::load_egraph(&args.input, rules);
+    let smc_result = smc::smc(egraph, root, &args);
 
-    smc::smc(egraph, root, &args);
+    let elapsed_secs = start.elapsed().as_secs_f64();
+
+    let (final_cost, compression_ratio, pattern, arity, pattern_size, rewritten_programs) =
+        match &smc_result.best {
+            Some((cost, state)) => (
+                Some(*cost),
+                Some(smc_result.original_size as f64 / *cost as f64),
+                Some(state.pattern.to_string()),
+                Some(state.pattern.vars.len()),
+                Some(cost::compute_pattern_size(&state.pattern)),
+                Some(cost::extract_rewritten_programs(&smc_result.egraph, root, state)),
+            ),
+            None => (None, None, None, None, None, None),
+        };
+
+    let run_result = results::RunResult {
+        input_file: args.input.clone(),
+        rules_file: args.rules.clone(),
+        elapsed_secs,
+        initial_cost: smc_result.original_size,
+        final_cost,
+        compression_ratio,
+        pattern,
+        arity,
+        pattern_size,
+        num_expansions: smc_result.best_found_at.map(|n| n + 1),
+        best_iteration: smc_result.best_found_at,
+        num_steps_run: smc_result.num_steps_run,
+        rewritten_programs,
+    };
+
+    if let Some(ref output_path) = args.output {
+        let json = serde_json::to_string_pretty(&run_result).expect("Failed to serialize result");
+        std::fs::write(output_path, json).expect("Failed to write output file");
+    }
 }
