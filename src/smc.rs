@@ -116,6 +116,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         // === RESAMPLE ===
         let weights_acc = normalize_and_accumulate(&mut weights);
         let resample_indices: Vec<usize> = (0..num_particles).map(|_| weighted_choice(&weights_acc)).collect();
+        // the clone here makes it safe to then mutate each state without cloning during expansion
         search_states = resample_indices.iter().map(|&idx| search_states[idx].clone()).collect();
 
         let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &weights)) } else { None };
