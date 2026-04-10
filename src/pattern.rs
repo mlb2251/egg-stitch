@@ -14,8 +14,7 @@ impl Pattern {
     /// Creates the initial #?0 pattern which is just a single var
     pub fn single_var() -> Self {
         // annoyingly parsing "#?0" doesn't create a ENodeOrVar::Var it creates an ENodeOrVar::ENode
-        let e: RevExpr<ENodeOrVar<StitchLang>> =
-            RevExpr::new(vec![ENodeOrVar::Var(egg::Var::from(0))]);
+        let e: RevExpr<ENodeOrVar<StitchLang>> = RevExpr::new(vec![ENodeOrVar::Var(egg::Var::from(0))]);
         Pattern {
             pattern: e,
             vars: vec![vec![0.into()]],
@@ -41,10 +40,7 @@ impl Pattern {
         for j in 0..num_vars {
             new_node.children[j] = self.new_var();
         }
-        assert!(
-            matches!(self.pattern[var[0]], ENodeOrVar::Var(_)),
-            "Attempting to expand a non-var"
-        );
+        assert!(matches!(self.pattern[var[0]], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
         for var_id in var {
             // could optimze
             self.pattern[var_id] = ENodeOrVar::ENode(new_node.clone());

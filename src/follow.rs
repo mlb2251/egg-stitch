@@ -10,46 +10,24 @@ fn follow_subtrees_equal(follow: &RevExpr<ENodeOrVar<StitchLang>>, a: Id, b: Id)
     }
     match (&follow[a], &follow[b]) {
         (ENodeOrVar::Var(va), ENodeOrVar::Var(vb)) => va == vb,
-        (ENodeOrVar::ENode(na), ENodeOrVar::ENode(nb)) => {
-            na.matches(nb)
-                && na
-                    .children
-                    .iter()
-                    .zip(nb.children.iter())
-                    .all(|(&ca, &cb)| follow_subtrees_equal(follow, ca, cb))
-        }
+        (ENodeOrVar::ENode(na), ENodeOrVar::ENode(nb)) => na.matches(nb) && na.children.iter().zip(nb.children.iter()).all(|(&ca, &cb)| follow_subtrees_equal(follow, ca, cb)),
         _ => false,
     }
 }
 
 /// Recursively checks whether a pattern is a valid prefix of the follow target.
-pub fn check_follow(
-    pattern: &RevExpr<ENodeOrVar<StitchLang>>,
-    pid: Id,
-    follow: &RevExpr<ENodeOrVar<StitchLang>>,
-    fid: Id,
-    var_bindings: &mut HashMap<egg::Var, Id>,
-) -> bool {
+pub fn check_follow(pattern: &RevExpr<ENodeOrVar<StitchLang>>, pid: Id, follow: &RevExpr<ENodeOrVar<StitchLang>>, fid: Id, var_bindings: &mut HashMap<egg::Var, Id>) -> bool {
     match &pattern[pid] {
         ENodeOrVar::Var(v) => match var_bindings.entry(*v) {
             std::collections::hash_map::Entry::Vacant(e) => {
                 e.insert(fid);
                 true
             }
-            std::collections::hash_map::Entry::Occupied(e) => {
-                follow_subtrees_equal(follow, *e.get(), fid)
-            }
+            std::collections::hash_map::Entry::Occupied(e) => follow_subtrees_equal(follow, *e.get(), fid),
         },
         ENodeOrVar::ENode(p_node) => match &follow[fid] {
             ENodeOrVar::Var(_) => false,
-            ENodeOrVar::ENode(f_node) => {
-                p_node.matches(f_node)
-                    && p_node
-                        .children
-                        .iter()
-                        .zip(f_node.children.iter())
-                        .all(|(&pc, &fc)| check_follow(pattern, pc, follow, fc, var_bindings))
-            }
+            ENodeOrVar::ENode(f_node) => p_node.matches(f_node) && p_node.children.iter().zip(f_node.children.iter()).all(|(&pc, &fc)| check_follow(pattern, pc, follow, fc, var_bindings)),
         },
     }
 }

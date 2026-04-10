@@ -26,8 +26,5 @@ impl MatchAtEClass {
 
 /// Returns one identity match per e-class in the egraph.
 pub fn identity_matches(egraph: &StitchEgraph) -> Vec<MatchAtEClass> {
-    egraph
-        .classes()
-        .map(|c| MatchAtEClass::identity_match(c.id))
-        .collect()
+    egraph.classes().map(|c| MatchAtEClass::identity_match(c.id)).collect()
 }

@@ -19,16 +19,12 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
         expr_ids.push(egraph.add_expr(&expr));
     }
 
-    let programs_node =
-        StitchLang::from_op("programs", expr_ids.clone()).expect("Failed to create programs node");
+    let programs_node = StitchLang::from_op("programs", expr_ids.clone()).expect("Failed to create programs node");
     let root = egraph.add(programs_node);
     println!("Loaded {} programs", expr_ids.len());
     println!("Egraph size: {}", egraph.classes().len());
 
-    println!(
-        "Weight of root node before rules: {}",
-        extract_root_size(&egraph, root)
-    );
+    println!("Weight of root node before rules: {}", extract_root_size(&egraph, root));
     let rules: Vec<egg::Rewrite<StitchLang, StitchAnalysis>> = match rule_file {
         Some(rule_file) => from_file(rule_file).expect("Failed to parse rules file"),
         None => vec![],
@@ -39,10 +35,7 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
     runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
 
     runner.egraph.rebuild();
-    println!(
-        "Weight of root node after rules:  {}",
-        extract_root_size(&runner.egraph, root)
-    );
+    println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
     (runner.egraph, root)
 }
