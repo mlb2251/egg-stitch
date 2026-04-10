@@ -3,7 +3,7 @@ use rustc_hash::FxHashSet;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-use crate::cost::compute_cost;
+use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::StitchEgraph;
 use crate::search::{Action, SearchState, setup_search};
@@ -143,6 +143,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                     action: n.action.as_ref().map(|a| a.to_string()),
                     pattern: n.state.pattern.to_string(),
                     arity: n.state.pattern.vars.len(),
+                    pattern_size: compute_pattern_size(&n.state.pattern),
                     num_matches: n.state.matches.len(),
                     cost: n.cost,
                     expanded: n.expanded,

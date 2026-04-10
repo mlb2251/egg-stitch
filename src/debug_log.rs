@@ -32,6 +32,7 @@ pub struct TreeNodeLog {
     pub action: Option<String>,
     pub pattern: String,
     pub arity: usize,
+    pub pattern_size: usize,
     pub num_matches: usize,
     pub cost: usize,
     /// Whether this node was actually popped and expanded (vs. just enqueued).

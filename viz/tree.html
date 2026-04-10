@@ -14,29 +14,43 @@ header h1 { font-size: 1.1rem; font-weight: 600; }
 header .meta { color: var(--muted); font-size: .85rem; }
 a.back { color: var(--accent); text-decoration: none; font-size: .85rem; }
 
-/* Layout */
 main { flex: 1; display: flex; min-height: 0; }
-#treepane { flex: 1; overflow: auto; background: var(--bg); position: relative; }
-#sidepane { width: 360px; border-left: 1px solid var(--border); background: var(--card); padding: 1rem 1.25rem; overflow-y: auto; font-size: .85rem; }
+#treepane { flex: 1; overflow: auto; background: var(--card); padding: .5rem 0; }
+#sidepane { width: 380px; border-left: 1px solid var(--border); background: var(--card); padding: 1rem 1.25rem; overflow-y: auto; font-size: .85rem; }
 
-/* Controls */
 .controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .85rem; color: var(--muted); }
 .controls label { display: flex; align-items: center; gap: .3rem; cursor: pointer; }
 .controls button { padding: .3rem .65rem; border: 1px solid var(--border); background: var(--card); border-radius: 6px; cursor: pointer; font-size: .8rem; }
 .controls button:hover { background: #f3f4f6; }
 
-/* SVG tree */
-svg.tree { display: block; }
-svg.tree .edge { fill: none; stroke: var(--dim); stroke-width: 1.2; }
-svg.tree .edge.on-best { stroke: var(--good); stroke-width: 2.5; }
-svg.tree .edge-label { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 9px; fill: var(--muted); pointer-events: none; }
+/* Nested tree rows */
+.tree-list { list-style: none; padding: 0; margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: .82rem; }
+.tree-list ul { list-style: none; padding-left: 1.1rem; margin: 0; border-left: 1px dashed var(--border); }
+.tree-list li { position: relative; }
 
-svg.tree .node circle { stroke: #fff; stroke-width: 1.5; cursor: pointer; }
-svg.tree .node.fringe circle { fill: var(--dim); }
-svg.tree .node.expanded circle { fill: var(--accent); }
-svg.tree .node.best circle { fill: var(--good); stroke: #064e3b; stroke-width: 2; }
-svg.tree .node.selected circle { stroke: #111; stroke-width: 3; }
-svg.tree .node text { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 10px; fill: var(--fg); pointer-events: none; }
+.row { display: flex; align-items: center; gap: .5rem; padding: .2rem .4rem .2rem .5rem; cursor: pointer; border-radius: 4px; white-space: nowrap; }
+.row:hover { background: #eef2ff; }
+.row.selected { background: #dbeafe; }
+.row.on-best { background: #ecfdf5; }
+.row.on-best.selected { background: #a7f3d0; }
+
+.row .caret { display: inline-block; width: .9rem; color: var(--muted); text-align: center; flex-shrink: 0; }
+.row .caret.leaf { color: transparent; }
+.row .id { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.2rem; }
+.row .eord { color: var(--accent); font-variant-numeric: tabular-nums; min-width: 3rem; font-size: .75rem; }
+.row .eord.none { color: transparent; }
+.row .cost { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 4.5rem; text-align: right; }
+.row .submin { font-variant-numeric: tabular-nums; color: var(--good); min-width: 5rem; font-size: .75rem; }
+.row .submin.same { color: transparent; }
+.row .stats { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 4rem; }
+.row .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.row .dot.fringe { background: var(--dim); }
+.row .dot.expanded { background: var(--accent); }
+.row .dot.best { background: var(--good); box-shadow: 0 0 0 2px #d1fae5; }
+.row .action { color: #9ca3af; font-size: .75rem; }
+.row .pattern { color: #0ea5e9; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.row .badge { font-size: .7rem; color: var(--muted); background: #f3f4f6; padding: 0 .35rem; border-radius: 3px; }
+.row .badge.best { color: #065f46; background: #d1fae5; }
 
 /* Side pane */
 #sidepane h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .35rem; margin-top: 1rem; }
@@ -51,7 +65,6 @@ svg.tree .node text { font-family: 'SF Mono', 'Fira Code', monospace; font-size:
 #sidepane a.nav { color: var(--accent); text-decoration: none; }
 #sidepane a.nav:hover { text-decoration: underline; }
 
-/* Legend */
 .legend { display: flex; gap: .75rem; font-size: .75rem; color: var(--muted); }
 .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: .25rem; }
 .legend .exp { background: var(--accent); }
@@ -73,14 +86,9 @@ svg.tree .node text { font-family: 'SF Mono', 'Fira Code', monospace; font-size:
       <span><span class="swatch fri"></span>fringe</span>
       <span><span class="swatch bes"></span>best</span>
     </div>
-    <label><input type="checkbox" id="chkBestPath" checked> best path</label>
-    <label><input type="checkbox" id="chkEdgeLabels"> edge labels</label>
-    <label>layout
-      <select id="layout">
-        <option value="h">horizontal</option>
-        <option value="v">vertical</option>
-      </select>
-    </label>
+    <button id="btnExpandBest" title="expand path from root to best">expand best path</button>
+    <button id="btnCollapseAll" title="collapse all">collapse all</button>
+    <label><input type="checkbox" id="chkExpandedOnly"> expanded only</label>
   </div>
 </header>
 

@@ -1,5 +1,7 @@
 // Tree viewer for egg-stitch best-first search runs.
-// Loads a SearchTreeLog JSON file and renders the explored search tree.
+// Renders the SearchTreeLog as a nested disclosure list — each node is a row
+// the user can click to expand/collapse its children. Designed for high-
+// branching search trees where an SVG layout would be unreadable.
 
 const $ = id => document.getElementById(id);
 const loading = $('loading');
@@ -10,14 +12,13 @@ const params = new URLSearchParams(location.search);
 const file = params.get('file');
 
 let data = null;
-let children = new Map();   // parent id -> sorted child id list
-let pos = null;             // node id -> { y, depth } in logical coords
-let bestPathEdges = new Set();
+let children = new Map();    // parent id -> child ids (sorted by subtree min cost)
+let subtreeMin = [];         // node id -> min cost anywhere in its subtree
+let expOrder = [];           // node id -> expansion pop index, or -1
 let bestPathNodes = new Set();
+let expandedOnly = false;
+let openNodes = new Set();   // ids whose children are visible
 let selectedId = null;
-let layoutMode = 'h';
-let showEdgeLabels = false;
-let showBestPath = true;
 
 if (!file) {
   loading.innerHTML = '<span class="err">no ?file= parameter</span>';
@@ -27,8 +28,6 @@ if (!file) {
     .then(d => { data = d; init(); })
     .catch(e => { loading.innerHTML = `<span class="err">failed to load ${file}: ${e}</span>`; });
 }
-
-// --- Init ---
 
 function init() {
   if (loading.parentNode) loading.remove();
@@ -47,153 +46,164 @@ function init() {
       children.get(n.parent).push(n.id);
     }
   }
-  // Sort siblings by cost so the lowest-cost branch sits on top.
-  for (const arr of children.values()) arr.sort((a, b) => data.nodes[a].cost - data.nodes[b].cost);
+  // Subtree min cost: the best (lowest) cost reachable anywhere at or below
+  // each node. Computed by processing ids in reverse order — children always
+  // have higher ids than their parent since nodes are appended on discovery.
+  subtreeMin = data.nodes.map(n => n.cost);
+  for (let i = data.nodes.length - 1; i > 0; i--) {
+    const p = data.nodes[i].parent;
+    if (p != null && subtreeMin[i] < subtreeMin[p]) subtreeMin[p] = subtreeMin[i];
+  }
+  for (const arr of children.values()) arr.sort((a, b) => subtreeMin[a] - subtreeMin[b]);
 
-  computeLayout();
+  expOrder = new Array(data.nodes.length).fill(-1);
+  if (Array.isArray(data.expansion_order)) {
+    data.expansion_order.forEach((id, i) => { expOrder[id] = i; });
+  }
 
-  // Best path: walk parent pointers from best_node.
-  bestPathEdges.clear();
   bestPathNodes.clear();
   if (data.best_node != null) {
     let cur = data.best_node;
     while (cur != null) {
       bestPathNodes.add(cur);
-      const parent = data.nodes[cur].parent;
-      if (parent != null) bestPathEdges.add(`${parent}-${cur}`);
-      cur = parent;
+      cur = data.nodes[cur].parent;
     }
   }
 
-  $('chkBestPath').addEventListener('change', (e) => { showBestPath = e.target.checked; render(); });
-  $('chkEdgeLabels').addEventListener('change', (e) => { showEdgeLabels = e.target.checked; render(); });
-  $('layout').addEventListener('change', (e) => { layoutMode = e.target.value; computeLayout(); render(); });
+  // Open the root and the full best path by default.
+  openNodes.add(0);
+  for (const id of bestPathNodes) openNodes.add(id);
+
+  $('btnExpandBest').addEventListener('click', () => {
+    for (const id of bestPathNodes) openNodes.add(id);
+    render();
+  });
+  $('btnCollapseAll').addEventListener('click', () => {
+    openNodes.clear();
+    openNodes.add(0);
+    render();
+  });
+  $('chkExpandedOnly').addEventListener('change', (e) => { expandedOnly = e.target.checked; render(); });
 
   selectedId = data.best_node ?? 0;
   render();
   renderSide();
-  setTimeout(() => scrollToNode(selectedId), 0);
-}
-
-// --- Layout ---
-
-// Two-pass layered tree: post-order compute subtree leaf counts, top-down assign
-// center position of each parent as the midpoint of its children.
-function computeLayout() {
-  const n = data.nodes.length;
-  const leafCount = new Array(n).fill(1);
-  function post(id) {
-    const kids = children.get(id) || [];
-    if (kids.length === 0) return (leafCount[id] = 1);
-    let total = 0;
-    for (const k of kids) total += post(k);
-    return (leafCount[id] = total);
-  }
-  post(0);
-
-  pos = new Array(n);
-  function assign(id, yStart, depth) {
-    const kids = children.get(id) || [];
-    if (kids.length === 0) {
-      pos[id] = { y: yStart + 0.5, depth };
-      return 1;
-    }
-    let y = yStart;
-    for (const k of kids) y += assign(k, y, depth + 1);
-    const first = pos[kids[0]].y;
-    const last = pos[kids[kids.length - 1]].y;
-    pos[id] = { y: (first + last) / 2, depth };
-    return leafCount[id];
-  }
-  assign(0, 0, 0);
 }
 
 // --- Render ---
 
+function visibleChildren(id) {
+  const kids = children.get(id) || [];
+  return expandedOnly ? kids.filter(k => data.nodes[k].expanded) : kids;
+}
+
 function render() {
-  const xStep = layoutMode === 'h' ? 110 : 18;
-  const yStep = layoutMode === 'h' ? 18 : 110;
-  const padX = 50, padY = 50;
-
-  let maxDepth = 0, maxY = 0;
-  for (const p of pos) {
-    if (!p) continue;
-    if (p.depth > maxDepth) maxDepth = p.depth;
-    if (p.y > maxY) maxY = p.y;
-  }
-
-  const W = (layoutMode === 'h' ? maxDepth * xStep : maxY * xStep) + padX * 2 + 220;
-  const H = (layoutMode === 'h' ? maxY * yStep : maxDepth * yStep) + padY * 2 + 40;
-
-  const NS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('class', 'tree');
-  svg.setAttribute('width', W);
-  svg.setAttribute('height', H);
-
-  function coord(id) {
-    const p = pos[id];
-    if (layoutMode === 'h') return { x: padX + p.depth * xStep, y: padY + p.y * yStep };
-    return { x: padX + p.y * xStep, y: padY + p.depth * yStep };
-  }
-
-  // Edges
-  const gEdges = document.createElementNS(NS, 'g');
-  svg.appendChild(gEdges);
-  for (const n of data.nodes) {
-    if (n.parent == null) continue;
-    const a = coord(n.parent), b = coord(n.id);
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    const d = layoutMode === 'h'
-      ? `M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x},${b.y}`
-      : `M${a.x},${a.y} C${a.x},${my} ${b.x},${my} ${b.x},${b.y}`;
-    const path = document.createElementNS(NS, 'path');
-    path.setAttribute('d', d);
-    const onBest = showBestPath && bestPathEdges.has(`${n.parent}-${n.id}`);
-    path.setAttribute('class', 'edge' + (onBest ? ' on-best' : ''));
-    gEdges.appendChild(path);
-
-    if (showEdgeLabels && n.action) {
-      const t = document.createElementNS(NS, 'text');
-      t.setAttribute('class', 'edge-label');
-      t.setAttribute('x', mx + 4);
-      t.setAttribute('y', my - 3);
-      t.textContent = n.action;
-      gEdges.appendChild(t);
-    }
-  }
-
-  // Nodes
-  const gNodes = document.createElementNS(NS, 'g');
-  svg.appendChild(gNodes);
-  for (const n of data.nodes) {
-    const p = coord(n.id);
-    const g = document.createElementNS(NS, 'g');
-    const state = n.id === data.best_node ? 'best' : (n.expanded ? 'expanded' : 'fringe');
-    g.setAttribute('class', 'node ' + state + (n.id === selectedId ? ' selected' : ''));
-    g.setAttribute('transform', `translate(${p.x},${p.y})`);
-    g.dataset.id = n.id;
-    const c = document.createElementNS(NS, 'circle');
-    c.setAttribute('r', n.id === data.best_node ? 7 : 5);
-    g.appendChild(c);
-    if (n.id === data.best_node) {
-      const t = document.createElementNS(NS, 'text');
-      t.setAttribute('x', layoutMode === 'h' ? 12 : 0);
-      t.setAttribute('y', layoutMode === 'h' ? 3 : -11);
-      t.setAttribute('text-anchor', layoutMode === 'h' ? 'start' : 'middle');
-      t.textContent = `best: ${n.cost}`;
-      g.appendChild(t);
-    }
-    g.addEventListener('click', () => {
-      selectedId = n.id;
-      render();
-      renderSide();
-    });
-    gNodes.appendChild(g);
-  }
-
+  const root = document.createElement('ul');
+  root.className = 'tree-list';
+  root.appendChild(renderNode(0));
   treepane.innerHTML = '';
-  treepane.appendChild(svg);
+  treepane.appendChild(root);
+}
+
+function renderNode(id) {
+  const n = data.nodes[id];
+  const kids = visibleChildren(id);
+  const isOpen = openNodes.has(id);
+  const isBest = id === data.best_node;
+  const onBest = bestPathNodes.has(id);
+
+  const li = document.createElement('li');
+
+  const row = document.createElement('div');
+  row.className = 'row' + (onBest ? ' on-best' : '') + (id === selectedId ? ' selected' : '');
+  row.dataset.id = id;
+
+  const caret = document.createElement('span');
+  caret.className = 'caret' + (kids.length === 0 ? ' leaf' : '');
+  caret.textContent = kids.length === 0 ? '·' : (isOpen ? '▼' : '▶');
+  row.appendChild(caret);
+
+  const dot = document.createElement('span');
+  const state = isBest ? 'best' : (n.expanded ? 'expanded' : 'fringe');
+  dot.className = 'dot ' + state;
+  row.appendChild(dot);
+
+  const idSpan = document.createElement('span');
+  idSpan.className = 'id';
+  idSpan.textContent = `#${id}`;
+  idSpan.title = `node id #${id}`;
+  row.appendChild(idSpan);
+
+  const eord = document.createElement('span');
+  const ei = expOrder[id];
+  eord.className = 'eord' + (ei < 0 ? ' none' : '');
+  eord.textContent = ei < 0 ? '—' : `e${ei}`;
+  eord.title = ei < 0 ? 'not expanded' : `expansion order #${ei}`;
+  row.appendChild(eord);
+
+  const cost = document.createElement('span');
+  cost.className = 'cost';
+  cost.textContent = n.cost.toLocaleString();
+  cost.title = 'cost at this node';
+  row.appendChild(cost);
+
+  const sm = subtreeMin[id];
+  const submin = document.createElement('span');
+  submin.className = 'submin' + (sm === n.cost ? ' same' : '');
+  submin.textContent = `↓ ${sm.toLocaleString()}`;
+  submin.title = 'min cost reachable in this subtree';
+  row.appendChild(submin);
+
+  const stats = document.createElement('span');
+  stats.className = 'stats';
+  stats.textContent = `sz${n.pattern_size ?? n.arity}·m${n.num_matches}`;
+  stats.title = `pattern size ${n.pattern_size ?? '—'} · ${n.num_matches} matches`;
+  row.appendChild(stats);
+
+  const pat = document.createElement('span');
+  pat.className = 'pattern';
+  pat.textContent = n.pattern;
+  row.appendChild(pat);
+
+  if (n.action) {
+    const act = document.createElement('span');
+    act.className = 'action';
+    act.textContent = n.action;
+    row.appendChild(act);
+  }
+
+  if (kids.length > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = `${kids.length}`;
+    row.appendChild(badge);
+  }
+  if (isBest) {
+    const badge = document.createElement('span');
+    badge.className = 'badge best';
+    badge.textContent = 'best';
+    row.appendChild(badge);
+  }
+
+  row.addEventListener('click', (e) => {
+    if (kids.length > 0) {
+      if (openNodes.has(id)) openNodes.delete(id);
+      else openNodes.add(id);
+    }
+    selectedId = id;
+    render();
+    renderSide();
+  });
+
+  li.appendChild(row);
+
+  if (isOpen && kids.length > 0) {
+    const ul = document.createElement('ul');
+    for (const k of kids) ul.appendChild(renderNode(k));
+    li.appendChild(ul);
+  }
+
+  return li;
 }
 
 // --- Side pane ---
@@ -207,7 +217,6 @@ function renderSide() {
   const kids = children.get(n.id) || [];
   const ratio = data.original_size ? (data.original_size / n.cost) : null;
   const isBest = n.id === data.best_node;
-  // Expansion order index, if this node was popped from the heap.
   let popIdx = -1;
   if (Array.isArray(data.expansion_order)) popIdx = data.expansion_order.indexOf(n.id);
 
@@ -230,22 +239,20 @@ function renderSide() {
   side.querySelectorAll('a.nav').forEach(a => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
-      selectedId = +a.dataset.id;
+      const id = +a.dataset.id;
+      // Open ancestors so the target is visible.
+      let cur = id;
+      while (cur != null) {
+        openNodes.add(data.nodes[cur].parent ?? 0);
+        cur = data.nodes[cur].parent;
+      }
+      selectedId = id;
       render();
       renderSide();
-      scrollToNode(selectedId);
+      const el = treepane.querySelector(`.row[data-id="${id}"]`);
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'instant' });
     });
   });
-}
-
-function scrollToNode(id) {
-  const el = treepane.querySelector(`.node[data-id="${id}"]`);
-  if (!el) return;
-  const rect = el.getBoundingClientRect();
-  const pRect = treepane.getBoundingClientRect();
-  const dx = rect.left - pRect.left - pRect.width / 2 + rect.width / 2;
-  const dy = rect.top - pRect.top - pRect.height / 2 + rect.height / 2;
-  treepane.scrollBy({ left: dx, top: dy, behavior: 'instant' });
 }
 
 function escapeHtml(s) {
