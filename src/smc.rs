@@ -59,13 +59,9 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         // === WEIGHT ===
         let costs: Vec<usize> = search_states.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
         for (i, cost) in costs.iter().enumerate() {
+            // update best-so-far
             if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
-                println!(
-                    "{} {} {}",
-                    format!("[iteration {}]", step).yellow().bold(),
-                    format!("new best: {}", cost).green().bold(),
-                    search_states[i].pattern.to_string().cyan()
-                );
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), search_states[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, search_states[i].clone()));
                 best_found_at = Some(step);
             }
@@ -128,9 +124,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         }
 
         println!("{}", format!("Step {}: resampled all particles", step).dimmed());
-        print_top_particles(&search_states, &weights, &shared, original_size, |i| {
-            compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow)
-        });
+        print_top_particles(&search_states, &weights, &shared, original_size, |i| compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow));
         steps_run = step + 1;
     }
 

@@ -17,10 +17,7 @@ pub struct Subst {
 impl MatchAtEClass {
     /// Creates a match for e-class `c` with a single substitution mapping the root variable to `c`.
     pub fn identity_match(c: egg::Id) -> Self {
-        Self {
-            root_eclass: c,
-            substs: vec![Subst { vars: vec![c] }],
-        }
+        Self { root_eclass: c, substs: vec![Subst { vars: vec![c] }] }
     }
 }
 

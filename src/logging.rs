@@ -19,11 +19,7 @@ pub fn apply_follow_constraint(states: &[SearchState], weights: &mut [f64], foll
     if found {
         let matching_weight: f64 = weights.iter().sum();
         let frac = if total_weight > 0.0 { matching_weight / total_weight } else { 0.0 };
-        println!(
-            "{} {}",
-            "follow:".dimmed(),
-            format!("{} / {} particles match ({:.1}% of weight)", weights.iter().filter(|&&w| w > 0.0).count(), weights.len(), frac * 100.0).blue()
-        );
+        println!("{} {}", "follow:".dimmed(), format!("{} / {} particles match ({:.1}% of weight)", weights.iter().filter(|&&w| w > 0.0).count(), weights.len(), frac * 100.0).blue());
     } else {
         println!("{}", "No particles match the follow pattern".red().bold());
     }

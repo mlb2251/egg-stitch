@@ -15,11 +15,7 @@ impl Pattern {
     pub fn single_var() -> Self {
         // annoyingly parsing "#?0" doesn't create a ENodeOrVar::Var it creates an ENodeOrVar::ENode
         let e: RevExpr<ENodeOrVar<StitchLang>> = RevExpr::new(vec![ENodeOrVar::Var(egg::Var::from(0))]);
-        Pattern {
-            pattern: e,
-            vars: vec![vec![0.into()]],
-            max_var: 0,
-        }
+        Pattern { pattern: e, vars: vec![vec![0.into()]], max_var: 0 }
     }
 
     /// Creates a new variable with a fresh name and adds it to the pattern
