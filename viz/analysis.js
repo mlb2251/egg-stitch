@@ -1,53 +1,151 @@
-// Fetch viz/results/*.json from a running `python3 -m http.server` and render.
-// Directory listing is parsed from http.server's auto-generated HTML index.
+// Fetch viz/results/**/*.json from a running `python3 -m http.server` and
+// render. Directory listing is parsed from http.server's auto-generated HTML
+// index. Results are grouped by their containing subfolder under results/:
+// the expts module drops each session into a timestamp-named folder, and we
+// render one <details> section per folder, expanded by default.
 
 const meta = document.getElementById('meta');
-const tbody = document.querySelector('#tbl tbody');
-let rows = [];
+const container = document.getElementById('groups');
+let groups = [];           // [{ folder: string|'', rows: [...] }]
 let sortKey = 'timestamp', sortAsc = false;
 
-/** Parse http.server's directory listing HTML and return hrefs ending in .json. */
-function extractJsonLinks(html) {
+/** Parse http.server's directory listing HTML. Returns { files, dirs }. */
+function extractLinks(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  return [...doc.querySelectorAll('a')]
-    .map(a => a.getAttribute('href'))
-    .filter(h => h && h.endsWith('.json'));
+  const files = [], dirs = [];
+  for (const a of doc.querySelectorAll('a')) {
+    const h = a.getAttribute('href');
+    if (!h || h.startsWith('?') || h === '../' || h === '/') continue;
+    if (h.endsWith('/')) dirs.push(h.replace(/\/$/, ''));
+    else if (h.endsWith('.json')) files.push(h);
+  }
+  return { files, dirs };
 }
 
-/** Fetch the results directory, load every JSON file, and kick off rendering. */
+/** Fetch + parse one JSON result file, tagging it with its folder. */
+async function loadRun(folder, file) {
+  const path = folder ? `results/${folder}/${file}` : `results/${file}`;
+  const r = await fetch(path).then(r => r.json());
+  return {
+    folder,
+    name: file.replace(/\.json$/, ''),
+    rewrites: !!r.rules_file,
+    ...r,
+  };
+}
+
+/** Fetch the results tree, load every JSON, group by folder, then render. */
 async function load() {
   try {
     const listing = await fetch('results/').then(r => r.text());
-    const files = extractJsonLinks(listing);
-    const loaded = await Promise.all(files.map(async f => {
-      const r = await fetch('results/' + f).then(r => r.json());
-      return { name: f.replace(/\.json$/, ''), rewrites: !!r.rules_file, ...r };
-    }));
-    rows = loaded;
-    meta.textContent = `${rows.length} runs loaded`;
+    const { files: topFiles, dirs } = extractLinks(listing);
+
+    const groupMap = new Map();            // folder -> rows[]
+    const add = (folder, row) => {
+      if (!groupMap.has(folder)) groupMap.set(folder, []);
+      groupMap.get(folder).push(row);
+    };
+
+    // Top-level (ungrouped / legacy) runs.
+    const topPromises = topFiles
+      .filter(f => !f.endsWith('_debug.json'))
+      .map(f => loadRun('', f).then(r => add('', r)));
+
+    // One pass per subfolder, in parallel.
+    const subPromises = dirs.map(async d => {
+      const sub = await fetch(`results/${d}/`).then(r => r.text());
+      const { files } = extractLinks(sub);
+      await Promise.all(
+        files
+          .filter(f => !f.endsWith('_debug.json'))
+          .map(f => loadRun(d, f).then(r => add(d, r)))
+      );
+    });
+
+    await Promise.all([...topPromises, ...subPromises]);
+
+    groups = [...groupMap.entries()].map(([folder, rows]) => ({ folder, rows }));
+    // Newest folder first; ungrouped ('') pinned to the bottom.
+    groups.sort((a, b) => {
+      if (a.folder === '' && b.folder !== '') return 1;
+      if (b.folder === '' && a.folder !== '') return -1;
+      return a.folder < b.folder ? 1 : a.folder > b.folder ? -1 : 0;
+    });
+
+    const total = groups.reduce((n, g) => n + g.rows.length, 0);
+    meta.textContent = `${total} runs across ${groups.length} folder${groups.length === 1 ? '' : 's'}`;
     render();
   } catch (e) {
     meta.innerHTML = `<span class="err">failed to load results: ${e}. run <code>make server</code> and open this page via http://localhost:&lt;port&gt;/viz/</span>`;
   }
 }
 
-/** Render the sorted table body. */
-function render() {
-  const maxRatio = Math.max(1, ...rows.map(r => r.compression_ratio || 0));
-  rows.sort((a, b) => {
+const COLUMNS = [
+  ['timestamp', 'when'],
+  ['name', 'run'],
+  [null, 'debug'],
+  ['rewrites', 'rewrites'],
+  ['initial_cost', 'init cost'],
+  ['final_cost', 'final'],
+  ['compression_ratio', 'ratio'],
+  ['elapsed_secs', 'time (s)'],
+  ['arity', 'arity'],
+  ['pattern_size', 'pat size'],
+  ['num_matches', 'matches'],
+  ['usage_matches', 'usage matches'],
+  ['approx_cost', 'approx cost'],
+  ['num_expansions', 'expansions'],
+  ['best_iteration', 'best iter'],
+];
+
+/** Render one folder group as an expanded <details> with its own table. */
+function renderGroup(g, maxRatio) {
+  const rows = [...g.rows].sort((a, b) => {
     const x = a[sortKey], y = b[sortKey];
     if (x === y) return 0;
     const cmp = x < y ? -1 : 1;
     return sortAsc ? cmp : -cmp;
   });
-  tbody.innerHTML = '';
+
+  const details = document.createElement('details');
+  details.className = 'group';
+  details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.innerHTML = `<span class="folder-name">${g.folder || '(ungrouped)'}</span> <span class="folder-count">${rows.length} run${rows.length === 1 ? '' : 's'}</span>`;
+  details.appendChild(summary);
+
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const headTr = document.createElement('tr');
+  for (const [k, label] of COLUMNS) {
+    const th = document.createElement('th');
+    th.textContent = label;
+    if (k) {
+      th.dataset.k = k;
+      th.onclick = () => {
+        if (sortKey === k) sortAsc = !sortAsc;
+        else { sortKey = k; sortAsc = true; }
+        render();
+      };
+    }
+    headTr.appendChild(th);
+  }
+  thead.appendChild(headTr);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
   for (const r of rows) {
     const tr = document.createElement('tr');
     tr.className = 'run';
     const barW = Math.round(60 * (r.compression_ratio || 0) / maxRatio);
+    const debugPath = r.debug_log_file
+      ? (r.folder ? `${r.folder}/${r.debug_log_file}` : r.debug_log_file)
+      : null;
     tr.innerHTML = `
       <td>${fmtTime(r.timestamp)}</td>
       <td><b>${r.name}</b></td>
+      <td>${debugPath ? `<a class="debug-link" href="debug.html?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
       <td>${r.rewrites ? '<span class="pill">yes</span>' : '<span class="pill no">no</span>'}</td>
       <td>${fmt(r.initial_cost)}</td>
       <td>${fmt(r.final_cost)}</td>
@@ -60,11 +158,21 @@ function render() {
       <td>${fmt(r.approx_cost)}</td>
       <td>${fmt(r.num_expansions)}</td>
       <td>${r.best_iteration ?? ''}</td>
-      <td>${r.debug_log_file ? `<a class="debug-link" href="debug.html?file=${encodeURIComponent(r.debug_log_file)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
     `;
     tr.onclick = () => showDetail(r);
     tbody.appendChild(tr);
   }
+  table.appendChild(tbody);
+  details.appendChild(table);
+  return details;
+}
+
+/** Render all groups. */
+function render() {
+  const allRows = groups.flatMap(g => g.rows);
+  const maxRatio = Math.max(1, ...allRows.map(r => r.compression_ratio || 0));
+  container.innerHTML = '';
+  for (const g of groups) container.appendChild(renderGroup(g, maxRatio));
 }
 
 /** Format numbers with thousands separators; pass through null/undefined. */
@@ -77,22 +185,13 @@ function fmtTime(ts) {
   return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-document.querySelectorAll('#tbl th').forEach(th => {
-  th.onclick = () => {
-    const k = th.dataset.k;
-    if (sortKey === k) sortAsc = !sortAsc;
-    else { sortKey = k; sortAsc = true; }
-    render();
-  };
-});
-
 /** Render the per-run detail card below the table. */
 function showDetail(r) {
   const d = document.getElementById('detail');
   const progs = r.rewritten_programs || [];
   d.innerHTML = `
     <div class="card">
-      <h3>${r.name}</h3>
+      <h3>${r.folder ? r.folder + ' / ' : ''}${r.name}</h3>
       <div class="kv">
         <span>input</span><b>${r.input_file || ''}</b>
         <span>rules</span><b>${r.rules_file || '—'}</b>

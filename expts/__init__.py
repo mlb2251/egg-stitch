@@ -1,13 +1,37 @@
 #!/usr/bin/env python3
-"""Run experiment variants and collect results into viz/results/."""
+"""Run experiment variants and collect results into viz/results/<timestamp>/.
+
+Folder management lives in ``expts.folders`` — see that module for the
+session-wide folder helpers (``current_folder``, ``new_folder``,
+``set_folder``). They're re-exported here for convenience.
+"""
 
 import os
 import argparse
 import shlex
 import subprocess
-from pathlib import Path
 
-RESULTS_DIR = Path(__file__).parent.parent / "viz" / "results"
+from .folders import (
+    RESULTS_DIR,
+    current_folder,
+    current_folder_path,
+    new_folder,
+    set_folder,
+)
+
+__all__ = [
+    "RESULTS_DIR",
+    "current_folder",
+    "current_folder_path",
+    "new_folder",
+    "set_folder",
+    "compress",
+    "run_domain",
+    "runall",
+    "DOMAINS_WITH_REWRITES",
+    "ALL_DOMAINS",
+    "NON_BABBLE_DOMAINS",
+]
 
 # Domains that have a matching drawings.<name>.rewrites file in ../babble.
 DOMAINS_WITH_REWRITES = ["dials", "furniture", "nuts-bolts", "wheels"]
@@ -21,8 +45,8 @@ NON_BABBLE_DOMAINS = ["bridge", "castle", "city", "house"]
 
 def compress(input, output="out.json", rewrites=None, **kwargs):
     """Run `cargo run --release` with the given input/output (relative to results dir)/optional rewrites."""
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    cmd = f"cargo run --release -- -i {input} --output {RESULTS_DIR / output}"
+    folder_dir = current_folder_path()
+    cmd = f"cargo run --release -- -i {input} --output {folder_dir / output}"
     if rewrites is not None:
         cmd += f" -r {rewrites}"
     for k, v in kwargs.items():

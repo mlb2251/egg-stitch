@@ -22,3 +22,10 @@ details > summary { cursor: pointer; color: var(--accent); font-size: .85rem; ma
 .err { color: #dc2626; }
 .debug-link { color: var(--accent); text-decoration: none; font-weight: 600; font-size: .8rem; padding: .15rem .5rem; border: 1px solid var(--accent); border-radius: 4px; }
 .debug-link:hover { background: var(--accent); color: #fff; }
+details.group { margin-bottom: 1.25rem; }
+details.group > summary { cursor: pointer; padding: .5rem .75rem; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; color: var(--fg); font-size: .95rem; margin-bottom: .5rem; list-style: none; }
+details.group > summary::-webkit-details-marker { display: none; }
+details.group > summary::before { content: '▾'; display: inline-block; width: 1em; color: var(--muted); transition: transform .15s; }
+details.group:not([open]) > summary::before { transform: rotate(-90deg); }
+details.group .folder-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+details.group .folder-count { color: var(--muted); font-size: .8rem; margin-left: .5rem; }
