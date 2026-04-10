@@ -184,7 +184,7 @@ function renderGroup(g, maxRatio) {
       <td><button class="del del-run" title="delete run">×</button></td>
       <td>${fmtTime(r.timestamp)}</td>
       <td><b>${r.name}</b></td>
-      <td>${debugPath ? `<a class="debug-link" href="debug.html?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
+      <td>${debugPath ? `<a class="debug-link" href="${r.search === 'best-first' ? 'tree.html' : 'debug.html'}?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
       <td>${r.rewrites ? '<span class="pill">yes</span>' : '<span class="pill no">no</span>'}</td>
       <td class="dim">${fmt(r.initial_cost)}</td>
       <td class="dim">${fmt(r.cost_after_rewrites)}</td>

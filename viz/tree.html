@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>egg-stitch tree viewer</title>
+<style>
+:root { --fg:#1b1b1f; --muted:#6b7280; --bg:#fafafa; --card:#fff; --accent:#3b82f6; --good:#10b981; --warn:#f59e0b; --dim:#cbd5e1; --border:#e5e7eb; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); display: flex; flex-direction: column; }
+
+header { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--card); flex-wrap: wrap; }
+header h1 { font-size: 1.1rem; font-weight: 600; }
+header .meta { color: var(--muted); font-size: .85rem; }
+a.back { color: var(--accent); text-decoration: none; font-size: .85rem; }
+
+/* Layout */
+main { flex: 1; display: flex; min-height: 0; }
+#treepane { flex: 1; overflow: auto; background: var(--bg); position: relative; }
+#sidepane { width: 360px; border-left: 1px solid var(--border); background: var(--card); padding: 1rem 1.25rem; overflow-y: auto; font-size: .85rem; }
+
+/* Controls */
+.controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .85rem; color: var(--muted); }
+.controls label { display: flex; align-items: center; gap: .3rem; cursor: pointer; }
+.controls button { padding: .3rem .65rem; border: 1px solid var(--border); background: var(--card); border-radius: 6px; cursor: pointer; font-size: .8rem; }
+.controls button:hover { background: #f3f4f6; }
+
+/* SVG tree */
+svg.tree { display: block; }
+svg.tree .edge { fill: none; stroke: var(--dim); stroke-width: 1.2; }
+svg.tree .edge.on-best { stroke: var(--good); stroke-width: 2.5; }
+svg.tree .edge-label { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 9px; fill: var(--muted); pointer-events: none; }
+
+svg.tree .node circle { stroke: #fff; stroke-width: 1.5; cursor: pointer; }
+svg.tree .node.fringe circle { fill: var(--dim); }
+svg.tree .node.expanded circle { fill: var(--accent); }
+svg.tree .node.best circle { fill: var(--good); stroke: #064e3b; stroke-width: 2; }
+svg.tree .node.selected circle { stroke: #111; stroke-width: 3; }
+svg.tree .node text { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 10px; fill: var(--fg); pointer-events: none; }
+
+/* Side pane */
+#sidepane h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .35rem; margin-top: 1rem; }
+#sidepane h2:first-child { margin-top: 0; }
+#sidepane .pattern { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .85rem; color: #0ea5e9; background: #f8fafc; padding: .5rem .6rem; border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; white-space: nowrap; }
+#sidepane dl { display: grid; grid-template-columns: auto 1fr; gap: .25rem .75rem; }
+#sidepane dt { color: var(--muted); }
+#sidepane dd { font-variant-numeric: tabular-nums; }
+#sidepane dd.good { color: var(--good); font-weight: 600; }
+#sidepane .action { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; color: var(--fg); background: #fef3c7; padding: .15rem .4rem; border-radius: 4px; display: inline-block; }
+#sidepane .empty { color: var(--muted); font-style: italic; }
+#sidepane a.nav { color: var(--accent); text-decoration: none; }
+#sidepane a.nav:hover { text-decoration: underline; }
+
+/* Legend */
+.legend { display: flex; gap: .75rem; font-size: .75rem; color: var(--muted); }
+.legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: .25rem; }
+.legend .exp { background: var(--accent); }
+.legend .fri { background: var(--dim); }
+.legend .bes { background: var(--good); }
+
+.loading { padding: 4rem; text-align: center; color: var(--muted); }
+.err { color: #dc2626; }
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="index.html">&larr; back</a>
+  <h1 id="title">tree viewer</h1>
+  <span class="meta" id="meta">loading...</span>
+  <div class="controls" style="margin-left:auto;">
+    <div class="legend">
+      <span><span class="swatch exp"></span>expanded</span>
+      <span><span class="swatch fri"></span>fringe</span>
+      <span><span class="swatch bes"></span>best</span>
+    </div>
+    <label><input type="checkbox" id="chkBestPath" checked> best path</label>
+    <label><input type="checkbox" id="chkEdgeLabels"> edge labels</label>
+    <label>layout
+      <select id="layout">
+        <option value="h">horizontal</option>
+        <option value="v">vertical</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<main>
+  <div id="treepane">
+    <div class="loading" id="loading">loading tree log...</div>
+  </div>
+  <aside id="sidepane">
+    <div class="empty">click a node to inspect</div>
+  </aside>
+</main>
+
+<script src="tree.js"></script>
+</body>
+</html>

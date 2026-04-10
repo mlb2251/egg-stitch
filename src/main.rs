@@ -1,3 +1,4 @@
+mod best_first;
 mod cost;
 mod debug_log;
 mod follow;
@@ -12,12 +13,25 @@ mod revexpr;
 mod search;
 mod smc;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
-/// E-graph based program synthesis via SMC.
+/// Which search algorithm to run.
+#[derive(ValueEnum, Clone, Debug)]
+pub enum SearchKind {
+    /// Sequential Monte Carlo (stochastic particle filter).
+    Smc,
+    /// Best-first enumerative search over canonical patterns.
+    BestFirst,
+}
+
+/// E-graph based program synthesis.
 #[derive(Parser, Debug)]
 #[command(version)]
 pub struct Args {
+    /// Search algorithm to use.
+    #[arg(long, value_enum, default_value_t = SearchKind::Smc)]
+    pub search: SearchKind,
+
     /// Path to the input JSON file containing programs.
     #[arg(short, long, default_value = "data/domains/cogsci/dials.json")]
     pub input: String,
@@ -81,36 +95,56 @@ fn main() {
 
     let rules = args.rules.as_deref();
     let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
-    let smc_result = smc::smc(egraph, root, &args);
+
+    // Dispatch to the requested search algorithm, flattening each driver's result
+    // into a common tuple so the downstream RunResult wiring stays shared.
+    let (best, original_size, best_found_at, num_steps_run, result_egraph, debug_log_json): (
+        Option<(usize, search::SearchState)>,
+        usize,
+        Option<usize>,
+        usize,
+        lang::StitchEgraph,
+        Option<String>,
+    ) = match args.search {
+        SearchKind::Smc => {
+            let r = smc::smc(egraph, root, &args);
+            let json = r.debug_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize debug log"));
+            (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, json)
+        }
+        SearchKind::BestFirst => {
+            let r = best_first::best_first(egraph, root, &args);
+            let json = r.tree_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize tree log"));
+            (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph, json)
+        }
+    };
 
     let elapsed_secs = start.elapsed().as_secs_f64();
 
-    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) = match &smc_result.best {
+    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) = match &best {
         Some((cost, state)) => {
             let pat_size = cost::compute_pattern_size(&state.pattern);
-            let usage_counts = search::compute_usage_counts(&smc_result.egraph, root);
+            let usage_counts = search::compute_usage_counts(&result_egraph, root);
             let um: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
-            let appx = smc_result.original_size as i64 - pat_size as i64 * (um as i64 - 1);
+            let appx = original_size as i64 - pat_size as i64 * (um as i64 - 1);
             (
                 Some(*cost),
-                Some(smc_result.original_size as f64 / *cost as f64),
+                Some(original_size as f64 / *cost as f64),
                 Some(state.pattern.to_string()),
                 Some(state.pattern.vars.len()),
                 Some(pat_size),
                 Some(state.matches.len()),
                 Some(um),
                 Some(appx),
-                Some(cost::extract_rewritten_programs(&smc_result.egraph, root, state)),
+                Some(cost::extract_rewritten_programs(&result_egraph, root, state)),
             )
         }
         None => (None, None, None, None, None, None, None, None, None),
     };
 
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-    // Write debug log if enabled, deriving filename from output path
-    let debug_log_file = if let (Some(debug_log), Some(output_path)) = (smc_result.debug_log, &args.output) {
+    // Write debug log if the driver produced one and an output path was given.
+    let debug_log_file = if let (Some(json), Some(output_path)) = (debug_log_json, &args.output) {
         let debug_path = output_path.replace(".json", "_debug.json");
-        let json = serde_json::to_string(&debug_log).expect("Failed to serialize debug log");
         std::fs::write(&debug_path, json).expect("Failed to write debug log");
         println!("wrote debug log to {}", debug_path);
         Some(std::path::Path::new(&debug_path).file_name().unwrap().to_string_lossy().into_owned())
@@ -118,13 +152,19 @@ fn main() {
         None
     };
 
+    let search_kind = match args.search {
+        SearchKind::Smc => "smc",
+        SearchKind::BestFirst => "best-first",
+    };
+
     let run_result = results::RunResult {
         timestamp,
+        search: search_kind.to_string(),
         input_file: args.input.clone(),
         rules_file: args.rules.clone(),
         elapsed_secs,
         initial_cost: cost_before_rewrites,
-        cost_after_rewrites: smc_result.original_size,
+        cost_after_rewrites: original_size,
         final_cost,
         compression_ratio,
         pattern,
@@ -133,9 +173,9 @@ fn main() {
         num_matches,
         usage_matches,
         approx_cost,
-        num_expansions: smc_result.best_found_at.map(|n| n + 1),
-        best_iteration: smc_result.best_found_at,
-        num_steps_run: smc_result.num_steps_run,
+        num_expansions: best_found_at.map(|n| n + 1),
+        best_iteration: best_found_at,
+        num_steps_run,
         rewritten_programs,
         debug_log_file,
     };

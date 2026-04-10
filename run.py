@@ -37,7 +37,19 @@ def dials_follow():
 
 
 def dev():
-    """Current expt"""
+    """Current expt: best-first on dials with rewrites."""
+    compress(
+        "data/domains/cogsci/dials.json",
+        rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        output="dials_bf.json",
+        search="best-first",
+        num_steps=500,
+        debug_log=True,
+    )
+
+
+def temp_sweep():
+    """Temperature sweep for SMC on dials with rewrites."""
 
     rows = []
 
@@ -56,7 +68,7 @@ def dev():
             output=f"dials_{row['name']}.json",
             **row["config"],
         )
-    
+
     for row in rows:
         print(f"{row['name']}:")
         res = json.load(open(row["output"]))
@@ -73,6 +85,7 @@ EXPTS = {
     "dials-compress": dials_compress,
     "dials-follow": dials_follow,
     "dev": dev,
+    "temp-sweep": temp_sweep,
 }
 
 

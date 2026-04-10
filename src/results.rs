@@ -5,6 +5,8 @@ use serde::Serialize;
 pub struct RunResult {
     /// Unix epoch seconds at which this run finished writing its result.
     pub timestamp: f64,
+    /// Which search algorithm produced this run ("smc" or "best-first").
+    pub search: String,
     pub input_file: String,
     pub rules_file: Option<String>,
     pub elapsed_secs: f64,

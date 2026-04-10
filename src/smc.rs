@@ -1,13 +1,11 @@
 use colored::Colorize;
 
-use crate::cost::{compute_cost, compute_size};
+use crate::cost::compute_cost;
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::StitchEgraph;
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
-use crate::revexpr::RevExpr;
-use crate::search::{SearchState, SharedSearchData};
-use egg::ENodeOrVar;
+use crate::search::{SearchState, setup_search};
 use rand::Rng;
 
 /// Output of a completed SMC run.
@@ -23,18 +21,7 @@ pub struct SmcResult {
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
 #[allow(clippy::needless_range_loop)]
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
-    let follow_expr: Option<RevExpr<ENodeOrVar<crate::lang::StitchLang>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
-    let usage_counts = crate::search::compute_usage_counts(&egraph, root);
-    let shared = SharedSearchData {
-        egraph,
-        follow: follow_expr,
-        weight_by_usage: args.weight_by_usage,
-        usage_counts,
-        p_reuse: args.p_reuse,
-        check_slow: args.check_slow,
-    };
-
-    let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared), shared.check_slow);
+    let (shared, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = args.num_particles;
