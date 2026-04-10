@@ -88,7 +88,11 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         // normalize
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-        let mut weights: Vec<f64> = log_weights.iter().map(|lw| (lw - total_weight).exp()).collect();
+        let mut weights: Vec<f64> = if total_weight.is_finite() {
+            log_weights.iter().map(|lw| (lw - total_weight).exp()).collect()
+        } else {
+            vec![0.0; log_weights.len()]
+        };
 
         if weights.iter().sum::<f64>() == 0.0 {
             log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);

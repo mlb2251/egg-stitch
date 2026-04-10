@@ -52,8 +52,10 @@ def compress(input, output="out.json", rewrites=None, **kwargs):
     for k, v in kwargs.items():
         k = k.replace("_", "-")
         if isinstance(v, bool):
-            assert v, f"dont pass in at all if you dont want it"
-            v = ""
+            if v:
+                v = "" # simply pass the flag in
+            else:
+                continue # don't pass the flag in
         cmd += f" --{k} {v}"
     print("+", cmd, flush=True)
     subprocess.run(shlex.split(cmd), check=True, env=dict(os.environ, RUST_BACKTRACE="1"))
