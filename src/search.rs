@@ -1,4 +1,4 @@
-use crate::lang::{StitchLang, StitchEgraph};
+use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
@@ -35,8 +35,16 @@ impl SearchState {
     pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
         let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
         let match_idx = if shared.weight_by_usage {
-            let mut weights: Vec<f64> = self.matches.iter()
-                .map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64)
+            let mut weights: Vec<f64> = self
+                .matches
+                .iter()
+                .map(|m| {
+                    shared
+                        .usage_counts
+                        .get(&m.root_eclass)
+                        .copied()
+                        .unwrap_or(1) as f64
+                })
                 .collect();
             crate::smc::normalize_and_accumulate(&mut weights);
             crate::smc::weighted_choice(&weights)
@@ -46,23 +54,37 @@ impl SearchState {
         let m = &self.matches[match_idx];
         if verbose {
             let (_cost, minimal_term) = extractor.find_best(m.root_eclass);
-            println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
+            println!(
+                "Expanding on match at eclass {} with pattern {}",
+                minimal_term, self.pattern
+            );
         }
         let subst_idx = rand::rng().random_range(0..m.substs.len());
         let subst = &m.substs[subst_idx];
 
         let var_idx = rand::rng().random_range(0..self.pattern.vars.len());
         if verbose {
-            println!("Expanding variable {:?} in pattern {}", self.pattern.vars[var_idx], self.pattern);
+            println!(
+                "Expanding variable {:?} in pattern {}",
+                self.pattern.vars[var_idx], self.pattern
+            );
         }
         let target_id = subst.vars[var_idx];
 
         if verbose {
-            println!("Target eclass is represented by minimal term {}", extractor.find_best(target_id).1);
+            println!(
+                "Target eclass is represented by minimal term {}",
+                extractor.find_best(target_id).1
+            );
         }
 
         if rand::rng().random_bool(shared.p_reuse) {
-            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)| *idx != var_idx && **id == target_id).collect::<Vec<_>>();
+            let reuse_candidates = subst
+                .vars
+                .iter()
+                .enumerate()
+                .filter(|(idx, id)| *idx != var_idx && **id == target_id)
+                .collect::<Vec<_>>();
             if !reuse_candidates.is_empty() {
                 let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx].0;
@@ -81,7 +103,13 @@ impl SearchState {
     /// Check if this particle's pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
         let mut var_bindings = HashMap::new();
-        crate::follow::check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        crate::follow::check_follow(
+            &self.pattern.pattern,
+            Id::from(0),
+            follow,
+            Id::from(0),
+            &mut var_bindings,
+        )
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
@@ -111,7 +139,12 @@ impl SearchState {
     }
 
     /// Filters matches to those where `var_idx` can be expanded with `target`, updating substitutions.
-    pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
+    pub fn subset_matches(
+        &mut self,
+        var_idx: usize,
+        target: &StitchLang,
+        shared: &SharedSearchData,
+    ) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
             let var_eclass = &shared.egraph[var_id];
@@ -150,7 +183,12 @@ impl SearchState {
 
 impl std::fmt::Display for SearchState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SearchState {{ pattern: {}, matches: {} }}", self.pattern, self.matches.len())
+        write!(
+            f,
+            "SearchState {{ pattern: {}, matches: {} }}",
+            self.pattern,
+            self.matches.len()
+        )
     }
 }
 
@@ -159,7 +197,11 @@ impl std::fmt::Display for SearchState {
 pub fn compute_usage_counts(egraph: &StitchEgraph, root: Id) -> FxHashMap<Id, usize> {
     let mut counts = FxHashMap::<Id, usize>::default();
     counts.insert(root, 1);
-    let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
+    let max_id = egraph
+        .classes()
+        .map(|c| usize::from(c.id))
+        .max()
+        .unwrap_or(0);
     for i in (0..=max_id).rev() {
         let id = Id::from(i);
         let count = match counts.get(&id) {

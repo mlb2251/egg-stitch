@@ -27,12 +27,15 @@ def compress(input, output="out.json", rewrites=None, **kwargs):
         cmd += f" -r {rewrites}"
     for k, v in kwargs.items():
         k = k.replace("_", "-")
+        if isinstance(v, bool):
+            assert v, f"dont pass in at all if you dont want it"
+            v = ""
         cmd += f" --{k} {v}"
     print("+", cmd, flush=True)
     subprocess.run(shlex.split(cmd), check=True, env=dict(os.environ, RUST_BACKTRACE="1"))
 
 
-def run_domain(domain, rewrites, **kwargs):
+def run_domain(domain, rewrites=True, **kwargs):
     """Run a cogsci domain benchmark, optionally with its rewrite set."""
     compress(
         input=f"data/domains/cogsci/{domain}.json",

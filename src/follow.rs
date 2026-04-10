@@ -4,17 +4,18 @@ use egg::{ENodeOrVar, Id, Language};
 use std::collections::HashMap;
 
 /// Checks structural equality of two subtrees in a follow RevExpr.
-fn follow_subtrees_equal(
-    follow: &RevExpr<ENodeOrVar<StitchLang>>,
-    a: Id,
-    b: Id,
-) -> bool {
-    if a == b { return true; }
+fn follow_subtrees_equal(follow: &RevExpr<ENodeOrVar<StitchLang>>, a: Id, b: Id) -> bool {
+    if a == b {
+        return true;
+    }
     match (&follow[a], &follow[b]) {
         (ENodeOrVar::Var(va), ENodeOrVar::Var(vb)) => va == vb,
         (ENodeOrVar::ENode(na), ENodeOrVar::ENode(nb)) => {
             na.matches(nb)
-                && na.children.iter().zip(nb.children.iter())
+                && na
+                    .children
+                    .iter()
+                    .zip(nb.children.iter())
                     .all(|(&ca, &cb)| follow_subtrees_equal(follow, ca, cb))
         }
         _ => false,
@@ -30,17 +31,23 @@ pub fn check_follow(
     var_bindings: &mut HashMap<egg::Var, Id>,
 ) -> bool {
     match &pattern[pid] {
-        ENodeOrVar::Var(v) => {
-            match var_bindings.entry(*v) {
-                std::collections::hash_map::Entry::Vacant(e) => { e.insert(fid); true }
-                std::collections::hash_map::Entry::Occupied(e) => follow_subtrees_equal(follow, *e.get(), fid),
+        ENodeOrVar::Var(v) => match var_bindings.entry(*v) {
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(fid);
+                true
             }
-        }
+            std::collections::hash_map::Entry::Occupied(e) => {
+                follow_subtrees_equal(follow, *e.get(), fid)
+            }
+        },
         ENodeOrVar::ENode(p_node) => match &follow[fid] {
             ENodeOrVar::Var(_) => false,
             ENodeOrVar::ENode(f_node) => {
                 p_node.matches(f_node)
-                    && p_node.children.iter().zip(f_node.children.iter())
+                    && p_node
+                        .children
+                        .iter()
+                        .zip(f_node.children.iter())
                         .all(|(&pc, &fc)| check_follow(pattern, pc, follow, fc, var_bindings))
             }
         },

@@ -3,6 +3,7 @@ use std::cmp::min;
 use colored::Colorize;
 
 use crate::cost::{compute_cost, compute_pattern_size, compute_size};
+use crate::debug_log::{DebugLog, ParticleLog, StepLog};
 use crate::lang::StitchEgraph;
 use crate::revexpr::RevExpr;
 use crate::search::{SearchState, SharedSearchData};
@@ -16,18 +17,37 @@ pub struct SmcResult {
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
     pub egraph: StitchEgraph,
+    pub debug_log: Option<DebugLog>,
 }
 
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
-    let follow_expr: Option<RevExpr<ENodeOrVar<crate::lang::StitchLang>>> = args.follow.as_deref().map(|s|
-        s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
-    );
+    let follow_expr: Option<RevExpr<ENodeOrVar<crate::lang::StitchLang>>> =
+        args.follow.as_deref().map(|s| {
+            s.parse()
+                .unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e))
+        });
     let usage_counts = crate::search::compute_usage_counts(&egraph, root);
-    let shared = SharedSearchData { egraph, follow: follow_expr, weight_by_usage: args.weight_by_usage, usage_counts, p_reuse: args.p_reuse, check_slow: args.check_slow };
+    let shared = SharedSearchData {
+        egraph,
+        follow: follow_expr,
+        weight_by_usage: args.weight_by_usage,
+        usage_counts,
+        p_reuse: args.p_reuse,
+        check_slow: args.check_slow,
+    };
 
-    let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared), shared.check_slow);
-    println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
+    let original_size = compute_size(
+        &shared.egraph,
+        root,
+        &SearchState::new(&shared),
+        shared.check_slow,
+    );
+    println!(
+        "{} {}",
+        "original size of egraph:".dimmed(),
+        original_size.to_string().bold()
+    );
 
     let num_particles = args.num_particles;
     let num_steps = args.num_steps;
@@ -38,6 +58,8 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
     let mut steps_run = 0;
+    let debug = args.debug_log;
+    let mut debug_steps: Vec<StepLog> = Vec::new();
 
     let mut search_states: Vec<SearchState> = (0..num_particles)
         .map(|_i| SearchState::new(&shared))
@@ -47,11 +69,17 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         for (i, search_state) in search_states.iter_mut().enumerate() {
             let verb = false;
             if verb {
-                println!("Expanding particle {} with pattern: {}", i, search_state.pattern);
+                println!(
+                    "Expanding particle {} with pattern: {}",
+                    i, search_state.pattern
+                );
             }
             search_state.expand_random(&shared, verb);
             if verb {
-                println!("Expanded particle {} to pattern: {}", i, search_state.pattern);
+                println!(
+                    "Expanded particle {} to pattern: {}",
+                    i, search_state.pattern
+                );
             }
         }
 
@@ -63,16 +91,21 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             if search_states[i].pattern.vars.len() <= max_arity
                 && best_so_far.as_ref().is_none_or(|best| *cost < best.0)
             {
-                println!("{} {} {}",
+                println!(
+                    "{} {} {}",
                     format!("[iteration {}]", step).yellow().bold(),
                     format!("new best: {}", cost).green().bold(),
-                    search_states[i].pattern.to_string().cyan());
+                    search_states[i].pattern.to_string().cyan()
+                );
                 best_so_far = Some((*cost, search_states[i].clone()));
                 best_found_at = Some(step);
             }
         }
 
-        let mut weights: Vec<f64> = costs.iter().map(|cost| -(*cost as f64) / temperature).collect();
+        let mut weights: Vec<f64> = costs
+            .iter()
+            .map(|cost| -(*cost as f64) / temperature)
+            .collect();
         let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         for w in &mut weights {
             *w = (*w - max_weight).exp();
@@ -96,36 +129,112 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             }
             if found {
                 let matching_weight: f64 = weights.iter().sum();
-                let weight_frac = if total_weight > 0.0 { matching_weight / total_weight } else { 0.0 };
-                println!("{} {}", "follow:".dimmed(), format!("{} / {} particles match ({:.1}% of weight)", weights.iter().filter(|&&w| w > 0.0).count(), weights.len(), weight_frac * 100.0).blue());
+                let weight_frac = if total_weight > 0.0 {
+                    matching_weight / total_weight
+                } else {
+                    0.0
+                };
+                println!(
+                    "{} {}",
+                    "follow:".dimmed(),
+                    format!(
+                        "{} / {} particles match ({:.1}% of weight)",
+                        weights.iter().filter(|&&w| w > 0.0).count(),
+                        weights.len(),
+                        weight_frac * 100.0
+                    )
+                    .blue()
+                );
             } else {
                 println!("{}", "No particles match the follow pattern".red().bold());
             }
         }
 
+        // Snapshot normalized weights for debug log before early-exit checks
+        let norm_weights: Vec<f64> = {
+            let sum: f64 = weights.iter().sum();
+            if sum == 0.0 {
+                vec![0.0; weights.len()]
+            } else {
+                weights.iter().map(|w| w / sum).collect()
+            }
+        };
+
         if weights.iter().sum::<f64>() == 0.0 {
+            if debug {
+                debug_steps.push(StepLog {
+                    step,
+                    particles: build_particle_logs(&search_states, &costs, &norm_weights),
+                    resample_indices: vec![],
+                    best_cost: best_so_far.as_ref().map(|(c, _)| *c),
+                    best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
+                });
+            }
             steps_run = step + 1;
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
 
-        if best_found_at.is_some_and(|best_found_at| (step as i64) - (best_found_at as i64) > dead_runs as i64) {
+        if best_found_at
+            .is_some_and(|best_found_at| (step as i64) - (best_found_at as i64) > dead_runs as i64)
+        {
+            if debug {
+                debug_steps.push(StepLog {
+                    step,
+                    particles: build_particle_logs(&search_states, &costs, &norm_weights),
+                    resample_indices: vec![],
+                    best_cost: best_so_far.as_ref().map(|(c, _)| *c),
+                    best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
+                });
+            }
             steps_run = step + 1;
-            println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
+            println!(
+                "{}",
+                format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow()
+            );
             break;
         }
 
+        // Build debug particle snapshot before resampling mutates search_states
+        let debug_particles = if debug {
+            Some(build_particle_logs(&search_states, &costs, &norm_weights))
+        } else {
+            None
+        };
+
         normalize_and_accumulate(&mut weights);
 
-        println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-        print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
+        println!(
+            "{}",
+            format!("Step {}: expanded all particles", step).dimmed()
+        );
+        print_top_particles(&search_states, &weights, &shared, original_size, |i| {
+            costs[i]
+        });
 
-        search_states = (0..num_particles).map(|_| {
-            let idx = weighted_choice(&weights);
-            search_states[idx].clone()
-        }).collect();
+        let mut resample_indices: Vec<usize> = Vec::new();
+        search_states = (0..num_particles)
+            .map(|_| {
+                let idx = weighted_choice(&weights);
+                resample_indices.push(idx);
+                search_states[idx].clone()
+            })
+            .collect();
 
-        println!("{}", format!("Step {}: resampled all particles", step).dimmed());
+        if let Some(particles) = debug_particles {
+            debug_steps.push(StepLog {
+                step,
+                particles,
+                resample_indices: resample_indices.clone(),
+                best_cost: best_so_far.as_ref().map(|(c, _)| *c),
+                best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
+            });
+        }
+
+        println!(
+            "{}",
+            format!("Step {}: resampled all particles", step).dimmed()
+        );
         print_top_particles(&search_states, &weights, &shared, original_size, |i| {
             compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow)
         });
@@ -134,13 +243,44 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
-        println!("{} {}", "best found at iteration:".dimmed(), iter.to_string().yellow());
-        println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
+        println!(
+            "{} {}",
+            "best found at iteration:".dimmed(),
+            iter.to_string().yellow()
+        );
+        println!(
+            "{} {}",
+            "pattern:".dimmed(),
+            state.pattern.to_string().cyan().bold()
+        );
         println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
-        println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
+        println!(
+            "{} {}",
+            "compression ratio:".dimmed(),
+            format!("{:.2}x", original_size as f64 / *cost as f64)
+                .green()
+                .bold()
+        );
     }
 
-    SmcResult { best: best_so_far, original_size, best_found_at, num_steps_run: steps_run, egraph: shared.egraph }
+    let debug_log = if debug {
+        Some(DebugLog {
+            original_size,
+            num_particles,
+            temperature,
+            steps: debug_steps,
+        })
+    } else {
+        None
+    };
+    SmcResult {
+        best: best_so_far,
+        original_size,
+        best_found_at,
+        num_steps_run: steps_run,
+        egraph: shared.egraph,
+        debug_log,
+    }
 }
 
 /// Samples an index from a normalized cumulative weight array.
@@ -168,6 +308,25 @@ pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
     }
 }
 
+/// Builds a ParticleLog for each particle (pre-resample snapshot).
+fn build_particle_logs(
+    states: &[SearchState],
+    costs: &[usize],
+    weights: &[f64],
+) -> Vec<ParticleLog> {
+    states
+        .iter()
+        .enumerate()
+        .map(|(i, s)| ParticleLog {
+            pattern: s.pattern.to_string(),
+            num_matches: s.matches.len(),
+            arity: s.pattern.vars.len(),
+            cost: costs[i],
+            weight: weights[i],
+        })
+        .collect()
+}
+
 /// Prints summary info for the top particles (up to 5).
 fn print_top_particles(
     states: &[SearchState],
@@ -177,14 +336,35 @@ fn print_top_particles(
     get_cost: impl Fn(usize) -> usize,
 ) {
     for i in 0..min(5, states.len()) {
-        let usage_matches: usize = states[i].matches.iter()
-            .map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
+        let usage_matches: usize = states[i]
+            .matches
+            .iter()
+            .map(|m| {
+                shared
+                    .usage_counts
+                    .get(&m.root_eclass)
+                    .copied()
+                    .unwrap_or(1)
+            })
             .sum();
         let pat_size = compute_pattern_size(&states[i].pattern);
         let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
         let cost_i = get_cost(i);
         let ratio = original_size as f64 / cost_i as f64;
-        println!("  {} {}", format!("p{}:", i).dimmed(), states[i].pattern.to_string().cyan());
-        println!("      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}", cost_i, ratio, weights[i], states[i].matches.len(), usage_matches, pat_size, appx_cost);
+        println!(
+            "  {} {}",
+            format!("p{}:", i).dimmed(),
+            states[i].pattern.to_string().cyan()
+        );
+        println!(
+            "      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
+            cost_i,
+            ratio,
+            weights[i],
+            states[i].matches.len(),
+            usage_matches,
+            pat_size,
+            appx_cost
+        );
     }
 }

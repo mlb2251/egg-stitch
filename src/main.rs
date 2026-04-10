@@ -1,13 +1,14 @@
-mod lang;
-mod revexpr;
-mod pattern;
-mod matching;
-mod follow;
-mod search;
 mod cost;
-mod smc;
+mod debug_log;
+mod follow;
 mod io;
+mod lang;
+mod matching;
+mod pattern;
 mod results;
+mod revexpr;
+mod search;
+mod smc;
 
 use clap::Parser;
 
@@ -62,6 +63,10 @@ pub struct Args {
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
+
+    /// Enable detailed debug logging of all particles at each SMC step.
+    #[arg(long, default_value_t = false)]
+    pub debug_log: bool,
 }
 
 fn main() {
@@ -74,34 +79,67 @@ fn main() {
 
     let elapsed_secs = start.elapsed().as_secs_f64();
 
-    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) =
-        match &smc_result.best {
-            Some((cost, state)) => {
-                let pat_size = cost::compute_pattern_size(&state.pattern);
-                let usage_counts = search::compute_usage_counts(&smc_result.egraph, root);
-                let um: usize = state.matches.iter()
-                    .map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
-                    .sum();
-                let appx = smc_result.original_size as i64 - pat_size as i64 * (um as i64 - 1);
-                (
-                    Some(*cost),
-                    Some(smc_result.original_size as f64 / *cost as f64),
-                    Some(state.pattern.to_string()),
-                    Some(state.pattern.vars.len()),
-                    Some(pat_size),
-                    Some(state.matches.len()),
-                    Some(um),
-                    Some(appx),
-                    Some(cost::extract_rewritten_programs(&smc_result.egraph, root, state)),
-                )
-            }
-            None => (None, None, None, None, None, None, None, None, None),
-        };
+    let (
+        final_cost,
+        compression_ratio,
+        pattern,
+        arity,
+        pattern_size,
+        num_matches,
+        usage_matches,
+        approx_cost,
+        rewritten_programs,
+    ) = match &smc_result.best {
+        Some((cost, state)) => {
+            let pat_size = cost::compute_pattern_size(&state.pattern);
+            let usage_counts = search::compute_usage_counts(&smc_result.egraph, root);
+            let um: usize = state
+                .matches
+                .iter()
+                .map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
+                .sum();
+            let appx = smc_result.original_size as i64 - pat_size as i64 * (um as i64 - 1);
+            (
+                Some(*cost),
+                Some(smc_result.original_size as f64 / *cost as f64),
+                Some(state.pattern.to_string()),
+                Some(state.pattern.vars.len()),
+                Some(pat_size),
+                Some(state.matches.len()),
+                Some(um),
+                Some(appx),
+                Some(cost::extract_rewritten_programs(
+                    &smc_result.egraph,
+                    root,
+                    state,
+                )),
+            )
+        }
+        None => (None, None, None, None, None, None, None, None, None),
+    };
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs_f64())
         .unwrap_or(0.0);
+    // Write debug log if enabled, deriving filename from output path
+    let debug_log_file =
+        if let (Some(debug_log), Some(output_path)) = (smc_result.debug_log, &args.output) {
+            let debug_path = output_path.replace(".json", "_debug.json");
+            let json = serde_json::to_string(&debug_log).expect("Failed to serialize debug log");
+            std::fs::write(&debug_path, json).expect("Failed to write debug log");
+            println!("wrote debug log to {}", debug_path);
+            Some(
+                std::path::Path::new(&debug_path)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+        } else {
+            None
+        };
+
     let run_result = results::RunResult {
         timestamp,
         input_file: args.input.clone(),
@@ -120,6 +158,7 @@ fn main() {
         best_iteration: smc_result.best_found_at,
         num_steps_run: smc_result.num_steps_run,
         rewritten_programs,
+        debug_log_file,
     };
 
     if let Some(ref output_path) = args.output {

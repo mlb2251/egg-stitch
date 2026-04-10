@@ -21,7 +21,12 @@ pub fn compute_cost(
 
 /// Returns the AST size of the pattern (counting each node and edge once).
 pub fn compute_pattern_size(pattern: &Pattern) -> usize {
-    1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
+    1 + pattern
+        .pattern
+        .nodes
+        .iter()
+        .map(|node| node.children().len())
+        .sum::<usize>()
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
@@ -36,7 +41,10 @@ pub(crate) fn compute_size(
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 {
-        s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64)
+        s_u_r
+            .get(&eclass)
+            .cloned()
+            .unwrap_or(egraph[eclass].data as i64)
     };
 
     for m in &search_state.matches {
@@ -76,21 +84,34 @@ pub(crate) fn compute_size(
             size_under_rewrite.insert(eclass, best);
         }
     }
-    let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
+    let final_size = size_under_rewrite
+        .get(&root)
+        .cloned()
+        .unwrap_or(egraph[root].data as i64);
     if check_slow {
         let slow_size = build_rewritten_egraph(egraph, search_state)[root].data as i64;
-        assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
+        assert_eq!(
+            final_size, slow_size,
+            "Fast rewrite size {} != slow rewrite size {}",
+            final_size, slow_size
+        );
     }
     final_size as usize
 }
 
 /// Clones the egraph and unions each match root with an `inv_0(args...)` node, then rebuilds.
 /// Used for validating `compute_size` and for extracting rewritten programs.
-pub(crate) fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &SearchState) -> StitchEgraph {
+pub(crate) fn build_rewritten_egraph(
+    egraph: &StitchEgraph,
+    search_state: &SearchState,
+) -> StitchEgraph {
     let mut egraph = egraph.clone();
     for m in &search_state.matches {
         for subst in &m.substs {
-            let node = StitchLang { op: "inv_0".into(), children: subst.vars.clone() };
+            let node = StitchLang {
+                op: "inv_0".into(),
+                children: subst.vars.clone(),
+            };
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
         }
@@ -100,10 +121,16 @@ pub(crate) fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &Searc
 }
 
 /// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
-pub fn extract_rewritten_programs(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> Vec<String> {
+pub fn extract_rewritten_programs(
+    egraph: &StitchEgraph,
+    root: egg::Id,
+    search_state: &SearchState,
+) -> Vec<String> {
     let rewritten = build_rewritten_egraph(egraph, search_state);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0].children.iter()
+    rewritten[root].nodes[0]
+        .children
+        .iter()
         .map(|&child| extractor.find_best(child).1.to_string())
         .collect()
 }

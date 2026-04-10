@@ -60,6 +60,7 @@ function render() {
       <td>${fmt(r.approx_cost)}</td>
       <td>${fmt(r.num_expansions)}</td>
       <td>${r.best_iteration ?? ''}</td>
+      <td>${r.debug_log_file ? `<a class="debug-link" href="debug.html?file=${encodeURIComponent(r.debug_log_file)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
     `;
     tr.onclick = () => showDetail(r);
     tbody.appendChild(tr);
