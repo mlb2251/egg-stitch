@@ -80,7 +80,7 @@ fn main() {
     let start = std::time::Instant::now();
 
     let rules = args.rules.as_deref();
-    let (egraph, root) = io::load_egraph(&args.input, rules);
+    let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
     let smc_result = smc::smc(egraph, root, &args);
 
     let elapsed_secs = start.elapsed().as_secs_f64();
@@ -123,7 +123,8 @@ fn main() {
         input_file: args.input.clone(),
         rules_file: args.rules.clone(),
         elapsed_secs,
-        initial_cost: smc_result.original_size,
+        initial_cost: cost_before_rewrites,
+        cost_after_rewrites: smc_result.original_size,
         final_cost,
         compression_ratio,
         pattern,

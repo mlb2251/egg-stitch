@@ -9,6 +9,7 @@ pub struct RunResult {
     pub rules_file: Option<String>,
     pub elapsed_secs: f64,
     pub initial_cost: usize,
+    pub cost_after_rewrites: usize,
     pub final_cost: Option<usize>,
     pub compression_ratio: Option<f64>,
     pub pattern: Option<String>,

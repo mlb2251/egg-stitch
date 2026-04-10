@@ -36,19 +36,12 @@ def dials_follow():
     )
 
 
-def dials_temp_sweep():
-    """Sweep temperature over powers of 2 from 1 to 1024 on dials."""
-    for t in [2**i for i in range(11)]:
-        print(f"=== temperature={t} ===", flush=True)
-        run_domain("dials", num_steps=10, num_particles=100, temperature=t)
-
-
 def dev():
     """Current expt"""
 
     rows = []
 
-    for t in [2**i for i in range(11)]:
+    for t in [1, 10, 100, 1000, 10000]:
         rows.append(dict(
             name=f"T{t}",
             config=dict(num_steps=100, num_particles=1000, temperature=t, max_arity=2, ),
@@ -79,7 +72,6 @@ EXPTS = {
     "dials-debug": dials_debug,
     "dials-compress": dials_compress,
     "dials-follow": dials_follow,
-    "dials-temp-sweep": dials_temp_sweep,
     "dev": dev,
 }
 

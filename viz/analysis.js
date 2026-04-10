@@ -85,7 +85,8 @@ const COLUMNS = [
   ['name', 'run'],
   [null, 'debug'],
   ['rewrites', 'rewrites'],
-  ['initial_cost', 'init cost'],
+  ['initial_cost', 'pre-dsr', 'dim'],
+  ['cost_after_rewrites', 'post-dsr', 'dim'],
   ['final_cost', 'final'],
   ['compression_ratio', 'ratio'],
   ['elapsed_secs', 'time (s)'],
@@ -118,9 +119,10 @@ function renderGroup(g, maxRatio) {
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const headTr = document.createElement('tr');
-  for (const [k, label] of COLUMNS) {
+  for (const [k, label, cls] of COLUMNS) {
     const th = document.createElement('th');
     th.textContent = label;
+    if (cls) th.classList.add(cls);
     if (k) {
       th.dataset.k = k;
       th.onclick = () => {
@@ -147,7 +149,8 @@ function renderGroup(g, maxRatio) {
       <td><b>${r.name}</b></td>
       <td>${debugPath ? `<a class="debug-link" href="debug.html?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
       <td>${r.rewrites ? '<span class="pill">yes</span>' : '<span class="pill no">no</span>'}</td>
-      <td>${fmt(r.initial_cost)}</td>
+      <td class="dim">${fmt(r.initial_cost)}</td>
+      <td class="dim">${fmt(r.cost_after_rewrites)}</td>
       <td>${fmt(r.final_cost)}</td>
       <td><span class="ratio">${(r.compression_ratio||0).toFixed(3)}×</span><span class="bar" style="width:${barW}px"></span></td>
       <td>${(r.elapsed_secs||0).toFixed(2)}</td>
