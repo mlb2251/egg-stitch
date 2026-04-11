@@ -6,8 +6,10 @@ use egg::{ENodeOrVar, Id, Language};
 #[derive(Debug, Clone)]
 pub struct Pattern {
     pub pattern: RevExpr<ENodeOrVar<StitchLang>>,
-    pub vars: Vec<Vec<Id>>, // each var is a vector of Ids that index into the locations in the pattern where that var is used
-    pub max_var: u32,       // not same as arity because can expand away a var
+    /// Each entry holds every pattern-node location where that variable appears; a
+    /// single logical variable may occur at multiple locations after `reuse`.
+    pub vars: Vec<Vec<Id>>,
+    pub max_var: u32, // not same as arity because can expand away a var
 }
 
 impl Pattern {
@@ -28,7 +30,8 @@ impl Pattern {
         new_id
     }
 
-    /// Expands the pattern at the given Id with the given node
+    /// Expands the pattern at the given variable index with the given node,
+    /// replacing every occurrence of that variable with the new enode.
     pub fn expand(&mut self, var_idx: usize, target: &StitchLang) {
         let var = self.vars.remove(var_idx);
         let mut new_node = target.clone();
@@ -38,12 +41,12 @@ impl Pattern {
         }
         assert!(matches!(self.pattern[var[0]], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
         for var_id in var {
-            // could optimze
             self.pattern[var_id] = ENodeOrVar::ENode(new_node.clone());
         }
     }
 
-    /// Merges `second_var_idx` into `var_idx`, replacing all occurrences with the first var's node.
+    /// Merges `second_var_idx` into `var_idx`, replacing every occurrence of the second
+    /// with the first so both locations become the same logical variable.
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
         for var_id in &self.vars[second_var_idx] {
             self.pattern[*var_id] = self.pattern[self.vars[var_idx][0]].clone();
