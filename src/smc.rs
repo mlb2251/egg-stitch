@@ -2,8 +2,9 @@ use std::cmp::{Reverse, min};
 use std::collections::BinaryHeap;
 
 use crate::lang::{StitchEgraph, StitchLang};
+use crate::matching::Subst;
 use crate::pattern::Pattern;
-use crate::search::{self, SearchState, SharedSearchData, Subst};
+use crate::search::{self, SearchState, SharedSearchData};
 use egg::{Id, Language};
 use priority_queue::PriorityQueue;
 use rand::Rng;

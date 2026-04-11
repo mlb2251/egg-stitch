@@ -1,4 +1,5 @@
 mod lang;
+mod matching;
 mod util;
 mod pattern;
 mod search;

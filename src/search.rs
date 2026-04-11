@@ -1,23 +1,12 @@
 use crate::lang::{StitchEgraph, StitchLang};
+use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
-use egg::{Id, Language};
+use egg::Language;
 use rand::Rng;
 
 #[derive(Debug)]
 pub struct SharedSearchData {
     pub egraph: StitchEgraph,
-}
-
-#[derive(Debug, Clone)]
-pub struct MatchAtEClass {
-    pub root_eclass: egg::Id,
-    // variables[i][j] represents the j'th variable in the i'th way to match the pattern
-    pub substs: Vec<Subst>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Subst {
-    pub vars: Vec<Id>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,20 +69,6 @@ impl std::fmt::Display for SearchState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SearchState {{ pattern: {}, matches: {} }}", self.pattern, self.matches.len())
     }
-}
-
-
-impl MatchAtEClass {
-    pub fn identity_match(c: egg::Id) -> Self {
-        Self {
-            root_eclass: c,
-            substs: vec![Subst { vars: vec![c] }],
-        }
-    }
-}
-
-fn identity_matches(egraph: &StitchEgraph) -> Vec<MatchAtEClass> {
-    egraph.classes().map(|c| MatchAtEClass::identity_match(c.id)).collect()
 }
 
 impl SearchState {
