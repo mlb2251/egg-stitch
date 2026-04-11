@@ -42,6 +42,14 @@ pub struct Args {
     #[arg(long, default_value_t = 0.5)]
     pub p_reuse: f64,
 
+    /// Maximum arity of patterns to consider as "best".
+    #[arg(long, default_value_t = 1000)]
+    pub max_arity: usize,
+
+    /// Enable slow rewrite check (assert fast == slow computation).
+    #[arg(long, default_value_t = false)]
+    pub check_slow: bool,
+
     /// Path to write a JSON-serialized RunResult.
     #[arg(short, long)]
     pub output: Option<String>,

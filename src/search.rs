@@ -9,6 +9,8 @@ pub struct SharedSearchData {
     pub egraph: StitchEgraph,
     /// Probability of attempting variable reuse during expansion.
     pub p_reuse: f64,
+    /// Enable slow rewrite check (assert fast == slow computation).
+    pub check_slow: bool,
 }
 
 #[derive(Debug, Clone)]
