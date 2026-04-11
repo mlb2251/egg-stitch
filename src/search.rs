@@ -1,4 +1,4 @@
-use crate::{lang::StitchLang, smc::StitchEgraph};
+use crate::lang::{StitchEgraph, StitchLang};
 use crate::pattern::Pattern;
 use egg::{Id, Language};
 use rand::Rng;

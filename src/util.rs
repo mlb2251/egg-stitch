@@ -1,4 +1,4 @@
-use crate::{lang::StitchLang, rewrites::from_file, smc::{StitchAnalysis, StitchEgraph}};
+use crate::{lang::{StitchAnalysis, StitchEgraph, StitchLang}, rewrites::from_file};
 use egg::{FromOp, Rewrite};
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.

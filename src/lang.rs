@@ -1,4 +1,4 @@
-use egg::{FromOp, Id, Language, Symbol};
+use egg::{Analysis, FromOp, Id, Language, Symbol};
 use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
@@ -64,3 +64,28 @@ impl FromOp for StitchLang {
         })
     }
 }
+
+#[derive(Clone, Debug, Default)]
+pub struct StitchAnalysis;
+
+impl Analysis<StitchLang> for StitchAnalysis {
+    type Data = u32;
+
+    fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: Id) -> Self::Data {
+        1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+    }
+
+    fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
+        if from < *to {
+            *to = from;
+            egg::DidMerge(true, false)
+        } else if from == *to {
+            egg::DidMerge(false, false)
+        } else {
+            // from = *to; but we don't do this because types; idk it seems like they don't want us to
+            egg::DidMerge(false, true)
+        }
+    }
+}
+
+pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;

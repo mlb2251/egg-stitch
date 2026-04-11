@@ -1,38 +1,13 @@
 use std::cmp::{Reverse, min};
 use std::collections::BinaryHeap;
 
-use crate::lang::StitchLang;
+use crate::lang::{StitchEgraph, StitchLang};
 use crate::pattern::Pattern;
 use crate::search::{self, SearchState, SharedSearchData, Subst};
-use egg::{Analysis, Id, Language};
+use egg::{Id, Language};
 use priority_queue::PriorityQueue;
 use rand::Rng;
 use rustc_hash::{FxHashMap};
-
-#[derive(Clone, Debug, Default)]
-pub struct StitchAnalysis;
-
-impl Analysis<StitchLang> for StitchAnalysis {
-    type Data = u32;
-
-    fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: egg::Id) -> Self::Data {
-        1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
-    }
-
-    fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
-        if from < *to {
-            *to = from;
-            egg::DidMerge(true, false)
-        } else if from == *to {
-            egg::DidMerge(false, false)
-        } else {
-            // from = *to; but we don't do this because types; idk it seems like they don't want us to
-            egg::DidMerge(false, true)
-        }
-    }
-}
-
-pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> {
     let shared = SharedSearchData { egraph };
