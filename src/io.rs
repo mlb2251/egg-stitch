@@ -69,6 +69,7 @@ pub fn print_programs(term: &egg::RecExpr<StitchLang>) {
 }
 
 /// Recursively prints an s-expression starting from the given node id.
+#[allow(dead_code)]
 fn print_expr(term: &egg::RecExpr<StitchLang>, id: usize) {
     let node = &term.as_ref()[id];
     if node.children.is_empty() {
