@@ -9,16 +9,16 @@ use egg::{Id, Language};
 use rand::Rng;
 use rustc_hash::FxHashMap;
 
-pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> {
+pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(usize, SearchState)> {
     let shared = SharedSearchData { egraph };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
     println!("original size of egraph: {}", original_size);
 
-    let num_particles = 10_000;
-    let num_steps = 1000;
-    let temperature = 100.0;
-    let dead_runs = 50;
+    let num_particles = args.num_particles;
+    let num_steps = args.num_steps;
+    let temperature = args.temperature;
+    let dead_runs = args.dead_runs as i64;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;

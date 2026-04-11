@@ -6,37 +6,39 @@ mod revexpr;
 mod search;
 mod smc;
 
-fn main() {
-    let rules = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
-    let (egraph, root) = io::load_egraph("data/domains/cogsci/dials.json", Some(rules));
+use clap::Parser;
 
-    smc::smc(egraph, root);
+/// E-graph based program synthesis via SMC.
+#[derive(Parser, Debug)]
+#[command(version)]
+pub struct Args {
+    /// Path to the input JSON file containing programs.
+    #[arg(short, long, default_value = "data/domains/cogsci/dials.json")]
+    pub input: String,
 
-    // let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    // let (_, term) = extractor.find_best(root);
-    // util::print_programs(&term);
+    /// Path to rewrite rules file.
+    #[arg(short, long)]
+    pub rules: Option<String>,
 
-    // let mut pattern = Pattern::single_var();
-    // println!("before expansion: {:?}", pattern.pattern.nodes);
-    // println!("before expansion: {}", pattern.pattern);
+    /// Number of particles.
+    #[arg(long, default_value_t = 10_000)]
+    pub num_particles: usize,
 
-    // pattern.expand(0, &StitchLang{op: "+".into(), children: vec![2.into(), 3.into()]});
-    // println!("after expansion: {:?}", pattern.pattern.nodes);
-    // println!("after expansion: {}", pattern.pattern);
+    /// Number of SMC steps.
+    #[arg(long, default_value_t = 1000)]
+    pub num_steps: usize,
 
-    // let shared = SharedSearchData { egraph };
-    // let mut search_state = SearchState::new(&shared);
-    // println!("search state: {}", search_state);
+    /// Softmax temperature for resampling weights.
+    #[arg(long, default_value_t = 100.0)]
+    pub temperature: f64,
 
-    // println!("****************************");
-
-    // while search_state.pattern.vars.len() > 0 {
-    //     search_state.expand_random(&shared);
-    //     println!("cost: {}", compute_cost(&shared.egraph, root, &search_state));
-    // }
-
-
+    /// Stop after this many steps with no improvement.
+    #[arg(long, default_value_t = 50)]
+    pub dead_runs: usize,
 }
 
-
-
+fn main() {
+    let args = Args::parse();
+    let (egraph, root) = io::load_egraph(&args.input, args.rules.as_deref());
+    smc::smc(egraph, root, &args);
+}
