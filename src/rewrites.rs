@@ -39,6 +39,7 @@ where
 /// This function will return an error if the file exists but can't be opened.
 ///
 /// It will also return an error if it could not parse the file.
+#[allow(dead_code)]
 pub fn try_from_file<L, A, P>(path: P) -> anyhow::Result<Option<Vec<Rewrite<L, A>>>>
 where
     L: Language + FromOp + Sync + Send + 'static,

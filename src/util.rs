@@ -1,5 +1,8 @@
-use crate::{lang::{StitchAnalysis, StitchEgraph, StitchLang}, rewrites::from_file};
-use egg::{FromOp, Rewrite};
+use crate::{
+    lang::{StitchAnalysis, StitchEgraph, StitchLang},
+    rewrites::from_file,
+};
+use egg::FromOp;
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
 /// All programs are combined into a single term (programs A B C ...).
@@ -98,6 +101,7 @@ fn extract_root_size(egraph: &StitchEgraph, root: egg::Id) -> usize {
 
 /// Prints a programs term with each child on a new line.
 /// If the term is not a programs node, prints it normally.
+#[allow(dead_code)]
 pub fn print_programs(term: &egg::RecExpr<StitchLang>) {
     let root_node = &term.as_ref()[term.as_ref().len() - 1];
     if root_node.op.as_str() == "programs" {
@@ -114,6 +118,7 @@ pub fn print_programs(term: &egg::RecExpr<StitchLang>) {
 }
 
 /// Recursively prints an s-expression starting from the given node id.
+#[allow(dead_code)]
 fn print_expr(term: &egg::RecExpr<StitchLang>, id: usize) {
     let node = &term.as_ref()[id];
     if node.children.is_empty() {
