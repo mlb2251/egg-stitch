@@ -1,20 +1,19 @@
+mod io;
 mod lang;
 mod matching;
-mod util;
 mod pattern;
-mod search;
 mod revexpr;
+mod search;
 mod smc;
-mod rewrites;
 
 use lang::StitchLang;
 use pattern::Pattern;
-use search::{SharedSearchData, SearchState};
+use search::{SearchState, SharedSearchData};
 use smc::compute_cost;
 
 fn main() {
     let rules = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
-    let (egraph, root) = util::load_egraph("data/domains/cogsci/dials.json", Some(rules));
+    let (egraph, root) = io::load_egraph("data/domains/cogsci/dials.json", Some(rules));
 
     smc::smc(egraph, root);
 
