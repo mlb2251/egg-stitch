@@ -8,6 +8,7 @@ pub struct RevExpr<L: egg::Language> {
 }
 
 impl<L: egg::Language> RevExpr<L> {
+    /// Creates a `RevExpr` from a pre-built node list (root at index 0).
     pub fn new(nodes: Vec<L>) -> Self {
         Self { nodes }
     }

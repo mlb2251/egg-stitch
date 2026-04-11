@@ -11,19 +11,6 @@ pub struct StitchLang {
     pub children: Vec<Id>,
 }
 
-impl StitchLang {
-    // Create an enode with the given string and children
-    // pub fn new(op: impl Into<Symbol>, children: Vec<Id>) -> Self {
-    //     let op = op.into();
-    //     Self { op, children }
-    // }
-
-    // /// Create childless enode with the given string
-    // pub fn leaf(op: impl Into<Symbol>) -> Self {
-    //     Self::new(op, vec![])
-    // }
-}
-
 impl Language for StitchLang {
     /// Used for short-circuiting the search for equivalent nodes.
     type Discriminant = Symbol;
@@ -62,16 +49,19 @@ impl FromOp for StitchLang {
     }
 }
 
+/// Egg analysis that tracks the minimum AST size of each e-class.
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis;
 
 impl Analysis<StitchLang> for StitchAnalysis {
     type Data = u32;
 
+    /// Computes the minimum AST size of a new enode as 1 + sum of children's sizes.
     fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: Id) -> Self::Data {
         1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
     }
 
+    /// Keeps the minimum size when two e-classes are merged.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
         if from < *to {
             *to = from;
@@ -79,10 +69,10 @@ impl Analysis<StitchLang> for StitchAnalysis {
         } else if from == *to {
             egg::DidMerge(false, false)
         } else {
-            // from = *to; but we don't do this because types; idk it seems like they don't want us to
             egg::DidMerge(false, true)
         }
     }
 }
 
+/// Type alias for the e-graph used throughout this codebase.
 pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;

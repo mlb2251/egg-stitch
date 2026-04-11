@@ -2,6 +2,7 @@ use crate::lang::StitchLang;
 use crate::revexpr::RevExpr;
 use egg::{ENodeOrVar, Id, Language};
 
+/// A partially-built pattern over `StitchLang`, tracking which nodes are open variables.
 #[derive(Debug, Clone)]
 pub struct Pattern {
     pub pattern: RevExpr<ENodeOrVar<StitchLang>>,
