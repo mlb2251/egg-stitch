@@ -38,6 +38,10 @@ pub struct Args {
     #[arg(long, default_value_t = 50)]
     pub dead_runs: usize,
 
+    /// Probability of attempting variable reuse during expansion.
+    #[arg(long, default_value_t = 0.5)]
+    pub p_reuse: f64,
+
     /// Path to write a JSON-serialized RunResult.
     #[arg(short, long)]
     pub output: Option<String>,
