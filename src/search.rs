@@ -34,7 +34,7 @@ impl SearchState {
         let node_idx = rand::rng().random_range(0..target_eclass.len());
         let target_node = &target_eclass.nodes[node_idx];
 
-        self.expand(var_idx, &target_node, shared);
+        self.expand(var_idx, target_node, shared);
     }
     pub fn expand(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
         self.pattern.expand(var_idx, target);

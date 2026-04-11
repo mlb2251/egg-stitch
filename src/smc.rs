@@ -4,11 +4,10 @@ use std::collections::BinaryHeap;
 use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
-use crate::search::{self, SearchState, SharedSearchData};
+use crate::search::{SearchState, SharedSearchData};
 use egg::{Id, Language};
-use priority_queue::PriorityQueue;
 use rand::Rng;
-use rustc_hash::{FxHashMap};
+use rustc_hash::FxHashMap;
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> {
     let shared = SharedSearchData { egraph };
@@ -25,9 +24,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
     let mut best_found_at = None;
 
     // make a bunch of search states
-    let mut search_states: Vec<SearchState> = (0..num_particles)
-        .map(|i| SearchState::new(&shared))
-        .collect();
+    let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(&shared)).collect();
 
     for step in 0..num_steps {
         for search_state in &mut search_states {
@@ -48,7 +45,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
         }
 
 
-        let mut weights: Vec<f64> = costs.iter().map(|cost| (-(*cost as f64)/temperature)).collect();
+        let mut weights: Vec<f64> = costs.iter().map(|cost| -(*cost as f64) / temperature).collect();
         let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         for w in &mut weights {
             *w = (*w - max_weight).exp();
@@ -79,13 +76,15 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
             println!("Sample particle {}: {}; cost={} weight={}", i, search_states[i].pattern, costs[i], weights[i]);
         }
 
-        search_states = (0..num_particles).map(|i| {
-            let idx = weighted_choice(&weights);
-            search_states[idx].clone()
-        }).collect();
+        search_states = (0..num_particles)
+            .map(|_| {
+                let idx = weighted_choice(&weights);
+                search_states[idx].clone()
+            })
+            .collect();
     }
 
-    let (cost) = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
+    let cost = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
     println!("best found at iteration {}: {}", best_found_at.unwrap(), cost);
     println!("program: {}", best_so_far.as_ref().unwrap().1.pattern);
     println!("best: {}", cost);
@@ -154,7 +153,7 @@ fn compute_size(
     }
     while let Some(Reverse(eclass)) = work_queue.pop() {
         // we assume that small numbers are children of large numbers, so when we pop we have already computed children
-        if(size_under_rewrite.contains_key(&eclass)) {
+        if size_under_rewrite.contains_key(&eclass) {
             continue;
         }
         let size_current = get_size(eclass, &size_under_rewrite);
@@ -194,11 +193,8 @@ fn compute_size(
     final_size as usize
 }
 
-pub fn rewrite_slow(
-    egraph: &StitchEgraph,
-    root: egg::Id,
-    search_state: &SearchState,
-) -> usize {
+#[allow(dead_code)]
+pub fn rewrite_slow(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> usize {
     let mut egraph = egraph.clone(); // todo be smarter
 
     // println!("search state: {}", search_state);
@@ -224,7 +220,6 @@ pub fn rewrite_slow(
     // assert_eq!(egraph[root].data as usize, cost);
     // println!("cost from extractor: {}", cost);
     // println!("cost from egraph: {}", egraph[root].data);
-    let cost = egraph[root].data as usize;
-    cost
+    egraph[root].data as usize
     // return (cost, term);
 }

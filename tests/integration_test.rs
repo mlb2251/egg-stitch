@@ -1,4 +1,2 @@
 #[test]
-fn placeholder() {
-    assert!(true);
-}
+fn placeholder() {}
