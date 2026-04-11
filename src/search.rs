@@ -7,6 +7,8 @@ use rand::Rng;
 #[derive(Debug)]
 pub struct SharedSearchData {
     pub egraph: StitchEgraph,
+    /// Enable slow rewrite check (assert fast == slow computation).
+    pub check_slow: bool,
 }
 
 #[derive(Debug, Clone)]

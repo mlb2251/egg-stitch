@@ -1,4 +1,4 @@
-use crate::lang::StitchEgraph;
+use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -8,8 +8,8 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
 /// Returns the total cost: compressed corpus size plus the pattern's own size.
-pub fn compute_cost(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> usize {
-    let cost = compute_size(egraph, root, search_state);
+pub fn compute_cost(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState, check_slow: bool) -> usize {
+    let cost = compute_size(egraph, root, search_state, check_slow);
     let pattern_size = compute_pattern_size(&search_state.pattern);
     cost + pattern_size
 }
@@ -20,7 +20,9 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
-pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> usize {
+/// When `check_slow` is set, cross-checks the result against a slow egg-based
+/// reference implementation and panics on mismatch.
+pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState, check_slow: bool) -> usize {
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
@@ -68,5 +70,25 @@ pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchS
         }
     }
     let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
+    if check_slow {
+        let slow_size = rewrite_slow(egraph, root, search_state) as i64;
+        assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
+    }
     final_size as usize
+}
+
+/// Slow reference implementation of `compute_size`: clones the egraph, unions each
+/// match root with an `inv_0(args...)` node, rebuilds, and reads the resulting size
+/// out of the analysis data.
+fn rewrite_slow(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> usize {
+    let mut egraph = egraph.clone();
+    for m in &search_state.matches {
+        for subst in &m.substs {
+            let node = StitchLang { op: "inv_0".into(), children: subst.vars.clone() };
+            let x = egraph.add(node);
+            egraph.union(x, m.root_eclass);
+        }
+    }
+    egraph.rebuild();
+    egraph[root].data as usize
 }

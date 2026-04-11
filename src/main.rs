@@ -36,6 +36,14 @@ pub struct Args {
     /// Stop after this many steps with no improvement.
     #[arg(long, default_value_t = 50)]
     pub dead_runs: usize,
+
+    /// Maximum arity of patterns to consider as "best".
+    #[arg(long, default_value_t = 1000)]
+    pub max_arity: usize,
+
+    /// Enable slow rewrite check (assert fast == slow computation).
+    #[arg(long, default_value_t = false)]
+    pub check_slow: bool,
 }
 
 fn main() {

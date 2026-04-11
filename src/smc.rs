@@ -1,20 +1,21 @@
 use std::cmp::min;
 
 use crate::cost::{compute_cost, compute_size};
-use crate::lang::{StitchEgraph, StitchLang};
+use crate::lang::StitchEgraph;
 use crate::search::{SearchState, SharedSearchData};
 use rand::Rng;
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(usize, SearchState)> {
-    let shared = SharedSearchData { egraph };
+    let shared = SharedSearchData { egraph, check_slow: args.check_slow };
 
-    let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
+    let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared), shared.check_slow);
     println!("original size of egraph: {}", original_size);
 
     let num_particles = args.num_particles;
     let num_steps = args.num_steps;
     let temperature = args.temperature;
     let dead_runs = args.dead_runs as i64;
+    let max_arity = args.max_arity;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
@@ -29,11 +30,11 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
 
         let costs: Vec<usize> = search_states
             .iter()
-            .map(|search_state| compute_cost(&shared.egraph, root, search_state))
+            .map(|search_state| compute_cost(&shared.egraph, root, search_state, shared.check_slow))
             .collect();
 
         for (i, cost) in costs.iter().enumerate() {
-            if best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
+            if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
                 println!("[iteration {}] new best: {} {}", step, cost, search_states[i].pattern);
                 best_so_far = Some((*cost, search_states[i].clone()));
                 best_found_at = Some(step);
@@ -80,7 +81,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
             .collect();
     }
 
-    let cost = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
+    let cost = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1, shared.check_slow);
     println!("best found at iteration {}: {}", best_found_at.unwrap(), cost);
     println!("program: {}", best_so_far.as_ref().unwrap().1.pattern);
     println!("best: {}", cost);
@@ -113,35 +114,4 @@ pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
         accum += *w;
         *w = accum;
     }
-}
-
-#[allow(dead_code)]
-pub fn rewrite_slow(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> usize {
-    let mut egraph = egraph.clone(); // todo be smarter
-
-    // println!("search state: {}", search_state);
-    // let mut nodes = vec![];
-    for m in &search_state.matches {
-        // println!("match at eclass {}: {:?}", m.root_eclass, m.substs);
-        for subst in &m.substs {
-            let node: StitchLang = StitchLang {
-                op: "inv_0".into(),
-                children: subst.vars.clone(),
-            };
-            let x = egraph.add(node);
-            egraph.union(x, m.root_eclass);
-            // nodes.push(x);
-        }
-    }
-    egraph.rebuild();
-    // let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    // let (cost, term) = extractor.find_best(root);
-    // for n in nodes {
-    //     egraph
-    // }
-    // assert_eq!(egraph[root].data as usize, cost);
-    // println!("cost from extractor: {}", cost);
-    // println!("cost from egraph: {}", egraph[root].data);
-    egraph[root].data as usize
-    // return (cost, term);
 }
