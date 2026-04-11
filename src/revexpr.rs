@@ -54,7 +54,6 @@ impl<L: egg::Language> std::ops::IndexMut<egg::Id> for RevExpr<L> {
     }
 }
 
-
 impl<L: egg::Language> From<RevExpr<L>> for egg::RecExpr<L> {
     fn from(rev_expr: RevExpr<L>) -> Self {
         let mut nodes: Vec<L> = rev_expr.nodes;

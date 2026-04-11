@@ -58,9 +58,6 @@ impl FromOp for StitchLang {
     type Error = Infallible;
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            op: op.into(),
-            children,
-        })
+        Ok(Self { op: op.into(), children })
     }
 }
