@@ -5,7 +5,17 @@ use crate::lang::{StitchEgraph, StitchLang};
 use crate::search::{SearchState, SharedSearchData};
 use rand::Rng;
 
-pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(usize, SearchState)> {
+/// Output of a completed SMC run, surfacing everything the caller needs to
+/// build an aggregate `RunResult` for JSON output.
+pub struct SmcResult {
+    pub best: Option<(usize, SearchState)>,
+    pub original_size: usize,
+    pub best_found_at: Option<usize>,
+    pub num_steps_run: usize,
+    pub egraph: StitchEgraph,
+}
+
+pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
     let shared = SharedSearchData { egraph };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
@@ -18,6 +28,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
+    let mut steps_run = 0;
 
     // make a bunch of search states
     let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(&shared)).collect();
@@ -55,11 +66,13 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
         }
 
         if weights.iter().sum::<f64>() == 0.0 {
+            steps_run = step + 1;
             println!("all particles died, stopping");
             break;
         }
 
         if best_found_at.is_some_and(|best_found_at| (step as i64) - (best_found_at as i64) > dead_runs) {
+            steps_run = step + 1;
             println!("no progress in 100 steps, stopping at {}", step);
             break;
         }
@@ -78,16 +91,23 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(u
                 search_states[idx].clone()
             })
             .collect();
+        steps_run = step + 1;
     }
 
-    let cost = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
-    println!("best found at iteration {}: {}", best_found_at.unwrap(), cost);
-    println!("program: {}", best_so_far.as_ref().unwrap().1.pattern);
-    println!("best: {}", cost);
-    println!("Compression ratio: {}", original_size as f64 / cost as f64);
-    // crate::util::print_programs(&term);
+    if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
+        println!("best found at iteration {}: {}", iter, cost);
+        println!("program: {}", state.pattern);
+        println!("best: {}", cost);
+        println!("Compression ratio: {}", original_size as f64 / *cost as f64);
+    }
 
-    best_so_far
+    SmcResult {
+        best: best_so_far,
+        original_size,
+        best_found_at,
+        num_steps_run: steps_run,
+        egraph: shared.egraph,
+    }
 }
 
 pub fn weighted_choice(acc_weights: &[f64]) -> usize {

@@ -3,6 +3,7 @@ mod io;
 mod lang;
 mod matching;
 mod pattern;
+mod results;
 mod revexpr;
 mod search;
 mod smc;
@@ -36,10 +37,56 @@ pub struct Args {
     /// Stop after this many steps with no improvement.
     #[arg(long, default_value_t = 50)]
     pub dead_runs: usize,
+
+    /// Path to write a JSON-serialized RunResult.
+    #[arg(short, long)]
+    pub output: Option<String>,
 }
 
 fn main() {
     let args = Args::parse();
-    let (egraph, root) = io::load_egraph(&args.input, args.rules.as_deref());
-    smc::smc(egraph, root, &args);
+    let start = std::time::Instant::now();
+
+    let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, args.rules.as_deref());
+    let smc_result = smc::smc(egraph, root, &args);
+
+    let elapsed_secs = start.elapsed().as_secs_f64();
+
+    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, rewritten_programs) = match &smc_result.best {
+        Some((cost, state)) => (
+            Some(*cost),
+            Some(smc_result.original_size as f64 / *cost as f64),
+            Some(state.pattern.to_string()),
+            Some(state.pattern.vars.len()),
+            Some(cost::compute_pattern_size(&state.pattern)),
+            Some(state.matches.len()),
+            Some(cost::extract_rewritten_programs(&smc_result.egraph, root, state)),
+        ),
+        None => (None, None, None, None, None, None, None),
+    };
+
+    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+
+    let run_result = results::RunResult {
+        timestamp,
+        input_file: args.input.clone(),
+        rules_file: args.rules.clone(),
+        elapsed_secs,
+        initial_cost: cost_before_rewrites,
+        cost_after_rewrites: smc_result.original_size,
+        final_cost,
+        compression_ratio,
+        pattern,
+        arity,
+        pattern_size,
+        num_matches,
+        best_iteration: smc_result.best_found_at,
+        num_steps_run: smc_result.num_steps_run,
+        rewritten_programs,
+    };
+
+    if let Some(ref output_path) = args.output {
+        let json = serde_json::to_string_pretty(&run_result).expect("Failed to serialize result");
+        std::fs::write(output_path, json).expect("Failed to write output file");
+    }
 }

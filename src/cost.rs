@@ -1,4 +1,4 @@
-use crate::lang::StitchEgraph;
+use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -69,4 +69,26 @@ pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchS
     }
     let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
     final_size as usize
+}
+
+/// Clones the egraph and unions each match root with an `inv_0(args...)` node, then
+/// rebuilds. Used as a starting point for extracting rewritten programs.
+fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &SearchState) -> StitchEgraph {
+    let mut egraph = egraph.clone();
+    for m in &search_state.matches {
+        for subst in &m.substs {
+            let node = StitchLang { op: "inv_0".into(), children: subst.vars.clone() };
+            let x = egraph.add(node);
+            egraph.union(x, m.root_eclass);
+        }
+    }
+    egraph.rebuild();
+    egraph
+}
+
+/// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
+pub fn extract_rewritten_programs(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> Vec<String> {
+    let rewritten = build_rewritten_egraph(egraph, search_state);
+    let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
+    rewritten[root].nodes[0].children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect()
 }
