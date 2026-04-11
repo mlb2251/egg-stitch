@@ -6,7 +6,7 @@ use crate::search::{SearchState, SharedSearchData};
 use rand::Rng;
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Option<(usize, SearchState)> {
-    let shared = SharedSearchData { egraph, check_slow: args.check_slow };
+    let shared = SharedSearchData { egraph, p_reuse: args.p_reuse, check_slow: args.check_slow };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared), shared.check_slow);
     println!("original size of egraph: {}", original_size);
