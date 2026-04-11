@@ -1,3 +1,4 @@
+mod cost;
 mod io;
 mod lang;
 mod matching;

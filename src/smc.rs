@@ -1,13 +1,9 @@
-use std::cmp::{Reverse, min};
-use std::collections::BinaryHeap;
+use std::cmp::min;
 
+use crate::cost::{compute_cost, compute_size};
 use crate::lang::{StitchEgraph, StitchLang};
-use crate::matching::Subst;
-use crate::pattern::Pattern;
 use crate::search::{SearchState, SharedSearchData};
-use egg::{Id, Language};
 use rand::Rng;
-use rustc_hash::FxHashMap;
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> {
     let shared = SharedSearchData { egraph };
@@ -117,80 +113,6 @@ pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
         accum += *w;
         *w = accum;
     }
-}
-
-pub fn compute_cost(
-    egraph: &StitchEgraph,
-    root: egg::Id,
-    search_state: &SearchState,
-) -> usize {
-    let cost = compute_size(egraph, root, search_state);
-    let pattern_size = compute_pattern_size(&search_state.pattern);
-    cost + pattern_size
-}
-
-pub fn compute_pattern_size(pattern: &Pattern) -> usize {
-    1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
-}
-
-fn compute_size(
-    egraph: &StitchEgraph,
-    root: egg::Id,
-    search_state: &SearchState,
-) -> usize {
-    // rewrite_slow(egraph, root, search_state)
-    let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
-    let mut work_queue = BinaryHeap::new();
-    let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
-
-    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 {
-        s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64)
-    };
-
-    for m in &search_state.matches {
-        work_queue.push(Reverse(m.root_eclass));
-        eclass_to_matches.insert(m.root_eclass, &m.substs);
-    }
-    while let Some(Reverse(eclass)) = work_queue.pop() {
-        // we assume that small numbers are children of large numbers, so when we pop we have already computed children
-        if size_under_rewrite.contains_key(&eclass) {
-            continue;
-        }
-        let size_current = get_size(eclass, &size_under_rewrite);
-        let mut best = size_current;
-        // trying a rewrite; (fn_i arg0 ...)
-        if let Some(substs) = eclass_to_matches.get(&eclass) {
-            for subst in *substs {
-                let mut size_new: i64 = 1;
-                for &var in &subst.vars {
-                    size_new += get_size(var, &size_under_rewrite);
-                }
-                if size_new < best {
-                    best = size_new;
-                }
-            }
-        }
-        // not doing a rewrite (just try all the enocdes)
-        if let Some(enode) = egraph[eclass].nodes.first() {
-            let mut size_no_rewrite: i64 = 1;
-            for &child in &enode.children {
-                size_no_rewrite += get_size(child, &size_under_rewrite);
-            }
-            if size_no_rewrite < best {
-                best = size_no_rewrite;
-            }
-        }
-        if best < size_current {
-            for parent in egraph[eclass].parents() {
-                work_queue.push(Reverse(parent));
-            }
-            size_under_rewrite.insert(eclass, best);
-        }
-    }
-    let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
-    // let slow_size = rewrite_slow(egraph, root, search_state) as i64;
-    // assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
-    final_size as usize
 }
 
 #[allow(dead_code)]
