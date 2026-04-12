@@ -4,7 +4,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
 use crate::cost::{compute_cost, compute_pattern_size};
-use crate::debug_log::{SearchTreeLog, TreeNodeLog};
+use crate::debug_log::{ReplayConfig, ReplayLog, ReplayStep, SearchTreeLog, TreeNodeLog};
 use crate::search::{Action, SearchState, SharedSearchData};
 
 /// How to order the best-first search heap.
@@ -37,6 +37,8 @@ pub struct BestFirstResult {
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
     pub tree_log: Option<SearchTreeLog>,
+    /// Lightweight replay log: just the sequence of (pattern, action) choices.
+    pub replay_log: Option<ReplayLog>,
 }
 
 /// One node in the in-memory search tree. Retained for parent-pointer lookups
@@ -99,6 +101,7 @@ pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
     let mut best_found_at: Option<usize> = None;
     let mut expansion_order: Vec<usize> = Vec::new();
+    let mut replay_steps: Vec<ReplayStep> = Vec::new();
     let mut num_expansions: usize = 0;
 
     while let Some(Reverse((_cost, node_id))) = heap.pop() {
@@ -109,6 +112,10 @@ pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize
 
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
+        replay_steps.push(ReplayStep {
+            pattern: nodes[node_id].state.pattern.to_string(),
+            action: None,
+        });
 
         let successors = nodes[node_id].state.enumerate_successors(shared);
 
@@ -185,11 +192,31 @@ pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize
         None
     };
 
+    let replay_log = if debug {
+        let priority_str = match strategy {
+            SearchPriority::Cost => "cost",
+            SearchPriority::DepthFirst => "depth-first",
+            SearchPriority::BreadthFirst => "breadth-first",
+            SearchPriority::MostMatches => "most-matches",
+        };
+        Some(ReplayLog {
+            config: ReplayConfig {
+                priority: priority_str.to_string(),
+                budget,
+                max_arity,
+            },
+            steps: replay_steps,
+        })
+    } else {
+        None
+    };
+
     BestFirstResult {
         best: best_pair,
         original_size,
         best_found_at,
         num_expansions,
         tree_log,
+        replay_log,
     }
 }

@@ -38,9 +38,77 @@ async function loadWasm() {
     await wasm.default();
     overlay.classList.add('hidden');
     $('btnLoad').disabled = false;
+    // Auto-load from URL params (e.g. linked from results page).
+    await autoLoadFromParams();
   } catch (e) {
     overlay.textContent = `failed to load WASM: ${e}. Run "make wasm" first.`;
     console.error(e);
+  }
+}
+
+/// If URL has ?domain=...&replay=... params, auto-load the domain and replay.
+async function autoLoadFromParams() {
+  const params = new URLSearchParams(location.search);
+  const domain = params.get('domain');
+  const replayFile = params.get('replay');
+  if (!domain) return;
+
+  // Set dropdowns to match.
+  const rules = params.get('rules') || '';
+  $('selDomain').value = domain;
+  $('selRules').value = rules;
+
+  // Trigger load.
+  $('btnLoad').click();
+
+  if (replayFile) {
+    // Wait for engine to be ready.
+    await new Promise(resolve => {
+      const check = () => engine ? resolve() : setTimeout(check, 50);
+      check();
+    });
+
+    // Load the replay log directly.
+    try {
+      const log = await fetch(`results/${replayFile}`).then(r => {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      });
+      applyReplayConfig(log.config);
+      replaySteps = log.steps || [];
+      replayIdx = 0;
+    } catch (e) {
+      console.error('failed to load replay:', e);
+      return;
+    }
+
+    // Fetch expected cost from the corresponding run result.
+    const runPath = `results/${replayFile.replace('_replay.json', '.json')}`;
+    try {
+      const run = await fetch(runPath).then(r => r.ok ? r.json() : null);
+      console.log('run result fetch:', runPath, run ? `final_cost=${run.final_cost}` : 'null');
+      if (run && run.final_cost != null) replayExpectedCost = run.final_cost;
+    } catch (e) { console.warn('failed to fetch run result:', e); }
+
+    // Also select it in the dropdown if available.
+    const sel = $('selReplay');
+    const opt = [...sel.options].find(o => o.value === replayFile);
+    if (opt) sel.value = replayFile;
+
+    // Replay all steps.
+    console.log(`replaying ${replaySteps.length} steps...`);
+    while (replayIdx < replaySteps.length) {
+      if (!replayOneStep()) break;
+    }
+    console.log(`replay done: ${replayIdx} steps, bestCost=${bestCost}, expected=${replayExpectedCost}`);
+    renderAll();
+    updateReplayButtons();
+    // Set status AFTER renderAll (which calls updateStatus) so it's not overwritten.
+    if (replayExpectedCost != null && bestCost > replayExpectedCost) {
+      statusBar.innerHTML = `<b class="bad">REPLAY MISMATCH: expected cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}</b>`;
+    } else {
+      statusBar.textContent = `replayed ${replayIdx} / ${replaySteps.length} steps`;
+    }
   }
 }
 
@@ -95,7 +163,166 @@ function enableControls(on) {
   $('btnRun').disabled = !on;
   $('btnExpandBest').disabled = !on;
   $('btnCollapseAll').disabled = !on;
+  $('selReplay').disabled = !on;
+  if (on) scanReplays();
+  updateReplayButtons();
 }
+
+// ── Replay log ───────────────────────────────────────────────────────────────
+
+let replaySteps = [];    // loaded replay steps
+let replayIdx = 0;       // next step to replay
+let replayExpectedCost = null; // final_cost from the original run, for validation
+
+/// Scan viz/results/ for runs matching the current domain that have replay logs.
+async function scanReplays() {
+  const sel = $('selReplay');
+  const domain = $('selDomain').value;
+  sel.innerHTML = '<option value="">none</option>';
+  try {
+    const listing = await fetch('results/').then(r => r.text());
+    const { files: topFiles, dirs } = parseDirectoryListing(listing);
+
+    const candidates = [];
+
+    // Scan top-level files.
+    for (const f of topFiles) {
+      if (f.endsWith('_debug.json') || f.endsWith('_replay.json')) continue;
+      try {
+        const r = await fetch(`results/${f}`).then(r => r.json());
+        if (r.replay_log_file && r.input_file && r.input_file.includes(`/${domain}.json`)) {
+          candidates.push({ label: f.replace(/\.json$/, ''), path: r.replay_log_file, finalCost: r.final_cost });
+        }
+      } catch { /* skip bad files */ }
+    }
+
+    // Scan subfolders.
+    for (const d of dirs) {
+      try {
+        const sub = await fetch(`results/${d}/`).then(r => r.text());
+        const { files } = parseDirectoryListing(sub);
+        for (const f of files) {
+          if (f.endsWith('_debug.json') || f.endsWith('_replay.json')) continue;
+          try {
+            const r = await fetch(`results/${d}/${f}`).then(r => r.json());
+            if (r.replay_log_file && r.input_file && r.input_file.includes(`/${domain}.json`)) {
+              candidates.push({ label: `${d}/${f.replace(/\.json$/, '')}`, path: `${d}/${r.replay_log_file}`, finalCost: r.final_cost });
+            }
+          } catch { /* skip */ }
+        }
+      } catch { /* skip */ }
+    }
+
+    for (const c of candidates) {
+      const opt = document.createElement('option');
+      opt.value = c.path;
+      opt.dataset.finalCost = c.finalCost ?? '';
+      opt.textContent = c.label + (c.finalCost != null ? ` (cost ${c.finalCost})` : '');
+      sel.appendChild(opt);
+    }
+  } catch (e) {
+    console.warn('could not scan replays:', e);
+  }
+}
+
+/// Parse http.server's directory listing HTML into {files, dirs}.
+function parseDirectoryListing(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const files = [], dirs = [];
+  for (const a of doc.querySelectorAll('a')) {
+    const h = a.getAttribute('href');
+    if (!h || h.startsWith('?') || h === '../' || h === '/') continue;
+    if (h.endsWith('/')) dirs.push(h.replace(/\/$/, ''));
+    else if (h.endsWith('.json')) files.push(h);
+  }
+  return { files, dirs };
+}
+
+/// Apply replay config to UI controls.
+function applyReplayConfig(config) {
+  if (!config) return;
+  if (config.priority) $('selPriority').value = config.priority;
+  if (config.budget) $('numBudget').value = config.budget;
+  if (config.max_arity) $('numArity').value = config.max_arity;
+}
+
+/// Load the selected replay log.
+$('selReplay').addEventListener('change', async () => {
+  const sel = $('selReplay');
+  const path = sel.value;
+  if (!path) { replaySteps = []; replayIdx = 0; replayExpectedCost = null; updateReplayButtons(); return; }
+  const opt = sel.options[sel.selectedIndex];
+  replayExpectedCost = opt.dataset.finalCost ? parseInt(opt.dataset.finalCost) : null;
+  try {
+    const log = await fetch(`results/${path}`).then(r => {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    });
+    applyReplayConfig(log.config);
+    replaySteps = log.steps || [];
+    replayIdx = 0;
+    updateReplayButtons();
+    statusBar.textContent = `loaded replay: ${replaySteps.length} steps` + (replayExpectedCost != null ? ` (expected cost: ${replayExpectedCost})` : '');
+  } catch (err) {
+    alert('failed to load replay: ' + err);
+  }
+});
+
+function updateReplayButtons() {
+  const hasSteps = replaySteps.length > 0 && replayIdx < replaySteps.length && engine;
+  $('btnReplay').disabled = !hasSteps;
+  $('btnReplayAll').disabled = !hasSteps;
+}
+
+/// Replay one step: find the fringe node matching the logged pattern and expand it.
+/// Returns true if a node was expanded, false if not found (already expanded or missing).
+function replayOneStep() {
+  if (replayIdx >= replaySteps.length) return false;
+  const step = replaySteps[replayIdx];
+  replayIdx++;
+
+  // Find a fringe node whose pattern matches.
+  const target = nodes.findIndex(n => !n.expanded && n.pattern === step.pattern);
+  if (target < 0) {
+    // Check if it's already expanded (ok, no-op) vs missing entirely (error).
+    const exists = nodes.some(n => n.pattern === step.pattern);
+    if (exists) return true; // already expanded, skip
+    // Pattern not in tree — halt with error.
+    const msg = `replay error at step ${replayIdx}: pattern not found in tree: ${step.pattern}`;
+    statusBar.innerHTML = `<b class="bad">${msg}</b>`;
+    console.error(msg);
+    return false; // halt
+  }
+  expandNode(target);
+  openNodes.add(target);
+  return true;
+}
+
+$('btnReplay').addEventListener('click', () => {
+  if (replayOneStep()) {
+    selectedId = expansionOrder[expansionOrder.length - 1] ?? selectedId;
+    renderAll();
+    updateReplayButtons();
+  }
+});
+
+$('btnReplayAll').addEventListener('click', () => {
+  const costBefore = bestCost;
+  while (replayIdx < replaySteps.length) {
+    if (!replayOneStep()) break;
+  }
+  renderAll();
+  updateReplayButtons();
+
+  // Validate: did we reach at least the expected cost?
+  if (replayExpectedCost != null && bestCost > replayExpectedCost && bestCost > costBefore) {
+    const msg = `replay mismatch: expected best cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}`;
+    statusBar.innerHTML = `<b class="bad">${msg}</b>`;
+    console.warn(msg);
+  } else if (replayExpectedCost != null && bestCost <= replayExpectedCost) {
+    statusBar.innerHTML = `replayed ${replayIdx} steps · best cost <b class="good">${bestCost.toLocaleString()}</b> (expected ${replayExpectedCost.toLocaleString()})`;
+  }
+});
 
 // ── Tree init ────────────────────────────────────────────────────────────────
 
@@ -120,6 +347,7 @@ function initTree() {
 }
 
 /// Add a tree node. Returns the new node id.
+/// Only updates best-so-far if arity <= maxArity (matching Rust best_first behavior).
 function addNode(parentId, stateId, info, action) {
   const id = nodes.length;
   const depth = parentId != null ? (nodes[parentId].depth || 0) + 1 : 0;
@@ -138,7 +366,8 @@ function addNode(parentId, stateId, info, action) {
   });
   stateIdMap.push(stateId);
 
-  if (info.cost < bestCost) {
+  const maxArity = parseInt($('numArity').value) || 2;
+  if (info.arity <= maxArity && info.cost < bestCost) {
     bestCost = info.cost;
     bestNode = id;
   }
@@ -179,7 +408,6 @@ function expandNode(nodeId) {
   const node = nodes[nodeId];
   if (node.expanded) return; // already expanded
 
-  const maxArity = parseInt($('numArity').value) || 3;
   const stateId = stateIdMap[nodeId];
   const succs = engine.successors(stateId);
 
@@ -191,8 +419,7 @@ function expandNode(nodeId) {
   if (hi >= 0) heap.splice(hi, 1);
 
   for (const s of succs) {
-    if (s.arity > maxArity) continue;
-    // Dedup by pattern string.
+    // Dedup by pattern string (matches Rust's seen.insert() check).
     const key = s.pattern;
     if (seen.has(key)) continue;
     seen.add(key);

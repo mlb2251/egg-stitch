@@ -36,19 +36,6 @@ def dials_follow():
     )
 
 
-def dev():
-    """Current expt: best-first on dials with rewrites."""
-    compress(
-        "data/domains/cogsci/dials.json",
-        rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
-        output="dials_bf.json",
-        search="best-first",
-        num_steps=500,
-        debug_log=True,
-        max_arity=2,
-    )
-
-
 def temp_sweep():
     """Temperature sweep for SMC on dials with rewrites."""
 
@@ -120,6 +107,22 @@ def bf_matches():
         debug_log=True,
         max_arity=2,
     )
+
+def best_first():
+    """Best-first with cost priority."""
+    compress(
+        "data/domains/cogsci/dials.json",
+        rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        output="dials_bf_cost.json",
+        search="best-first",
+        priority="cost",
+        debug_log=True,
+    )
+
+
+def dev():
+    best_first()
+
 
 
 EXPTS = {

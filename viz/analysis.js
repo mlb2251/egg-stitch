@@ -121,6 +121,9 @@ async function deleteRun(r) {
     // Best-effort: ignore 404 if there's no debug file.
     await fetch(r.folder ? `results/${r.folder}/${r.debug_log_file}` : `results/${r.debug_log_file}`, { method: 'DELETE' });
   }
+  if (r.replay_log_file) {
+    await fetch(r.folder ? `results/${r.folder}/${r.replay_log_file}` : `results/${r.replay_log_file}`, { method: 'DELETE' });
+  }
   await load();
 }
 
@@ -180,11 +183,19 @@ function renderGroup(g, maxRatio) {
     const debugPath = r.debug_log_file
       ? (r.folder ? `${r.folder}/${r.debug_log_file}` : r.debug_log_file)
       : null;
+    const replayPath = r.replay_log_file
+      ? (r.folder ? `${r.folder}/${r.replay_log_file}` : r.replay_log_file)
+      : null;
+    // Extract domain name from input_file (e.g. "data/domains/cogsci/dials.json" -> "dials")
+    const domain = r.input_file ? r.input_file.replace(/.*\//, '').replace(/\.json$/, '') : '';
+    // Extract rules file basename (e.g. ".../drawings.dials.rewrites" -> "drawings.dials.rewrites")
+    const rules = r.rules_file ? r.rules_file.replace(/.*\//, '') : '';
+    const replayParams = replayPath ? `replay=${encodeURIComponent(replayPath)}&domain=${encodeURIComponent(domain)}&rules=${encodeURIComponent(rules)}` : '';
     tr.innerHTML = `
       <td><button class="del del-run" title="delete run">×</button></td>
       <td>${fmtTime(r.timestamp)}</td>
       <td><b>${r.name}</b></td>
-      <td>${debugPath ? `<a class="debug-link" href="${r.search === 'best-first' ? 'tree.html' : 'debug.html'}?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
+      <td>${debugPath ? `<a class="debug-link" href="${r.search === 'best-first' ? 'tree.html' : 'debug.html'}?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">tree</a>` : ''}${replayPath ? ` <a class="debug-link" href="interactive.html?${replayParams}" onclick="event.stopPropagation()">replay</a>` : ''}</td>
       <td>${r.rewrites ? '<span class="pill">yes</span>' : '<span class="pill no">no</span>'}</td>
       <td class="dim">${fmt(r.initial_cost)}</td>
       <td class="dim">${fmt(r.cost_after_rewrites)}</td>

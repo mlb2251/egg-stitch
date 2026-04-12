@@ -2,6 +2,34 @@ use serde::Serialize;
 
 use crate::search::SearchState;
 
+/// A replay log: search config + a sequence of (pattern, action) pairs that
+/// can be replayed in the interactive WASM viewer to reconstruct a search run.
+#[derive(Serialize)]
+pub struct ReplayLog {
+    pub config: ReplayConfig,
+    pub steps: Vec<ReplayStep>,
+}
+
+/// Search configuration stored alongside a replay log so the viewer can
+/// reproduce the exact same settings.
+#[derive(Serialize)]
+pub struct ReplayConfig {
+    pub priority: String,
+    pub budget: usize,
+    pub max_arity: usize,
+}
+
+/// One expansion decision in a replay log.
+#[derive(Serialize)]
+pub struct ReplayStep {
+    /// Pattern string of the node that was expanded.
+    pub pattern: String,
+    /// Action string describing the expansion (e.g. "expand #0 := op/2").
+    /// None means "expand all successors" (deterministic best-first).
+    /// Some(action) means a specific action was chosen (stochastic search).
+    pub action: Option<String>,
+}
+
 /// Full debug trace of an SMC run, one entry per step.
 #[derive(Serialize)]
 pub struct DebugLog {

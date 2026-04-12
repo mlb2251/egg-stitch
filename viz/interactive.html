@@ -99,8 +99,10 @@ main { flex: 1; display: flex; min-height: 0; }
 #loading-overlay.hidden { display: none; }
 
 .empty-msg { color: var(--muted); font-style: italic; padding: 1rem; font-size: .85rem; }
-#status-bar { padding: .35rem 1rem; font-size: .8rem; color: var(--muted); border-top: 1px solid var(--border); background: var(--card); }
+#status-bar { padding: .35rem 1rem; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--card); }
 #status-bar b { color: var(--fg); }
+#status-bar b.bad { color: var(--bad); }
+#status-bar b.good { color: var(--good); }
 </style>
 </head>
 <body>
@@ -124,7 +126,7 @@ main { flex: 1; display: flex; min-height: 0; }
     <label>rules:</label>
     <select id="selRules">
       <option value="">none</option>
-      <option value="drawings.dials.rewrites">dials</option>
+      <option value="drawings.dials.rewrites" selected>dials</option>
       <option value="drawings.furniture.rewrites">furniture</option>
       <option value="drawings.nuts-bolts.rewrites">nuts-bolts</option>
       <option value="drawings.wheels.rewrites">wheels</option>
@@ -141,9 +143,14 @@ main { flex: 1; display: flex; min-height: 0; }
     <label>budget:</label>
     <input type="number" id="numBudget" value="100" min="1" max="100000">
     <label>max arity:</label>
-    <input type="number" id="numArity" value="3" min="1" max="100">
+    <input type="number" id="numArity" value="2" min="1" max="100">
     <button id="btnStep" disabled title="expand the top heap node">step</button>
     <button id="btnRun" disabled title="run N expansions from heap">run</button>
+    <span class="sep"></span>
+    <label>replay:</label>
+    <select id="selReplay" disabled><option value="">none</option></select>
+    <button id="btnReplay" disabled title="replay one step">step</button>
+    <button id="btnReplayAll" disabled title="replay all remaining steps">replay all</button>
     <span class="sep"></span>
     <button id="btnExpandBest" disabled title="expand UI path to best node">show best</button>
     <button id="btnCollapseAll" disabled title="collapse all tree disclosure">collapse</button>
@@ -155,6 +162,8 @@ main { flex: 1; display: flex; min-height: 0; }
     </div>
   </div>
 </header>
+
+<div id="status-bar">ready</div>
 
 <main>
   <div id="treepane">
@@ -171,8 +180,6 @@ main { flex: 1; display: flex; min-height: 0; }
     </div>
   </div>
 </main>
-
-<div id="status-bar">ready</div>
 
 <script type="module" src="interactive.js"></script>
 </body>

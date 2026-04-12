@@ -112,7 +112,7 @@ fn main() {
 
     let (shared, original_size) = search::setup_search(egraph, root, args.follow.as_deref(), args.weight_by_usage, args.p_reuse, args.check_slow);
 
-    let (best, best_found_at, num_steps_run, debug_log_json): (Option<(usize, SearchState)>, Option<usize>, usize, Option<String>) = match args.search {
+    let (best, best_found_at, num_steps_run, debug_log_json, replay_log_json): (Option<(usize, SearchState)>, Option<usize>, usize, Option<String>, Option<String>) = match args.search {
         CliSearchKind::Smc => {
             let config = SmcConfig {
                 num_particles: args.num_particles,
@@ -125,7 +125,7 @@ fn main() {
             };
             let r = smc(&shared, root, original_size, &config);
             let json = r.debug_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize debug log"));
-            (r.best, r.best_found_at, r.num_steps_run, json)
+            (r.best, r.best_found_at, r.num_steps_run, json, None)
         }
         CliSearchKind::BestFirst => {
             let config = BestFirstConfig {
@@ -136,8 +136,9 @@ fn main() {
             };
             let initial = SearchState::new(&shared);
             let r = best_first(&shared, root, original_size, initial, &config);
-            let json = r.tree_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize tree log"));
-            (r.best, r.best_found_at, r.num_expansions, json)
+            let tree_json = r.tree_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize tree log"));
+            let replay_json = r.replay_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize replay log"));
+            (r.best, r.best_found_at, r.num_expansions, tree_json, replay_json)
         }
     };
 
@@ -175,6 +176,15 @@ fn main() {
         None
     };
 
+    let replay_log_file = if let (Some(json), Some(output_path)) = (replay_log_json, &args.output) {
+        let replay_path = output_path.replace(".json", "_replay.json");
+        std::fs::write(&replay_path, &json).expect("Failed to write replay log");
+        println!("wrote replay log to {}", replay_path);
+        Some(std::path::Path::new(&replay_path).file_name().unwrap().to_string_lossy().into_owned())
+    } else {
+        None
+    };
+
     let search_kind = match args.search {
         CliSearchKind::Smc => "smc",
         CliSearchKind::BestFirst => "best-first",
@@ -201,6 +211,7 @@ fn main() {
         num_steps_run,
         rewritten_programs,
         debug_log_file,
+        replay_log_file,
     };
 
     if let Some(ref output_path) = args.output {

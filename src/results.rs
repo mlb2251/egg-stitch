@@ -30,4 +30,7 @@ pub struct RunResult {
     /// Filename of the debug log (in the same directory), if debug logging was enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_log_file: Option<String>,
+    /// Filename of the replay log (in the same directory), if debug logging was enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replay_log_file: Option<String>,
 }
