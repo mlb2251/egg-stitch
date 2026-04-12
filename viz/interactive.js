@@ -126,7 +126,7 @@ $('selDomain').addEventListener('change', () => {
 
 // Sync settings to Rust when changed.
 $('selPriority').addEventListener('change', () => {
-  if (engine) engine.set_priority($('selPriority').value);
+  if (engine) { engine.set_priority($('selPriority').value); renderAll(); }
 });
 $('numArity').addEventListener('change', () => {
   if (engine) {

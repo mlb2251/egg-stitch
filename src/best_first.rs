@@ -498,6 +498,11 @@ impl InteractiveSearch {
     /// Rebuild the heap with a new priority strategy.
     pub fn set_priority(&mut self, strategy: SearchPriority) {
         self.strategy = strategy;
+        self.rekey_heap();
+    }
+
+    /// Rekey all unexpanded nodes in the heap using the current strategy.
+    pub fn rekey_heap(&mut self) {
         let ids: Vec<usize> = self.heap.iter().map(|&(_, id)| id).collect();
         self.heap.clear();
         for id in ids {

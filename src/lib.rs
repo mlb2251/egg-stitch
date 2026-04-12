@@ -107,6 +107,11 @@ mod wasm_api {
 
         // ── Settings ───────────────────────────────────────────────────
 
+        /// Rekey all unexpanded nodes in the heap using the current priority strategy.
+        pub fn rekey_heap(&mut self) {
+            self.inner.rekey_heap();
+        }
+
         /// Change the heap priority strategy. Rebuilds the heap.
         pub fn set_priority(&mut self, priority: &str) -> Result<(), JsError> {
             let strategy = SearchPriority::parse(priority).ok_or_else(|| JsError::new("invalid priority: use cost|depth-first|breadth-first|most-matches"))?;
