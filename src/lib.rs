@@ -17,150 +17,129 @@ pub mod smc;
 
 #[cfg(feature = "wasm")]
 mod wasm_api {
-    use serde::Serialize;
     use wasm_bindgen::prelude::*;
 
-    use crate::best_first::{BestFirstConfig, SearchPriority, best_first};
-    use crate::cost::{compute_cost, compute_pattern_size};
-    use crate::search::{SearchState, setup_search};
-
-    #[derive(Serialize)]
-    struct StateInfo {
-        state_id: usize,
-        pattern: String,
-        cost: usize,
-        num_matches: usize,
-        arity: usize,
-        pattern_size: usize,
-        compression_ratio: f64,
-    }
-
-    #[derive(Serialize)]
-    struct SuccessorInfo {
-        state_id: usize,
-        action: String,
-        pattern: String,
-        cost: usize,
-        num_matches: usize,
-        arity: usize,
-        pattern_size: usize,
-        cost_diff: i64,
-    }
+    use crate::best_first::{InteractiveSearch, SearchPriority};
+    use crate::search::setup_search;
 
     /// Interactive search engine exposed to JavaScript via WASM.
     ///
-    /// Owns the e-graph and shared search context. Manages a pool of
-    /// `SearchState`s that the JS side references by integer id.
+    /// Wraps an `InteractiveSearch` that owns all search state (heap, seen
+    /// set, best tracking, node tree). JS issues commands and reads snapshots
+    /// — no search logic lives on the JS side.
     #[wasm_bindgen]
     pub struct Engine {
-        shared: crate::search::SharedSearchData,
-        root: egg::Id,
-        original_size: usize,
-        states: Vec<SearchState>,
+        inner: InteractiveSearch,
     }
 
     #[wasm_bindgen]
     impl Engine {
-        /// Load programs from a JSON array of s-expression strings.
-        /// Optionally apply rewrite rules (pass `undefined` / `null` for none).
+        /// Load programs and initialize search. Priority defaults to "cost", max_arity to 2.
         #[wasm_bindgen(constructor)]
         pub fn new(programs_json: &str, rules_text: Option<String>) -> Result<Engine, JsError> {
-            let (egraph, root, _cost_before) = crate::io::load_egraph_from_strings(programs_json, rules_text.as_deref());
+            let (egraph, root, _) = crate::io::load_egraph_from_strings(programs_json, rules_text.as_deref());
             let (shared, original_size) = setup_search(egraph, root, None, false, 0.5, false);
-            Ok(Engine { shared, root, original_size, states: Vec::new() })
+            let search = InteractiveSearch::new(shared, root, original_size, SearchPriority::Cost, 2);
+            Ok(Engine { inner: search })
         }
+
+        // ── Simple getters ─────────────────────────────────────────────
 
         /// Original (pre-compression) corpus size.
         pub fn original_size(&self) -> usize {
-            self.original_size
+            self.inner.original_size()
         }
 
-        /// Number of e-classes in the loaded e-graph.
-        pub fn num_eclasses(&self) -> usize {
-            self.shared.egraph.classes().count()
+        /// Total number of nodes in the search tree.
+        pub fn num_nodes(&self) -> usize {
+            self.inner.num_nodes()
         }
 
-        /// Create the initial search state (`?#0` matching every e-class).
-        /// Returns the new state id.
-        pub fn create_state(&mut self) -> usize {
-            let state = SearchState::new(&self.shared);
-            let id = self.states.len();
-            self.states.push(state);
-            id
+        /// Number of nodes expanded so far.
+        pub fn num_expansions(&self) -> usize {
+            self.inner.num_expansions()
         }
 
-        /// Get info about a state (pattern, cost, matches, compression ratio).
-        pub fn state_info(&self, state_id: usize) -> Result<JsValue, JsError> {
-            let state = self.states.get(state_id).ok_or_else(|| JsError::new("invalid state_id"))?;
-            let cost = compute_cost(&self.shared.egraph, self.root, state, false);
-            let info = StateInfo {
-                state_id,
-                pattern: state.pattern.to_string(),
-                cost,
-                num_matches: state.matches.len(),
-                arity: state.pattern.vars.len(),
-                pattern_size: compute_pattern_size(&state.pattern),
-                compression_ratio: self.original_size as f64 / cost as f64,
-            };
-            Ok(serde_wasm_bindgen::to_value(&info)?)
+        /// Number of unexpanded nodes on the heap.
+        pub fn heap_size(&self) -> usize {
+            self.inner.heap_size()
         }
 
-        /// Enumerate all one-step successors of a state.
-        ///
-        /// Each successor is immediately stored in the state pool;
-        /// the returned JSON array contains state ids the JS side can
-        /// navigate to directly.
-        pub fn successors(&mut self, state_id: usize) -> Result<JsValue, JsError> {
-            let parent_cost = compute_cost(&self.shared.egraph, self.root, &self.states[state_id], false);
-            // Clone state before calling enumerate_successors to satisfy borrow checker.
-            let parent_clone = self.states[state_id].clone();
-            let succs = parent_clone.enumerate_successors(&self.shared);
-            let mut infos = Vec::new();
-            for (action, state) in succs {
-                let c = compute_cost(&self.shared.egraph, self.root, &state, false);
-                let new_id = self.states.len();
-                infos.push(SuccessorInfo {
-                    state_id: new_id,
-                    action: action.to_string(),
-                    pattern: state.pattern.to_string(),
-                    cost: c,
-                    num_matches: state.matches.len(),
-                    arity: state.pattern.vars.len(),
-                    pattern_size: compute_pattern_size(&state.pattern),
-                    cost_diff: c as i64 - parent_cost as i64,
-                });
-                self.states.push(state);
-            }
-            Ok(serde_wasm_bindgen::to_value(&infos)?)
+        /// Best cost found so far, or -1 if none.
+        pub fn best_cost(&self) -> f64 {
+            self.inner.best_cost().map_or(-1.0, |c| c as f64)
         }
 
-        /// Run automated best-first search starting from the given state.
-        ///
-        /// `priority` is one of: `"cost"`, `"depth-first"`, `"breadth-first"`, `"most-matches"`.
-        /// Returns a `SearchTreeLog` as JSON (same format the existing tree viewer uses).
-        pub fn run_search(&self, state_id: usize, priority: &str, budget: usize, max_arity: usize) -> Result<JsValue, JsError> {
-            let strategy = match priority {
-                "cost" => SearchPriority::Cost,
-                "depth-first" => SearchPriority::DepthFirst,
-                "breadth-first" => SearchPriority::BreadthFirst,
-                "most-matches" => SearchPriority::MostMatches,
-                _ => return Err(JsError::new("invalid priority: use cost|depth-first|breadth-first|most-matches")),
-            };
-            let config = BestFirstConfig {
-                budget,
-                max_arity,
-                debug: true, // always produce tree log for the UI
-                priority: strategy,
-            };
-            let initial = self.states.get(state_id).ok_or_else(|| JsError::new("invalid state_id"))?.clone();
-            let result = best_first(&self.shared, self.root, self.original_size, initial, &config);
-            Ok(serde_wasm_bindgen::to_value(&result.tree_log)?)
+        /// Node id of the best node, or -1 if none.
+        pub fn best_node_id(&self) -> i32 {
+            self.inner.best_node_id().map_or(-1, |id| id as i32)
         }
 
-        /// Compute cost of a single state.
-        pub fn cost(&self, state_id: usize) -> Result<usize, JsError> {
-            let state = self.states.get(state_id).ok_or_else(|| JsError::new("invalid state_id"))?;
-            Ok(compute_cost(&self.shared.egraph, self.root, state, false))
+        // ── Commands ───────────────────────────────────────────────────
+
+        /// Pop the best node from the heap and expand it. Returns the
+        /// expanded node id, or -1 if the heap is empty.
+        pub fn step(&mut self) -> i32 {
+            self.inner.step().map_or(-1, |id| id as i32)
+        }
+
+        /// Run up to `n` expansion steps. Returns the count actually expanded.
+        pub fn step_n(&mut self, n: usize) -> usize {
+            self.inner.step_n(n)
+        }
+
+        /// Expand a specific node (for manual clicks and replay).
+        /// Returns true if the node was expanded.
+        pub fn expand_node(&mut self, node_id: usize) -> bool {
+            self.inner.expand_node(node_id)
+        }
+
+        /// Find an unexpanded node by pattern string (for replay).
+        /// Returns the node id, or -1 if not found.
+        pub fn find_unexpanded_by_pattern(&self, pattern: &str) -> i32 {
+            self.inner.find_unexpanded_by_pattern(pattern).map_or(-1, |id| id as i32)
+        }
+
+        /// Check if any node has the given pattern (for replay error reporting).
+        pub fn has_pattern(&self, pattern: &str) -> bool {
+            self.inner.has_pattern(pattern)
+        }
+
+        // ── Settings ───────────────────────────────────────────────────
+
+        /// Change the heap priority strategy. Rebuilds the heap.
+        pub fn set_priority(&mut self, priority: &str) -> Result<(), JsError> {
+            let strategy = SearchPriority::parse(priority).ok_or_else(|| JsError::new("invalid priority: use cost|depth-first|breadth-first|most-matches"))?;
+            self.inner.set_priority(strategy);
+            Ok(())
+        }
+
+        /// Change the max arity and recompute best node.
+        pub fn set_max_arity(&mut self, max_arity: usize) {
+            self.inner.set_max_arity(max_arity);
+        }
+
+        // ── Snapshots (JSON via serde-wasm-bindgen) ────────────────────
+
+        /// Full node tree snapshot for rendering.
+        pub fn nodes_json(&self) -> Result<JsValue, JsError> {
+            Ok(serde_wasm_bindgen::to_value(&self.inner.all_nodes_snapshot())?)
+        }
+
+        /// Top `n` heap entries sorted by priority (ascending = best first).
+        pub fn heap_top_json(&self, n: usize) -> Result<JsValue, JsError> {
+            Ok(serde_wasm_bindgen::to_value(&self.inner.heap_top(n))?)
+        }
+
+        /// Info for a single node.
+        pub fn node_info_json(&self, node_id: usize) -> Result<JsValue, JsError> {
+            let snap = self.inner.node_snapshot(node_id).ok_or_else(|| JsError::new("invalid node_id"))?;
+            Ok(serde_wasm_bindgen::to_value(&snap)?)
+        }
+
+        /// Expansion order as a JSON array of node ids.
+        pub fn expansion_order_json(&self) -> Result<JsValue, JsError> {
+            Ok(serde_wasm_bindgen::to_value(self.inner.expansion_order())?)
         }
     }
 }

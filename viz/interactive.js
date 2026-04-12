@@ -1,6 +1,6 @@
 // Interactive explorer for egg-stitch WASM module.
-// Manages a JS-side tree + priority queue. Manual clicks and automated search
-// both use the same expandNode() path, so the tree builds up identically.
+// All search state (heap, dedup, best tracking) lives in Rust.
+// JS only manages UI state (open/selected nodes) and rendering.
 
 import { buildTreeMeta, buildExpOrder, buildBestPath, renderTree, renderSidePane, wireNavLinks } from './tree-render.js';
 
@@ -14,21 +14,12 @@ const statusBar = $('status-bar');
 
 let wasm = null;
 let engine = null;
-let originalSize = 0;
 
-// ── Tree data model ──────────────────────────────────────────────────────────
-// Mirrors the SearchTreeLog node format used by tree.html/tree-render.js.
+// ── UI-only state (not search state) ────────────────────────────────────────
 
-let nodes = [];          // flat array, same shape as tree log nodes
-let stateIdMap = [];     // nodeId -> wasm state_id
-let heap = [];           // [{nodeId, priority}] sorted by priority ascending
-let seen = new Set();    // state patterns we've already added (dedup)
-let bestNode = null;     // id of the best (lowest-cost) node
-let bestCost = Infinity;
-let expansionOrder = []; // ordered list of expanded node ids
-let expandedOnly = false;
 let openNodes = new Set();
 let selectedId = null;
+let expandedOnly = false;
 
 // ── WASM loading ─────────────────────────────────────────────────────────────
 
@@ -38,7 +29,6 @@ async function loadWasm() {
     await wasm.default();
     overlay.classList.add('hidden');
     $('btnLoad').disabled = false;
-    // Auto-load from URL params (e.g. linked from results page).
     await autoLoadFromParams();
   } catch (e) {
     overlay.textContent = `failed to load WASM: ${e}. Run "make wasm" first.`;
@@ -53,22 +43,18 @@ async function autoLoadFromParams() {
   const replayFile = params.get('replay');
   if (!domain) return;
 
-  // Set dropdowns to match.
   const rules = params.get('rules') || '';
   $('selDomain').value = domain;
   $('selRules').value = rules;
 
-  // Trigger load.
   $('btnLoad').click();
 
   if (replayFile) {
-    // Wait for engine to be ready.
     await new Promise(resolve => {
       const check = () => engine ? resolve() : setTimeout(check, 50);
       check();
     });
 
-    // Load the replay log directly.
     try {
       const log = await fetch(`results/${replayFile}`).then(r => {
         if (!r.ok) throw new Error(r.status);
@@ -82,7 +68,6 @@ async function autoLoadFromParams() {
       return;
     }
 
-    // Fetch expected cost from the corresponding run result.
     const runPath = `results/${replayFile.replace('_replay.json', '.json')}`;
     try {
       const run = await fetch(runPath).then(r => r.ok ? r.json() : null);
@@ -90,20 +75,18 @@ async function autoLoadFromParams() {
       if (run && run.final_cost != null) replayExpectedCost = run.final_cost;
     } catch (e) { console.warn('failed to fetch run result:', e); }
 
-    // Also select it in the dropdown if available.
     const sel = $('selReplay');
     const opt = [...sel.options].find(o => o.value === replayFile);
     if (opt) sel.value = replayFile;
 
-    // Replay all steps.
     console.log(`replaying ${replaySteps.length} steps...`);
     while (replayIdx < replaySteps.length) {
       if (!replayOneStep()) break;
     }
+    const bestCost = engine.best_cost();
     console.log(`replay done: ${replayIdx} steps, bestCost=${bestCost}, expected=${replayExpectedCost}`);
     renderAll();
     updateReplayButtons();
-    // Set status AFTER renderAll (which calls updateStatus) so it's not overwritten.
     if (replayExpectedCost != null && bestCost > replayExpectedCost) {
       statusBar.innerHTML = `<b class="bad">REPLAY MISMATCH: expected cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}</b>`;
     } else {
@@ -138,8 +121,13 @@ $('btnLoad').addEventListener('click', async () => {
       });
     }
     engine = new wasm.Engine(programsText, rulesText);
-    originalSize = engine.original_size();
-    initTree();
+    // Apply current UI settings.
+    engine.set_priority($('selPriority').value);
+    engine.set_max_arity(parseInt($('numArity').value) || 2);
+    openNodes.clear();
+    openNodes.add(0);
+    selectedId = 0;
+    renderAll();
     enableControls(true);
   } catch (e) {
     alert('failed to load: ' + e);
@@ -158,6 +146,17 @@ $('selDomain').addEventListener('change', () => {
   rulesSelect.value = opt ? match : '';
 });
 
+// Sync settings to Rust when changed.
+$('selPriority').addEventListener('change', () => {
+  if (engine) engine.set_priority($('selPriority').value);
+});
+$('numArity').addEventListener('change', () => {
+  if (engine) {
+    engine.set_max_arity(parseInt($('numArity').value) || 2);
+    renderAll();
+  }
+});
+
 function enableControls(on) {
   $('btnStep').disabled = !on;
   $('btnRun').disabled = !on;
@@ -170,11 +169,10 @@ function enableControls(on) {
 
 // ── Replay log ───────────────────────────────────────────────────────────────
 
-let replaySteps = [];    // loaded replay steps
-let replayIdx = 0;       // next step to replay
-let replayExpectedCost = null; // final_cost from the original run, for validation
+let replaySteps = [];
+let replayIdx = 0;
+let replayExpectedCost = null;
 
-/// Scan viz/results/ for runs matching the current domain that have replay logs.
 async function scanReplays() {
   const sel = $('selReplay');
   const domain = $('selDomain').value;
@@ -185,7 +183,6 @@ async function scanReplays() {
 
     const candidates = [];
 
-    // Scan top-level files.
     for (const f of topFiles) {
       if (f.endsWith('_debug.json') || f.endsWith('_replay.json')) continue;
       try {
@@ -196,7 +193,6 @@ async function scanReplays() {
       } catch { /* skip bad files */ }
     }
 
-    // Scan subfolders.
     for (const d of dirs) {
       try {
         const sub = await fetch(`results/${d}/`).then(r => r.text());
@@ -225,7 +221,6 @@ async function scanReplays() {
   }
 }
 
-/// Parse http.server's directory listing HTML into {files, dirs}.
 function parseDirectoryListing(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const files = [], dirs = [];
@@ -238,15 +233,18 @@ function parseDirectoryListing(html) {
   return { files, dirs };
 }
 
-/// Apply replay config to UI controls.
 function applyReplayConfig(config) {
   if (!config) return;
   if (config.priority) $('selPriority').value = config.priority;
   if (config.budget) $('numBudget').value = config.budget;
   if (config.max_arity) $('numArity').value = config.max_arity;
+  // Sync to engine.
+  if (engine) {
+    engine.set_priority(config.priority || 'cost');
+    engine.set_max_arity(config.max_arity || 2);
+  }
 }
 
-/// Load the selected replay log.
 $('selReplay').addEventListener('change', async () => {
   const sel = $('selReplay');
   const path = sel.value;
@@ -274,210 +272,94 @@ function updateReplayButtons() {
   $('btnReplayAll').disabled = !hasSteps;
 }
 
-/// Replay one step: find the fringe node matching the logged pattern and expand it.
-/// Returns true if a node was expanded, false if not found (already expanded or missing).
+/// Replay one step using Rust engine. Returns true if a node was expanded.
 function replayOneStep() {
   if (replayIdx >= replaySteps.length) return false;
   const step = replaySteps[replayIdx];
   replayIdx++;
 
-  // Find a fringe node whose pattern matches.
-  const target = nodes.findIndex(n => !n.expanded && n.pattern === step.pattern);
-  if (target < 0) {
-    // Check if it's already expanded (ok, no-op) vs missing entirely (error).
-    const exists = nodes.some(n => n.pattern === step.pattern);
-    if (exists) return true; // already expanded, skip
-    // Pattern not in tree — halt with error.
+  const nodeId = engine.find_unexpanded_by_pattern(step.pattern);
+  if (nodeId < 0) {
+    if (engine.has_pattern(step.pattern)) return true; // already expanded, skip
     const msg = `replay error at step ${replayIdx}: pattern not found in tree: ${step.pattern}`;
     statusBar.innerHTML = `<b class="bad">${msg}</b>`;
     console.error(msg);
-    return false; // halt
+    return false;
   }
-  // Validate matches and cost against expected values before expanding.
-  const node = nodes[target];
-  const matchesOk = step.num_matches == null || node.num_matches === step.num_matches;
-  const costOk = step.cost == null || node.cost === step.cost;
+
+  // Validate matches and cost against expected values.
+  const info = engine.node_info_json(nodeId);
+  const matchesOk = step.num_matches == null || info.num_matches === step.num_matches;
+  const costOk = step.cost == null || info.cost === step.cost;
   if (!matchesOk || !costOk) {
     const parts = [`replay mismatch at step ${replayIdx}: ${step.pattern}`];
-    parts.push(`  matches: ${node.num_matches} (expected ${step.num_matches})`);
-    parts.push(`  cost: ${node.cost} (expected ${step.cost})`);
-    parts.push(`  pattern_size: ${node.pattern_size}`);
+    parts.push(`  matches: ${info.num_matches} (expected ${step.num_matches})`);
+    parts.push(`  cost: ${info.cost} (expected ${step.cost})`);
+    parts.push(`  pattern_size: ${info.pattern_size}`);
     const msg = parts.join('\n');
     statusBar.innerHTML = `<b class="bad">${parts.join('<br>')}</b>`;
     console.error(msg);
     return false;
   }
 
-  expandNode(target);
-  openNodes.add(target);
+  engine.expand_node(nodeId);
+  openNodes.add(nodeId);
   return true;
 }
 
 $('btnReplay').addEventListener('click', () => {
   if (replayOneStep()) {
-    selectedId = expansionOrder[expansionOrder.length - 1] ?? selectedId;
+    selectedId = engine.expansion_order_json().at(-1) ?? selectedId;
     renderAll();
     updateReplayButtons();
   }
 });
 
 $('btnReplayAll').addEventListener('click', () => {
-  const costBefore = bestCost;
+  const costBefore = engine.best_cost();
   while (replayIdx < replaySteps.length) {
     if (!replayOneStep()) break;
   }
   renderAll();
   updateReplayButtons();
 
-  // Validate: did we reach at least the expected cost?
+  const bestCost = engine.best_cost();
   if (replayExpectedCost != null && bestCost > replayExpectedCost && bestCost > costBefore) {
     const msg = `replay mismatch: expected best cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}`;
     statusBar.innerHTML = `<b class="bad">${msg}</b>`;
     console.warn(msg);
-  } else if (replayExpectedCost != null && bestCost <= replayExpectedCost) {
+  } else if (replayExpectedCost != null && bestCost >= 0 && bestCost <= replayExpectedCost) {
     statusBar.innerHTML = `replayed ${replayIdx} steps · best cost <b class="good">${bestCost.toLocaleString()}</b> (expected ${replayExpectedCost.toLocaleString()})`;
   }
 });
 
-// ── Tree init ────────────────────────────────────────────────────────────────
-
-function initTree() {
-  nodes = [];
-  stateIdMap = [];
-  heap = [];
-  seen.clear();
-  bestNode = null;
-  bestCost = Infinity;
-  expansionOrder = [];
-  openNodes.clear();
-  selectedId = null;
-
-  const sid = engine.create_state();
-  const info = engine.state_info(sid);
-  addNode(null, sid, info, null);
-  heapInsert(0); // root starts on the heap as an expandable fringe node
-  openNodes.add(0);
-  selectedId = 0;
-  renderAll();
-}
-
-/// Add a tree node. Returns the new node id.
-/// Only updates best-so-far if arity <= maxArity (matching Rust best_first behavior).
-function addNode(parentId, stateId, info, action) {
-  const id = nodes.length;
-  const depth = parentId != null ? (nodes[parentId].depth || 0) + 1 : 0;
-  nodes.push({
-    id,
-    parent: parentId,
-    expanded: false,
-    cost: info.cost,
-    pattern: info.pattern,
-    num_matches: info.num_matches,
-    arity: info.arity,
-    pattern_size: info.pattern_size,
-    action: action,
-    priority: null,
-    depth,
-  });
-  stateIdMap.push(stateId);
-
-  const maxArity = parseInt($('numArity').value) || 2;
-  if (info.arity <= maxArity && info.cost < bestCost) {
-    bestCost = info.cost;
-    bestNode = id;
-  }
-  return id;
-}
-
-// ── Priority ─────────────────────────────────────────────────────────────────
-
-function computePriority(node) {
-  const key = $('selPriority').value;
-  switch (key) {
-    case 'cost':          return node.cost;
-    case 'depth-first':   return -(node.depth || 0);
-    case 'breadth-first': return node.depth || 0;
-    case 'most-matches':  return -node.num_matches;
-    default:              return node.cost;
-  }
-}
-
-/// Insert into the sorted heap (binary search).
-function heapInsert(nodeId) {
-  const p = computePriority(nodes[nodeId]);
-  nodes[nodeId].priority = p;
-  let lo = 0, hi = heap.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (heap[mid].priority <= p) lo = mid + 1;
-    else hi = mid;
-  }
-  heap.splice(lo, 0, { nodeId, priority: p });
-}
-
-// ── Expand ───────────────────────────────────────────────────────────────────
-
-/// Expand a single fringe node: fetch successors from WASM, add children to
-/// tree and heap. Used by both manual clicks and automated search.
-function expandNode(nodeId) {
-  const node = nodes[nodeId];
-  if (node.expanded) return; // already expanded
-
-  const stateId = stateIdMap[nodeId];
-  const succs = engine.successors(stateId);
-
-  node.expanded = true;
-  expansionOrder.push(nodeId);
-
-  // Remove this node from the heap.
-  const hi = heap.findIndex(h => h.nodeId === nodeId);
-  if (hi >= 0) heap.splice(hi, 1);
-
-  for (const s of succs) {
-    // Dedup by pattern string (matches Rust's seen.insert() check).
-    const key = s.pattern;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const childId = addNode(nodeId, s.state_id, s, s.action);
-    heapInsert(childId);
-  }
-}
-
-// ── Automated search ─────────────────────────────────────────────────────────
-
-function runSteps(n) {
-  for (let i = 0; i < n && heap.length > 0; i++) {
-    const top = heap.shift();
-    expandNode(top.nodeId);
-    // Auto-open expanded nodes so the tree shows growth.
-    openNodes.add(top.nodeId);
-  }
-}
+// ── Commands ────────────────────────────────────────────────────────────────
 
 $('btnStep').addEventListener('click', () => {
-  if (heap.length === 0) return;
-  runSteps(1);
-  // Select the just-expanded node.
-  selectedId = expansionOrder[expansionOrder.length - 1];
+  const nodeId = engine.step();
+  if (nodeId < 0) return;
+  openNodes.add(nodeId);
+  selectedId = nodeId;
   renderAll();
 });
 
 $('btnRun').addEventListener('click', () => {
   const budget = parseInt($('numBudget').value) || 100;
-  runSteps(budget);
+  engine.step_n(budget);
   renderAll();
 });
 
 // ── UI controls ──────────────────────────────────────────────────────────────
 
 $('btnExpandBest').addEventListener('click', () => {
-  if (bestNode == null) return;
-  let cur = bestNode;
-  while (cur != null) { openNodes.add(cur); cur = nodes[cur].parent; }
-  selectedId = bestNode;
+  const bestId = engine.best_node_id();
+  if (bestId < 0) return;
+  const nodes = engine.nodes_json();
+  let cur = bestId;
+  while (cur != null) { openNodes.add(cur); cur = nodes[cur]?.parent; }
+  selectedId = bestId;
   renderAll();
-  const el = treepane.querySelector(`.row[data-id="${bestNode}"]`);
+  const el = treepane.querySelector(`.row[data-id="${bestId}"]`);
   if (el) el.scrollIntoView({ block: 'center', behavior: 'instant' });
 });
 
@@ -495,6 +377,13 @@ $('chkExpandedOnly').addEventListener('change', e => {
 // ── Rendering ────────────────────────────────────────────────────────────────
 
 function renderAll() {
+  // Fetch all state from Rust.
+  const nodes = engine.nodes_json();
+  const expansionOrder = engine.expansion_order_json();
+  const bestNodeId = engine.best_node_id();
+  const bestNode = bestNodeId >= 0 ? bestNodeId : null;
+  const originalSize = engine.original_size();
+
   const meta = buildTreeMeta(nodes);
   const expOrder = buildExpOrder(expansionOrder, nodes.length);
   const bestPath = buildBestPath(nodes, bestNode);
@@ -513,19 +402,18 @@ function renderAll() {
   };
 
   renderTree(treepane, ctx);
-  renderDetail(ctx);
-  renderHeap();
+  renderDetail(ctx, nodes);
+  renderHeap(nodes);
   updateStatus();
 }
 
 function handleRowClick(id, e) {
+  const nodes = engine.nodes_json();
   const node = nodes[id];
-  if (!node.expanded && stateIdMap[id] != null) {
-    // Fringe node: expand it (manual interactive expansion).
-    expandNode(id);
+  if (!node.expanded) {
+    engine.expand_node(id);
     openNodes.add(id);
   } else {
-    // Expanded node: toggle disclosure.
     if (openNodes.has(id)) openNodes.delete(id);
     else openNodes.add(id);
   }
@@ -533,7 +421,7 @@ function handleRowClick(id, e) {
   renderAll();
 }
 
-function renderDetail(ctx) {
+function renderDetail(ctx, nodes) {
   renderSidePane(detail, selectedId, ctx, null);
   wireNavLinks(detail, nodes, openNodes, id => {
     selectedId = id;
@@ -543,15 +431,16 @@ function renderDetail(ctx) {
   });
 }
 
-function renderHeap() {
-  heapTitle.textContent = `heap (${heap.length})`;
+function renderHeap(nodes) {
+  const heapEntries = engine.heap_top_json(200);
+  const heapTotal = engine.heap_size();
+  heapTitle.textContent = `heap (${heapTotal})`;
   heapList.innerHTML = '';
-  const show = heap.slice(0, 200); // cap rendering for performance
-  for (let i = 0; i < show.length; i++) {
-    const h = show[i];
-    const n = nodes[h.nodeId];
+  for (let i = 0; i < heapEntries.length; i++) {
+    const h = heapEntries[i];
+    const n = nodes[h.node_id];
     const li = document.createElement('li');
-    if (h.nodeId === selectedId) li.classList.add('selected');
+    if (h.node_id === selectedId) li.classList.add('selected');
     li.innerHTML = `
       <span class="rank">${i}</span>
       <span class="prio">${h.priority}</span>
@@ -560,27 +449,31 @@ function renderHeap() {
       <span class="pattern">${esc(n.pattern)}</span>
     `;
     li.addEventListener('click', () => {
-      selectedId = h.nodeId;
-      // Ensure ancestors are open so it's visible in tree.
-      let cur = h.nodeId;
-      while (cur != null) { openNodes.add(nodes[cur].parent ?? 0); cur = nodes[cur].parent; }
+      selectedId = h.node_id;
+      let cur = h.node_id;
+      while (cur != null) { openNodes.add(nodes[cur]?.parent ?? 0); cur = nodes[cur]?.parent; }
       renderAll();
-      const el = treepane.querySelector(`.row[data-id="${h.nodeId}"]`);
+      const el = treepane.querySelector(`.row[data-id="${h.node_id}"]`);
       if (el) el.scrollIntoView({ block: 'center', behavior: 'instant' });
     });
     heapList.appendChild(li);
   }
-  if (heap.length > 200) {
+  if (heapTotal > 200) {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="rank">…</span><span class="pattern" style="color:var(--muted)">${heap.length - 200} more</span>`;
+    li.innerHTML = `<span class="rank">…</span><span class="pattern" style="color:var(--muted)">${heapTotal - 200} more</span>`;
     heapList.appendChild(li);
   }
 }
 
 function updateStatus() {
-  const nExp = expansionOrder.length;
-  const ratio = bestCost < Infinity ? (originalSize / bestCost).toFixed(3) : '—';
-  statusBar.innerHTML = `<b>${nodes.length}</b> nodes · <b>${nExp}</b> expanded · <b>${heap.length}</b> in heap · best cost: <b>${bestCost < Infinity ? bestCost.toLocaleString() : '—'}</b> · ratio: <b>${ratio}×</b> · original: <b>${originalSize.toLocaleString()}</b>`;
+  const nNodes = engine.num_nodes();
+  const nExp = engine.num_expansions();
+  const heapSz = engine.heap_size();
+  const bestCost = engine.best_cost();
+  const originalSize = engine.original_size();
+  const hasBest = bestCost >= 0;
+  const ratio = hasBest ? (originalSize / bestCost).toFixed(3) : '—';
+  statusBar.innerHTML = `<b>${nNodes}</b> nodes · <b>${nExp}</b> expanded · <b>${heapSz}</b> in heap · best cost: <b>${hasBest ? bestCost.toLocaleString() : '—'}</b> · ratio: <b>${ratio}×</b> · original: <b>${originalSize.toLocaleString()}</b>`;
 }
 
 function esc(s) {
