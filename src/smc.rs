@@ -1,8 +1,11 @@
 use std::cmp::min;
 
 use crate::cost::{compute_cost, compute_size};
-use crate::lang::StitchEgraph;
+use crate::lang::{StitchEgraph, StitchLang};
+use crate::logging::apply_follow_constraint;
+use crate::revexpr::RevExpr;
 use crate::search::{SearchState, SharedSearchData};
+use egg::ENodeOrVar;
 use rand::Rng;
 
 /// Output of a completed SMC run, surfacing everything the caller needs to
@@ -16,6 +19,7 @@ pub struct SmcResult {
 }
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
+    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = crate::search::compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,
@@ -23,6 +27,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         check_slow: args.check_slow,
         weight_by_usage: args.weight_by_usage,
         usage_counts,
+        follow: follow_expr,
     };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared), shared.check_slow);
@@ -71,6 +76,11 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             if state.pattern.vars.is_empty() {
                 weights[i] = 0.0;
             }
+        }
+
+        // zero out particles whose pattern doesn't match the follow target
+        if let Some(ref follow) = shared.follow {
+            apply_follow_constraint(&search_states, &mut weights, follow);
         }
 
         if weights.iter().sum::<f64>() == 0.0 {
