@@ -1,6 +1,7 @@
 mod cost;
 mod io;
 mod lang;
+mod logging;
 mod matching;
 mod math;
 mod pattern;
@@ -58,6 +59,10 @@ pub struct Args {
     /// Path to write a JSON-serialized RunResult.
     #[arg(short, long)]
     pub output: Option<String>,
+
+    /// Print per-step progress output (top particles, follow stats, etc.).
+    #[arg(long, default_value_t = false)]
+    pub verbose: bool,
 }
 
 fn main() {

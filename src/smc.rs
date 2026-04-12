@@ -1,7 +1,8 @@
-use std::cmp::min;
+use colored::Colorize;
 
 use crate::cost::{compute_cost, compute_size};
 use crate::lang::StitchEgraph;
+use crate::logging::print_top_particles;
 use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 use rand::Rng;
@@ -26,13 +27,14 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared), shared.check_slow);
-    println!("original size of egraph: {}", original_size);
+    println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = args.num_particles;
     let num_steps = args.num_steps;
     let temperature = args.temperature;
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;
+    let verbose = args.verbose;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
@@ -42,14 +44,14 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
     for step in 0..num_steps {
         for ss in search_states.iter_mut() {
-            ss.expand_random(&shared);
+            ss.expand_random(&shared, false);
         }
 
         let costs: Vec<usize> = search_states.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
 
         for (i, cost) in costs.iter().enumerate() {
             if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
-                println!("[iteration {}] new best: {} {}", step, cost, search_states[i].pattern);
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), search_states[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, search_states[i].clone()));
                 best_found_at = Some(step);
             }
@@ -73,36 +75,37 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         if weights.iter().sum::<f64>() == 0.0 {
             steps_run = step + 1;
-            println!("all particles died, stopping");
+            println!("{}", "all particles died, stopping".red().bold());
             break;
         }
         if best_found_at.is_some_and(|bf| (step as i64) - (bf as i64) > dead_runs as i64) {
             steps_run = step + 1;
-            println!("no progress in {} steps, stopping at {}", dead_runs, step);
+            println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
         }
 
-        let weights_acc = normalize_and_accumulate(&mut weights);
-
-        println!("Step {}: expanded all particles", step);
-        for i in 0..min(5, search_states.len()) {
-            println!("Sample particle {}: {}; cost={} weight={}", i, search_states[i].pattern, costs[i], weights[i]);
+        if verbose {
+            println!("{}", format!("Step {}: expanded all particles", step).dimmed());
+            print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
         }
 
-        search_states = (0..num_particles)
-            .map(|_| {
-                let idx = weighted_choice(&weights_acc);
-                search_states[idx].clone()
-            })
-            .collect();
+        let weights_acc = normalize_and_accumulate(&mut weights);
+        let resample_indices: Vec<usize> = (0..num_particles).map(|_| weighted_choice(&weights_acc)).collect();
+        search_states = resample_indices.iter().map(|&idx| search_states[idx].clone()).collect();
+
+        if verbose {
+            println!("{}", format!("Step {}: resampled all particles", step).dimmed());
+            print_top_particles(&search_states, &weights, &shared, original_size, |i| compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow));
+        }
         steps_run = step + 1;
     }
 
+    println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
-        println!("best found at iteration {}: {}", iter, cost);
-        println!("program: {}", state.pattern);
-        println!("best: {}", cost);
-        println!("Compression ratio: {}", original_size as f64 / *cost as f64);
+        println!("{} {}", "best found at iteration:".dimmed(), iter.to_string().yellow());
+        println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
+        println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
+        println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
     }
 
     SmcResult {
