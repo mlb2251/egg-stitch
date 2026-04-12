@@ -2,6 +2,7 @@ mod cost;
 mod io;
 mod lang;
 mod matching;
+mod math;
 mod pattern;
 mod results;
 mod revexpr;
