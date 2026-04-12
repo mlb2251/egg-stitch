@@ -29,6 +29,7 @@ struct Node {
     state: SearchState,
     cost: usize,
     depth: usize,
+    priority: i64,
     expanded: bool,
 }
 
@@ -74,6 +75,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         state: initial_state.clone(),
         cost: initial_cost,
         depth: 0,
+        priority: initial_prio,
         expanded: false,
     });
     heap.push(Reverse((initial_prio, 0)));
@@ -128,6 +130,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                 state: child_state,
                 cost: child_cost,
                 depth: child_depth,
+                priority: child_prio,
                 expanded: false,
             });
             heap.push(Reverse((child_prio, child_id)));
@@ -162,6 +165,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                     pattern_size: compute_pattern_size(&n.state.pattern),
                     num_matches: n.state.matches.len(),
                     cost: n.cost,
+                    priority: n.priority,
                     expanded: n.expanded,
                 })
                 .collect(),

@@ -36,17 +36,15 @@ main { flex: 1; display: flex; min-height: 0; }
 
 .row .caret { display: inline-block; width: .9rem; color: var(--muted); text-align: center; flex-shrink: 0; }
 .row .caret.leaf { color: transparent; }
-.row .id { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.2rem; }
-.row .eord { color: var(--accent); font-variant-numeric: tabular-nums; min-width: 3rem; font-size: .75rem; }
-.row .eord.none { color: transparent; }
+.row .exp-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6rem; height: 1.15rem; border-radius: 4px; font-size: .7rem; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.row .exp-badge.expanded { background: var(--accent); color: #fff; }
+.row .exp-badge.best { background: var(--good); color: #fff; box-shadow: 0 0 0 2px #d1fae5; }
+.row .exp-badge.fringe { background: transparent; border: 1px solid var(--dim); min-width: 1.6rem; }
+.row .prio { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 3rem; }
 .row .cost { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 4.5rem; text-align: right; }
 .row .submin { font-variant-numeric: tabular-nums; color: var(--good); min-width: 5rem; font-size: .75rem; }
 .row .submin.same { color: transparent; }
 .row .stats { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 4rem; }
-.row .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.row .dot.fringe { background: var(--dim); }
-.row .dot.expanded { background: var(--accent); }
-.row .dot.best { background: var(--good); box-shadow: 0 0 0 2px #d1fae5; }
 .row .action { color: #9ca3af; font-size: .75rem; }
 .row .pattern { color: #0ea5e9; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
 .row .badge { font-size: .7rem; color: var(--muted); background: #f3f4f6; padding: 0 .35rem; border-radius: 3px; }
@@ -65,10 +63,10 @@ main { flex: 1; display: flex; min-height: 0; }
 #sidepane a.nav { color: var(--accent); text-decoration: none; }
 #sidepane a.nav:hover { text-decoration: underline; }
 
-.legend { display: flex; gap: .75rem; font-size: .75rem; color: var(--muted); }
-.legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: .25rem; }
+.legend { display: flex; gap: .75rem; font-size: .75rem; color: var(--muted); align-items: center; }
+.legend .swatch { display: inline-block; width: 14px; height: 11px; border-radius: 3px; vertical-align: middle; margin-right: .25rem; }
 .legend .exp { background: var(--accent); }
-.legend .fri { background: var(--dim); }
+.legend .fri { background: transparent; border: 1px solid var(--dim); }
 .legend .bes { background: var(--good); }
 
 .loading { padding: 4rem; text-align: center; color: var(--muted); }

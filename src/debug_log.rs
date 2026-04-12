@@ -35,6 +35,8 @@ pub struct TreeNodeLog {
     pub pattern_size: usize,
     pub num_matches: usize,
     pub cost: usize,
+    /// Heap priority used for ordering (depends on search strategy).
+    pub priority: i64,
     /// Whether this node was actually popped and expanded (vs. just enqueued).
     pub expanded: bool,
 }

@@ -123,23 +123,28 @@ function renderNode(id) {
   caret.textContent = kids.length === 0 ? '·' : (isOpen ? '▼' : '▶');
   row.appendChild(caret);
 
-  const dot = document.createElement('span');
-  const state = isBest ? 'best' : (n.expanded ? 'expanded' : 'fringe');
-  dot.className = 'dot ' + state;
-  row.appendChild(dot);
-
-  const idSpan = document.createElement('span');
-  idSpan.className = 'id';
-  idSpan.textContent = `#${id}`;
-  idSpan.title = `node id #${id}`;
-  row.appendChild(idSpan);
-
-  const eord = document.createElement('span');
   const ei = expOrder[id];
-  eord.className = 'eord' + (ei < 0 ? ' none' : '');
-  eord.textContent = ei < 0 ? '—' : `e${ei}`;
-  eord.title = ei < 0 ? 'not expanded' : `expansion order #${ei}`;
-  row.appendChild(eord);
+  const expBadge = document.createElement('span');
+  if (isBest) {
+    expBadge.className = 'exp-badge best';
+    expBadge.textContent = ei >= 0 ? ei : '';
+    expBadge.title = `best node · node #${id}` + (ei >= 0 ? ` · expansion #${ei}` : '');
+  } else if (n.expanded) {
+    expBadge.className = 'exp-badge expanded';
+    expBadge.textContent = ei >= 0 ? ei : '';
+    expBadge.title = `expanded · node #${id} · expansion #${ei}`;
+  } else {
+    expBadge.className = 'exp-badge fringe';
+    expBadge.textContent = '';
+    expBadge.title = `not expanded · node #${id}`;
+  }
+  row.appendChild(expBadge);
+
+  const prio = document.createElement('span');
+  prio.className = 'prio';
+  prio.textContent = n.priority != null ? n.priority : '';
+  prio.title = 'heap priority';
+  row.appendChild(prio);
 
   const cost = document.createElement('span');
   cost.className = 'cost';
