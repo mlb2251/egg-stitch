@@ -28,7 +28,6 @@ pub struct SearchState {
 impl SearchState {
     /// Randomly selects a match and variable, then expands or reuses the variable.
     pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
-        let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
@@ -37,8 +36,9 @@ impl SearchState {
             rand::rng().random_range(0..self.matches.len())
         };
         let m = &self.matches[match_idx];
-        if verbose {
-            let (_cost, minimal_term) = extractor.find_best(m.root_eclass);
+        let extractor = if verbose { Some(egg::Extractor::new(&shared.egraph, egg::AstSize)) } else { None };
+        if let Some(ref ext) = extractor {
+            let (_cost, minimal_term) = ext.find_best(m.root_eclass);
             println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
         }
         let subst_idx = rand::rng().random_range(0..m.substs.len());
@@ -50,8 +50,8 @@ impl SearchState {
         }
         let target_id = subst.vars[var_idx];
 
-        if verbose {
-            println!("Target eclass is represented by minimal term {}", extractor.find_best(target_id).1);
+        if let Some(ref ext) = extractor {
+            println!("Target eclass is represented by minimal term {}", ext.find_best(target_id).1);
         }
 
         if rand::rng().random_bool(shared.p_reuse) {
