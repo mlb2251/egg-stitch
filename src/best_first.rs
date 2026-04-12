@@ -115,6 +115,8 @@ pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize
         replay_steps.push(ReplayStep {
             pattern: nodes[node_id].state.pattern.to_string(),
             action: None,
+            num_matches: nodes[node_id].state.matches.len(),
+            cost: nodes[node_id].cost,
         });
 
         let successors = nodes[node_id].state.enumerate_successors(shared);

@@ -28,6 +28,10 @@ pub struct ReplayStep {
     /// None means "expand all successors" (deterministic best-first).
     /// Some(action) means a specific action was chosen (stochastic search).
     pub action: Option<String>,
+    /// Expected number of e-class matches at the time of expansion (for replay validation).
+    pub num_matches: usize,
+    /// Expected cost at the time of expansion (for replay validation).
+    pub cost: usize,
 }
 
 /// Full debug trace of an SMC run, one entry per step.

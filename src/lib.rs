@@ -21,7 +21,7 @@ mod wasm_api {
     use wasm_bindgen::prelude::*;
 
     use crate::best_first::{BestFirstConfig, SearchPriority, best_first};
-    use crate::cost::compute_cost;
+    use crate::cost::{compute_cost, compute_pattern_size};
     use crate::search::{SearchState, setup_search};
 
     #[derive(Serialize)]
@@ -31,6 +31,7 @@ mod wasm_api {
         cost: usize,
         num_matches: usize,
         arity: usize,
+        pattern_size: usize,
         compression_ratio: f64,
     }
 
@@ -42,6 +43,7 @@ mod wasm_api {
         cost: usize,
         num_matches: usize,
         arity: usize,
+        pattern_size: usize,
         cost_diff: i64,
     }
 
@@ -97,6 +99,7 @@ mod wasm_api {
                 cost,
                 num_matches: state.matches.len(),
                 arity: state.pattern.vars.len(),
+                pattern_size: compute_pattern_size(&state.pattern),
                 compression_ratio: self.original_size as f64 / cost as f64,
             };
             Ok(serde_wasm_bindgen::to_value(&info)?)
@@ -123,6 +126,7 @@ mod wasm_api {
                     cost: c,
                     num_matches: state.matches.len(),
                     arity: state.pattern.vars.len(),
+                    pattern_size: compute_pattern_size(&state.pattern),
                     cost_diff: c as i64 - parent_cost as i64,
                 });
                 self.states.push(state);

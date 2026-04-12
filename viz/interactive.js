@@ -293,6 +293,21 @@ function replayOneStep() {
     console.error(msg);
     return false; // halt
   }
+  // Validate matches and cost against expected values before expanding.
+  const node = nodes[target];
+  const matchesOk = step.num_matches == null || node.num_matches === step.num_matches;
+  const costOk = step.cost == null || node.cost === step.cost;
+  if (!matchesOk || !costOk) {
+    const parts = [`replay mismatch at step ${replayIdx}: ${step.pattern}`];
+    parts.push(`  matches: ${node.num_matches} (expected ${step.num_matches})`);
+    parts.push(`  cost: ${node.cost} (expected ${step.cost})`);
+    parts.push(`  pattern_size: ${node.pattern_size}`);
+    const msg = parts.join('\n');
+    statusBar.innerHTML = `<b class="bad">${parts.join('<br>')}</b>`;
+    console.error(msg);
+    return false;
+  }
+
   expandNode(target);
   openNodes.add(target);
   return true;
@@ -359,7 +374,7 @@ function addNode(parentId, stateId, info, action) {
     pattern: info.pattern,
     num_matches: info.num_matches,
     arity: info.arity,
-    pattern_size: info.arity, // approximate; real pattern_size not exposed via WASM
+    pattern_size: info.pattern_size,
     action: action,
     priority: null,
     depth,
