@@ -20,11 +20,18 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
+///
+/// Seeds a work queue with match roots, then propagates size reductions upward
+/// through parents until convergence. Eclasses may be revisited when a child
+/// shrinks further (after equality saturation, eclass IDs don't follow
+/// parent-child ordering, so a single bottom-up pass isn't sufficient).
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState, check_slow: bool) -> usize {
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
 
+    // Best known size for an eclass: rewritten if we've improved it, else the
+    // analysis data (min AST size computed by egg).
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64) };
 
     for m in &search_state.matches {
@@ -32,11 +39,10 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &
         eclass_to_matches.insert(m.root_eclass, &m.substs);
     }
     while let Some(Reverse(eclass)) = work_queue.pop() {
-        if size_under_rewrite.contains_key(&eclass) {
-            continue;
-        }
         let size_current = get_size(eclass, &size_under_rewrite);
         let mut best = size_current;
+
+        // Option A: apply the pattern rewrite here (cost = 1 call node + args).
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
                 let mut size_new: i64 = 1;
@@ -48,7 +54,12 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &
                 }
             }
         }
-        if let Some(enode) = egraph[eclass].nodes.first() {
+
+        // Option B: don't rewrite here, but recompute size from children that
+        // may themselves have been rewritten. Must check ALL enodes in the
+        // eclass — after equality saturation there can be multiple, and they
+        // may have different children pointing to differently-sized subtrees.
+        for enode in &egraph[eclass].nodes {
             let mut size_no_rewrite: i64 = 1;
             for &child in &enode.children {
                 size_no_rewrite += get_size(child, &size_under_rewrite);
@@ -57,6 +68,12 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &
                 best = size_no_rewrite;
             }
         }
+
+        // If we improved this eclass, record it and enqueue parents so the
+        // savings propagate upward. An eclass can be revisited if a child
+        // shrinks later — this is necessary because equality saturation can
+        // make a child's canonical ID higher than its parent's, breaking the
+        // assumption that ascending-ID order = bottom-up.
         if best < size_current {
             for parent in egraph[eclass].parents() {
                 work_queue.push(Reverse(parent));
