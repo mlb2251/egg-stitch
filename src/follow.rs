@@ -13,18 +13,11 @@ pub fn strip_vars(expr: RevExpr<ENodeOrVar<StitchLang>>) -> RevExpr<StitchLang> 
     }).collect())
 }
 
-/// Checks structural equality of two subtrees in a concrete follow RevExpr.
-fn follow_subtrees_equal(follow: &RevExpr<StitchLang>, a: Id, b: Id) -> bool {
-    if a == b {
-        return true;
-    }
-    let (na, nb) = (&follow[a], &follow[b]);
-    na.matches(nb) && na.children.iter().zip(nb.children.iter()).all(|(&ca, &cb)| follow_subtrees_equal(follow, ca, cb))
-}
-
-/// Recursively checks whether a pattern is a valid prefix of a concrete follow
-/// target. Pattern variables bind to follow subtrees; every occurrence of the
-/// same pattern variable must bind to structurally equal subtrees.
+/// Checks whether a pattern is a valid prefix of a concrete follow target.
+/// Pattern variables bind to follow subtree ids; every occurrence of the same
+/// pattern variable must bind to the same id (which is sufficient for equality
+/// because RevExpr preserves egg's hash-consing — structurally equal subtrees
+/// always share the same Id).
 pub fn check_follow(pattern: &RevExpr<ENodeOrVar<StitchLang>>, pid: Id, follow: &RevExpr<StitchLang>, fid: Id, var_bindings: &mut HashMap<egg::Var, Id>) -> bool {
     match &pattern[pid] {
         ENodeOrVar::Var(v) => match var_bindings.entry(*v) {
@@ -32,7 +25,7 @@ pub fn check_follow(pattern: &RevExpr<ENodeOrVar<StitchLang>>, pid: Id, follow: 
                 e.insert(fid);
                 true
             }
-            std::collections::hash_map::Entry::Occupied(e) => follow_subtrees_equal(follow, *e.get(), fid),
+            std::collections::hash_map::Entry::Occupied(e) => *e.get() == fid,
         },
         ENodeOrVar::ENode(p_node) => {
             let f_node = &follow[fid];
