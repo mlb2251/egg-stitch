@@ -3,16 +3,9 @@ use anyhow::anyhow;
 use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
 use std::{error::Error, fs, path::Path};
 
-/// Loads a JSON file containing s-expressions and builds an egraph from them.
-/// All programs are combined into a single term (programs A B C ...).
-/// Returns the egraph, the root e-class Id of the programs node, and the
-/// minimum AST cost of that root *before* any rewrites were applied.
-pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, egg::Id, usize) {
-    let contents = std::fs::read_to_string(filename).expect("Failed to read file");
-    let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
-
+/// Core egraph construction from parsed program strings and optional rule text.
+fn build_egraph(exprs: Vec<String>, rules_text: Option<&str>) -> (StitchEgraph, egg::Id, usize) {
     let mut egraph: StitchEgraph = egg::EGraph::default();
-
     let mut expr_ids = Vec::new();
 
     for expr_str in &exprs {
@@ -27,12 +20,11 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
 
     let cost_before_rewrites = extract_root_size(&egraph, root);
     println!("Weight of root node before rules: {}", cost_before_rewrites);
-    let rules: Vec<egg::Rewrite<StitchLang, StitchAnalysis>> = match rule_file {
-        Some(rule_file) => from_file(rule_file).expect("Failed to parse rules file"),
+    let rules: Vec<egg::Rewrite<StitchLang, StitchAnalysis>> = match rules_text {
+        Some(text) => parse(text).expect("Failed to parse rules"),
         None => vec![],
     };
     println!("loaded {} rules", rules.len());
-    // println!("{:#?}", rules);
     egraph.rebuild();
     let mut runner: egg::Runner<StitchLang, StitchAnalysis> = egg::Runner::default();
     runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
@@ -41,6 +33,23 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
     (runner.egraph, root, cost_before_rewrites)
+}
+
+/// Loads a JSON file containing s-expressions and builds an egraph from them.
+/// All programs are combined into a single term (programs A B C ...).
+/// Returns the egraph, the root e-class Id of the programs node, and the
+/// minimum AST cost of that root *before* any rewrites were applied.
+pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, egg::Id, usize) {
+    let contents = std::fs::read_to_string(filename).expect("Failed to read file");
+    let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
+    let rules_text = rule_file.map(|f| std::fs::read_to_string(f).expect("Failed to read rules file"));
+    build_egraph(exprs, rules_text.as_deref())
+}
+
+/// Builds an egraph from in-memory JSON and optional rule text (for WASM use).
+pub fn load_egraph_from_strings(programs_json: &str, rules_text: Option<&str>) -> (StitchEgraph, egg::Id, usize) {
+    let exprs: Vec<String> = serde_json::from_str(programs_json).expect("Failed to parse JSON");
+    build_egraph(exprs, rules_text)
 }
 
 /// Returns the minimum AST size of the expression rooted at `root`.

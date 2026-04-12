@@ -1,109 +1,106 @@
-mod best_first;
-mod cost;
-mod debug_log;
-mod follow;
-mod io;
-mod lang;
-mod logging;
-mod matching;
-mod math;
-mod pattern;
-mod results;
-mod revexpr;
-mod search;
-mod smc;
-
 use clap::{Parser, ValueEnum};
 
-/// Which search algorithm to run.
+use egg_stitch::best_first::{BestFirstConfig, SearchPriority, best_first};
+use egg_stitch::cost;
+use egg_stitch::io;
+use egg_stitch::results;
+use egg_stitch::search::{self, SearchState};
+use egg_stitch::smc::{SmcConfig, smc};
+
+/// Which search algorithm to run (CLI wrapper).
 #[derive(ValueEnum, Clone, Debug)]
-pub enum SearchKind {
-    /// Sequential Monte Carlo (stochastic particle filter).
+enum CliSearchKind {
     Smc,
-    /// Best-first enumerative search over canonical patterns.
     BestFirst,
 }
 
-/// How to order the best-first search heap.
+/// Heap priority (CLI wrapper with ValueEnum derive).
 #[derive(ValueEnum, Clone, Debug)]
-pub enum SearchPriority {
-    /// Lowest compressed-corpus-plus-pattern cost first (default).
+enum CliPriority {
     Cost,
-    /// Deepest patterns first (depth-first).
     DepthFirst,
-    /// Shallowest patterns first (breadth-first).
     BreadthFirst,
-    /// Patterns with the most e-class matches first.
     MostMatches,
+}
+
+impl From<CliPriority> for SearchPriority {
+    fn from(p: CliPriority) -> Self {
+        match p {
+            CliPriority::Cost => SearchPriority::Cost,
+            CliPriority::DepthFirst => SearchPriority::DepthFirst,
+            CliPriority::BreadthFirst => SearchPriority::BreadthFirst,
+            CliPriority::MostMatches => SearchPriority::MostMatches,
+        }
+    }
 }
 
 /// E-graph based program synthesis.
 #[derive(Parser, Debug)]
 #[command(version)]
-pub struct Args {
+struct Args {
     /// Search algorithm to use.
-    #[arg(long, value_enum, default_value_t = SearchKind::Smc)]
-    pub search: SearchKind,
+    #[arg(long, value_enum, default_value_t = CliSearchKind::Smc)]
+    search: CliSearchKind,
 
     /// Path to the input JSON file containing programs.
     #[arg(short, long, default_value = "data/domains/cogsci/dials.json")]
-    pub input: String,
+    input: String,
 
     /// Path to rewrite rules file.
     #[arg(short, long)]
-    pub rules: Option<String>,
+    rules: Option<String>,
 
     /// Follow pattern to constrain particle expansion.
     #[arg(short, long)]
-    pub follow: Option<String>,
+    follow: Option<String>,
 
     /// Number of particles.
     #[arg(long, default_value_t = 10_000)]
-    pub num_particles: usize,
+    num_particles: usize,
 
     /// Number of SMC steps.
     #[arg(long, default_value_t = 1000)]
-    pub num_steps: usize,
+    num_steps: usize,
 
     /// Softmax temperature for resampling weights.
     #[arg(long, default_value_t = 100.0)]
-    pub temperature: f64,
+    temperature: f64,
 
     /// Stop after this many steps with no improvement.
     #[arg(long, default_value_t = 50)]
-    pub dead_runs: usize,
+    dead_runs: usize,
 
     /// Maximum arity of patterns to consider as "best".
     #[arg(long, default_value_t = 1000)]
-    pub max_arity: usize,
+    max_arity: usize,
 
     /// Heap priority for best-first search.
-    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
-    pub priority: SearchPriority,
+    #[arg(long, value_enum, default_value_t = CliPriority::Cost)]
+    priority: CliPriority,
 
     /// Weight match selection by usage count during expansion.
     #[arg(long, default_value_t = false)]
-    pub weight_by_usage: bool,
+    weight_by_usage: bool,
 
     /// Probability of attempting variable reuse during expansion.
     #[arg(long, default_value_t = 0.5)]
-    pub p_reuse: f64,
+    p_reuse: f64,
 
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]
-    pub check_slow: bool,
+    check_slow: bool,
 
     /// Path to write JSON output.
     #[arg(short, long)]
-    pub output: Option<String>,
+    output: Option<String>,
 
     /// Enable detailed debug logging of all particles at each SMC step.
     #[arg(long, default_value_t = false)]
-    pub debug_log: bool,
+    debug_log: bool,
 
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
-    pub verbose: bool,
+    verbose: bool,
 }
 
 fn main() {
@@ -113,53 +110,62 @@ fn main() {
     let rules = args.rules.as_deref();
     let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
 
-    // Dispatch to the requested search algorithm, flattening each driver's result
-    // into a common tuple so the downstream RunResult wiring stays shared.
-    let (best, original_size, best_found_at, num_steps_run, result_egraph, debug_log_json): (
-        Option<(usize, search::SearchState)>,
-        usize,
-        Option<usize>,
-        usize,
-        lang::StitchEgraph,
-        Option<String>,
-    ) = match args.search {
-        SearchKind::Smc => {
-            let r = smc::smc(egraph, root, &args);
+    let (shared, original_size) = search::setup_search(egraph, root, args.follow.as_deref(), args.weight_by_usage, args.p_reuse, args.check_slow);
+
+    let (best, best_found_at, num_steps_run, debug_log_json): (Option<(usize, SearchState)>, Option<usize>, usize, Option<String>) = match args.search {
+        CliSearchKind::Smc => {
+            let config = SmcConfig {
+                num_particles: args.num_particles,
+                num_steps: args.num_steps,
+                temperature: args.temperature,
+                dead_runs: args.dead_runs,
+                max_arity: args.max_arity,
+                verbose: args.verbose,
+                debug: args.debug_log,
+            };
+            let r = smc(&shared, root, original_size, &config);
             let json = r.debug_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize debug log"));
-            (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, json)
+            (r.best, r.best_found_at, r.num_steps_run, json)
         }
-        SearchKind::BestFirst => {
-            let r = best_first::best_first(egraph, root, &args);
+        CliSearchKind::BestFirst => {
+            let config = BestFirstConfig {
+                budget: args.num_steps,
+                max_arity: args.max_arity,
+                debug: args.debug_log,
+                priority: args.priority.into(),
+            };
+            let initial = SearchState::new(&shared);
+            let r = best_first(&shared, root, original_size, initial, &config);
             let json = r.tree_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize tree log"));
-            (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph, json)
+            (r.best, r.best_found_at, r.num_expansions, json)
         }
     };
 
     let elapsed_secs = start.elapsed().as_secs_f64();
 
     let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) = match &best {
-        Some((cost, state)) => {
+        Some((c, state)) => {
             let pat_size = cost::compute_pattern_size(&state.pattern);
-            let usage_counts = search::compute_usage_counts(&result_egraph, root);
+            let usage_counts = search::compute_usage_counts(&shared.egraph, root);
             let um: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
             let appx = original_size as i64 - pat_size as i64 * (um as i64 - 1);
             (
-                Some(*cost),
-                Some(original_size as f64 / *cost as f64),
+                Some(*c),
+                Some(original_size as f64 / *c as f64),
                 Some(state.pattern.to_string()),
                 Some(state.pattern.vars.len()),
                 Some(pat_size),
                 Some(state.matches.len()),
                 Some(um),
                 Some(appx),
-                Some(cost::extract_rewritten_programs(&result_egraph, root, state)),
+                Some(cost::extract_rewritten_programs(&shared.egraph, root, state)),
             )
         }
         None => (None, None, None, None, None, None, None, None, None),
     };
 
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-    // Write debug log if the driver produced one and an output path was given.
+
     let debug_log_file = if let (Some(json), Some(output_path)) = (debug_log_json, &args.output) {
         let debug_path = output_path.replace(".json", "_debug.json");
         std::fs::write(&debug_path, json).expect("Failed to write debug log");
@@ -170,8 +176,8 @@ fn main() {
     };
 
     let search_kind = match args.search {
-        SearchKind::Smc => "smc",
-        SearchKind::BestFirst => "best-first",
+        CliSearchKind::Smc => "smc",
+        CliSearchKind::BestFirst => "best-first",
     };
 
     let run_result = results::RunResult {

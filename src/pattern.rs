@@ -67,11 +67,7 @@ impl Pattern {
     /// be passed in either order.
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
-        let (keep_idx, drop_idx) = if var_idx < second_var_idx {
-            (var_idx, second_var_idx)
-        } else {
-            (second_var_idx, var_idx)
-        };
+        let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
         let keep_name = ENodeOrVar::Var(egg::Var::from(keep_idx as u32));
         for var_id in &self.vars[drop_idx] {
@@ -105,7 +101,10 @@ mod tests {
     /// Build a StitchLang enode with `arity` placeholder children. `expand` overwrites
     /// the children, so the dummy Ids here are never read.
     fn op(name: &str, arity: usize) -> StitchLang {
-        StitchLang { op: Symbol::from(name), children: vec![Id::from(0); arity] }
+        StitchLang {
+            op: Symbol::from(name),
+            children: vec![Id::from(0); arity],
+        }
     }
 
     /// Asserts the canonical-form invariant: every id in `vars[k]` holds `Var(k)`,
@@ -115,11 +114,7 @@ mod tests {
             let expected = egg::Var::from(k as u32);
             for id in ids {
                 match &p.pattern[*id] {
-                    ENodeOrVar::Var(v) => assert_eq!(
-                        *v, expected,
-                        "vars[{}] = {:?}: expected {:?}, got {:?}",
-                        k, ids, expected, v
-                    ),
+                    ENodeOrVar::Var(v) => assert_eq!(*v, expected, "vars[{}] = {:?}: expected {:?}, got {:?}", k, ids, expected, v),
                     other => panic!("vars[{}] contains non-Var: {:?}", k, other),
                 }
             }
@@ -176,7 +171,7 @@ mod tests {
     fn reuse_adjacent() {
         let mut p = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
-        p.reuse(0, 1);             // (+ ?#0 ?#0)
+        p.reuse(0, 1); // (+ ?#0 ?#0)
         assert_eq!(p.to_string(), "(+ ?#0 ?#0)");
         assert_eq!(p.vars.len(), 1);
         assert_vars_canonical(&p);
@@ -212,7 +207,7 @@ mod tests {
     fn reuse_with_intervening_var() {
         let mut p = Pattern::single_var();
         p.expand(0, &op("f", 3)); // (f ?#0 ?#1 ?#2)
-        p.reuse(0, 2);             // (f ?#0 ?#1 ?#0)
+        p.reuse(0, 2); // (f ?#0 ?#1 ?#0)
         assert_eq!(p.to_string(), "(f ?#0 ?#1 ?#0)");
         assert_eq!(p.vars.len(), 2);
         assert_vars_canonical(&p);
@@ -222,7 +217,7 @@ mod tests {
     fn expand_reused_var_preserves_dag_sharing() {
         let mut p = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
-        p.reuse(0, 1);             // (+ ?#0 ?#0)
+        p.reuse(0, 1); // (+ ?#0 ?#0)
         assert_eq!(p.vars.len(), 1);
         p.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
         assert_eq!(p.to_string(), "(+ (* ?#0 ?#1) (* ?#0 ?#1))");
@@ -238,9 +233,9 @@ mod tests {
     #[test]
     fn expand_then_reuse_across_structure() {
         let mut p = Pattern::single_var();
-        p.expand(0, &op("+", 2));  // (+ ?#0 ?#1)
-        p.expand(1, &op("*", 2));  // (+ ?#0 (* ?#1 ?#2))
-        p.reuse(1, 2);              // (+ ?#0 (* ?#1 ?#1))
+        p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
+        p.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
+        p.reuse(1, 2); // (+ ?#0 (* ?#1 ?#1))
         assert_eq!(p.to_string(), "(+ ?#0 (* ?#1 ?#1))");
         assert_eq!(p.vars.len(), 2);
         assert_vars_canonical(&p);
@@ -250,13 +245,13 @@ mod tests {
     fn to_string_distinguishes_non_equivalent_shapes() {
         let mut a = Pattern::single_var();
         a.expand(0, &op("+", 2));
-        a.reuse(0, 1);             // (+ ?#0 ?#0)
-        a.expand(0, &op("*", 2));  // (+ (* ?#0 ?#1) (* ?#0 ?#1))
+        a.reuse(0, 1); // (+ ?#0 ?#0)
+        a.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
 
         let mut b = Pattern::single_var();
         b.expand(0, &op("+", 2));
-        b.expand(0, &op("*", 2));  // (+ (* ?#0 ?#1) ?#2)
-        b.expand(2, &op("*", 2));  // (+ (* ?#0 ?#1) (* ?#2 ?#3))
+        b.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) ?#2)
+        b.expand(2, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#2 ?#3))
 
         assert_ne!(a.to_string(), b.to_string());
         assert_eq!(a.to_string(), "(+ (* ?#0 ?#1) (* ?#0 ?#1))");

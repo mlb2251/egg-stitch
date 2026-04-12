@@ -31,6 +31,33 @@ cargo fmt
 cargo clippy
 ```
 
+### WASM Build
+```bash
+# Prerequisites (one-time):
+#   cargo install wasm-pack
+#   rustup target add wasm32-unknown-unknown
+
+# Build the WASM package (outputs to pkg/)
+make wasm
+
+# Or directly:
+wasm-pack build --target web --features wasm
+
+# Run the dev server for the interactive UI
+make server
+# Then open http://localhost:8066/viz/interactive.html
+```
+
+## Architecture
+
+The project is structured as a Rust library (`src/lib.rs`) with a CLI binary (`src/main.rs`).
+- **Library modules** (`search`, `best_first`, `smc`, `cost`, `pattern`, etc.) contain all core logic
+- **`main.rs`** is the CLI entry point using `clap` for argument parsing
+- **WASM API** (`lib.rs`, behind the `wasm` feature) exposes an `Engine` struct to JavaScript for interactive exploration
+- **`viz/interactive.html`** is the web UI that loads the WASM module
+
+The search functions (`best_first`, `smc`) take `&SharedSearchData` + config structs rather than CLI `Args`, enabling use from both CLI and WASM paths without code duplication.
+
 ## Development Notes
 
 - The project uses Rust edition 2024

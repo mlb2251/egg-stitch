@@ -14,11 +14,20 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS = (ROOT / "viz" / "results").resolve()
+# Sibling repo containing rewrite rule files used by the interactive UI.
+BABBLE = ROOT.parent / "babble"
 
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
+
+    def translate_path(self, path):
+        """Serve /babble/... from the sibling babble repo."""
+        clean = unquote(path)
+        if clean.startswith("/babble/"):
+            return str(BABBLE / clean[len("/babble/"):])
+        return super().translate_path(path)
 
     def do_DELETE(self):
         """Delete a file or directory strictly under viz/results/."""

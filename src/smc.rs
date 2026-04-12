@@ -2,10 +2,9 @@ use colored::Colorize;
 
 use crate::cost::compute_cost;
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::lang::StitchEgraph;
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
-use crate::search::{SearchState, setup_search};
+use crate::search::{SearchState, SharedSearchData};
 use rand::Rng;
 
 /// Output of a completed SMC run.
@@ -14,41 +13,49 @@ pub struct SmcResult {
     pub original_size: usize,
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
-    pub egraph: StitchEgraph,
     pub debug_log: Option<DebugLog>,
+}
+
+/// Configuration for an SMC search run.
+pub struct SmcConfig {
+    pub num_particles: usize,
+    pub num_steps: usize,
+    pub temperature: f64,
+    pub dead_runs: usize,
+    pub max_arity: usize,
+    pub verbose: bool,
+    pub debug: bool,
 }
 
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
 #[allow(clippy::needless_range_loop)]
-pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
-    let (shared, original_size) = setup_search(egraph, root, args);
+pub fn smc(shared: &SharedSearchData, root: egg::Id, original_size: usize, config: &SmcConfig) -> SmcResult {
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
-    let num_particles = args.num_particles;
-    let num_steps = args.num_steps;
-    let temperature = args.temperature;
-    let dead_runs = args.dead_runs;
-    let max_arity = args.max_arity;
-    let verbose = args.verbose;
+    let num_particles = config.num_particles;
+    let num_steps = config.num_steps;
+    let temperature = config.temperature;
+    let dead_runs = config.dead_runs;
+    let max_arity = config.max_arity;
+    let verbose = config.verbose;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
     let mut steps_run = 0;
-    let debug = args.debug_log;
+    let debug = config.debug;
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
-    let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(&shared)).collect();
+    let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(shared)).collect();
 
     for step in 0..num_steps {
-
         // === PROPOSE ===
         for ss in search_states.iter_mut() {
-            ss.expand_random(&shared, false);
+            ss.expand_random(shared, false);
         }
 
         // === COST ===
         let costs: Vec<usize> = search_states.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
-        
+
         // === BEST-SO-FAR ===
         for (i, cost) in costs.iter().enumerate() {
             if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
@@ -71,16 +78,12 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         // logweight=-inf for programs that don't match the follow pattern (if provided)
         if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&search_states, &mut log_weights, follow, &shared, original_size, &costs, verbose);
+            apply_follow_constraint(&search_states, &mut log_weights, follow, shared, original_size, &costs, verbose);
         }
 
         // normalize
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-        let mut weights: Vec<f64> = if total_weight.is_finite() {
-            log_weights.iter().map(|lw| (lw - total_weight).exp()).collect()
-        } else {
-            vec![0.0; log_weights.len()]
-        };
+        let mut weights: Vec<f64> = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
 
         if weights.iter().sum::<f64>() == 0.0 {
             log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);
@@ -97,7 +100,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         if verbose {
             println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-            print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
+            print_top_particles(&search_states, &weights, shared, original_size, |i| costs[i]);
         }
 
         // === RESAMPLE ===
@@ -119,7 +122,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         if verbose {
             println!("{}", format!("Step {}: resampled all particles", step).dimmed());
-            print_top_particles(&search_states, &weights, &shared, original_size, |i| compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow));
+            print_top_particles(&search_states, &weights, shared, original_size, |i| compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow));
         }
         steps_run = step + 1;
     }
@@ -147,7 +150,6 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         original_size,
         best_found_at,
         num_steps_run: steps_run,
-        egraph: shared.egraph,
         debug_log,
     }
 }

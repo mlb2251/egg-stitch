@@ -3,6 +3,13 @@ name = "egg-stitch"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "egg-stitch"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0.100"
 clap = { version = "4.6.0", features = ["derive"] }
@@ -13,6 +20,13 @@ rand = "0.9.2"
 rustc-hash = "2.1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
+
+[features]
+default = []
+wasm = ["wasm-bindgen", "serde-wasm-bindgen", "getrandom"]
 
 [patch.crates-io]
 egg = { git = "https://github.com/mlb2251/egg", rev = "196d7d4"}

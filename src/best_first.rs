@@ -5,9 +5,28 @@ use std::collections::BinaryHeap;
 
 use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
-use crate::lang::StitchEgraph;
-use crate::search::{Action, SearchState, setup_search};
-use crate::SearchPriority;
+use crate::search::{Action, SearchState, SharedSearchData};
+
+/// How to order the best-first search heap.
+#[derive(Clone, Debug, Copy)]
+pub enum SearchPriority {
+    /// Lowest compressed-corpus-plus-pattern cost first (default).
+    Cost,
+    /// Deepest patterns first (depth-first).
+    DepthFirst,
+    /// Shallowest patterns first (breadth-first).
+    BreadthFirst,
+    /// Patterns with the most e-class matches first.
+    MostMatches,
+}
+
+/// Configuration for a best-first search run.
+pub struct BestFirstConfig {
+    pub budget: usize,
+    pub max_arity: usize,
+    pub debug: bool,
+    pub priority: SearchPriority,
+}
 
 /// Output of a completed best-first enumerative search.
 pub struct BestFirstResult {
@@ -17,7 +36,6 @@ pub struct BestFirstResult {
     pub best_found_at: Option<usize>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
-    pub egraph: StitchEgraph,
     pub tree_log: Option<SearchTreeLog>,
 }
 
@@ -49,19 +67,16 @@ fn priority(strategy: &SearchPriority, cost: usize, depth: usize, num_matches: u
 /// Maintains a min-heap keyed by `(cost, insertion_order)`. Each pop enumerates
 /// every deterministic successor of the node, deduplicates against the set of
 /// previously-seen canonical patterns, applies `max_arity` and `follow` filters,
-/// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
-/// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
-/// improvement" just means we're grinding through a less promising branch.)
-pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> BestFirstResult {
-    let (shared, original_size) = setup_search(egraph, root, args);
+/// and pushes the survivors back onto the heap. Stops at `budget` pops or an
+/// empty heap.
+pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize, initial_state: SearchState, config: &BestFirstConfig) -> BestFirstResult {
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
-    let budget = args.num_steps;
-    let max_arity = args.max_arity;
-    let debug = args.debug_log;
-    let strategy = &args.priority;
+    let budget = config.budget;
+    let max_arity = config.max_arity;
+    let debug = config.debug;
+    let strategy = &config.priority;
 
-    let initial_state = SearchState::new(&shared);
     let initial_cost = compute_cost(&shared.egraph, root, &initial_state, shared.check_slow);
 
     let mut nodes: Vec<Node> = Vec::new();
@@ -95,14 +110,13 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
-        let successors = nodes[node_id].state.enumerate_successors(&shared);
+        let successors = nodes[node_id].state.enumerate_successors(shared);
 
         for (action, child_state) in successors {
-            if let Some(ref follow) = shared.follow {
-                if !child_state.matches_follow(follow) {
+            if let Some(ref follow) = shared.follow
+                && !child_state.matches_follow(follow) {
                     continue;
                 }
-            }
             let key = child_state.pattern.to_string();
             if !seen.insert(key) {
                 continue;
@@ -113,12 +127,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             let child_depth = nodes[node_id].depth + 1;
 
             if child_state.pattern.vars.len() <= max_arity && best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
-                println!(
-                    "{} {} {}",
-                    format!("[expansion {}]", num_expansions).yellow().bold(),
-                    format!("new best: {}", child_cost).green().bold(),
-                    child_state.pattern.to_string().cyan()
-                );
+                println!("{} {} {}", format!("[expansion {}]", num_expansions).yellow().bold(), format!("new best: {}", child_cost).green().bold(), child_state.pattern.to_string().cyan());
                 best = Some((child_cost, child_id));
                 best_found_at = Some(num_expansions);
             }
@@ -181,7 +190,6 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         original_size,
         best_found_at,
         num_expansions,
-        egraph: shared.egraph,
         tree_log,
     }
 }

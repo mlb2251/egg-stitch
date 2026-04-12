@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>egg-stitch interactive</title>
+<style>
+:root { --fg:#1b1b1f; --muted:#6b7280; --bg:#fafafa; --card:#fff; --accent:#3b82f6; --good:#10b981; --warn:#f59e0b; --dim:#cbd5e1; --border:#e5e7eb; --bad:#ef4444; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); display: flex; flex-direction: column; }
+
+header { padding: .75rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--card); }
+header h1 { font-size: 1.1rem; font-weight: 600; margin-bottom: .5rem; }
+.toolbar { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .85rem; }
+.toolbar label { color: var(--muted); }
+.toolbar button { padding: .35rem .75rem; border: 1px solid var(--border); background: var(--card); border-radius: 6px; cursor: pointer; font-size: .8rem; }
+.toolbar button:hover { background: #f3f4f6; }
+.toolbar button:disabled { opacity: .4; cursor: default; }
+.toolbar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.toolbar button.primary:hover { background: #2563eb; }
+.toolbar select, .toolbar input[type="number"] { padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 4px; font-size: .8rem; }
+.toolbar input[type="number"] { width: 5rem; }
+.toolbar .sep { width: 1px; height: 1.2rem; background: var(--border); }
+
+.legend { display: flex; gap: .75rem; font-size: .75rem; color: var(--muted); align-items: center; }
+.legend .swatch { display: inline-block; width: 14px; height: 11px; border-radius: 3px; vertical-align: middle; margin-right: .25rem; }
+.legend .exp { background: var(--accent); }
+.legend .fri { background: transparent; border: 1px solid var(--dim); }
+.legend .bes { background: var(--good); }
+
+main { flex: 1; display: flex; min-height: 0; }
+
+/* Left: tree view */
+#treepane { flex: 1; overflow: auto; background: var(--card); padding: .5rem 0; }
+
+/* Shared tree row styles (same as tree.html) */
+.tree-list { list-style: none; padding: 0; margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: .82rem; }
+.tree-list ul { list-style: none; padding-left: 1.1rem; margin: 0; border-left: 1px dashed var(--border); }
+.tree-list li { position: relative; }
+
+.row { display: flex; align-items: center; gap: .5rem; padding: .2rem .4rem .2rem .5rem; cursor: pointer; border-radius: 4px; white-space: nowrap; }
+.row:hover { background: #eef2ff; }
+.row.selected { background: #dbeafe; }
+.row.on-best { background: #ecfdf5; }
+.row.on-best.selected { background: #a7f3d0; }
+
+.row .caret { display: inline-block; width: .9rem; color: var(--muted); text-align: center; flex-shrink: 0; }
+.row .caret.leaf { color: transparent; }
+.row .exp-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6rem; height: 1.15rem; border-radius: 4px; font-size: .7rem; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.row .exp-badge.expanded { background: var(--accent); color: #fff; }
+.row .exp-badge.best { background: var(--good); color: #fff; box-shadow: 0 0 0 2px #d1fae5; }
+.row .exp-badge.fringe { background: transparent; border: 1px solid var(--dim); min-width: 1.6rem; }
+.row .prio { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 3rem; }
+.row .cost { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 4.5rem; text-align: right; }
+.row .cost-diff { font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 3.5rem; }
+.row .cost-diff.good { color: var(--good); }
+.row .cost-diff.bad { color: var(--bad); }
+.row .cost-diff:not(.good):not(.bad) { color: var(--muted); }
+.row .submin { font-variant-numeric: tabular-nums; color: var(--good); min-width: 5rem; font-size: .75rem; }
+.row .submin.same { color: transparent; }
+.row .stats { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 4rem; }
+.row .action { color: #9ca3af; font-size: .75rem; }
+.row .pattern { color: #0ea5e9; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.row .badge { font-size: .7rem; color: var(--muted); background: #f3f4f6; padding: 0 .35rem; border-radius: 3px; }
+.row .badge.best { color: #065f46; background: #d1fae5; }
+.row .badge.subtree-exp { color: var(--accent); background: #eff6ff; }
+
+/* Right sidebar: heap + detail */
+#sidebar { width: 380px; border-left: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; overflow: hidden; }
+#sidebar h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: .75rem 1rem .35rem; }
+
+/* Detail pane (selected node) */
+#detail { border-bottom: 1px solid var(--border); overflow-y: auto; max-height: 45%; padding: 0 1.25rem 1rem; font-size: .85rem; }
+#detail h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .35rem; margin-top: 1rem; padding: 0; }
+#detail h2:first-child { margin-top: .5rem; }
+#detail .pattern { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .85rem; color: #0ea5e9; background: #f8fafc; padding: .5rem .6rem; border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; white-space: nowrap; }
+#detail dl { display: grid; grid-template-columns: auto 1fr; gap: .25rem .75rem; }
+#detail dt { color: var(--muted); }
+#detail dd { font-variant-numeric: tabular-nums; }
+#detail dd.good { color: var(--good); font-weight: 600; }
+#detail .action { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; color: var(--fg); background: #fef3c7; padding: .15rem .4rem; border-radius: 4px; display: inline-block; }
+#detail .empty { color: var(--muted); font-style: italic; }
+#detail a.nav { color: var(--accent); text-decoration: none; }
+#detail a.nav:hover { text-decoration: underline; }
+
+/* Heap list */
+#heap-wrap { flex: 1; overflow-y: auto; }
+.heap-list { list-style: none; padding: 0; margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; }
+.heap-list li { display: flex; align-items: center; gap: .4rem; padding: .2rem 1rem; cursor: pointer; white-space: nowrap; }
+.heap-list li:hover { background: #eef2ff; }
+.heap-list li.selected { background: #dbeafe; }
+.heap-list .rank { color: var(--muted); font-size: .7rem; min-width: 2rem; text-align: right; }
+.heap-list .cost { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 4.5rem; text-align: right; }
+.heap-list .prio { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 3rem; }
+.heap-list .stats { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; }
+.heap-list .pattern { color: #0ea5e9; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+
+#loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,.8); display: flex; align-items: center; justify-content: center; z-index: 100; font-size: 1.1rem; color: var(--muted); }
+#loading-overlay.hidden { display: none; }
+
+.empty-msg { color: var(--muted); font-style: italic; padding: 1rem; font-size: .85rem; }
+#status-bar { padding: .35rem 1rem; font-size: .8rem; color: var(--muted); border-top: 1px solid var(--border); background: var(--card); }
+#status-bar b { color: var(--fg); }
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">loading WASM module…</div>
+
+<header>
+  <h1>egg-stitch interactive explorer</h1>
+  <div class="toolbar">
+    <label>domain:</label>
+    <select id="selDomain">
+      <option value="dials">dials</option>
+      <option value="furniture">furniture</option>
+      <option value="nuts-bolts">nuts-bolts</option>
+      <option value="wheels">wheels</option>
+      <option value="bridge">bridge</option>
+      <option value="castle">castle</option>
+      <option value="city">city</option>
+      <option value="house">house</option>
+    </select>
+    <label>rules:</label>
+    <select id="selRules">
+      <option value="">none</option>
+      <option value="drawings.dials.rewrites">dials</option>
+      <option value="drawings.furniture.rewrites">furniture</option>
+      <option value="drawings.nuts-bolts.rewrites">nuts-bolts</option>
+      <option value="drawings.wheels.rewrites">wheels</option>
+    </select>
+    <button id="btnLoad" class="primary" disabled>load</button>
+    <span class="sep"></span>
+    <label>priority:</label>
+    <select id="selPriority">
+      <option value="cost">best-first (cost)</option>
+      <option value="depth-first">depth-first</option>
+      <option value="breadth-first">breadth-first</option>
+      <option value="most-matches">most-matches</option>
+    </select>
+    <label>budget:</label>
+    <input type="number" id="numBudget" value="100" min="1" max="100000">
+    <label>max arity:</label>
+    <input type="number" id="numArity" value="3" min="1" max="100">
+    <button id="btnStep" disabled title="expand the top heap node">step</button>
+    <button id="btnRun" disabled title="run N expansions from heap">run</button>
+    <span class="sep"></span>
+    <button id="btnExpandBest" disabled title="expand UI path to best node">show best</button>
+    <button id="btnCollapseAll" disabled title="collapse all tree disclosure">collapse</button>
+    <label><input type="checkbox" id="chkExpandedOnly"> expanded only</label>
+    <div class="legend" style="margin-left:auto;">
+      <span><span class="swatch exp"></span>expanded</span>
+      <span><span class="swatch fri"></span>fringe</span>
+      <span><span class="swatch bes"></span>best</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="treepane">
+    <div class="empty-msg" id="placeholder">load a domain to begin</div>
+  </div>
+
+  <div id="sidebar">
+    <div id="detail">
+      <div class="empty">click a node to inspect</div>
+    </div>
+    <h2 id="heapTitle">heap (0)</h2>
+    <div id="heap-wrap">
+      <ul class="heap-list" id="heapList"></ul>
+    </div>
+  </div>
+</main>
+
+<div id="status-bar">ready</div>
+
+<script type="module" src="interactive.js"></script>
+</body>
+</html>

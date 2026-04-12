@@ -7,24 +7,12 @@ use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 
 /// Sets the log weight of particles that don't match the follow pattern to -inf, and prints status.
-pub fn apply_follow_constraint(
-    states: &[SearchState],
-    log_weights: &mut [f64],
-    follow: &crate::revexpr::RevExpr<egg::ENodeOrVar<crate::lang::StitchLang>>,
-    shared: &SharedSearchData,
-    original_size: usize,
-    costs: &[usize],
-    verbose: bool,
-) {
+pub fn apply_follow_constraint(states: &[SearchState], log_weights: &mut [f64], follow: &crate::revexpr::RevExpr<egg::ENodeOrVar<crate::lang::StitchLang>>, shared: &SharedSearchData, original_size: usize, costs: &[usize], verbose: bool) {
     let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
 
     if verbose {
         // Print top 5 particles by weight before zeroing out follow-mismatches.
-        let weights_before: Vec<f64> = if log_total.is_finite() {
-            log_weights.iter().map(|lw| (lw - log_total).exp()).collect()
-        } else {
-            vec![0.0; log_weights.len()]
-        };
+        let weights_before: Vec<f64> = if log_total.is_finite() { log_weights.iter().map(|lw| (lw - log_total).exp()).collect() } else { vec![0.0; log_weights.len()] };
         let mut sorted_idx: Vec<usize> = (0..states.len()).collect();
         sorted_idx.sort_by(|&a, &b| weights_before[b].partial_cmp(&weights_before[a]).unwrap_or(std::cmp::Ordering::Equal));
         println!("{}", "top 5 particles before follow constraint:".dimmed());

@@ -196,10 +196,7 @@ impl SearchState {
                 let mut child = self.clone();
                 child.expand(var_idx, &shape, shared);
                 if !child.matches.is_empty() {
-                    out.push((
-                        Action::Expand { var_idx, op: shape.op, arity: shape.children.len() },
-                        child,
-                    ));
+                    out.push((Action::Expand { var_idx, op: shape.op, arity: shape.children.len() }, child));
                 }
             }
         }
@@ -207,10 +204,7 @@ impl SearchState {
         let n = self.pattern.vars.len();
         for i in 0..n {
             for j in (i + 1)..n {
-                let unifiable = self
-                    .matches
-                    .iter()
-                    .any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
+                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
                 if unifiable {
                     let mut child = self.clone();
                     child.reuse(i, j, shared);
@@ -225,21 +219,17 @@ impl SearchState {
     }
 }
 
-/// Parses the shared-context fields out of CLI args, computes usage counts, and
-/// returns the initial corpus size alongside the populated `SharedSearchData`.
-pub fn setup_search(egraph: StitchEgraph, root: Id, args: &crate::Args) -> (SharedSearchData, usize) {
-    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args
-        .follow
-        .as_deref()
-        .map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+/// Builds shared search context and computes the initial corpus size.
+pub fn setup_search(egraph: StitchEgraph, root: Id, follow: Option<&str>, weight_by_usage: bool, p_reuse: f64, check_slow: bool) -> (SharedSearchData, usize) {
+    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = follow.map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,
         follow: follow_expr,
-        weight_by_usage: args.weight_by_usage,
+        weight_by_usage,
         usage_counts,
-        p_reuse: args.p_reuse,
-        check_slow: args.check_slow,
+        p_reuse,
+        check_slow,
     };
     let initial = SearchState::new(&shared);
     let original_size = crate::cost::compute_size(&shared.egraph, root, &initial, shared.check_slow);

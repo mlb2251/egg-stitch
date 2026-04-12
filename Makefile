@@ -6,3 +6,15 @@ dev:
 .PHONY: server
 server:
 	python3 viz/server.py $(PORT)
+
+# ── WASM ───────────────────────────────────────────────────────────────────────
+# Prerequisites (one-time):
+#   cargo install wasm-pack
+#   rustup target add wasm32-unknown-unknown
+
+.PHONY: wasm
+wasm:
+	wasm-pack build --target web --features wasm
+
+.PHONY: wasm-dev
+wasm-dev: wasm server
