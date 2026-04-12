@@ -43,10 +43,24 @@ ALL_DOMAINS = ["dials", "furniture", "nuts-bolts", "wheels"]
 NON_BABBLE_DOMAINS = ["bridge", "castle", "city", "house"]
 
 
-def compress(input, output="out.json", rewrites=None, **kwargs):
-    """Run `cargo run --release` with the given input/output (relative to results dir)/optional rewrites."""
+def compress(input, output="out.json", rewrites=None, flamegraph=False, samply=False, **kwargs):
+    """Run `cargo run --release` with the given input/output (relative to results dir)/optional rewrites.
+
+    Pass ``flamegraph=True`` to profile via ``cargo flamegraph`` (macOS, needs sudo).
+    Pass ``samply=True`` to profile via ``samply record`` (builds release binary first,
+    then opens Firefox Profiler automatically).
+    """
     output_path = unique_path(current_folder_path() / output)
-    cmd = ["cargo", "run", "--release", "--", "-i", input, "--output", str(output_path)]
+    binary = "./target/release/egg-stitch"
+    prog_args = ["-i", input, "--output", str(output_path)]
+    if flamegraph:
+        svg_path = str(output_path).replace(".json", "_flamegraph.svg")
+        cmd = ["cargo", "flamegraph", "--root", "-o", svg_path, "--", *prog_args]
+    elif samply:
+        subprocess.run(["cargo", "build", "--release"], check=True)
+        cmd = ["samply", "record", binary, *prog_args]
+    else:
+        cmd = ["cargo", "run", "--release", "--", *prog_args]
     if rewrites is not None:
         cmd += ["-r", rewrites]
     for k, v in kwargs.items():
