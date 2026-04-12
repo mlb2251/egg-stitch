@@ -33,12 +33,10 @@ impl Pattern {
 
         // Shift names of trailing vars: a var currently at post-removal index p
         // will end up at post-insertion index p + num_children, so rename its leaves.
-        if num_children != 1 {
-            for p in var_idx..self.vars.len() {
-                let shifted = ENodeOrVar::Var(egg::Var::from((p + num_children) as u32));
-                for &id in &self.vars[p] {
-                    self.pattern[id] = shifted.clone();
-                }
+        for p in var_idx..self.vars.len() {
+            let shifted = ENodeOrVar::Var(egg::Var::from((p + num_children) as u32));
+            for &id in &self.vars[p] {
+                self.pattern[id] = shifted.clone();
             }
         }
 
