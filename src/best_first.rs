@@ -209,6 +209,7 @@ pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut replay_steps: Vec<ReplayStep> = Vec::new();
     let mut num_expansions: usize = 0;
+    let search_start = std::time::Instant::now();
 
     while let Some((_, node_id)) = heap.pop_first() {
         if num_expansions >= budget {
@@ -235,7 +236,10 @@ pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize
         num_expansions += 1;
     }
 
+    let search_elapsed = search_start.elapsed();
     println!("\n{}", "═══ RESULT ═══".green().bold());
+    println!("{} {}", "search time:".dimmed(), format!("{:.1?}", search_elapsed).yellow());
+    println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().yellow());
     if let (Some(iter), Some((cost, best_id))) = (best_found_at, best) {
         let state = &nodes[best_id].state;
         println!("{} {}", "best found at expansion:".dimmed(), iter.to_string().yellow());

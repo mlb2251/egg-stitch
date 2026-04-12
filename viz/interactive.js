@@ -15,6 +15,9 @@ const statusBar = $('status-bar');
 let wasm = null;
 let engine = null;
 
+/// Await this to guarantee the browser paints the current DOM state.
+const paint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+
 // ── UI-only state (not search state) ────────────────────────────────────────
 
 let openNodes = new Set();
@@ -79,22 +82,7 @@ async function autoLoadFromParams() {
     const opt = [...sel.options].find(o => o.value === replayFile);
     if (opt) sel.value = replayFile;
 
-    console.log(`replaying ${replaySteps.length} steps...`);
-    try {
-      engine.replay(replaySteps);
-      replayIdx = replaySteps.length;
-    } catch (e) {
-      console.error('replay error:', e);
-    }
-    const bestCost = engine.best_cost();
-    console.log(`replay done: ${replayIdx} steps, bestCost=${bestCost}, expected=${replayExpectedCost}`);
-    renderAll();
-    updateReplayButtons();
-    if (replayExpectedCost != null && bestCost > replayExpectedCost) {
-      statusBar.innerHTML = `<b class="bad">REPLAY MISMATCH: expected cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}</b>`;
-    } else {
-      statusBar.textContent = `replayed ${replayIdx} / ${replaySteps.length} steps`;
-    }
+    await runReplayAll(replaySteps);
   }
 }
 
@@ -319,29 +307,45 @@ $('btnReplay').addEventListener('click', () => {
 });
 
 $('btnReplayAll').addEventListener('click', () => {
-  const remaining = replaySteps.slice(replayIdx);
-  statusBar.textContent = `replaying ${remaining.length} steps…`;
-  // Yield once so the status bar paints, then run the whole replay in Rust.
-  setTimeout(() => {
-    try {
-      engine.replay(remaining);
-      replayIdx = replaySteps.length;
-    } catch (e) {
-      statusBar.innerHTML = `<b class="bad">${e.message}</b>`;
-      console.error(e);
-    }
-    renderAll();
-    updateReplayButtons();
-    const bestCost = engine.best_cost();
-    if (replayExpectedCost != null && bestCost > replayExpectedCost) {
-      const msg = `replay mismatch: expected best cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}`;
-      statusBar.innerHTML = `<b class="bad">${msg}</b>`;
-      console.warn(msg);
-    } else if (replayExpectedCost != null && bestCost >= 0 && bestCost <= replayExpectedCost) {
-      statusBar.innerHTML = `replayed ${replayIdx} steps · best cost <b class="good">${bestCost.toLocaleString()}</b> (expected ${replayExpectedCost.toLocaleString()})`;
-    }
-  }, 0);
+  runReplayAll(replaySteps.slice(replayIdx));
 });
+
+/// Run replay with visible progress updates between phases.
+/// Uses await + setTimeout to guarantee the browser paints between steps.
+async function runReplayAll(steps) {
+  $('btnReplayAll').disabled = true;
+  $('btnReplay').disabled = true;
+  statusBar.textContent = `replaying ${steps.length} steps…`;
+  await paint();
+
+  const t0 = performance.now();
+  let error = null;
+  try {
+    engine.replay(steps);
+    replayIdx = replaySteps.length;
+  } catch (e) {
+    error = e.message;
+  }
+  const replayMs = (performance.now() - t0).toFixed(0);
+
+  const bestCost = engine.best_cost();
+  if (error) {
+    statusBar.innerHTML = `<b class="bad">${error}</b> (${replayMs}ms)`;
+  } else {
+    const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '—';
+    statusBar.textContent = `replayed ${replayIdx} steps in ${replayMs}ms · best cost ${costStr} · rendering…`;
+  }
+  await paint();
+
+  const t1 = performance.now();
+  renderAll();
+  updateReplayButtons();
+  const renderMs = (performance.now() - t1).toFixed(0);
+  if (!error) {
+    const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '—';
+    statusBar.innerHTML = `replayed ${replayIdx} steps in <b>${replayMs}ms</b> · render <b>${renderMs}ms</b> · best cost <b>${costStr}</b>` + (replayExpectedCost != null ? ` (expected ${replayExpectedCost.toLocaleString()})` : '');
+  }
+}
 
 // ── Commands ────────────────────────────────────────────────────────────────
 
@@ -353,10 +357,19 @@ $('btnStep').addEventListener('click', () => {
   renderAll();
 });
 
-$('btnRun').addEventListener('click', () => {
+$('btnRun').addEventListener('click', async () => {
   const budget = parseInt($('numBudget').value) || 100;
-  engine.step_n(budget);
+  statusBar.textContent = `running ${budget} steps…`;
+  await paint();
+  const t0 = performance.now();
+  const expanded = engine.step_n(budget);
+  const searchMs = (performance.now() - t0).toFixed(0);
+  statusBar.textContent = `expanded ${expanded} nodes in ${searchMs}ms · rendering…`;
+  await paint();
+  const t1 = performance.now();
   renderAll();
+  const renderMs = (performance.now() - t1).toFixed(0);
+  statusBar.textContent = `expanded ${expanded} nodes in ${searchMs}ms · render ${renderMs}ms`;
 });
 
 // ── UI controls ──────────────────────────────────────────────────────────────

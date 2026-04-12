@@ -34,3 +34,5 @@ egg = { git = "https://github.com/mlb2251/egg", rev = "196d7d4"}
 
 [profile.release]
 debug = true
+# lto = true
+# codegen-units = 1
