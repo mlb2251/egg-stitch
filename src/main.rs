@@ -1,4 +1,5 @@
 mod cost;
+mod debug_log;
 mod io;
 mod lang;
 mod matching;
@@ -58,6 +59,10 @@ pub struct Args {
     /// Path to write a JSON-serialized RunResult.
     #[arg(short, long)]
     pub output: Option<String>,
+
+    /// Enable detailed debug logging of all particles at each SMC step.
+    #[arg(long, default_value_t = false)]
+    pub debug_log: bool,
 }
 
 fn main() {
@@ -111,6 +116,13 @@ fn main() {
         num_steps_run: smc_result.num_steps_run,
         rewritten_programs,
     };
+
+    if let (Some(debug_log), Some(output_path)) = (smc_result.debug_log, &args.output) {
+        let debug_path = output_path.replace(".json", "_debug.json");
+        let json = serde_json::to_string(&debug_log).expect("Failed to serialize debug log");
+        std::fs::write(&debug_path, json).expect("Failed to write debug log");
+        println!("wrote debug log to {}", debug_path);
+    }
 
     if let Some(ref output_path) = args.output {
         let json = serde_json::to_string_pretty(&run_result).expect("Failed to serialize result");
