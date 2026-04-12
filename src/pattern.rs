@@ -31,12 +31,17 @@ impl Pattern {
         assert!(matches!(self.pattern[var_positions[0]], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
         let num_children = target.len();
 
-        // Shift names of trailing vars: a var currently at post-removal index p
-        // will end up at post-insertion index p + num_children, so rename its leaves.
-        for p in var_idx..self.vars.len() {
-            let shifted = ENodeOrVar::Var(egg::Var::from((p + num_children) as u32));
-            for &id in &self.vars[p] {
-                self.pattern[id] = shifted.clone();
+        // The remove above and the inserts below shift self.vars indices but don't
+        // touch the Var(k) names stored in the pattern tree. The net index shift for
+        // trailing vars is num_children - 1 (remove 1, insert num_children). When
+        // num_children == 1 the shifts cancel and names are already correct; otherwise
+        // we must rewrite the tree nodes to their final positions.
+        if num_children != 1 {
+            for p in var_idx..self.vars.len() {
+                let shifted = ENodeOrVar::Var(egg::Var::from((p + num_children) as u32));
+                for &id in &self.vars[p] {
+                    self.pattern[id] = shifted.clone();
+                }
             }
         }
 
