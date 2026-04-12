@@ -3,32 +3,39 @@ use crate::revexpr::RevExpr;
 use egg::{ENodeOrVar, Id, Language};
 use std::collections::HashMap;
 
-/// Strips the `ENodeOrVar` wrapper from a parsed follow pattern, panicking if
-/// any node is a `Var`. Call this once at parse time so all downstream code
-/// can work with `RevExpr<StitchLang>` and never worry about Vars.
-pub fn strip_vars(expr: RevExpr<ENodeOrVar<StitchLang>>) -> RevExpr<StitchLang> {
-    RevExpr::new(expr.nodes.into_iter().map(|node| match node {
-        ENodeOrVar::ENode(inner) => inner,
-        ENodeOrVar::Var(v) => panic!("follow pattern contains Var node {v}; only concrete enodes are supported"),
-    }).collect())
+/// Validates a parsed follow pattern: panics if any enode has an op starting
+/// with `#`, which likely means the user wrote `#0` instead of `?0`.
+pub fn validate_follow(expr: &RevExpr<ENodeOrVar<StitchLang>>) {
+    for node in &expr.nodes {
+        if let ENodeOrVar::ENode(n) = node {
+            assert!(
+                !n.op.as_str().starts_with('#'),
+                "follow pattern contains enode with op '{}'; use ?-prefixed variables (e.g. ?0) instead of #-prefixed literals",
+                n.op,
+            );
+        }
+    }
 }
 
-/// Checks whether a pattern is a valid prefix of a concrete follow target.
+/// Checks whether a pattern is a valid prefix of a follow target.
+///
 /// Pattern variables bind to follow subtree ids; every occurrence of the same
-/// pattern variable must bind to the same id (which is sufficient for equality
-/// because RevExpr preserves egg's hash-consing — structurally equal subtrees
-/// always share the same Id).
-pub fn check_follow(pattern: &RevExpr<ENodeOrVar<StitchLang>>, pid: Id, follow: &RevExpr<StitchLang>, fid: Id, var_bindings: &mut HashMap<egg::Var, Id>) -> bool {
-    match &pattern[pid] {
-        ENodeOrVar::Var(v) => match var_bindings.entry(*v) {
+/// pattern variable must bind to the same id (sufficient for structural
+/// equality because RevExpr preserves egg's hash-consing).
+///
+/// Follow variables act as wildcards — any pattern node (Var or ENode) at a
+/// follow-Var position is accepted.
+pub fn check_follow(pattern: &RevExpr<ENodeOrVar<StitchLang>>, pid: Id, follow: &RevExpr<ENodeOrVar<StitchLang>>, fid: Id, var_bindings: &mut HashMap<egg::Var, Id>) -> bool {
+    match (&pattern[pid], &follow[fid]) {
+        (ENodeOrVar::Var(v), _) => match var_bindings.entry(*v) {
             std::collections::hash_map::Entry::Vacant(e) => {
                 e.insert(fid);
                 true
             }
             std::collections::hash_map::Entry::Occupied(e) => *e.get() == fid,
         },
-        ENodeOrVar::ENode(p_node) => {
-            let f_node = &follow[fid];
+        (_, ENodeOrVar::Var(_)) => true,
+        (ENodeOrVar::ENode(p_node), ENodeOrVar::ENode(f_node)) => {
             p_node.matches(f_node) && p_node.children.iter().zip(f_node.children.iter()).all(|(&pc, &fc)| check_follow(pattern, pc, follow, fc, var_bindings))
         }
     }

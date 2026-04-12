@@ -1,7 +1,7 @@
 use std::cmp::min;
 
 use crate::cost::{compute_cost, compute_size};
-use crate::follow::strip_vars;
+use crate::follow::validate_follow;
 use crate::lang::StitchEgraph;
 use crate::logging::apply_follow_constraint;
 use crate::search::{SearchState, SharedSearchData};
@@ -20,7 +20,8 @@ pub struct SmcResult {
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
     let follow_expr = args.follow.as_deref().map(|s| {
         let parsed = s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e));
-        strip_vars(parsed)
+        validate_follow(&parsed);
+        parsed
     });
     let usage_counts = crate::search::compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
@@ -175,8 +176,10 @@ mod tests {
         std::path::Path::new(INPUT).exists() && std::path::Path::new(RULES).exists()
     }
 
-    fn parse_follow(s: &str) -> crate::revexpr::RevExpr<crate::lang::StitchLang> {
-        strip_vars(s.parse().expect("parse follow"))
+    fn parse_follow(s: &str) -> crate::revexpr::RevExpr<egg::ENodeOrVar<crate::lang::StitchLang>> {
+        let parsed = s.parse().expect("parse follow");
+        validate_follow(&parsed);
+        parsed
     }
 
     fn run(args: &Args) -> SmcResult {
@@ -197,7 +200,7 @@ mod tests {
     }
 
     /// The full complex follow from the baseline invocation we're locking in.
-    const DIALS_FULL_FOLLOW: &str = "(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))";
+    const DIALS_FULL_FOLLOW: &str = "(T (T (T l (M 1 0 -0.5 0)) (M ?0 (/ pi 4) 0 0)) (M 1 0 (* ?0 (* 0.5 (cos (/ pi 4)))) (* ?0 (* 0.5 (sin (/ pi 4))))))";
 
     /// Mirror of the baseline CLI:
     ///   `cargo run --release -- -i data/domains/cogsci/dials.json -r <rules> \
@@ -224,7 +227,7 @@ mod tests {
         assert_best_matches_follow(&result, DIALS_FULL_FOLLOW);
     }
 
-    /// Shallow follow with no `#0` placeholders — fast variant that should be
+    /// Shallow follow with no variables — fast variant that should be
     /// reachable in a small number of SMC steps.
     #[test]
     fn follow_shallow_no_placeholders() {
@@ -246,9 +249,8 @@ mod tests {
         assert_best_matches_follow(&result, follow);
     }
 
-    /// Follow containing one `#0` enode (the placeholder convention in this
-    /// codebase): exercises matching a pattern variable against an enode subtree
-    /// in the follow.
+    /// Follow containing a `?0` variable: exercises the wildcard handling
+    /// where the follow has a Var and the pattern has either a Var or ENode.
     #[test]
     #[ignore = "slow: 100 steps * 1000 particles; run with --release --ignored"]
     fn follow_single_placeholder() {
@@ -256,7 +258,7 @@ mod tests {
             eprintln!("skipping: fixtures not available");
             return;
         }
-        let follow = "(T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0))";
+        let follow = "(T (T l (M 1 0 -0.5 0)) (M ?0 (/ pi 4) 0 0))";
         let args = Args::parse_from([
             "egg-stitch",
             "--input", INPUT,
