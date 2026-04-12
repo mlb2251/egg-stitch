@@ -80,31 +80,21 @@ async function autoLoadFromParams() {
     if (opt) sel.value = replayFile;
 
     console.log(`replaying ${replaySteps.length} steps...`);
-    await new Promise(resolve => {
-      const costBefore = engine.best_cost();
-      const total = replaySteps.length;
-      const BATCH = 50;
-      function tick() {
-        let ok = true;
-        for (let i = 0; i < BATCH && replayIdx < total; i++) {
-          if (!replayOneStep()) { ok = false; break; }
-        }
-        statusBar.textContent = `replaying… ${replayIdx} / ${total}`;
-        if (ok && replayIdx < total) { setTimeout(tick, 0); return; }
-        // Done.
-        const bestCost = engine.best_cost();
-        console.log(`replay done: ${replayIdx} steps, bestCost=${bestCost}, expected=${replayExpectedCost}`);
-        renderAll();
-        updateReplayButtons();
-        if (replayExpectedCost != null && bestCost > replayExpectedCost) {
-          statusBar.innerHTML = `<b class="bad">REPLAY MISMATCH: expected cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}</b>`;
-        } else {
-          statusBar.textContent = `replayed ${replayIdx} / ${total} steps`;
-        }
-        resolve();
-      }
-      tick();
-    });
+    try {
+      engine.replay(replaySteps);
+      replayIdx = replaySteps.length;
+    } catch (e) {
+      console.error('replay error:', e);
+    }
+    const bestCost = engine.best_cost();
+    console.log(`replay done: ${replayIdx} steps, bestCost=${bestCost}, expected=${replayExpectedCost}`);
+    renderAll();
+    updateReplayButtons();
+    if (replayExpectedCost != null && bestCost > replayExpectedCost) {
+      statusBar.innerHTML = `<b class="bad">REPLAY MISMATCH: expected cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}</b>`;
+    } else {
+      statusBar.textContent = `replayed ${replayIdx} / ${replaySteps.length} steps`;
+    }
   }
 }
 
@@ -329,38 +319,29 @@ $('btnReplay').addEventListener('click', () => {
 });
 
 $('btnReplayAll').addEventListener('click', () => {
-  const costBefore = engine.best_cost();
-  $('btnReplayAll').disabled = true;
-  $('btnReplay').disabled = true;
-  replayBatch(costBefore);
+  const remaining = replaySteps.slice(replayIdx);
+  statusBar.textContent = `replaying ${remaining.length} steps…`;
+  // Yield once so the status bar paints, then run the whole replay in Rust.
+  setTimeout(() => {
+    try {
+      engine.replay(remaining);
+      replayIdx = replaySteps.length;
+    } catch (e) {
+      statusBar.innerHTML = `<b class="bad">${e.message}</b>`;
+      console.error(e);
+    }
+    renderAll();
+    updateReplayButtons();
+    const bestCost = engine.best_cost();
+    if (replayExpectedCost != null && bestCost > replayExpectedCost) {
+      const msg = `replay mismatch: expected best cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}`;
+      statusBar.innerHTML = `<b class="bad">${msg}</b>`;
+      console.warn(msg);
+    } else if (replayExpectedCost != null && bestCost >= 0 && bestCost <= replayExpectedCost) {
+      statusBar.innerHTML = `replayed ${replayIdx} steps · best cost <b class="good">${bestCost.toLocaleString()}</b> (expected ${replayExpectedCost.toLocaleString()})`;
+    }
+  }, 0);
 });
-
-/// Run replay in batches of 50 steps, yielding to the browser between batches
-/// so the status bar updates with progress.
-function replayBatch(costBefore) {
-  const total = replaySteps.length;
-  const BATCH = 50;
-  let ok = true;
-  for (let i = 0; i < BATCH && replayIdx < total; i++) {
-    if (!replayOneStep()) { ok = false; break; }
-  }
-  statusBar.textContent = `replaying… ${replayIdx} / ${total}`;
-  if (ok && replayIdx < total) {
-    setTimeout(() => replayBatch(costBefore), 0);
-    return;
-  }
-  // Done — render final state.
-  renderAll();
-  updateReplayButtons();
-  const bestCost = engine.best_cost();
-  if (replayExpectedCost != null && bestCost > replayExpectedCost && bestCost > costBefore) {
-    const msg = `replay mismatch: expected best cost ${replayExpectedCost.toLocaleString()} but got ${bestCost.toLocaleString()}`;
-    statusBar.innerHTML = `<b class="bad">${msg}</b>`;
-    console.warn(msg);
-  } else if (replayExpectedCost != null && bestCost >= 0 && bestCost <= replayExpectedCost) {
-    statusBar.innerHTML = `replayed ${replayIdx} steps · best cost <b class="good">${bestCost.toLocaleString()}</b> (expected ${replayExpectedCost.toLocaleString()})`;
-  }
-}
 
 // ── Commands ────────────────────────────────────────────────────────────────
 

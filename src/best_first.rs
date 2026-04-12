@@ -391,6 +391,47 @@ impl InteractiveSearch {
         self.nodes.iter().any(|n| n.state.pattern.to_string() == pattern)
     }
 
+    /// Replay a sequence of steps entirely in Rust. Returns `Ok(steps_replayed)`
+    /// on success, or `Err(message)` on the first mismatch/missing pattern.
+    pub fn replay(&mut self, steps: &[ReplayStep]) -> Result<usize, String> {
+        for (i, step) in steps.iter().enumerate() {
+            let node_id = match self.find_unexpanded_by_pattern(&step.pattern) {
+                Some(id) => id,
+                None => {
+                    if self.has_pattern(&step.pattern) {
+                        continue; // already expanded, skip
+                    }
+                    return Err(format!(
+                        "step {}: pattern not found: {}",
+                        i + 1,
+                        step.pattern
+                    ));
+                }
+            };
+            let node = &self.nodes[node_id];
+            if node.state.matches.len() != step.num_matches {
+                return Err(format!(
+                    "step {}: matches mismatch for {}: got {} expected {}",
+                    i + 1,
+                    step.pattern,
+                    node.state.matches.len(),
+                    step.num_matches,
+                ));
+            }
+            if node.cost != step.cost {
+                return Err(format!(
+                    "step {}: cost mismatch for {}: got {} expected {}",
+                    i + 1,
+                    step.pattern,
+                    node.cost,
+                    step.cost,
+                ));
+            }
+            self.expand_node(node_id);
+        }
+        Ok(steps.len())
+    }
+
     // ── Snapshots for rendering ────────────────────────────────────────
 
     /// Snapshot of a single node.

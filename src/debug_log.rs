@@ -20,7 +20,7 @@ pub struct ReplayConfig {
 }
 
 /// One expansion decision in a replay log.
-#[derive(Serialize)]
+#[derive(Serialize, serde::Deserialize)]
 pub struct ReplayStep {
     /// Pattern string of the node that was expanded.
     pub pattern: String,
