@@ -58,23 +58,10 @@ async function autoLoadFromParams() {
       check();
     });
 
-    try {
-      const log = await fetch(`results/${replayFile}`).then(r => {
-        if (!r.ok) throw new Error(r.status);
-        return r.json();
-      });
-      applyReplayConfig(log.config);
-      replaySteps = log.steps || [];
-      replayIdx = 0;
-    } catch (e) {
-      console.error('failed to load replay:', e);
-      return;
-    }
-
+    // Fetch expected cost from the run result.
     const runPath = `results/${replayFile.replace('_replay.json', '.json')}`;
     try {
       const run = await fetch(runPath).then(r => r.ok ? r.json() : null);
-      console.log('run result fetch:', runPath, run ? `final_cost=${run.final_cost}` : 'null');
       if (run && run.final_cost != null) replayExpectedCost = run.final_cost;
     } catch (e) { console.warn('failed to fetch run result:', e); }
 
@@ -82,7 +69,7 @@ async function autoLoadFromParams() {
     const opt = [...sel.options].find(o => o.value === replayFile);
     if (opt) sel.value = replayFile;
 
-    await runReplayAll(replaySteps);
+    await runReplayFromUrl(`results/${replayFile}`);
   }
 }
 
@@ -160,7 +147,8 @@ function enableControls(on) {
 
 // ── Replay log ───────────────────────────────────────────────────────────────
 
-let replaySteps = [];
+let replayJsonText = null;  // raw JSON string, sent to Rust for bulk replay
+let replaySteps = [];       // parsed steps, used for single-step replay
 let replayIdx = 0;
 let replayExpectedCost = null;
 
@@ -239,14 +227,15 @@ function applyReplayConfig(config) {
 $('selReplay').addEventListener('change', async () => {
   const sel = $('selReplay');
   const path = sel.value;
-  if (!path) { replaySteps = []; replayIdx = 0; replayExpectedCost = null; updateReplayButtons(); return; }
+  if (!path) { replayJsonText = null; replaySteps = []; replayIdx = 0; replayExpectedCost = null; updateReplayButtons(); return; }
   const opt = sel.options[sel.selectedIndex];
   replayExpectedCost = opt.dataset.finalCost ? parseInt(opt.dataset.finalCost) : null;
   try {
-    const log = await fetch(`results/${path}`).then(r => {
+    replayJsonText = await fetch(`results/${path}`).then(r => {
       if (!r.ok) throw new Error(r.status);
-      return r.json();
+      return r.text();
     });
+    const log = JSON.parse(replayJsonText);
     applyReplayConfig(log.config);
     replaySteps = log.steps || [];
     replayIdx = 0;
@@ -307,33 +296,46 @@ $('btnReplay').addEventListener('click', () => {
 });
 
 $('btnReplayAll').addEventListener('click', () => {
-  runReplayAll(replaySteps.slice(replayIdx));
+  if (replayJsonText) runReplayFromJson(replayJsonText);
 });
 
-/// Run replay with visible progress updates between phases.
-/// Uses await + setTimeout to guarantee the browser paints between steps.
-async function runReplayAll(steps) {
+/// Fetch a replay log by URL and run it entirely in Rust.
+async function runReplayFromUrl(url) {
+  const text = await fetch(url).then(r => {
+    if (!r.ok) throw new Error(`${r.status} loading ${url}`);
+    return r.text();
+  });
+  await runReplayFromJson(text);
+}
+
+/// Run a replay from raw JSON text. Parsing + execution happen in Rust.
+async function runReplayFromJson(json) {
   $('btnReplayAll').disabled = true;
   $('btnReplay').disabled = true;
-  statusBar.textContent = `replaying ${steps.length} steps…`;
+  const stepCount = replaySteps.length || '?';
+  statusBar.textContent = `replaying ${stepCount} steps…`;
   await paint();
 
   const t0 = performance.now();
   let error = null;
   try {
-    engine.replay(steps);
+    const config = engine.replay_from_json(json);
+    // Sync UI dropdowns with the config Rust applied.
+    if (config.priority) $('selPriority').value = config.priority;
+    if (config.max_arity) $('numArity').value = config.max_arity;
     replayIdx = replaySteps.length;
   } catch (e) {
     error = e.message;
   }
   const replayMs = (performance.now() - t0).toFixed(0);
+  const nExpanded = engine.num_expansions();
 
   const bestCost = engine.best_cost();
   if (error) {
     statusBar.innerHTML = `<b class="bad">${error}</b> (${replayMs}ms)`;
   } else {
     const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '—';
-    statusBar.textContent = `replayed ${replayIdx} steps in ${replayMs}ms · best cost ${costStr} · rendering…`;
+    statusBar.textContent = `replayed ${nExpanded} steps in ${replayMs}ms · best cost ${costStr} · rendering…`;
   }
   await paint();
 
@@ -343,7 +345,7 @@ async function runReplayAll(steps) {
   const renderMs = (performance.now() - t1).toFixed(0);
   if (!error) {
     const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '—';
-    statusBar.innerHTML = `replayed ${replayIdx} steps in <b>${replayMs}ms</b> · render <b>${renderMs}ms</b> · best cost <b>${costStr}</b>` + (replayExpectedCost != null ? ` (expected ${replayExpectedCost.toLocaleString()})` : '');
+    statusBar.innerHTML = `replayed ${nExpanded} steps in <b>${replayMs}ms</b> · render <b>${renderMs}ms</b> · best cost <b>${costStr}</b>` + (replayExpectedCost != null ? ` (expected ${replayExpectedCost.toLocaleString()})` : '');
   }
 }
 
@@ -430,7 +432,7 @@ function renderAll() {
   updateStatus();
 }
 
-function handleRowClick(id, e) {
+function handleRowClick(id) {
   const nodes = engine.nodes_json();
   const node = nodes[id];
   if (!node.expanded) {

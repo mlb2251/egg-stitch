@@ -395,6 +395,19 @@ impl InteractiveSearch {
         self.nodes.iter().any(|n| n.state.pattern.to_string() == pattern)
     }
 
+    /// Parse a replay log JSON string, apply its config, and run all steps.
+    /// Returns the config so the caller can update UI.
+    pub fn replay_from_json(&mut self, json: &str) -> Result<ReplayConfig, String> {
+        let log: ReplayLog =
+            serde_json::from_str(json).map_err(|e| format!("failed to parse replay: {e}"))?;
+        if let Some(strategy) = SearchPriority::parse(&log.config.priority) {
+            self.set_priority(strategy);
+        }
+        self.set_max_arity(log.config.max_arity);
+        self.replay(&log.steps)?;
+        Ok(log.config)
+    }
+
     /// Replay a sequence of steps entirely in Rust. Returns `Ok(steps_replayed)`
     /// on success, or `Err(message)` on the first mismatch/missing pattern.
     pub fn replay(&mut self, steps: &[ReplayStep]) -> Result<usize, String> {

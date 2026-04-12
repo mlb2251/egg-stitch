@@ -4,7 +4,7 @@ use crate::search::SearchState;
 
 /// A replay log: search config + a sequence of (pattern, action) pairs that
 /// can be replayed in the interactive WASM viewer to reconstruct a search run.
-#[derive(Serialize)]
+#[derive(Serialize, serde::Deserialize)]
 pub struct ReplayLog {
     pub config: ReplayConfig,
     pub steps: Vec<ReplayStep>,
@@ -12,7 +12,7 @@ pub struct ReplayLog {
 
 /// Search configuration stored alongside a replay log so the viewer can
 /// reproduce the exact same settings.
-#[derive(Serialize)]
+#[derive(Serialize, serde::Deserialize)]
 pub struct ReplayConfig {
     pub priority: String,
     pub budget: usize,

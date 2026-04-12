@@ -1,6 +1,7 @@
 use clap::{Parser, ValueEnum};
+use colored::Colorize;
 
-use egg_stitch::best_first::{BestFirstConfig, SearchPriority, best_first};
+use egg_stitch::best_first::{BestFirstConfig, InteractiveSearch, SearchPriority, best_first};
 use egg_stitch::cost;
 use egg_stitch::io;
 use egg_stitch::results;
@@ -101,6 +102,10 @@ struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     verbose: bool,
+
+    /// Path to a replay JSON file to replay instead of running a fresh search.
+    #[arg(long)]
+    replay: Option<String>,
 }
 
 fn main() {
@@ -111,6 +116,25 @@ fn main() {
     let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
 
     let (shared, original_size) = search::setup_search(egraph, root, args.follow.as_deref(), args.weight_by_usage, args.p_reuse, args.check_slow);
+
+    // ── Replay mode: load a replay JSON and re-run it natively ───────
+    if let Some(ref replay_path) = args.replay {
+        let json = std::fs::read_to_string(replay_path).expect("Failed to read replay file");
+        let mut search = InteractiveSearch::new(shared, root, original_size, SearchPriority::Cost, 2);
+        let replay_start = std::time::Instant::now();
+        let config = search.replay_from_json(&json).expect("Replay failed");
+        let elapsed = replay_start.elapsed();
+        println!("{} {}", "priority:".dimmed(), config.priority.bold());
+        println!("{} {}", "max_arity:".dimmed(), config.max_arity.to_string().bold());
+        println!("{} {}", "steps replayed:".dimmed(), search.num_expansions().to_string().yellow());
+        println!("{} {}", "nodes created:".dimmed(), search.num_nodes().to_string().yellow());
+        println!("{} {}", "replay time:".dimmed(), format!("{:.1?}", elapsed).yellow());
+        if let Some(cost) = search.best_cost() {
+            println!("{} {}", "best cost:".dimmed(), cost.to_string().green().bold());
+            println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
+        }
+        return;
+    }
 
     let (best, best_found_at, num_steps_run, debug_log_json, replay_log_json): (Option<(usize, SearchState)>, Option<usize>, usize, Option<String>, Option<String>) = match args.search {
         CliSearchKind::Smc => {

@@ -119,13 +119,15 @@ mod wasm_api {
             self.inner.set_max_arity(max_arity);
         }
 
-        /// Replay a full sequence of steps in Rust. `steps_json` is a JS array
-        /// of `{pattern, num_matches, cost, ...}` objects (same as replay log format).
-        /// Returns the number of steps replayed. Throws on mismatch.
-        pub fn replay(&mut self, steps_json: JsValue) -> Result<usize, JsError> {
-            let steps: Vec<crate::debug_log::ReplayStep> =
-                serde_wasm_bindgen::from_value(steps_json).map_err(|e| JsError::new(&e.to_string()))?;
-            self.inner.replay(&steps).map_err(|e| JsError::new(&e))
+        /// Parse a replay log JSON string, apply its config (priority, max_arity),
+        /// and run all steps entirely in Rust. Returns the config as JSON so JS
+        /// can update dropdowns.
+        pub fn replay_from_json(&mut self, json: &str) -> Result<JsValue, JsError> {
+            let config = self
+                .inner
+                .replay_from_json(json)
+                .map_err(|e| JsError::new(&e))?;
+            Ok(serde_wasm_bindgen::to_value(&config)?)
         }
 
         // ── Snapshots (JSON via serde-wasm-bindgen) ────────────────────
