@@ -80,6 +80,48 @@ def temp_sweep():
 
 
 
+def bf_dfs():
+    """Best-first with depth-first priority."""
+    compress(
+        "data/domains/cogsci/dials.json",
+        rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        output="dials_bf_dfs.json",
+        search="best-first",
+        priority="depth-first",
+        num_steps=500,
+        debug_log=True,
+        max_arity=2,
+    )
+
+
+def bf_bfs():
+    """Best-first with breadth-first priority."""
+    compress(
+        "data/domains/cogsci/dials.json",
+        rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        output="dials_bf_bfs.json",
+        search="best-first",
+        priority="breadth-first",
+        num_steps=500,
+        debug_log=True,
+        max_arity=2,
+    )
+
+
+def bf_matches():
+    """Best-first with most-matches priority."""
+    compress(
+        "data/domains/cogsci/dials.json",
+        rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        output="dials_bf_matches.json",
+        search="best-first",
+        priority="most-matches",
+        num_steps=500,
+        debug_log=True,
+        max_arity=2,
+    )
+
+
 EXPTS = {
     "all-mini": all_mini,
     "dials-debug": dials_debug,
@@ -87,6 +129,9 @@ EXPTS = {
     "dials-follow": dials_follow,
     "dev": dev,
     "temp-sweep": temp_sweep,
+    "bf-dfs": bf_dfs,
+    "bf-bfs": bf_bfs,
+    "bf-matches": bf_matches,
 }
 
 

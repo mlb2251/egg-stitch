@@ -24,6 +24,19 @@ pub enum SearchKind {
     BestFirst,
 }
 
+/// How to order the best-first search heap.
+#[derive(ValueEnum, Clone, Debug)]
+pub enum SearchPriority {
+    /// Lowest compressed-corpus-plus-pattern cost first (default).
+    Cost,
+    /// Deepest patterns first (depth-first).
+    DepthFirst,
+    /// Shallowest patterns first (breadth-first).
+    BreadthFirst,
+    /// Patterns with the most e-class matches first.
+    MostMatches,
+}
+
 /// E-graph based program synthesis.
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -63,6 +76,10 @@ pub struct Args {
     /// Maximum arity of patterns to consider as "best".
     #[arg(long, default_value_t = 1000)]
     pub max_arity: usize,
+
+    /// Heap priority for best-first search.
+    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
+    pub priority: SearchPriority,
 
     /// Weight match selection by usage count during expansion.
     #[arg(long, default_value_t = false)]

@@ -7,6 +7,7 @@ use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::StitchEgraph;
 use crate::search::{Action, SearchState, setup_search};
+use crate::SearchPriority;
 
 /// Output of a completed best-first enumerative search.
 pub struct BestFirstResult {
@@ -27,7 +28,19 @@ struct Node {
     action: Option<Action>,
     state: SearchState,
     cost: usize,
+    depth: usize,
     expanded: bool,
+}
+
+/// Returns the heap priority for a node given the search strategy.
+/// Lower values are explored first (min-heap via `Reverse`).
+fn priority(strategy: &SearchPriority, cost: usize, depth: usize, num_matches: usize) -> i64 {
+    match strategy {
+        SearchPriority::Cost => cost as i64,
+        SearchPriority::DepthFirst => -(depth as i64),
+        SearchPriority::BreadthFirst => depth as i64,
+        SearchPriority::MostMatches => -(num_matches as i64),
+    }
 }
 
 /// Runs best-first enumerative search to find a pattern that minimizes cost.
@@ -45,22 +58,25 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let budget = args.num_steps;
     let max_arity = args.max_arity;
     let debug = args.debug_log;
+    let strategy = &args.priority;
 
     let initial_state = SearchState::new(&shared);
     let initial_cost = compute_cost(&shared.egraph, root, &initial_state, shared.check_slow);
 
     let mut nodes: Vec<Node> = Vec::new();
-    let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
+    let mut heap: BinaryHeap<Reverse<(i64, usize)>> = BinaryHeap::new();
     let mut seen: FxHashSet<String> = FxHashSet::default();
 
+    let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
     nodes.push(Node {
         parent: None,
         action: None,
         state: initial_state.clone(),
         cost: initial_cost,
+        depth: 0,
         expanded: false,
     });
-    heap.push(Reverse((initial_cost, 0)));
+    heap.push(Reverse((initial_prio, 0)));
     seen.insert(initial_state.pattern.to_string());
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
@@ -92,6 +108,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
 
             let child_cost = compute_cost(&shared.egraph, root, &child_state, shared.check_slow);
             let child_id = nodes.len();
+            let child_depth = nodes[node_id].depth + 1;
 
             if child_state.pattern.vars.len() <= max_arity && best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
                 println!(
@@ -104,14 +121,16 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                 best_found_at = Some(num_expansions);
             }
 
+            let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
             nodes.push(Node {
                 parent: Some(node_id),
                 action: Some(action),
                 state: child_state,
                 cost: child_cost,
+                depth: child_depth,
                 expanded: false,
             });
-            heap.push(Reverse((child_cost, child_id)));
+            heap.push(Reverse((child_prio, child_id)));
         }
 
         num_expansions += 1;
