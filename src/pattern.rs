@@ -2,40 +2,31 @@ use crate::lang::StitchLang;
 use crate::revexpr::RevExpr;
 use egg::{ENodeOrVar, Id, Language};
 
-/// A partially-built pattern over `StitchLang`, tracking which nodes are open variables.
-///
-/// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds
-/// `ENodeOrVar::Var(egg::Var::from(k as u32))` in the tree — i.e. the tree's var names
-/// match their DFS first-appearance order exactly. `expand` and `reuse` preserve this
-/// by actively rewriting affected `Var(n)` leaves, so `pattern.to_string()` is itself
-/// canonical: two alpha-equivalent patterns render identically.
+/// A partially-built pattern with a canonical-form invariant: `vars[k]` always
+/// holds `Var(k)` in the tree, so `to_string()` is canonical and alpha-equivalent
+/// patterns render identically.
 #[derive(Debug, Clone)]
 pub struct Pattern {
     pub pattern: RevExpr<ENodeOrVar<StitchLang>>,
-    pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
+    pub vars: Vec<Vec<Id>>, // vars[k] = all tree ids holding Var(k)
 }
 
 impl Pattern {
-    /// Creates the initial `?#0` pattern: a single variable.
     pub fn single_var() -> Self {
         let e: RevExpr<ENodeOrVar<StitchLang>> = RevExpr::new(vec![ENodeOrVar::Var(egg::Var::from(0))]);
         Pattern { pattern: e, vars: vec![vec![0.into()]] }
     }
 
-    /// Expands the variable at `var_idx` with `target`. New children are inserted
-    /// at list positions `var_idx..var_idx+k`; any vars that previously followed
-    /// `var_idx` shift right and get their in-tree `Var(n)` leaves rewritten to
-    /// match their new position, so the canonical-form invariant is preserved.
+    /// Replaces the variable at `var_idx` with `target`, inserting fresh child
+    /// vars at `var_idx..var_idx+k` and renaming trailing vars to preserve
+    /// canonical form.
     pub fn expand(&mut self, var_idx: usize, target: &StitchLang) {
         let var_positions = self.vars.remove(var_idx);
         assert!(matches!(self.pattern[var_positions[0]], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
         let num_children = target.len();
 
-        // The remove above and the inserts below shift self.vars indices but don't
-        // touch the Var(k) names stored in the pattern tree. The net index shift for
-        // trailing vars is num_children - 1 (remove 1, insert num_children). When
-        // num_children == 1 the shifts cancel and names are already correct; otherwise
-        // we must rewrite the tree nodes to their final positions.
+        // self.vars indices shift on remove/insert but tree Var(k) names don't.
+        // Net shift for trailing vars is num_children - 1; only == 1 cancels exactly.
         if num_children != 1 {
             for p in var_idx..self.vars.len() {
                 let shifted = ENodeOrVar::Var(egg::Var::from((p + num_children) as u32));
@@ -45,7 +36,6 @@ impl Pattern {
             }
         }
 
-        // Build the new enode with freshly-named Var children at positions var_idx..var_idx+k.
         let mut new_node = target.clone();
         for j in 0..num_children {
             let new_var = ENodeOrVar::Var(egg::Var::from((var_idx + j) as u32));
@@ -60,17 +50,11 @@ impl Pattern {
         }
     }
 
-    /// Unifies two variables. The lower-indexed one is kept; the higher one is
-    /// removed and its positions are rewritten to the kept var's name. Trailing
-    /// vars shift left by one and have their leaves renamed accordingly. Args may
-    /// be passed in either order.
+    /// Unifies two variables (in either order). Keeps the lower-indexed one,
+    /// removes the higher, and shifts trailing var names down by one.
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
-        assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
-        let (keep_idx, drop_idx) = if var_idx < second_var_idx {
-            (var_idx, second_var_idx)
-        } else {
-            (second_var_idx, var_idx)
-        };
+        assert_ne!(var_idx, second_var_idx);
+        let (keep_idx, drop_idx) = (var_idx.min(second_var_idx), var_idx.max(second_var_idx));
 
         let keep_name = ENodeOrVar::Var(egg::Var::from(keep_idx as u32));
         for var_id in &self.vars[drop_idx] {
