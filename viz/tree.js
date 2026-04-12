@@ -14,6 +14,7 @@ const file = params.get('file');
 let data = null;
 let children = new Map();    // parent id -> child ids (sorted by subtree min cost)
 let subtreeMin = [];         // node id -> min cost anywhere in its subtree
+let subtreeExp = [];         // node id -> number of expanded nodes in subtree (inclusive)
 let expOrder = [];           // node id -> expansion pop index, or -1
 let bestPathNodes = new Set();
 let expandedOnly = false;
@@ -50,9 +51,13 @@ function init() {
   // each node. Computed by processing ids in reverse order — children always
   // have higher ids than their parent since nodes are appended on discovery.
   subtreeMin = data.nodes.map(n => n.cost);
+  subtreeExp = data.nodes.map(n => n.expanded ? 1 : 0);
   for (let i = data.nodes.length - 1; i > 0; i--) {
     const p = data.nodes[i].parent;
-    if (p != null && subtreeMin[i] < subtreeMin[p]) subtreeMin[p] = subtreeMin[i];
+    if (p != null) {
+      if (subtreeMin[i] < subtreeMin[p]) subtreeMin[p] = subtreeMin[i];
+      subtreeExp[p] += subtreeExp[i];
+    }
   }
   for (const arr of children.values()) arr.sort((a, b) => subtreeMin[a] - subtreeMin[b]);
 
@@ -152,6 +157,15 @@ function renderNode(id) {
   cost.title = 'cost at this node';
   row.appendChild(cost);
 
+  if (n.parent != null) {
+    const diff = n.cost - data.nodes[n.parent].cost;
+    const cdiff = document.createElement('span');
+    cdiff.className = 'cost-diff' + (diff < 0 ? ' good' : diff > 0 ? ' bad' : '');
+    cdiff.textContent = (diff > 0 ? '+' : '') + diff.toLocaleString();
+    cdiff.title = 'cost change from parent';
+    row.appendChild(cdiff);
+  }
+
   const sm = subtreeMin[id];
   const submin = document.createElement('span');
   submin.className = 'submin' + (sm === n.cost ? ' same' : '');
@@ -182,6 +196,14 @@ function renderNode(id) {
     badge.className = 'badge';
     badge.textContent = `${kids.length} children`;
     row.appendChild(badge);
+  }
+  const se = subtreeExp[id];
+  if (se > 0) {
+    const seBadge = document.createElement('span');
+    seBadge.className = 'badge subtree-exp';
+    seBadge.textContent = `${se} exp`;
+    seBadge.title = `${se} expanded node${se > 1 ? 's' : ''} in this subtree`;
+    row.appendChild(seBadge);
   }
   if (isBest) {
     const badge = document.createElement('span');

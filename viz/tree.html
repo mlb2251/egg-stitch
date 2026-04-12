@@ -42,6 +42,10 @@ main { flex: 1; display: flex; min-height: 0; }
 .row .exp-badge.fringe { background: transparent; border: 1px solid var(--dim); min-width: 1.6rem; }
 .row .prio { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 3rem; }
 .row .cost { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 4.5rem; text-align: right; }
+.row .cost-diff { font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 3.5rem; }
+.row .cost-diff.good { color: var(--good); }
+.row .cost-diff.bad { color: #ef4444; }
+.row .cost-diff:not(.good):not(.bad) { color: var(--muted); }
 .row .submin { font-variant-numeric: tabular-nums; color: var(--good); min-width: 5rem; font-size: .75rem; }
 .row .submin.same { color: transparent; }
 .row .stats { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 4rem; }
@@ -49,6 +53,7 @@ main { flex: 1; display: flex; min-height: 0; }
 .row .pattern { color: #0ea5e9; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
 .row .badge { font-size: .7rem; color: var(--muted); background: #f3f4f6; padding: 0 .35rem; border-radius: 3px; }
 .row .badge.best { color: #065f46; background: #d1fae5; }
+.row .badge.subtree-exp { color: var(--accent); background: #eff6ff; }
 
 /* Side pane */
 #sidepane h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .35rem; margin-top: 1rem; }
