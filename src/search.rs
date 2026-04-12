@@ -86,6 +86,9 @@ impl SearchState {
     }
 
     /// Filters matches to those where `var_idx` can be expanded with `target`, updating substitutions.
+    /// Mirrors `Pattern::expand`: drops the old var from `subst.vars` and inserts the new
+    /// child eclass ids at positions `var_idx..var_idx+k`, keeping substs aligned with
+    /// the pattern's DFS-ordered vars list.
     pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
@@ -94,8 +97,8 @@ impl SearchState {
                 if node.matches(target) {
                     let mut new_subst = subst.clone();
                     new_subst.vars.remove(var_idx);
-                    for child_id in &node.children {
-                        new_subst.vars.push(*child_id);
+                    for (j, child_id) in node.children.iter().enumerate() {
+                        new_subst.vars.insert(var_idx + j, *child_id);
                     }
                     out.push(new_subst);
                 }
@@ -104,11 +107,14 @@ impl SearchState {
     }
 
     /// Filters matches to those where `var_idx` and `second_var_idx` point to the same e-class.
+    /// Mirrors `Pattern::reuse`: keeps the lower-indexed var and removes the higher one,
+    /// so substs stay aligned with the pattern regardless of caller argument order.
     pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+        let drop_idx = var_idx.max(second_var_idx);
         self.update_matches(|subst, out| {
             if subst.vars[var_idx] == subst.vars[second_var_idx] {
                 let mut new_subst = subst.clone();
-                new_subst.vars.remove(second_var_idx);
+                new_subst.vars.remove(drop_idx);
                 out.push(new_subst);
             }
         });
