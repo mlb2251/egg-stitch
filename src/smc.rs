@@ -16,7 +16,14 @@ pub struct SmcResult {
 }
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
-    let shared = SharedSearchData { egraph, p_reuse: args.p_reuse, check_slow: args.check_slow };
+    let usage_counts = crate::search::compute_usage_counts(&egraph, root);
+    let shared = SharedSearchData {
+        egraph,
+        p_reuse: args.p_reuse,
+        check_slow: args.check_slow,
+        weight_by_usage: args.weight_by_usage,
+        usage_counts,
+    };
 
     let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared), shared.check_slow);
     println!("original size of egraph: {}", original_size);

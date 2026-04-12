@@ -1,8 +1,9 @@
 use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
-use egg::Language;
+use egg::{Id, Language};
 use rand::Rng;
+use rustc_hash::FxHashMap;
 
 #[derive(Debug)]
 pub struct SharedSearchData {
@@ -11,6 +12,10 @@ pub struct SharedSearchData {
     pub p_reuse: f64,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
+    /// Whether to weight match selection by usage count during expansion.
+    pub weight_by_usage: bool,
+    /// How many times each e-class is used in the fully-expanded corpus tree.
+    pub usage_counts: FxHashMap<Id, usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -23,7 +28,13 @@ pub struct SearchState {
 impl SearchState {
     /// Randomly selects a match and variable, then expands or reuses the variable.
     pub fn expand_random(&mut self, shared: &SharedSearchData) {
-        let match_idx = rand::rng().random_range(0..self.matches.len());
+        let match_idx = if shared.weight_by_usage {
+            let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
+            crate::smc::normalize_and_accumulate(&mut weights);
+            crate::smc::weighted_choice(&weights)
+        } else {
+            rand::rng().random_range(0..self.matches.len())
+        };
         let m = &self.matches[match_idx];
         let subst_idx = rand::rng().random_range(0..m.substs.len());
         let subst = &m.substs[subst_idx];
@@ -118,4 +129,25 @@ impl SearchState {
             matches: identity_matches(&shared.egraph)
         }
     }
+}
+
+/// Computes how many times each e-class appears in the fully-expanded corpus tree.
+/// Top-down pass: root gets count 1, then propagate to children of the best (first) enode.
+pub fn compute_usage_counts(egraph: &StitchEgraph, root: Id) -> FxHashMap<Id, usize> {
+    let mut counts = FxHashMap::<Id, usize>::default();
+    counts.insert(root, 1);
+    let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
+    for i in (0..=max_id).rev() {
+        let id = Id::from(i);
+        let count = match counts.get(&id) {
+            Some(&c) => c,
+            None => continue,
+        };
+        if let Some(enode) = egraph[id].nodes.first() {
+            for &child in &enode.children {
+                *counts.entry(child).or_insert(0) += count;
+            }
+        }
+    }
+    counts
 }

@@ -17,6 +17,10 @@ pub struct RunResult {
     pub arity: Option<usize>,
     pub pattern_size: Option<usize>,
     pub num_matches: Option<usize>,
+    /// Sum of corpus usage counts across all matching e-classes.
+    pub usage_matches: Option<usize>,
+    /// Approximate cost estimate: `cost_after_rewrites - pattern_size * (usage_matches - 1)`.
+    pub approx_cost: Option<i64>,
     pub best_iteration: Option<usize>,
     pub num_steps_run: usize,
     pub rewritten_programs: Option<Vec<String>>,

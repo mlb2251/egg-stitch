@@ -50,6 +50,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub check_slow: bool,
 
+    /// Weight match selection by usage count during expansion.
+    #[arg(long, default_value_t = false)]
+    pub weight_by_usage: bool,
+
     /// Path to write a JSON-serialized RunResult.
     #[arg(short, long)]
     pub output: Option<String>,
@@ -64,17 +68,25 @@ fn main() {
 
     let elapsed_secs = start.elapsed().as_secs_f64();
 
-    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, rewritten_programs) = match &smc_result.best {
-        Some((cost, state)) => (
-            Some(*cost),
-            Some(smc_result.original_size as f64 / *cost as f64),
-            Some(state.pattern.to_string()),
-            Some(state.pattern.vars.len()),
-            Some(cost::compute_pattern_size(&state.pattern)),
-            Some(state.matches.len()),
-            Some(cost::extract_rewritten_programs(&smc_result.egraph, root, state)),
-        ),
-        None => (None, None, None, None, None, None, None),
+    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) = match &smc_result.best {
+        Some((cost, state)) => {
+            let pat_size = cost::compute_pattern_size(&state.pattern);
+            let usage_counts = search::compute_usage_counts(&smc_result.egraph, root);
+            let um: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
+            let appx = smc_result.original_size as i64 - pat_size as i64 * (um as i64 - 1);
+            (
+                Some(*cost),
+                Some(smc_result.original_size as f64 / *cost as f64),
+                Some(state.pattern.to_string()),
+                Some(state.pattern.vars.len()),
+                Some(pat_size),
+                Some(state.matches.len()),
+                Some(um),
+                Some(appx),
+                Some(cost::extract_rewritten_programs(&smc_result.egraph, root, state)),
+            )
+        }
+        None => (None, None, None, None, None, None, None, None, None),
     };
 
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
@@ -92,6 +104,8 @@ fn main() {
         arity,
         pattern_size,
         num_matches,
+        usage_matches,
+        approx_cost,
         best_iteration: smc_result.best_found_at,
         num_steps_run: smc_result.num_steps_run,
         rewritten_programs,
