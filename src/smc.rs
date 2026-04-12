@@ -57,7 +57,10 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             .collect();
 
         for (i, cost) in costs.iter().enumerate() {
-            if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
+            if search_states[i].pattern.vars.len() <= max_arity
+                && best_so_far.as_ref().is_none_or(|best| *cost < best.0)
+                && shared.follow.as_ref().is_none_or(|f| search_states[i].matches_follow(f))
+            {
                 println!("[iteration {}] new best: {} {}", step, cost, search_states[i].pattern);
                 best_so_far = Some((*cost, search_states[i].clone()));
                 best_found_at = Some(step);
@@ -246,14 +249,8 @@ mod tests {
     /// Follow containing one `#0` enode (the placeholder convention in this
     /// codebase): exercises matching a pattern variable against an enode subtree
     /// in the follow.
-    ///
-    /// Currently this fails because `best_so_far` is updated in the SMC loop
-    /// *before* the follow constraint filters the weights, so a low-cost
-    /// non-matching pattern at an early iteration can stick around as the best
-    /// even when matching-but-more-expensive patterns appear later. Kept as an
-    /// ignored regression test to re-enable once that ordering is fixed.
     #[test]
-    #[ignore = "known: best_so_far tracked before follow filter can hold a non-matching pattern"]
+    #[ignore = "slow: 100 steps * 1000 particles; run with --release --ignored"]
     fn follow_single_placeholder() {
         if !fixtures_present() {
             eprintln!("skipping: fixtures not available");
