@@ -180,7 +180,7 @@ function renderNode(id) {
   if (kids.length > 0) {
     const badge = document.createElement('span');
     badge.className = 'badge';
-    badge.textContent = `${kids.length}`;
+    badge.textContent = `${kids.length} children`;
     row.appendChild(badge);
   }
   if (isBest) {
