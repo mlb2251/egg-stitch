@@ -1,11 +1,10 @@
 use std::cmp::min;
 
 use crate::cost::{compute_cost, compute_size};
-use crate::lang::{StitchEgraph, StitchLang};
+use crate::follow::strip_vars;
+use crate::lang::StitchEgraph;
 use crate::logging::apply_follow_constraint;
-use crate::revexpr::RevExpr;
 use crate::search::{SearchState, SharedSearchData};
-use egg::ENodeOrVar;
 use rand::Rng;
 
 /// Output of a completed SMC run, surfacing everything the caller needs to
@@ -19,7 +18,10 @@ pub struct SmcResult {
 }
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
-    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+    let follow_expr = args.follow.as_deref().map(|s| {
+        let parsed = s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e));
+        strip_vars(parsed)
+    });
     let usage_counts = crate::search::compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,
@@ -161,9 +163,7 @@ mod tests {
     use super::*;
     use crate::Args;
     use crate::io;
-    use crate::revexpr::RevExpr;
     use clap::Parser;
-    use egg::ENodeOrVar;
 
     const INPUT: &str = "data/domains/cogsci/dials.json";
     const RULES: &str = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
@@ -175,8 +175,8 @@ mod tests {
         std::path::Path::new(INPUT).exists() && std::path::Path::new(RULES).exists()
     }
 
-    fn parse_follow(s: &str) -> RevExpr<ENodeOrVar<crate::lang::StitchLang>> {
-        s.parse().expect("parse follow")
+    fn parse_follow(s: &str) -> crate::revexpr::RevExpr<crate::lang::StitchLang> {
+        strip_vars(s.parse().expect("parse follow"))
     }
 
     fn run(args: &Args) -> SmcResult {

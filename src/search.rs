@@ -2,7 +2,7 @@ use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
-use egg::{ENodeOrVar, Id, Language};
+use egg::{Id, Language};
 use rand::Rng;
 use rustc_hash::FxHashMap;
 use std::collections::HashMap;
@@ -18,9 +18,9 @@ pub struct SharedSearchData {
     pub weight_by_usage: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
-    /// Optional follow pattern: particles whose pattern isn't a valid prefix of
+    /// Concrete follow pattern: particles whose pattern isn't a valid prefix of
     /// this target get zero weight at the resample step.
-    pub follow: Option<RevExpr<ENodeOrVar<StitchLang>>>,
+    pub follow: Option<RevExpr<StitchLang>>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,7 +65,7 @@ impl SearchState {
     }
 
     /// Check if this particle's pattern is a valid prefix of the follow target.
-    pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
+    pub fn matches_follow(&self, follow: &RevExpr<StitchLang>) -> bool {
         let mut var_bindings = HashMap::new();
         crate::follow::check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
