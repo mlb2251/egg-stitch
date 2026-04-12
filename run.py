@@ -117,6 +117,7 @@ def best_first():
         search="best-first",
         priority="cost",
         debug_log=True,
+        max_arity=2,
     )
 
 
