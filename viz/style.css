@@ -1,11 +1,22 @@
 :root { --fg:#1b1b1f; --muted:#6b7280; --bg:#fafafa; --card:#fff; --accent:#3b82f6; --good:#10b981; --border:#e5e7eb; }
 * { box-sizing: border-box; }
-body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 2rem; background: var(--bg); color: var(--fg); }
-h1 { margin: 0 0 .25rem; }
-.sub { color: var(--muted); margin-bottom: 1.5rem; }
+body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 1rem 1.5rem; background: var(--bg); color: var(--fg); }
+
+/* Shared site header */
+.site-header { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .75rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+.site-title { font-size: 1rem; font-weight: 700; color: var(--fg); text-decoration: none; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: -.02em; }
+.site-title:hover { color: var(--accent); }
+.site-title-link { font-size: 1rem; font-weight: 700; color: var(--fg); text-decoration: none; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: -.02em; }
+.site-title-link:hover { color: var(--accent); }
+.site-subtitle { color: var(--muted); font-size: .85rem; }
+.header-link { margin-left: auto; font-size: .8rem; color: var(--accent); text-decoration: none; }
+.header-link:hover { text-decoration: underline; }
+
+h1 { margin: 0 0 .25rem; font-size: 1.1rem; }
+.sub { color: var(--muted); margin-bottom: 1rem; font-size: .85rem; }
 table { width: auto; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
-th, td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; white-space: nowrap; }
-th { background: #f3f4f6; font-weight: 600; font-size: .85rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); cursor: pointer; user-select: none; }
+th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .82rem; }
+th { background: #f3f4f6; font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); cursor: pointer; user-select: none; }
 th.dim, td.dim { color: #9ca3af; }
 tr:last-child td { border-bottom: none; }
 tr.run { cursor: pointer; }

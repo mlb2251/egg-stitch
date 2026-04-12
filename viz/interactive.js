@@ -39,11 +39,12 @@ async function loadWasm() {
   }
 }
 
-/// If URL has ?domain=...&replay=... params, auto-load the domain and replay.
+/// If URL has ?domain=...&replay=... or ?domain=...&config=... params, auto-load.
 async function autoLoadFromParams() {
   const params = new URLSearchParams(location.search);
   const domain = params.get('domain');
   const replayFile = params.get('replay');
+  const configFile = params.get('config');
   if (!domain) return;
 
   const rules = params.get('rules') || '';
@@ -52,12 +53,28 @@ async function autoLoadFromParams() {
 
   $('btnLoad').click();
 
-  if (replayFile) {
-    await new Promise(resolve => {
-      const check = () => engine ? resolve() : setTimeout(check, 50);
-      check();
-    });
+  // Wait for engine to be initialized.
+  await new Promise(resolve => {
+    const check = () => engine ? resolve() : setTimeout(check, 50);
+    check();
+  });
 
+  if (configFile) {
+    // Apply config from replay file without replaying steps.
+    try {
+      const text = await fetch(`results/${configFile}`).then(r => {
+        if (!r.ok) throw new Error(r.status);
+        return r.text();
+      });
+      const log = JSON.parse(text);
+      applyReplayConfig(log.config);
+      renderAll();
+      statusBar.textContent = `loaded config: priority=${log.config?.priority}, max_arity=${log.config?.max_arity}`;
+    } catch (e) { console.warn('failed to load config:', e); }
+    return;
+  }
+
+  if (replayFile) {
     // Fetch expected cost from the run result.
     const runPath = `results/${replayFile.replace('_replay.json', '.json')}`;
     try {
@@ -446,8 +463,40 @@ function handleRowClick(id) {
   renderAll();
 }
 
+function buildCostSparkline(nodes, id) {
+  // Walk parent chain from selected node to root.
+  const chain = [];
+  let cur = id;
+  while (cur != null) { chain.push(nodes[cur]); cur = nodes[cur].parent; }
+  chain.reverse(); // root first
+  if (chain.length < 2) return '';
+
+  const costs = chain.map(n => n.cost);
+  const minC = Math.min(...costs), maxC = Math.max(...costs);
+  const range = maxC - minC || 1;
+  const W = 240, H = 48, px = 6, py = 6;
+  const iW = W - 2 * px, iH = H - 2 * py;
+  const x = (i) => px + (i / (chain.length - 1)) * iW;
+  const y = (c) => py + ((c - minC) / range) * iH; // lower cost → higher y (bottom)
+
+  const pts = chain.map((n, i) => `${x(i).toFixed(1)},${y(n.cost).toFixed(1)}`).join(' ');
+  const lx = x(chain.length - 1).toFixed(1);
+  const ly = y(costs.at(-1)).toFixed(1);
+
+  return `
+    <h2>cost along path</h2>
+    <svg width="${W}" height="${H}" style="display:block;overflow:visible;margin:.25rem 0">
+      <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="${lx}" cy="${ly}" r="3" fill="var(--accent)"/>
+      <text x="${px}" y="${H - 1}" font-size="9" fill="var(--muted)">${minC.toLocaleString()}</text>
+      <text x="${px}" y="${py + 8}" font-size="9" fill="var(--muted)">${maxC.toLocaleString()}</text>
+      <text x="${lx}" y="${+ly - 5}" font-size="9" fill="var(--fg)" text-anchor="middle">${costs.at(-1).toLocaleString()}</text>
+    </svg>`;
+}
+
 function renderDetail(ctx, nodes) {
-  renderSidePane(detail, selectedId, ctx, null);
+  const sparkline = selectedId != null ? buildCostSparkline(nodes, selectedId) : '';
+  renderSidePane(detail, selectedId, ctx, sparkline);
   wireNavLinks(detail, nodes, openNodes, id => {
     selectedId = id;
     renderAll();

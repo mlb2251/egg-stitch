@@ -48,9 +48,11 @@ async function load() {
       groupMap.get(folder).push(row);
     };
 
+    const isRunFile = f => !f.endsWith('_debug.json') && !f.endsWith('_replay.json');
+
     // Top-level (ungrouped / legacy) runs.
     const topPromises = topFiles
-      .filter(f => !f.endsWith('_debug.json'))
+      .filter(isRunFile)
       .map(f => loadRun('', f).then(r => add('', r)));
 
     // One pass per subfolder, in parallel.
@@ -59,7 +61,7 @@ async function load() {
       const { files } = extractLinks(sub);
       await Promise.all(
         files
-          .filter(f => !f.endsWith('_debug.json'))
+          .filter(isRunFile)
           .map(f => loadRun(d, f).then(r => add(d, r)))
       );
     });
@@ -86,20 +88,14 @@ const COLUMNS = [
   [null, ''],
   ['timestamp', 'when'],
   ['name', 'run'],
-  [null, 'debug'],
-  ['rewrites', 'rewrites'],
-  ['initial_cost', 'pre-dsr', 'dim'],
-  ['cost_after_rewrites', 'post-dsr', 'dim'],
-  ['final_cost', 'final'],
+  [null, 'links'],
+  ['rewrites', 'dsr'],
+  ['final_cost', 'cost'],
   ['compression_ratio', 'ratio'],
   ['elapsed_secs', 'time (s)'],
   ['arity', 'arity'],
-  ['pattern_size', 'pat size'],
   ['num_matches', 'matches'],
-  ['usage_matches', 'usage matches'],
-  ['approx_cost', 'approx cost'],
   ['num_expansions', 'expansions'],
-  ['best_iteration', 'best iter'],
 ];
 
 /** DELETE a path under results/ and reload on success. */
@@ -191,24 +187,22 @@ function renderGroup(g, maxRatio) {
     // Extract rules file basename (e.g. ".../drawings.dials.rewrites" -> "drawings.dials.rewrites")
     const rules = r.rules_file ? r.rules_file.replace(/.*\//, '') : '';
     const replayParams = replayPath ? `replay=${encodeURIComponent(replayPath)}&domain=${encodeURIComponent(domain)}&rules=${encodeURIComponent(rules)}` : '';
+    const configParams = replayPath ? `config=${encodeURIComponent(replayPath)}&domain=${encodeURIComponent(domain)}&rules=${encodeURIComponent(rules)}` : '';
+    const debugLink = debugPath ? `<a class="debug-link" href="debug.html?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">debug</a>` : '';
+    const replayLink = replayPath ? `<a class="debug-link" href="interactive.html?${replayParams}" onclick="event.stopPropagation()">replay</a>` : '';
+    const configLink = replayPath ? `<a class="debug-link" href="interactive.html?${configParams}" onclick="event.stopPropagation()">config</a>` : '';
     tr.innerHTML = `
       <td><button class="del del-run" title="delete run">×</button></td>
       <td>${fmtTime(r.timestamp)}</td>
       <td><b>${r.name}</b></td>
-      <td>${debugPath ? `<a class="debug-link" href="${r.search === 'best-first' ? 'tree.html' : 'debug.html'}?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">tree</a>` : ''}${replayPath ? ` <a class="debug-link" href="interactive.html?${replayParams}" onclick="event.stopPropagation()">replay</a>` : ''}</td>
+      <td style="display:flex;gap:.3rem;align-items:center">${debugLink}${replayLink}${configLink}</td>
       <td>${r.rewrites ? '<span class="pill">yes</span>' : '<span class="pill no">no</span>'}</td>
-      <td class="dim">${fmt(r.initial_cost)}</td>
-      <td class="dim">${fmt(r.cost_after_rewrites)}</td>
       <td>${fmt(r.final_cost)}</td>
       <td><span class="ratio">${(r.compression_ratio||0).toFixed(3)}×</span><span class="bar" style="width:${barW}px"></span></td>
       <td>${(r.elapsed_secs||0).toFixed(2)}</td>
       <td>${r.arity ?? ''}</td>
-      <td>${r.pattern_size ?? ''}</td>
       <td>${fmt(r.num_matches)}</td>
-      <td>${fmt(r.usage_matches)}</td>
-      <td>${fmt(r.approx_cost)}</td>
       <td>${fmt(r.num_expansions)}</td>
-      <td>${r.best_iteration ?? ''}</td>
     `;
     tr.querySelector('.del-run').onclick = (e) => { e.stopPropagation(); deleteRun(r); };
     tr.onclick = () => toggleDetail(tr, r);

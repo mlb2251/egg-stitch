@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>egg-stitch interactive</title>
+<title>egg-stitch</title>
 <style>
 :root { --fg:#1b1b1f; --muted:#6b7280; --bg:#fafafa; --card:#fff; --accent:#3b82f6; --good:#10b981; --warn:#f59e0b; --dim:#cbd5e1; --border:#e5e7eb; --bad:#ef4444; }
 * { box-sizing: border-box; margin: 0; }
@@ -33,7 +33,7 @@ main { flex: 1; display: flex; min-height: 0; }
 /* Left: tree view */
 #treepane { flex: 1; overflow: auto; background: var(--card); padding: .5rem 0; }
 
-/* Shared tree row styles (same as tree.html) */
+/* Tree row styles */
 .tree-list { list-style: none; padding: 0; margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: .82rem; }
 .tree-list ul { list-style: none; padding-left: 1.1rem; margin: 0; border-left: 1px dashed var(--border); }
 .tree-list li { position: relative; }
@@ -110,7 +110,7 @@ main { flex: 1; display: flex; min-height: 0; }
 <div id="loading-overlay">loading WASM module…</div>
 
 <header>
-  <h1>egg-stitch interactive explorer</h1>
+  <h1><a href="/viz/" class="site-title-link">egg-stitch</a> <span style="font-weight:400;color:var(--muted)">· interactive explorer</span></h1>
   <div class="toolbar">
     <label>domain:</label>
     <select id="selDomain">

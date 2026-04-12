@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 
 use crate::cost::{compute_cost, compute_pattern_size};
-use crate::debug_log::{ReplayConfig, ReplayLog, ReplayStep, SearchTreeLog, TreeNodeLog};
+use crate::debug_log::{ReplayConfig, ReplayLog, ReplayStep};
 use crate::search::{Action, SearchState, SharedSearchData};
 
 /// How to order the best-first search heap.
@@ -47,7 +47,6 @@ impl SearchPriority {
 pub struct BestFirstConfig {
     pub budget: usize,
     pub max_arity: usize,
-    pub debug: bool,
     pub priority: SearchPriority,
 }
 
@@ -59,9 +58,8 @@ pub struct BestFirstResult {
     pub best_found_at: Option<usize>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
-    pub tree_log: Option<SearchTreeLog>,
-    /// Lightweight replay log: just the sequence of (pattern, action) choices.
-    pub replay_log: Option<ReplayLog>,
+    /// Replay log: sequence of expansion decisions for reconstructing the run.
+    pub replay_log: ReplayLog,
 }
 
 /// One node in the in-memory search tree.
@@ -182,7 +180,6 @@ pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize
 
     let budget = config.budget;
     let max_arity = config.max_arity;
-    let debug = config.debug;
     let strategy = &config.priority;
 
     let initial_cost = compute_cost(&shared.egraph, root, &initial_state, shared.check_slow);
@@ -250,52 +247,19 @@ pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize
 
     let best_pair = best.map(|(cost, id)| (cost, nodes[id].state.clone()));
 
-    let tree_log = if debug {
-        Some(SearchTreeLog {
-            original_size,
-            nodes: nodes
-                .iter()
-                .enumerate()
-                .map(|(id, n)| TreeNodeLog {
-                    id,
-                    parent: n.parent,
-                    action: n.action.as_ref().map(|a| a.to_string()),
-                    pattern: n.state.pattern.to_string(),
-                    arity: n.state.pattern.vars.len(),
-                    pattern_size: compute_pattern_size(&n.state.pattern),
-                    num_matches: n.state.matches.len(),
-                    cost: n.cost,
-                    priority: n.priority,
-                    expanded: n.expanded,
-                })
-                .collect(),
-            expansion_order,
-            best_node: best.map(|(_, id)| id),
-        })
-    } else {
-        None
-    };
-
-    let replay_log = if debug {
-        Some(ReplayLog {
+    BestFirstResult {
+        best: best_pair,
+        original_size,
+        best_found_at,
+        num_expansions,
+        replay_log: ReplayLog {
             config: ReplayConfig {
                 priority: strategy.as_str().to_string(),
                 budget,
                 max_arity,
             },
             steps: replay_steps,
-        })
-    } else {
-        None
-    };
-
-    BestFirstResult {
-        best: best_pair,
-        original_size,
-        best_found_at,
-        num_expansions,
-        tree_log,
-        replay_log,
+        },
     }
 }
 
@@ -525,32 +489,6 @@ impl InteractiveSearch {
     }
 
     // ── Debug log generation ───────────────────────────────────────────
-
-    /// Build a `SearchTreeLog` (same format as batch search debug output).
-    pub fn tree_log(&self) -> SearchTreeLog {
-        SearchTreeLog {
-            original_size: self.original_size,
-            nodes: self
-                .nodes
-                .iter()
-                .enumerate()
-                .map(|(id, n)| TreeNodeLog {
-                    id,
-                    parent: n.parent,
-                    action: n.action.as_ref().map(|a| a.to_string()),
-                    pattern: n.state.pattern.to_string(),
-                    arity: n.state.pattern.vars.len(),
-                    pattern_size: compute_pattern_size(&n.state.pattern),
-                    num_matches: n.state.matches.len(),
-                    cost: n.cost,
-                    priority: n.priority,
-                    expanded: n.expanded,
-                })
-                .collect(),
-            expansion_order: self.expansion_order.clone(),
-            best_node: self.best.map(|(_, id)| id),
-        }
-    }
 
     /// Build a `ReplayLog` from the expansion history.
     pub fn replay_log(&self) -> ReplayLog {

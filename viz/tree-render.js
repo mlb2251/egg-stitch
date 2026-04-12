@@ -1,5 +1,4 @@
-// Shared tree rendering for egg-stitch viewers.
-// Used by both tree.js (static viewer) and interactive.js (live explorer).
+// Shared tree rendering for the egg-stitch interactive explorer.
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

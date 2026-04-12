@@ -155,14 +155,12 @@ fn main() {
             let config = BestFirstConfig {
                 budget: args.num_steps,
                 max_arity: args.max_arity,
-                debug: args.debug_log,
                 priority: args.priority.into(),
             };
             let initial = SearchState::new(&shared);
             let r = best_first(&shared, root, original_size, initial, &config);
-            let tree_json = r.tree_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize tree log"));
-            let replay_json = r.replay_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize replay log"));
-            (r.best, r.best_found_at, r.num_expansions, tree_json, replay_json)
+            let replay_json = serde_json::to_string(&r.replay_log).expect("Failed to serialize replay log");
+            (r.best, r.best_found_at, r.num_expansions, None, Some(replay_json))
         }
     };
 
