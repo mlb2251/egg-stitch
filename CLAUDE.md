@@ -31,6 +31,23 @@ cargo fmt
 cargo clippy
 ```
 
+### WASM Build
+```bash
+# Prerequisites (one-time):
+#   cargo install wasm-pack
+#   rustup target add wasm32-unknown-unknown
+
+# Build the WASM package (outputs to pkg/)
+make wasm
+
+# Or directly:
+wasm-pack build --target web --features wasm
+
+# Run the dev server for the interactive UI
+make server
+# Then open http://localhost:8066/viz/interactive.html
+```
+
 ## Development Notes
 
 - The project uses Rust edition 2024
