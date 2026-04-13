@@ -1,13 +1,12 @@
 pub mod best_first;
 pub mod cost;
-pub mod debug_log;
 pub mod follow;
 pub mod io;
 pub mod lang;
-pub mod logging;
 pub mod matching;
 pub mod math;
 pub mod pattern;
+pub mod replay;
 pub mod results;
 pub mod revexpr;
 pub mod search;
@@ -36,7 +35,13 @@ mod wasm_api {
 
     impl Default for EngineConfig {
         fn default() -> Self {
-            Self { follow: None, weight_by_usage: false, p_reuse: 0.5, max_arity: 2, priority: "cost".into() }
+            Self {
+                follow: None,
+                weight_by_usage: false,
+                p_reuse: 0.5,
+                max_arity: 2,
+                priority: "cost".into(),
+            }
         }
     }
 
@@ -151,7 +156,13 @@ mod wasm_api {
         /// is populated and can be queried with `nodes_json()`, `best_cost()`,
         /// `expansion_order_json()`, etc. Replay also works.
         pub fn run_smc(&mut self, num_particles: usize, num_steps: usize, temperature: f64, dead_runs: usize) {
-            let config = SmcConfig { num_particles, num_steps, temperature, dead_runs, verbose: false };
+            let config = SmcConfig {
+                num_particles,
+                num_steps,
+                temperature,
+                dead_runs,
+                verbose: false,
+            };
             crate::smc::smc(&mut self.inner, &config);
         }
 
@@ -178,10 +189,7 @@ mod wasm_api {
         /// and run all steps entirely in Rust. Returns the config as JSON so JS
         /// can update dropdowns.
         pub fn replay_from_json(&mut self, json: &str) -> Result<JsValue, JsError> {
-            let config = self
-                .inner
-                .replay_from_json(json)
-                .map_err(|e| JsError::new(&e))?;
+            let config = crate::replay::replay_from_json(&mut self.inner, json).map_err(|e| JsError::new(&e))?;
             Ok(serde_wasm_bindgen::to_value(&config)?)
         }
 
@@ -218,12 +226,7 @@ mod wasm_api {
         pub fn results_json(&self) -> Result<JsValue, JsError> {
             let original = self.inner.original_size();
             let (best_cost, pattern, arity, num_matches) = match self.inner.best_state() {
-                Some((cost, state)) => (
-                    Some(cost),
-                    Some(state.pattern.to_string()),
-                    Some(state.pattern.vars.len()),
-                    Some(state.matches.len()),
-                ),
+                Some((cost, state)) => (Some(cost), Some(state.pattern.to_string()), Some(state.pattern.vars.len()), Some(state.matches.len())),
                 None => (None, None, None, None),
             };
             let ratio = best_cost.map(|c| original as f64 / c as f64);

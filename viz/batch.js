@@ -2,10 +2,10 @@
 // Loads WASM on demand and runs preset experiment batches.
 
 import { ALL_DOMAINS, RULES_FOR, fetchDomainData, saveSearchResults, getSessionFolder, resetSessionFolder } from './shared.js';
+import { loadWasm, createEngine, runSearch } from './wasm-api.js';
 
 const $ = id => document.getElementById(id);
 const status = $('batchStatus');
-let wasm = null;
 
 function buildBatches() {
   const key = $('batchPreset').value;
@@ -28,48 +28,39 @@ function buildBatches() {
   }
 }
 
-async function ensureWasm() {
-  if (wasm) return;
-  status.textContent = 'loading WASM…';
-  wasm = await import('../pkg/egg_stitch.js');
-  await wasm.default();
-}
-
 $('btnBatchRun').addEventListener('click', async () => {
   const btn = $('btnBatchRun');
   btn.disabled = true;
-  btn.textContent = 'running…';
+  btn.textContent = 'running\u2026';
   resetSessionFolder();
 
   try {
-    await ensureWasm();
+    status.textContent = 'loading WASM\u2026';
+    await loadWasm();
     const items = buildBatches();
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      status.textContent = `[${i + 1}/${items.length}] ${item.name}…`;
+      status.textContent = `[${i + 1}/${items.length}] ${item.name}\u2026`;
 
       const { programsText, rulesText } = await fetchDomainData(item.domain, item.rules);
       const configJson = JSON.stringify({
         follow: null, weight_by_usage: false, p_reuse: 0.5,
         max_arity: item.max_arity, priority: item.priority || 'cost',
       });
-      const eng = new wasm.Engine(programsText, rulesText, configJson);
+      const eng = createEngine(programsText, rulesText, configJson);
 
-      const t0 = performance.now();
-      if (item.search === 'smc') {
-        eng.run_smc(item.particles, item.steps, item.temperature, item.dead_runs);
-      } else {
-        eng.step_n(item.budget);
-      }
-      const elapsed = (performance.now() - t0) / 1000;
+      const searchParams = item.search === 'smc'
+        ? { particles: item.particles, steps: item.steps, temperature: item.temperature, deadRuns: item.dead_runs }
+        : { budget: item.budget };
+      const { elapsed } = runSearch(eng, item.search, searchParams);
 
       await saveSearchResults(eng, item.domain, item.rules, item.search, elapsed, item.name, item.budget || 0);
     }
 
-    status.textContent = `done — ${items.length} runs saved to ${getSessionFolder()}/`;
-    // Reload the results table (load() is a global from analysis.js).
-    if (typeof load === 'function') load();
+    status.textContent = `done \u2014 ${items.length} runs saved to ${getSessionFolder()}/`;
+    // Reload the results table (exposed on window by analysis.js).
+    if (typeof window.load === 'function') window.load();
   } catch (e) {
     status.textContent = `error: ${e}`;
     console.error(e);

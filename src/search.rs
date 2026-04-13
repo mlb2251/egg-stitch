@@ -50,7 +50,6 @@ pub struct SearchState {
 impl SearchState {
     /// Randomly selects a match and variable, then expands or reuses the variable.
     pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
-        let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
@@ -60,6 +59,7 @@ impl SearchState {
         };
         let m = &self.matches[match_idx];
         if verbose {
+            let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
             let (_cost, minimal_term) = extractor.find_best(m.root_eclass);
             println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
         }
@@ -73,6 +73,7 @@ impl SearchState {
         let target_id = subst.vars[var_idx];
 
         if verbose {
+            let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
             println!("Target eclass is represented by minimal term {}", extractor.find_best(target_id).1);
         }
 
@@ -81,7 +82,7 @@ impl SearchState {
             if !reuse_candidates.is_empty() {
                 let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx].0;
-                self.reuse(var_idx, candidate_var_idx, shared);
+                self.reuse(var_idx, candidate_var_idx);
                 return;
             }
         }
@@ -106,7 +107,7 @@ impl SearchState {
     }
 
     /// Merges two pattern variables and filters matches to those where both point to the same e-class.
-    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize, _shared: &SharedSearchData) {
+    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
         self.pattern.reuse(var_idx, second_var_idx);
         self.subset_matches_reuse(var_idx, second_var_idx);
     }
@@ -207,7 +208,7 @@ impl SearchState {
                 let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
                 if unifiable {
                     let mut child = self.clone();
-                    child.reuse(i, j, shared);
+                    child.reuse(i, j);
                     if !child.matches.is_empty() {
                         out.push((Action::Reuse { keep: i, drop: j }, child));
                     }

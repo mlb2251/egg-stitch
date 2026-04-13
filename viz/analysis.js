@@ -3,26 +3,15 @@
 // parsed from http.server's auto-generated HTML index. Results are grouped by
 // their containing subfolder under results/: the expts module drops each
 // session into a timestamp-named folder, and we render one <details> section
-// per folder, expanded by default. Each row and each folder summary has a ×
+// per folder, expanded by default. Each row and each folder summary has a x
 // button that issues a DELETE to the server and re-loads on success.
+
+import { parseDirectoryListing, escapeHtml } from './shared.js';
 
 const meta = document.getElementById('meta');
 const container = document.getElementById('groups');
 let groups = [];           // [{ folder: string|'', rows: [...] }]
 let sortKey = 'timestamp', sortAsc = false;
-
-/** Parse http.server's directory listing HTML. Returns { files, dirs }. */
-function extractLinks(html) {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const files = [], dirs = [];
-  for (const a of doc.querySelectorAll('a')) {
-    const h = a.getAttribute('href');
-    if (!h || h.startsWith('?') || h === '../' || h === '/') continue;
-    if (h.endsWith('/')) dirs.push(h.replace(/\/$/, ''));
-    else if (h.endsWith('.json')) files.push(h);
-  }
-  return { files, dirs };
-}
 
 /** Fetch + parse one JSON result file, tagging it with its folder. */
 async function loadRun(folder, file) {
@@ -37,10 +26,12 @@ async function loadRun(folder, file) {
 }
 
 /** Fetch the results tree, load every JSON, group by folder, then render. */
+// Exposed on window so batch.js can trigger a refresh after runs complete.
+window.load = load;
 async function load() {
   try {
     const listing = await fetch('results/').then(r => r.text());
-    const { files: topFiles, dirs } = extractLinks(listing);
+    const { files: topFiles, dirs } = parseDirectoryListing(listing);
 
     const groupMap = new Map();            // folder -> rows[]
     const add = (folder, row) => {
@@ -58,7 +49,7 @@ async function load() {
     // One pass per subfolder, in parallel.
     const subPromises = dirs.map(async d => {
       const sub = await fetch(`results/${d}/`).then(r => r.text());
-      const { files } = extractLinks(sub);
+      const { files } = parseDirectoryListing(sub);
       await Promise.all(
         files
           .filter(isRunFile)
@@ -247,16 +238,13 @@ function toggleDetail(tr, r) {
         <span>rules</span><b>${r.rules_file || '—'}</b>
         <span>steps run</span><b>${r.num_steps_run ?? ''}</b>
       </div>
-      <details open><summary>best pattern</summary><pre>${esc(r.pattern || '')}</pre></details>
-      <details><summary>${progs.length} rewritten programs</summary><pre>${esc(progs.join('\n'))}</pre></details>
+      <details open><summary>best pattern</summary><pre>${escapeHtml(r.pattern || '')}</pre></details>
+      <details><summary>${progs.length} rewritten programs</summary><pre>${escapeHtml(progs.join('\n'))}</pre></details>
     </div>
   `;
   detailTr.appendChild(td);
   tr.parentNode.insertBefore(detailTr, tr.nextSibling);
   tr.classList.add('expanded');
 }
-
-/** Minimal HTML escape for untrusted text inserted via innerHTML. */
-function esc(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
 load();

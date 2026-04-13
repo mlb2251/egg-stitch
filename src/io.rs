@@ -1,7 +1,7 @@
 use crate::lang::{StitchAnalysis, StitchEgraph, StitchLang};
 use anyhow::anyhow;
 use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
-use std::{error::Error, fs, path::Path};
+use std::error::Error;
 
 /// Core egraph construction from parsed program strings and optional rule text.
 fn build_egraph(exprs: Vec<String>, rules_text: Option<&str>) -> (StitchEgraph, egg::Id, usize) {
@@ -57,51 +57,6 @@ fn extract_root_size(egraph: &StitchEgraph, root: egg::Id) -> usize {
     let extractor = egg::Extractor::new(egraph, egg::AstSize);
     let (expr, _) = extractor.find_best(root);
     expr
-}
-
-/// Prints a programs term with each child on a new line.
-/// If the term is not a programs node, prints it normally.
-#[allow(dead_code)]
-pub fn print_programs(term: &egg::RecExpr<StitchLang>) {
-    let root_node = &term.as_ref()[term.as_ref().len() - 1];
-    if root_node.op.as_str() == "programs" {
-        println!("(programs");
-        for &child_id in &root_node.children {
-            print!("  ");
-            print_expr(term, child_id.into());
-            println!();
-        }
-        println!(")");
-    } else {
-        println!("{}", term);
-    }
-}
-
-/// Recursively prints an s-expression starting from the given node id.
-fn print_expr(term: &egg::RecExpr<StitchLang>, id: usize) {
-    let node = &term.as_ref()[id];
-    if node.children.is_empty() {
-        print!("{}", node.op);
-    } else {
-        print!("({}", node.op);
-        for &child_id in &node.children {
-            print!(" ");
-            print_expr(term, child_id.into());
-        }
-        print!(")");
-    }
-}
-
-/// Loads rewrite rules from a file in `name: lhs => rhs` format.
-pub fn from_file<L, A, P>(path: P) -> anyhow::Result<Vec<Rewrite<L, A>>>
-where
-    L: Language + FromOp + Sync + Send + 'static,
-    A: Analysis<L>,
-    P: AsRef<Path>,
-    L::Error: Send + Sync + Error,
-{
-    let contents = fs::read_to_string(path)?;
-    parse(&contents)
 }
 
 /// Parses rewrite rules from a string in `name: lhs => rhs` format.

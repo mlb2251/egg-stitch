@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 
 use crate::cost::{compute_cost, compute_pattern_size};
-use crate::debug_log::{ReplayConfig, ReplayLog, ReplayStep};
+use crate::replay::{ReplayConfig, ReplayLog, ReplayStep};
 use crate::search::{Action, SearchState, SharedSearchData};
 
 /// How to order the best-first search heap.
@@ -112,56 +112,6 @@ fn snapshot(id: usize, node: &Node) -> NodeSnapshot {
     }
 }
 
-/// Core expansion logic shared by batch and interactive search.
-#[allow(clippy::too_many_arguments)]
-///
-/// Marks `node_id` as expanded, enumerates its successors, deduplicates
-/// against `seen`, pushes survivors onto `heap`, and updates `best`.
-fn expand_one(node_id: usize, nodes: &mut Vec<Node>, heap: &mut BTreeSet<(i64, usize)>, seen: &mut FxHashMap<String, usize>, best: &mut Option<(usize, usize)>, expansion_order: &mut Vec<usize>, shared: &SharedSearchData, root: egg::Id, strategy: &SearchPriority, max_arity: usize) {
-    nodes[node_id].expanded = true;
-    expansion_order.push(node_id);
-
-    let successors = nodes[node_id].state.enumerate_successors(shared);
-    let parent_depth = nodes[node_id].depth;
-    let first_child = nodes.len();
-
-    for (action, child_state) in successors {
-        if let Some(ref follow) = shared.follow
-            && !child_state.matches_follow(follow)
-        {
-            continue;
-        }
-        let key = child_state.pattern.to_string();
-        let child_id = nodes.len();
-        if let std::collections::hash_map::Entry::Vacant(e) = seen.entry(key) {
-            e.insert(child_id);
-        } else {
-            continue;
-        }
-
-        let child_cost = compute_cost(&shared.egraph, root, &child_state, shared.check_slow);
-        let child_depth = parent_depth + 1;
-
-        if child_state.pattern.vars.len() <= max_arity && best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
-            *best = Some((child_cost, child_id));
-        }
-
-        let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
-        nodes.push(Node {
-            parent: Some(node_id),
-            children: Vec::new(),
-            action: Some(action),
-            state: child_state,
-            cost: child_cost,
-            depth: child_depth,
-            priority: child_prio,
-            expanded: false,
-        });
-        heap.insert((child_prio, child_id));
-    }
-    nodes[node_id].children = (first_child..nodes.len()).collect();
-}
-
 // ── Interactive search (WASM-friendly, steppable) ──────────────────────────
 
 /// Persistent best-first search that owns all state. JS issues commands
@@ -259,60 +209,6 @@ impl InteractiveSearch {
         self.seen.contains_key(pattern)
     }
 
-    /// Parse a replay log JSON string, apply its config, and run all steps.
-    /// Returns the config so the caller can update UI.
-    pub fn replay_from_json(&mut self, json: &str) -> Result<ReplayConfig, String> {
-        let log: ReplayLog =
-            serde_json::from_str(json).map_err(|e| format!("failed to parse replay: {e}"))?;
-        if let Some(strategy) = SearchPriority::parse(&log.config.priority) {
-            self.set_priority(strategy);
-        }
-        self.set_max_arity(log.config.max_arity);
-        self.replay(&log.steps)?;
-        Ok(log.config)
-    }
-
-    /// Replay a sequence of steps entirely in Rust. Returns `Ok(steps_replayed)`
-    /// on success, or `Err(message)` on the first mismatch/missing pattern.
-    pub fn replay(&mut self, steps: &[ReplayStep]) -> Result<usize, String> {
-        for (i, step) in steps.iter().enumerate() {
-            let node_id = match self.find_unexpanded_by_pattern(&step.pattern) {
-                Some(id) => id,
-                None => {
-                    if self.has_pattern(&step.pattern) {
-                        continue; // already expanded, skip
-                    }
-                    return Err(format!(
-                        "step {}: pattern not found: {}",
-                        i + 1,
-                        step.pattern
-                    ));
-                }
-            };
-            let node = &self.nodes[node_id];
-            if node.state.matches.len() != step.num_matches {
-                return Err(format!(
-                    "step {}: matches mismatch for {}: got {} expected {}",
-                    i + 1,
-                    step.pattern,
-                    node.state.matches.len(),
-                    step.num_matches,
-                ));
-            }
-            if node.cost != step.cost {
-                return Err(format!(
-                    "step {}: cost mismatch for {}: got {} expected {}",
-                    i + 1,
-                    step.pattern,
-                    node.cost,
-                    step.cost,
-                ));
-            }
-            self.expand_node(node_id);
-        }
-        Ok(steps.len())
-    }
-
     // ── Snapshots for rendering ────────────────────────────────────────
 
     /// Snapshot of a single node.
@@ -364,6 +260,9 @@ impl InteractiveSearch {
     pub fn shared(&self) -> &SharedSearchData {
         &self.shared
     }
+    pub fn root(&self) -> egg::Id {
+        self.root
+    }
 
     // ── Node accessors (for SMC) ─────────────────────────────────────
 
@@ -380,6 +279,12 @@ impl InteractiveSearch {
     /// Cost of a node.
     pub fn node_cost(&self, node_id: usize) -> usize {
         self.nodes[node_id].cost
+    }
+
+    /// Returns (num_matches, cost) for a node. Used by replay validation.
+    pub fn node_matches_and_cost(&self, node_id: usize) -> (usize, usize) {
+        let n = &self.nodes[node_id];
+        (n.state.matches.len(), n.cost)
     }
 
     /// Number of pattern variables for a node.
@@ -450,10 +355,53 @@ impl InteractiveSearch {
         }
     }
 
-    /// Internal: expand a node using the shared `expand_one` helper.
+    /// Expand a node: enumerate successors, dedup, push to heap, update best.
     fn do_expand(&mut self, node_id: usize) {
         let old_best = self.best;
-        expand_one(node_id, &mut self.nodes, &mut self.heap, &mut self.seen, &mut self.best, &mut self.expansion_order, &self.shared, self.root, &self.strategy, self.max_arity);
+
+        self.nodes[node_id].expanded = true;
+        self.expansion_order.push(node_id);
+
+        let successors = self.nodes[node_id].state.enumerate_successors(&self.shared);
+        let parent_depth = self.nodes[node_id].depth;
+        let first_child = self.nodes.len();
+
+        for (action, child_state) in successors {
+            if let Some(ref follow) = self.shared.follow
+                && !child_state.matches_follow(follow)
+            {
+                continue;
+            }
+            let key = child_state.pattern.to_string();
+            let child_id = self.nodes.len();
+            if let std::collections::hash_map::Entry::Vacant(e) = self.seen.entry(key) {
+                e.insert(child_id);
+            } else {
+                continue;
+            }
+
+            let child_cost = compute_cost(&self.shared.egraph, self.root, &child_state, self.shared.check_slow);
+            let child_depth = parent_depth + 1;
+
+            if child_state.pattern.vars.len() <= self.max_arity && self.best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
+                self.best = Some((child_cost, child_id));
+            }
+
+            let child_prio = priority(&self.strategy, child_cost, child_depth, child_state.matches.len());
+            self.nodes.push(Node {
+                parent: Some(node_id),
+                children: Vec::new(),
+                action: Some(action),
+                state: child_state,
+                cost: child_cost,
+                depth: child_depth,
+                priority: child_prio,
+                expanded: false,
+            });
+            self.heap.insert((child_prio, child_id));
+        }
+        self.nodes[node_id].children = (first_child..self.nodes.len()).collect();
+
         if self.best != old_best {
             self.best_found_at = Some(self.expansion_order.len().saturating_sub(1));
         }

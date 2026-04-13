@@ -53,11 +53,7 @@ pub fn smc(search: &mut InteractiveSearch, config: &SmcConfig) {
         // don't match are never added), so no separate filtering needed here.
 
         let total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-        let mut weights: Vec<f64> = if total.is_finite() {
-            log_weights.iter().map(|lw| (lw - total).exp()).collect()
-        } else {
-            vec![0.0; config.num_particles]
-        };
+        let mut weights: Vec<f64> = if total.is_finite() { log_weights.iter().map(|lw| (lw - total).exp()).collect() } else { vec![0.0; config.num_particles] };
 
         if weights.iter().sum::<f64>() == 0.0 {
             println!("{}", "all particles died, stopping".red().bold());
@@ -71,9 +67,7 @@ pub fn smc(search: &mut InteractiveSearch, config: &SmcConfig) {
         // === RESAMPLE ===
         let weights_acc = normalize_and_accumulate(&mut weights);
         let old_particles = particles.clone();
-        particles = (0..config.num_particles)
-            .map(|_| old_particles[weighted_choice(&weights_acc)])
-            .collect();
+        particles = (0..config.num_particles).map(|_| old_particles[weighted_choice(&weights_acc)]).collect();
     }
 }
 

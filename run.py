@@ -4,7 +4,7 @@
 import sys
 import json
 from expts import compress, run_domain, runall
-
+import subprocess as sp
 
 
 
@@ -128,6 +128,11 @@ def dev_best_first():
     best_first()
 
 
+def stitch():
+    stitch_cmd = ["cargo", "run", "--release", "--bin=compress", "data/cogsci/dials.json", "-i1", "-a2"]
+    sp.run(stitch_cmd, check=True, cwd="../stitch")
+
+
 def dev():
     best_first()
     # compress(
@@ -142,22 +147,10 @@ def dev():
 
 
 
-EXPTS = {
-    "all-mini": all_mini,
-    "dials-debug": dials_debug,
-    "dials-compress": dials_compress,
-    "dials-follow": dials_follow,
-    "dev": dev,
-    "dev-best-first": dev_best_first,
-    "temp-sweep": temp_sweep,
-    "bf-dfs": bf_dfs,
-    "bf-bfs": bf_bfs,
-    "bf-matches": bf_matches,
-}
-
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in EXPTS:
-        print(f"usage: python run.py <{'|'.join(EXPTS)}>", file=sys.stderr)
+    fn = globals().get(sys.argv[1]) if len(sys.argv) == 2 else None
+    if not callable(fn):
+        print(f"usage: python run.py <function_name>", file=sys.stderr)
         sys.exit(1)
-    EXPTS[sys.argv[1]]()
+    fn()

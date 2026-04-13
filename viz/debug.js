@@ -1,6 +1,8 @@
 // Debug viewer for egg-stitch SMC runs.
 // Loads a debug JSON file and provides step-by-step navigation of all particles.
 
+import { escapeHtml } from './shared.js';
+
 const $ = id => document.getElementById(id);
 const loading = $('loading');
 const controls = $('controls');
@@ -90,7 +92,7 @@ function renderStep() {
     <span>alive: <b>${alive}</b> / ${s.particles.length}</span>
     <span>best cost: <span class="best">${bestCost != null ? bestCost.toLocaleString() : '?'}</span></span>
     <span>ratio: <span class="best">${ratio}x</span></span>
-    <span>best pattern: <b style="color:#0ea5e9; font-family:monospace">${esc(s.best_pattern || '?')}</b></span>
+    <span>best pattern: <b style="color:#0ea5e9; font-family:monospace">${escapeHtml(s.best_pattern || '?')}</b></span>
   `;
 
   // Count how many times each index was resampled
@@ -136,7 +138,7 @@ function renderStep() {
     const barW = Math.round(80 * p.weight / maxW);
     tr.innerHTML = `
       <td>${p.idx}</td>
-      <td class="pattern" title="${esc(p.pattern)}">${esc(p.pattern)}</td>
+      <td class="pattern" title="${escapeHtml(p.pattern)}">${escapeHtml(p.pattern)}</td>
       <td>${p.arity}</td>
       <td>${p.cost.toLocaleString()}</td>
       <td><span class="wbar" style="width:${barW}px"></span> ${p.weight > 0 ? (p.weight * 100).toFixed(2) + '%' : '0'}</td>
@@ -248,4 +250,3 @@ function highlightStep(idx) {
   ctx.restore();
 }
 
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

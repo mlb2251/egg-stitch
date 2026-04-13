@@ -2,8 +2,14 @@
 // All search state (heap, dedup, best tracking) lives in Rust.
 // JS only manages UI state (open/selected nodes) and rendering.
 
-import { buildTreeMeta, buildExpOrder, buildBestPath, renderTree, renderSidePane, wireNavLinks } from './tree-render.js';
+import { buildTreeMeta, buildExpOrder, buildBestPath, renderTree, renderSidePane, wireNavLinks, escapeHtml } from './tree-render.js';
 import { fetchDomainData, saveSearchResults, getSessionFolder } from './shared.js';
+import { loadWasm, createEngine, runSearch } from './wasm-api.js';
+import {
+  scanReplays, applyReplayConfig, updateReplayButtons, replayOneStep,
+  runReplayFromJson, runReplayFromUrl, wireReplaySelect, getReplayJsonText,
+  getReplayExpectedCost, setReplayExpectedCost, getReplaySteps,
+} from './replay.js';
 
 const $ = id => document.getElementById(id);
 const overlay = $('loading-overlay');
@@ -13,7 +19,6 @@ const heapList = $('heapList');
 const heapTitle = $('heapTitle');
 const statusBar = $('status-bar');
 
-let wasm = null;
 let engine = null;
 
 /// Await this to guarantee the browser paints the current DOM state.
@@ -41,10 +46,9 @@ function trackLoadedConfig() { lastLoadedEngineKey = engineKey(); }
 
 // ── WASM loading ─────────────────────────────────────────────────────────────
 
-async function loadWasm() {
+async function initWasm() {
   try {
-    wasm = await import('../pkg/egg_stitch.js');
-    await wasm.default();
+    await loadWasm();
     overlay.classList.add('hidden');
     $('btnLoad').disabled = false;
     $('btnRun').disabled = false;
@@ -67,10 +71,9 @@ async function autoLoadFromParams() {
   $('selDomain').value = domain;
   $('selRules').value = rules;
 
-  // Load engine with current config for auto-load.
   try {
     const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
-    engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+    engine = createEngine(programsText, rulesText, buildEngineConfig());
     trackLoadedConfig();
     openNodes.clear();
     openNodes.add(0);
@@ -82,14 +85,13 @@ async function autoLoadFromParams() {
   }
 
   if (configFile) {
-    // Apply config from replay file without replaying steps.
     try {
       const text = await fetch(`results/${configFile}`).then(r => {
         if (!r.ok) throw new Error(r.status);
         return r.text();
       });
       const log = JSON.parse(text);
-      applyReplayConfig(log.config);
+      applyReplayConfig(log.config, engine);
       renderAll();
       statusBar.textContent = `loaded config: priority=${log.config?.priority}, max_arity=${log.config?.max_arity}`;
     } catch (e) { console.warn('failed to load config:', e); }
@@ -97,22 +99,21 @@ async function autoLoadFromParams() {
   }
 
   if (replayFile) {
-    // Fetch expected cost from the run result.
     const runPath = `results/${replayFile.replace('_replay.json', '.json')}`;
     try {
       const run = await fetch(runPath).then(r => r.ok ? r.json() : null);
-      if (run && run.final_cost != null) replayExpectedCost = run.final_cost;
+      if (run && run.final_cost != null) setReplayExpectedCost(run.final_cost);
     } catch (e) { console.warn('failed to fetch run result:', e); }
 
     const sel = $('selReplay');
     const opt = [...sel.options].find(o => o.value === replayFile);
     if (opt) sel.value = replayFile;
 
-    await runReplayFromUrl(`results/${replayFile}`);
+    await doRunReplayFromUrl(`results/${replayFile}`);
   }
 }
 
-loadWasm();
+initWasm();
 
 // ── Domain / rules ───────────────────────────────────────────────────────────
 
@@ -185,38 +186,19 @@ $('selPreset').addEventListener('change', () => {
   $('cfgWeightByUsage').checked = p.weight_by_usage ?? false;
 });
 
-/// Run a single search with current config panel settings. Returns { engine, results, elapsed }.
-async function runSingleSearch(programsText, rulesText) {
-  const eng = new wasm.Engine(programsText, rulesText, buildEngineConfig());
-
-  const searchType = $('selSearch').value;
-  const t0 = performance.now();
-  if (searchType === 'smc') {
-    const particles = parseInt($('cfgParticles').value) || 1000;
-    const steps = parseInt($('cfgSteps').value) || 100;
-    const temp = parseFloat($('cfgTemp').value) || 100;
-    const deadRuns = parseInt($('cfgDeadRuns').value) || 50;
-    eng.run_smc(particles, steps, temp, deadRuns);
-  } else {
-    const budget = parseInt($('cfgBudget').value) || 500;
-    eng.step_n(budget);
-  }
-  const elapsed = ((performance.now() - t0) / 1000);
-  const results = eng.results_json();
-  return { engine: eng, results, elapsed, searchType };
-}
+// ── Load / Run ──────────────────────────────────────────────────────────────
 
 /// Load: create a fresh engine with config, no search.
 $('btnLoad').addEventListener('click', async () => {
   const btn = $('btnLoad');
   btn.disabled = true;
-  btn.textContent = 'loading…';
-  statusBar.textContent = 'loading domain…';
+  btn.textContent = 'loading\u2026';
+  statusBar.textContent = 'loading domain\u2026';
   await paint();
 
   try {
     const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
-    engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+    engine = createEngine(programsText, rulesText, buildEngineConfig());
     trackLoadedConfig();
     openNodes.clear();
     openNodes.add(0);
@@ -233,24 +215,22 @@ $('btnLoad').addEventListener('click', async () => {
   }
 });
 
-/// Run: run search on the current engine (or load first if none). Can be called repeatedly to expand more.
+/// Run: run search on the current engine (or load first if none).
 $('btnRun').addEventListener('click', async () => {
   const btn = $('btnRun');
   btn.disabled = true;
-  btn.textContent = 'running…';
+  btn.textContent = 'running\u2026';
   const resultsBar = $('results-bar');
   resultsBar.className = '';
   resultsBar.innerHTML = '';
 
   try {
-    // (Re)load engine if not yet loaded or if engine-level config changed
-    // (domain, rules, follow, weight_by_usage, p_reuse).
-    // Priority and max_arity can be changed live without reload.
+    // (Re)load engine if not yet loaded or if engine-level config changed.
     if (!engine || engineKey() !== lastLoadedEngineKey) {
-      statusBar.textContent = 'loading domain…';
+      statusBar.textContent = 'loading domain\u2026';
       await paint();
       const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
-      engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+      engine = createEngine(programsText, rulesText, buildEngineConfig());
       openNodes.clear();
       openNodes.add(0);
       selectedId = 0;
@@ -262,40 +242,31 @@ $('btnRun').addEventListener('click', async () => {
     engine.set_max_arity(parseInt($('cfgArity').value) || 2);
 
     const searchType = $('selSearch').value;
-    statusBar.textContent = `running ${searchType}…`;
+    statusBar.textContent = `running ${searchType}\u2026`;
     await paint();
 
-    const t0 = performance.now();
-    if (searchType === 'smc') {
-      const particles = parseInt($('cfgParticles').value) || 1000;
-      const steps = parseInt($('cfgSteps').value) || 100;
-      const temp = parseFloat($('cfgTemp').value) || 100;
-      const deadRuns = parseInt($('cfgDeadRuns').value) || 50;
-      engine.run_smc(particles, steps, temp, deadRuns);
-    } else {
-      const budget = parseInt($('cfgBudget').value) || 500;
-      engine.step_n(budget);
-    }
-    const elapsed = (performance.now() - t0) / 1000;
-    const results = engine.results_json();
+    const searchParams = searchType === 'smc'
+      ? { particles: parseInt($('cfgParticles').value) || 1000, steps: parseInt($('cfgSteps').value) || 100, temperature: parseFloat($('cfgTemp').value) || 100, deadRuns: parseInt($('cfgDeadRuns').value) || 50 }
+      : { budget: parseInt($('cfgBudget').value) || 500 };
+    const { results, elapsed } = runSearch(engine, searchType, searchParams);
 
     // Save results.
     const domain = $('selDomain').value;
     const rulesFile = $('selRules').value;
-    statusBar.textContent = 'saving…';
+    statusBar.textContent = 'saving\u2026';
     await paint();
     const outputName = `${domain}_${searchType.replace('-', '_')}`;
-    const budget = searchType === 'best-first' ? (parseInt($('cfgBudget').value) || 500) : 0;
+    const budget = searchType === 'best-first' ? (searchParams.budget || 0) : 0;
     const saved = await saveSearchResults(engine, domain, rulesFile, searchType, elapsed, outputName, budget);
 
     showResults(results, elapsed.toFixed(2), searchType, saved.folder);
     enableControls(true);
 
-    statusBar.textContent = `rendering…`;
+    statusBar.textContent = `rendering\u2026`;
     await paint();
     renderAll();
     showBest();
-    statusBar.innerHTML += ` · ${elapsed.toFixed(2)}s · saved to ${saved.folder}/`;
+    statusBar.innerHTML += ` \u00b7 ${elapsed.toFixed(2)}s \u00b7 saved to ${saved.folder}/`;
   } catch (e) {
     alert('search failed: ' + e);
     console.error(e);
@@ -309,7 +280,7 @@ $('btnRun').addEventListener('click', async () => {
 /// Display search results in the results bar.
 function showResults(r, elapsed, searchType, folder) {
   const bar = $('results-bar');
-  const fmt = v => v != null ? Number(v).toLocaleString() : '—';
+  const fmt = v => v != null ? Number(v).toLocaleString() : '\u2014';
   const savedTag = folder ? `<span class="result-label" style="color:var(--accent)">saved: ${folder}/</span>` : '';
   if (r.best_cost == null) {
     bar.className = 'visible';
@@ -323,18 +294,18 @@ function showResults(r, elapsed, searchType, folder) {
   bar.className = 'visible';
   bar.style.background = '';
   bar.style.borderColor = '';
-  const ratio = r.compression_ratio != null ? r.compression_ratio.toFixed(2) + 'x' : '—';
+  const ratio = r.compression_ratio != null ? r.compression_ratio.toFixed(2) + 'x' : '\u2014';
   bar.innerHTML = `
     <span class="result-label">${searchType}</span>
     <span class="result-label">cost:</span><span class="result-value" style="color:var(--good)">${fmt(r.best_cost)}</span>
     <span class="result-label">ratio:</span><span class="result-value" style="color:var(--good)">${ratio}</span>
-    <span class="result-label">arity:</span><span class="result-value">${r.arity ?? '—'}</span>
+    <span class="result-label">arity:</span><span class="result-value">${r.arity ?? '\u2014'}</span>
     <span class="result-label">matches:</span><span class="result-value">${fmt(r.num_matches)}</span>
     <span class="result-label">expansions:</span><span class="result-value">${fmt(r.num_expansions)}</span>
     <span class="result-label">nodes:</span><span class="result-value">${fmt(r.num_nodes)}</span>
     <span class="result-label">time:</span><span class="result-value">${elapsed}s</span>
     ${savedTag}
-    <span class="result-pattern" title="${esc(r.pattern || '')}">${esc(r.pattern || '')}</span>
+    <span class="result-pattern" title="${escapeHtml(r.pattern || '')}">${escapeHtml(r.pattern || '')}</span>
   `;
 }
 
@@ -343,212 +314,60 @@ function enableControls(on) {
   $('btnExpandBest').disabled = !on;
   $('btnCollapseAll').disabled = !on;
   $('selReplay').disabled = !on;
-  if (on) scanReplays();
-  updateReplayButtons();
+  if (on) scanReplays(engine);
+  updateReplayButtons(engine);
 }
 
-// ── Replay log ───────────────────────────────────────────────────────────────
+// ── Replay event handlers ───────────────────────────────────────────────────
 
-let replayJsonText = null;  // raw JSON string, sent to Rust for bulk replay
-let replaySteps = [];       // parsed steps, used for single-step replay
-let replayIdx = 0;
-let replayExpectedCost = null;
-
-async function scanReplays() {
-  const sel = $('selReplay');
-  const domain = $('selDomain').value;
-  sel.innerHTML = '<option value="">none</option>';
-  try {
-    const listing = await fetch('results/').then(r => r.text());
-    const { files: topFiles, dirs } = parseDirectoryListing(listing);
-
-    const candidates = [];
-
-    for (const f of topFiles) {
-      if (f.endsWith('_debug.json') || f.endsWith('_replay.json')) continue;
-      try {
-        const r = await fetch(`results/${f}`).then(r => r.json());
-        if (r.replay_log_file && r.input_file && r.input_file.includes(`/${domain}.json`)) {
-          candidates.push({ label: f.replace(/\.json$/, ''), path: r.replay_log_file, finalCost: r.final_cost });
-        }
-      } catch { /* skip bad files */ }
-    }
-
-    for (const d of dirs) {
-      try {
-        const sub = await fetch(`results/${d}/`).then(r => r.text());
-        const { files } = parseDirectoryListing(sub);
-        for (const f of files) {
-          if (f.endsWith('_debug.json') || f.endsWith('_replay.json')) continue;
-          try {
-            const r = await fetch(`results/${d}/${f}`).then(r => r.json());
-            if (r.replay_log_file && r.input_file && r.input_file.includes(`/${domain}.json`)) {
-              candidates.push({ label: `${d}/${f.replace(/\.json$/, '')}`, path: `${d}/${r.replay_log_file}`, finalCost: r.final_cost });
-            }
-          } catch { /* skip */ }
-        }
-      } catch { /* skip */ }
-    }
-
-    for (const c of candidates) {
-      const opt = document.createElement('option');
-      opt.value = c.path;
-      opt.dataset.finalCost = c.finalCost ?? '';
-      opt.textContent = c.label + (c.finalCost != null ? ` (cost ${c.finalCost})` : '');
-      sel.appendChild(opt);
-    }
-  } catch (e) {
-    console.warn('could not scan replays:', e);
-  }
-}
-
-function parseDirectoryListing(html) {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const files = [], dirs = [];
-  for (const a of doc.querySelectorAll('a')) {
-    const h = a.getAttribute('href');
-    if (!h || h.startsWith('?') || h === '../' || h === '/') continue;
-    if (h.endsWith('/')) dirs.push(h.replace(/\/$/, ''));
-    else if (h.endsWith('.json')) files.push(h);
-  }
-  return { files, dirs };
-}
-
-function applyReplayConfig(config) {
-  if (!config) return;
-  if (config.priority) $('cfgPriority').value = config.priority;
-  if (config.budget) $('cfgBudget').value = config.budget;
-  if (config.max_arity) $('cfgArity').value = config.max_arity;
-  // Sync to engine.
-  if (engine) {
-    engine.set_priority(config.priority || 'cost');
-    engine.set_max_arity(config.max_arity || 2);
-  }
-}
-
-$('selReplay').addEventListener('change', async () => {
-  const sel = $('selReplay');
-  const path = sel.value;
-  if (!path) { replayJsonText = null; replaySteps = []; replayIdx = 0; replayExpectedCost = null; updateReplayButtons(); return; }
-  const opt = sel.options[sel.selectedIndex];
-  replayExpectedCost = opt.dataset.finalCost ? parseInt(opt.dataset.finalCost) : null;
-  try {
-    replayJsonText = await fetch(`results/${path}`).then(r => {
-      if (!r.ok) throw new Error(r.status);
-      return r.text();
-    });
-    const log = JSON.parse(replayJsonText);
-    applyReplayConfig(log.config);
-    replaySteps = log.steps || [];
-    replayIdx = 0;
-    updateReplayButtons();
-    statusBar.textContent = `loaded replay: ${replaySteps.length} steps` + (replayExpectedCost != null ? ` (expected cost: ${replayExpectedCost})` : '');
-  } catch (err) {
-    alert('failed to load replay: ' + err);
-  }
-});
-
-function updateReplayButtons() {
-  const hasSteps = replaySteps.length > 0 && replayIdx < replaySteps.length && engine;
-  $('btnReplay').disabled = !hasSteps;
-  $('btnReplayAll').disabled = !hasSteps;
-}
-
-/// Replay one step using Rust engine. Returns true if a node was expanded.
-function replayOneStep() {
-  if (replayIdx >= replaySteps.length) return false;
-  const step = replaySteps[replayIdx];
-  replayIdx++;
-
-  const nodeId = engine.find_unexpanded_by_pattern(step.pattern);
-  if (nodeId < 0) {
-    if (engine.has_pattern(step.pattern)) return true; // already expanded, skip
-    const msg = `replay error at step ${replayIdx}: pattern not found in tree: ${step.pattern}`;
-    statusBar.innerHTML = `<b class="bad">${msg}</b>`;
-    console.error(msg);
-    return false;
-  }
-
-  // Validate matches and cost against expected values.
-  const info = engine.node_info_json(nodeId);
-  const matchesOk = step.num_matches == null || info.num_matches === step.num_matches;
-  const costOk = step.cost == null || info.cost === step.cost;
-  if (!matchesOk || !costOk) {
-    const parts = [`replay mismatch at step ${replayIdx}: ${step.pattern}`];
-    parts.push(`  matches: ${info.num_matches} (expected ${step.num_matches})`);
-    parts.push(`  cost: ${info.cost} (expected ${step.cost})`);
-    parts.push(`  pattern_size: ${info.pattern_size}`);
-    const msg = parts.join('\n');
-    statusBar.innerHTML = `<b class="bad">${parts.join('<br>')}</b>`;
-    console.error(msg);
-    return false;
-  }
-
-  engine.expand_node(nodeId);
-  openNodes.add(nodeId);
-  return true;
-}
+wireReplaySelect(engine, statusBar);
 
 $('btnReplay').addEventListener('click', () => {
-  if (replayOneStep()) {
+  if (replayOneStep(engine, openNodes, statusBar)) {
     selectedId = engine.expansion_order_json().at(-1) ?? selectedId;
     renderAll();
-    updateReplayButtons();
+    updateReplayButtons(engine);
   }
 });
 
 $('btnReplayAll').addEventListener('click', () => {
-  if (replayJsonText) runReplayFromJson(replayJsonText);
+  const json = getReplayJsonText();
+  if (json) doRunReplayFromJson(json);
 });
 
-/// Fetch a replay log by URL and run it entirely in Rust.
-async function runReplayFromUrl(url) {
-  const text = await fetch(url).then(r => {
-    if (!r.ok) throw new Error(`${r.status} loading ${url}`);
-    return r.text();
-  });
-  await runReplayFromJson(text);
-}
-
-/// Run a replay from raw JSON text. Parsing + execution happen in Rust.
-async function runReplayFromJson(json) {
+/// Run a full replay from JSON and update the UI.
+async function doRunReplayFromJson(json) {
   $('btnReplayAll').disabled = true;
   $('btnReplay').disabled = true;
-  const stepCount = replaySteps.length || '?';
-  statusBar.textContent = `replaying ${stepCount} steps…`;
-  await paint();
 
-  const t0 = performance.now();
-  let error = null;
-  try {
-    const config = engine.replay_from_json(json);
-    // Sync config panel with the config Rust applied.
-    if (config.priority) $('cfgPriority').value = config.priority;
-    if (config.max_arity) $('cfgArity').value = config.max_arity;
-    replayIdx = replaySteps.length;
-  } catch (e) {
-    error = e.message;
-  }
-  const replayMs = (performance.now() - t0).toFixed(0);
-  const nExpanded = engine.num_expansions();
+  const { error, replayMs, nExpanded, bestCost } = await runReplayFromJson(engine, json, statusBar);
 
-  const bestCost = engine.best_cost();
   if (error) {
     statusBar.innerHTML = `<b class="bad">${error}</b> (${replayMs}ms)`;
   } else {
-    const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '—';
-    statusBar.textContent = `replayed ${nExpanded} steps in ${replayMs}ms · best cost ${costStr} · rendering…`;
+    const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '\u2014';
+    statusBar.textContent = `replayed ${nExpanded} steps in ${replayMs}ms \u00b7 best cost ${costStr} \u00b7 rendering\u2026`;
   }
   await paint();
 
   const t1 = performance.now();
   renderAll();
-  updateReplayButtons();
+  updateReplayButtons(engine);
   const renderMs = (performance.now() - t1).toFixed(0);
   if (!error) {
-    const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '—';
-    statusBar.innerHTML = `replayed ${nExpanded} steps in <b>${replayMs}ms</b> · render <b>${renderMs}ms</b> · best cost <b>${costStr}</b>` + (replayExpectedCost != null ? ` (expected ${replayExpectedCost.toLocaleString()})` : '');
+    const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '\u2014';
+    const expected = getReplayExpectedCost();
+    statusBar.innerHTML = `replayed ${nExpanded} steps in <b>${replayMs}ms</b> \u00b7 render <b>${renderMs}ms</b> \u00b7 best cost <b>${costStr}</b>` + (expected != null ? ` (expected ${expected.toLocaleString()})` : '');
   }
+}
+
+/// Run a full replay from a URL.
+async function doRunReplayFromUrl(url) {
+  const text = await fetch(url).then(r => {
+    if (!r.ok) throw new Error(`${r.status} loading ${url}`);
+    return r.text();
+  });
+  await doRunReplayFromJson(text);
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────
@@ -593,7 +412,6 @@ $('chkExpandedOnly').addEventListener('change', e => {
 // ── Rendering ────────────────────────────────────────────────────────────────
 
 function renderAll() {
-  // Fetch all state from Rust.
   const nodes = engine.nodes_json();
   const expansionOrder = engine.expansion_order_json();
   const bestNodeId = engine.best_node_id();
@@ -605,15 +423,8 @@ function renderAll() {
   const bestPath = buildBestPath(nodes, bestNode);
 
   const ctx = {
-    nodes,
-    meta,
-    bestNode,
-    bestPath,
-    expOrder,
-    originalSize,
-    openNodes,
-    selectedId,
-    expandedOnly,
+    nodes, meta, bestNode, bestPath, expOrder, originalSize,
+    openNodes, selectedId, expandedOnly,
     onRowClick: handleRowClick,
   };
 
@@ -638,11 +449,10 @@ function handleRowClick(id) {
 }
 
 function buildCostSparkline(nodes, id) {
-  // Walk parent chain from selected node to root.
   const chain = [];
   let cur = id;
   while (cur != null) { chain.push(nodes[cur]); cur = nodes[cur].parent; }
-  chain.reverse(); // root first
+  chain.reverse();
   if (chain.length < 2) return '';
 
   const costs = chain.map(n => n.cost);
@@ -651,7 +461,7 @@ function buildCostSparkline(nodes, id) {
   const W = 240, H = 48, px = 6, py = 6;
   const iW = W - 2 * px, iH = H - 2 * py;
   const x = (i) => px + (i / (chain.length - 1)) * iW;
-  const y = (c) => py + ((c - minC) / range) * iH; // lower cost → higher y (bottom)
+  const y = (c) => py + ((c - minC) / range) * iH;
 
   const pts = chain.map((n, i) => `${x(i).toFixed(1)},${y(n.cost).toFixed(1)}`).join(' ');
   const lx = x(chain.length - 1).toFixed(1);
@@ -694,7 +504,7 @@ function renderHeap(nodes) {
       <span class="prio">${h.priority}</span>
       <span class="cost">${n.cost.toLocaleString()}</span>
       <span class="stats">m${n.num_matches} a${n.arity}</span>
-      <span class="pattern">${esc(n.pattern)}</span>
+      <span class="pattern">${escapeHtml(n.pattern)}</span>
     `;
     li.addEventListener('click', () => {
       selectedId = h.node_id;
@@ -708,7 +518,7 @@ function renderHeap(nodes) {
   }
   if (heapTotal > 200) {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="rank">…</span><span class="pattern" style="color:var(--muted)">${heapTotal - 200} more</span>`;
+    li.innerHTML = `<span class="rank">\u2026</span><span class="pattern" style="color:var(--muted)">${heapTotal - 200} more</span>`;
     heapList.appendChild(li);
   }
 }
@@ -720,10 +530,6 @@ function updateStatus() {
   const bestCost = engine.best_cost();
   const originalSize = engine.original_size();
   const hasBest = bestCost >= 0;
-  const ratio = hasBest ? (originalSize / bestCost).toFixed(3) : '—';
-  statusBar.innerHTML = `<b>${nNodes}</b> nodes · <b>${nExp}</b> expanded · <b>${heapSz}</b> in heap · best cost: <b>${hasBest ? bestCost.toLocaleString() : '—'}</b> · ratio: <b>${ratio}×</b> · original: <b>${originalSize.toLocaleString()}</b>`;
-}
-
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const ratio = hasBest ? (originalSize / bestCost).toFixed(3) : '\u2014';
+  statusBar.innerHTML = `<b>${nNodes}</b> nodes \u00b7 <b>${nExp}</b> expanded \u00b7 <b>${heapSz}</b> in heap \u00b7 best cost: <b>${hasBest ? bestCost.toLocaleString() : '\u2014'}</b> \u00b7 ratio: <b>${ratio}\u00d7</b> \u00b7 original: <b>${originalSize.toLocaleString()}</b>`;
 }

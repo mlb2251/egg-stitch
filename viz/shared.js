@@ -1,4 +1,6 @@
-// Shared constants and utilities for interactive.js and batch.js.
+// Shared constants and utilities used across the viz UI.
+
+export { escapeHtml } from './tree-render.js';
 
 export const DOMAIN_DIR = '/data/domains/cogsci';
 export const RULES_DIR = '/babble/harness/data/benchmark-dsrs';
@@ -24,6 +26,19 @@ export async function fetchDomainData(domain, rulesFile) {
     });
   }
   return { programsText, rulesText };
+}
+
+/// Parse an http.server directory listing HTML into { files, dirs }.
+export function parseDirectoryListing(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const files = [], dirs = [];
+  for (const a of doc.querySelectorAll('a')) {
+    const h = a.getAttribute('href');
+    if (!h || h.startsWith('?') || h === '../' || h === '/') continue;
+    if (h.endsWith('/')) dirs.push(h.replace(/\/$/, ''));
+    else if (h.endsWith('.json')) files.push(h);
+  }
+  return { files, dirs };
 }
 
 // ── Session folder + saving ─────────────────────────────────────────────────

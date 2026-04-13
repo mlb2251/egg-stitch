@@ -1,11 +1,12 @@
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
 
-use egg_stitch::best_first::{BestFirstConfig, InteractiveSearch, SearchPriority};
+use egg_stitch::best_first::{InteractiveSearch, SearchPriority};
 use egg_stitch::cost;
 use egg_stitch::io;
+use egg_stitch::replay;
 use egg_stitch::results;
-use egg_stitch::search::{self, SearchState, SharedSearchData};
+use egg_stitch::search;
 use egg_stitch::smc::SmcConfig;
 
 /// Which search algorithm to run (CLI wrapper).
@@ -16,7 +17,7 @@ enum CliSearchKind {
 }
 
 /// Heap priority (CLI wrapper with ValueEnum derive).
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Copy, Debug)]
 enum CliPriority {
     Cost,
     DepthFirst,
@@ -95,10 +96,6 @@ struct Args {
     #[arg(short, long)]
     output: Option<String>,
 
-    /// Enable detailed debug logging of all particles at each SMC step.
-    #[arg(long, default_value_t = false)]
-    debug_log: bool,
-
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     verbose: bool,
@@ -114,35 +111,23 @@ fn main() {
 
     let rules = args.rules.as_deref();
     let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
-
     let (shared, original_size) = search::setup_search(egraph, root, args.follow.as_deref(), args.weight_by_usage, args.p_reuse, args.check_slow);
 
-    // ── Replay mode: load a replay JSON and re-run it natively ───────
+    // ── Replay mode ─────────────────────────────────────────────────────
     if let Some(ref replay_path) = args.replay {
-        let json = std::fs::read_to_string(replay_path).expect("Failed to read replay file");
-        let mut search = InteractiveSearch::new(shared, root, original_size, SearchPriority::Cost, 2);
-        let replay_start = std::time::Instant::now();
-        let config = search.replay_from_json(&json).expect("Replay failed");
-        let elapsed = replay_start.elapsed();
-        println!("{} {}", "priority:".dimmed(), config.priority.bold());
-        println!("{} {}", "max_arity:".dimmed(), config.max_arity.to_string().bold());
-        println!("{} {}", "steps replayed:".dimmed(), search.num_expansions().to_string().yellow());
-        println!("{} {}", "nodes created:".dimmed(), search.num_nodes().to_string().yellow());
-        println!("{} {}", "replay time:".dimmed(), format!("{:.1?}", elapsed).yellow());
-        if let Some(cost) = search.best_cost() {
-            println!("{} {}", "best cost:".dimmed(), cost.to_string().green().bold());
-            println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
-        }
+        run_replay(shared, root, original_size, replay_path);
         return;
     }
 
-    // Wrap shared in Option so the BestFirst arm can move it into InteractiveSearch
-    // while still allowing the post-match analysis to borrow from whichever path ran.
-    let mut shared = Some(shared);
-    let search_opt: Option<InteractiveSearch>;
+    // ── Search ──────────────────────────────────────────────────────────
+    let (priority, budget) = match args.search {
+        CliSearchKind::Smc => (SearchPriority::Cost, 0),
+        CliSearchKind::BestFirst => (args.priority.into(), args.num_steps),
+    };
+    let mut search = InteractiveSearch::new(shared, root, original_size, priority, args.max_arity);
+    println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
-    #[allow(clippy::type_complexity)]
-    let (best, best_found_at, num_steps_run, debug_log_json, replay_log_json): (Option<(usize, SearchState)>, Option<usize>, usize, Option<String>, Option<String>) = match args.search {
+    match args.search {
         CliSearchKind::Smc => {
             let config = SmcConfig {
                 num_particles: args.num_particles,
@@ -151,118 +136,107 @@ fn main() {
                 dead_runs: args.dead_runs,
                 verbose: args.verbose,
             };
-            let mut search = InteractiveSearch::new(shared.take().unwrap(), root, original_size, SearchPriority::Cost, args.max_arity);
-            println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
             egg_stitch::smc::smc(&mut search, &config);
-            println!("\n{}", "═══ RESULT ═══".green().bold());
-            if let Some((cost, state)) = search.best_state() {
-                println!("{} {}", "best found at expansion:".dimmed(), search.best_found_at().unwrap_or(0).to_string().yellow());
-                println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
-                println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
-                println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
-            }
-            let best = search.best_state().map(|(c, s)| (c, s.clone()));
-            let best_found_at = search.best_found_at();
-            let num_expansions = search.num_expansions();
-            let replay_json = serde_json::to_string(&search.replay_log(0)).expect("Failed to serialize replay log");
-            search_opt = Some(search);
-            (best, best_found_at, num_expansions, None, Some(replay_json))
         }
         CliSearchKind::BestFirst => {
-            let config = BestFirstConfig {
-                budget: args.num_steps,
-                max_arity: args.max_arity,
-                priority: args.priority.into(),
-            };
-            let mut search = InteractiveSearch::new(shared.take().unwrap(), root, original_size, config.priority, config.max_arity);
-            println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
             let search_start = std::time::Instant::now();
             loop {
-                if search.num_expansions() >= config.budget {
-                    println!("{}", format!("reached expansion budget {}", config.budget).yellow());
+                if search.num_expansions() >= budget {
+                    println!("{}", format!("reached expansion budget {}", budget).yellow());
                     break;
                 }
                 let old_best = search.best_cost();
-                if search.step().is_none() { break; }
+                if search.step().is_none() {
+                    break;
+                }
                 if search.best_cost() != old_best {
                     let (cost, state) = search.best_state().unwrap();
                     println!("{} {} {}", format!("[expansion {}]", search.num_expansions() - 1).yellow().bold(), format!("new best: {}", cost).green().bold(), state.pattern.to_string().cyan());
                 }
             }
-            let search_elapsed = search_start.elapsed();
-            println!("\n{}", "═══ RESULT ═══".green().bold());
-            println!("{} {}", "search time:".dimmed(), format!("{:.1?}", search_elapsed).yellow());
+            println!("{} {}", "search time:".dimmed(), format!("{:.1?}", search_start.elapsed()).yellow());
             println!("{} {}", "expansions:".dimmed(), search.num_expansions().to_string().yellow());
-            if let (Some(iter), Some((cost, state))) = (search.best_found_at(), search.best_state()) {
-                println!("{} {}", "best found at expansion:".dimmed(), iter.to_string().yellow());
-                println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
-                println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
-                println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
-            }
-            let best = search.best_state().map(|(c, s)| (c, s.clone()));
-            let best_found_at = search.best_found_at();
-            let num_expansions = search.num_expansions();
-            let replay_json = serde_json::to_string(&search.replay_log(config.budget)).expect("Failed to serialize replay log");
-            search_opt = Some(search);
-            (best, best_found_at, num_expansions, None, Some(replay_json))
         }
-    };
+    }
 
-    let elapsed_secs = start.elapsed().as_secs_f64();
+    // ── Print results ───────────────────────────────────────────────────
+    println!("\n{}", "═══ RESULT ═══".green().bold());
+    if let (Some(iter), Some((cost, state))) = (search.best_found_at(), search.best_state()) {
+        println!("{} {}", "best found at expansion:".dimmed(), iter.to_string().yellow());
+        println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
+        println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
+        println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
+    }
 
-    // Get a reference to SharedSearchData from whichever path held onto it.
-    let shared_ref: &SharedSearchData = match search_opt.as_ref() {
-        Some(s) => s.shared(),
-        None => shared.as_ref().unwrap(),
-    };
+    // ── Save output ─────────────────────────────────────────────────────
+    if let Some(ref output_path) = args.output {
+        let run_result = build_run_result(&args, &search, original_size, cost_before_rewrites, start.elapsed().as_secs_f64(), budget, output_path);
+        let json = serde_json::to_string_pretty(&run_result).expect("Failed to serialize result");
+        std::fs::write(output_path, json).expect("Failed to write output file");
+    }
+}
 
-    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) = match &best {
+/// Replay a saved search log and print summary.
+fn run_replay(shared: search::SharedSearchData, root: egg::Id, original_size: usize, path: &str) {
+    let json = std::fs::read_to_string(path).expect("Failed to read replay file");
+    let mut search = InteractiveSearch::new(shared, root, original_size, SearchPriority::Cost, 2);
+    let t0 = std::time::Instant::now();
+    let config = replay::replay_from_json(&mut search, &json).expect("Replay failed");
+    let elapsed = t0.elapsed();
+    println!("{} {}", "priority:".dimmed(), config.priority.bold());
+    println!("{} {}", "max_arity:".dimmed(), config.max_arity.to_string().bold());
+    println!("{} {}", "steps replayed:".dimmed(), search.num_expansions().to_string().yellow());
+    println!("{} {}", "nodes created:".dimmed(), search.num_nodes().to_string().yellow());
+    println!("{} {}", "replay time:".dimmed(), format!("{:.1?}", elapsed).yellow());
+    if let Some(cost) = search.best_cost() {
+        println!("{} {}", "best cost:".dimmed(), cost.to_string().green().bold());
+        println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
+    }
+}
+
+/// Build a RunResult from the completed search, saving replay log as a side effect.
+fn build_run_result(args: &Args, search: &InteractiveSearch, original_size: usize, cost_before_rewrites: usize, elapsed_secs: f64, budget: usize, output_path: &str) -> results::RunResult {
+    let shared = search.shared();
+    let root = search.root();
+
+    // Extract best-state metrics.
+    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) = match search.best_state() {
         Some((c, state)) => {
             let pat_size = cost::compute_pattern_size(&state.pattern);
-            let usage_counts = search::compute_usage_counts(&shared_ref.egraph, root);
+            let usage_counts = search::compute_usage_counts(&shared.egraph, root);
             let um: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
             let appx = original_size as i64 - pat_size as i64 * (um as i64 - 1);
             (
-                Some(*c),
-                Some(original_size as f64 / *c as f64),
+                Some(c),
+                Some(original_size as f64 / c as f64),
                 Some(state.pattern.to_string()),
                 Some(state.pattern.vars.len()),
                 Some(pat_size),
                 Some(state.matches.len()),
                 Some(um),
                 Some(appx),
-                Some(cost::extract_rewritten_programs(&shared_ref.egraph, root, state)),
+                Some(cost::extract_rewritten_programs(&shared.egraph, root, state)),
             )
         }
         None => (None, None, None, None, None, None, None, None, None),
     };
 
-    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-
-    let debug_log_file = if let (Some(json), Some(output_path)) = (debug_log_json, &args.output) {
-        let debug_path = output_path.replace(".json", "_debug.json");
-        std::fs::write(&debug_path, json).expect("Failed to write debug log");
-        println!("wrote debug log to {}", debug_path);
-        Some(std::path::Path::new(&debug_path).file_name().unwrap().to_string_lossy().into_owned())
-    } else {
-        None
-    };
-
-    let replay_log_file = if let (Some(json), Some(output_path)) = (replay_log_json, &args.output) {
+    // Save replay log.
+    let replay_log_file = {
         let replay_path = output_path.replace(".json", "_replay.json");
-        std::fs::write(&replay_path, &json).expect("Failed to write replay log");
+        let replay_json = serde_json::to_string(&search.replay_log(budget)).expect("Failed to serialize replay log");
+        std::fs::write(&replay_path, &replay_json).expect("Failed to write replay log");
         println!("wrote replay log to {}", replay_path);
         Some(std::path::Path::new(&replay_path).file_name().unwrap().to_string_lossy().into_owned())
-    } else {
-        None
     };
 
     let search_kind = match args.search {
         CliSearchKind::Smc => "smc",
         CliSearchKind::BestFirst => "best-first",
     };
+    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
 
-    let run_result = results::RunResult {
+    results::RunResult {
         timestamp,
         search: search_kind.to_string(),
         input_file: args.input.clone(),
@@ -278,16 +252,10 @@ fn main() {
         num_matches,
         usage_matches,
         approx_cost,
-        num_expansions: best_found_at.map(|n| n + 1),
-        best_iteration: best_found_at,
-        num_steps_run,
+        num_expansions: search.best_found_at().map(|n| n + 1),
+        best_iteration: search.best_found_at(),
+        num_steps_run: search.num_expansions(),
         rewritten_programs,
-        debug_log_file,
         replay_log_file,
-    };
-
-    if let Some(ref output_path) = args.output {
-        let json = serde_json::to_string_pretty(&run_result).expect("Failed to serialize result");
-        std::fs::write(output_path, json).expect("Failed to write output file");
     }
 }
