@@ -98,7 +98,9 @@ const REWRITES_DIR: &str = "../babble/harness/data/benchmark-dsrs";
 fn check_slow_furniture() {
     let input = "data/domains/cogsci/furniture.json";
     let rules = &format!("{}/drawings.furniture.rewrites", REWRITES_DIR);
-    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() { return; }
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
+        return;
+    }
     let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
@@ -108,7 +110,9 @@ fn check_slow_furniture() {
 fn check_slow_nuts_bolts() {
     let input = "data/domains/cogsci/nuts-bolts.json";
     let rules = &format!("{}/drawings.nuts-bolts.rewrites", REWRITES_DIR);
-    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() { return; }
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
+        return;
+    }
     let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
@@ -118,7 +122,9 @@ fn check_slow_nuts_bolts() {
 fn check_slow_wheels() {
     let input = "data/domains/cogsci/wheels.json";
     let rules = &format!("{}/drawings.wheels.rewrites", REWRITES_DIR);
-    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() { return; }
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
+        return;
+    }
     let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
