@@ -59,10 +59,10 @@ pub fn replay(search: &mut InteractiveSearch, steps: &[ReplayStep]) -> Result<us
         };
         let (matches, cost) = search.node_matches_and_cost(node_id);
         if matches != step.num_matches {
-            return Err(format!("step {}: matches mismatch for {}: got {} expected {}", i + 1, step.pattern, matches, step.num_matches,));
+            return Err(format!("step {}: matches mismatch for {}: got {} expected {}", i + 1, step.pattern, matches, step.num_matches));
         }
         if cost != step.cost {
-            return Err(format!("step {}: cost mismatch for {}: got {} expected {}", i + 1, step.pattern, cost, step.cost,));
+            return Err(format!("step {}: cost mismatch for {}: got {} expected {}", i + 1, step.pattern, cost, step.cost));
         }
         search.expand_node(node_id);
     }

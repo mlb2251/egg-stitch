@@ -3,7 +3,6 @@ use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use egg::{ENodeOrVar, Id, Language, Symbol};
-use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 
@@ -48,52 +47,6 @@ pub struct SearchState {
 }
 
 impl SearchState {
-    /// Randomly selects a match and variable, then expands or reuses the variable.
-    pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
-        let match_idx = if shared.weight_by_usage {
-            let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
-            let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
-            crate::smc::weighted_choice(&weights_acc)
-        } else {
-            rand::rng().random_range(0..self.matches.len())
-        };
-        let m = &self.matches[match_idx];
-        if verbose {
-            let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
-            let (_cost, minimal_term) = extractor.find_best(m.root_eclass);
-            println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
-        }
-        let subst_idx = rand::rng().random_range(0..m.substs.len());
-        let subst = &m.substs[subst_idx];
-
-        let var_idx = rand::rng().random_range(0..self.pattern.vars.len());
-        if verbose {
-            println!("Expanding variable {:?} in pattern {}", self.pattern.vars[var_idx], self.pattern);
-        }
-        let target_id = subst.vars[var_idx];
-
-        if verbose {
-            let extractor = egg::Extractor::new(&shared.egraph, egg::AstSize);
-            println!("Target eclass is represented by minimal term {}", extractor.find_best(target_id).1);
-        }
-
-        if rand::rng().random_bool(shared.p_reuse) {
-            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)| *idx != var_idx && **id == target_id).collect::<Vec<_>>();
-            if !reuse_candidates.is_empty() {
-                let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
-                let candidate_var_idx = reuse_candidates[candidate_idx].0;
-                self.reuse(var_idx, candidate_var_idx);
-                return;
-            }
-        }
-
-        let target_eclass = &shared.egraph[target_id];
-        let node_idx = rand::rng().random_range(0..target_eclass.len());
-        let target_node = &target_eclass.nodes[node_idx];
-
-        self.expand(var_idx, target_node, shared);
-    }
-
     /// Check if this particle's pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
         let mut var_bindings = HashMap::new();

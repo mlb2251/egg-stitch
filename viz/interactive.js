@@ -3,12 +3,12 @@
 // JS only manages UI state (open/selected nodes) and rendering.
 
 import { buildTreeMeta, buildExpOrder, buildBestPath, renderTree, renderSidePane, wireNavLinks, escapeHtml } from './tree-render.js';
-import { fetchDomainData, saveSearchResults, getSessionFolder } from './shared.js';
+import { fetchDomainData, saveSearchResults, getSessionFolder, paint } from './shared.js';
 import { loadWasm, createEngine, runSearch } from './wasm-api.js';
 import {
   scanReplays, applyReplayConfig, updateReplayButtons, replayOneStep,
   runReplayFromJson, runReplayFromUrl, wireReplaySelect, getReplayJsonText,
-  getReplayExpectedCost, setReplayExpectedCost, getReplaySteps,
+  getReplayExpectedCost, setReplayExpectedCost,
 } from './replay.js';
 
 const $ = id => document.getElementById(id);
@@ -20,9 +20,6 @@ const heapTitle = $('heapTitle');
 const statusBar = $('status-bar');
 
 let engine = null;
-
-/// Await this to guarantee the browser paints the current DOM state.
-const paint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
 
 // ── UI-only state (not search state) ────────────────────────────────────────
 
@@ -95,10 +92,7 @@ async function autoLoadFromParams() {
       renderAll();
       statusBar.textContent = `loaded config: priority=${log.config?.priority}, max_arity=${log.config?.max_arity}`;
     } catch (e) { console.warn('failed to load config:', e); }
-    return;
-  }
-
-  if (replayFile) {
+  } else if (replayFile) {
     const runPath = `results/${replayFile.replace('_replay.json', '.json')}`;
     try {
       const run = await fetch(runPath).then(r => r.ok ? r.json() : null);
@@ -337,6 +331,8 @@ $('btnReplayAll').addEventListener('click', () => {
 
 /// Run a full replay from JSON and update the UI.
 async function doRunReplayFromJson(json) {
+  const formatCost = (cost) => cost >= 0 ? cost.toLocaleString() : '\u2014';
+
   $('btnReplayAll').disabled = true;
   $('btnReplay').disabled = true;
 
@@ -345,7 +341,7 @@ async function doRunReplayFromJson(json) {
   if (error) {
     statusBar.innerHTML = `<b class="bad">${error}</b> (${replayMs}ms)`;
   } else {
-    const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '\u2014';
+    const costStr = formatCost(bestCost);
     statusBar.textContent = `replayed ${nExpanded} steps in ${replayMs}ms \u00b7 best cost ${costStr} \u00b7 rendering\u2026`;
   }
   await paint();
@@ -355,7 +351,7 @@ async function doRunReplayFromJson(json) {
   updateReplayButtons(engine);
   const renderMs = (performance.now() - t1).toFixed(0);
   if (!error) {
-    const costStr = bestCost >= 0 ? bestCost.toLocaleString() : '\u2014';
+    const costStr = formatCost(bestCost);
     const expected = getReplayExpectedCost();
     statusBar.innerHTML = `replayed ${nExpanded} steps in <b>${replayMs}ms</b> \u00b7 render <b>${renderMs}ms</b> \u00b7 best cost <b>${costStr}</b>` + (expected != null ? ` (expected ${expected.toLocaleString()})` : '');
   }
@@ -441,8 +437,7 @@ function handleRowClick(id) {
     engine.expand_node(id);
     openNodes.add(id);
   } else {
-    if (openNodes.has(id)) openNodes.delete(id);
-    else openNodes.add(id);
+    openNodes.has(id) ? openNodes.delete(id) : openNodes.add(id);
   }
   selectedId = id;
   renderAll();

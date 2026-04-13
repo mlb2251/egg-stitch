@@ -2,6 +2,9 @@
 
 export { escapeHtml } from './tree-render.js';
 
+/// Await this to guarantee the browser paints the current DOM state.
+export const paint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+
 export const DOMAIN_DIR = '/data/domains/cogsci';
 export const RULES_DIR = '/babble/harness/data/benchmark-dsrs';
 export const ALL_DOMAINS = ['dials', 'furniture', 'nuts-bolts', 'wheels'];
@@ -18,7 +21,7 @@ export async function fetchDomainData(domain, rulesFile) {
     if (!r.ok) throw new Error(`${r.status} loading ${domain}.json`);
     return r.text();
   });
-  let rulesText = undefined;
+  let rulesText;
   if (rulesFile) {
     rulesText = await fetch(`${RULES_DIR}/${rulesFile}`).then(r => {
       if (!r.ok) throw new Error(`${r.status} loading ${rulesFile}`);

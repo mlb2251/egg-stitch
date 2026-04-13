@@ -16,6 +16,15 @@ enum CliSearchKind {
     BestFirst,
 }
 
+impl std::fmt::Display for CliSearchKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CliSearchKind::Smc => write!(f, "smc"),
+            CliSearchKind::BestFirst => write!(f, "best-first"),
+        }
+    }
+}
+
 /// Heap priority (CLI wrapper with ValueEnum derive).
 #[derive(ValueEnum, Clone, Copy, Debug)]
 enum CliPriority {
@@ -140,16 +149,18 @@ fn main() {
         }
         CliSearchKind::BestFirst => {
             let search_start = std::time::Instant::now();
+            let mut old_best = search.best_cost();
             loop {
                 if search.num_expansions() >= budget {
                     println!("{}", format!("reached expansion budget {}", budget).yellow());
                     break;
                 }
-                let old_best = search.best_cost();
                 if search.step().is_none() {
                     break;
                 }
-                if search.best_cost() != old_best {
+                let new_best = search.best_cost();
+                if new_best != old_best {
+                    old_best = new_best;
                     let (cost, state) = search.best_state().unwrap();
                     println!("{} {} {}", format!("[expansion {}]", search.num_expansions() - 1).yellow().bold(), format!("new best: {}", cost).green().bold(), state.pattern.to_string().cyan());
                 }
@@ -179,7 +190,7 @@ fn main() {
 /// Replay a saved search log and print summary.
 fn run_replay(shared: search::SharedSearchData, root: egg::Id, original_size: usize, path: &str) {
     let json = std::fs::read_to_string(path).expect("Failed to read replay file");
-    let mut search = InteractiveSearch::new(shared, root, original_size, SearchPriority::Cost, 2);
+    let mut search = InteractiveSearch::new(shared, root, original_size, SearchPriority::Cost, 1000);
     let t0 = std::time::Instant::now();
     let config = replay::replay_from_json(&mut search, &json).expect("Replay failed");
     let elapsed = t0.elapsed();
@@ -230,10 +241,7 @@ fn build_run_result(args: &Args, search: &InteractiveSearch, original_size: usiz
         Some(std::path::Path::new(&replay_path).file_name().unwrap().to_string_lossy().into_owned())
     };
 
-    let search_kind = match args.search {
-        CliSearchKind::Smc => "smc",
-        CliSearchKind::BestFirst => "best-first",
-    };
+    let search_kind = args.search.to_string();
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
 
     results::RunResult {

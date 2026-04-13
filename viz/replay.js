@@ -1,7 +1,7 @@
 // Replay log loading and step-by-step execution.
 // Planned for deprecation -- kept separate from core interactive logic.
 
-import { parseDirectoryListing } from './shared.js';
+import { parseDirectoryListing, paint } from './shared.js';
 
 const $ = id => document.getElementById(id);
 
@@ -12,8 +12,6 @@ let replaySteps = [];       // parsed steps, used for single-step replay
 let replayIdx = 0;
 let replayExpectedCost = null;
 
-export function getReplaySteps() { return replaySteps; }
-export function getReplayIdx() { return replayIdx; }
 export function getReplayExpectedCost() { return replayExpectedCost; }
 export function setReplayExpectedCost(v) { replayExpectedCost = v; }
 
@@ -127,9 +125,6 @@ export function replayOneStep(engine, openNodes, statusBar) {
 }
 
 // ── Bulk replay ─────────────────────────────────────────────────────────────
-
-/// Await this to guarantee the browser paints the current DOM state.
-const paint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
 
 /// Run a replay from raw JSON text. Parsing + execution happen in Rust.
 /// Returns { error, replayMs, nExpanded, bestCost }.

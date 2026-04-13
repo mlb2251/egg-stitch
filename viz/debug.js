@@ -3,6 +3,11 @@
 
 import { escapeHtml } from './shared.js';
 
+// Chart dimensions and styling constants
+const CHART_HEIGHT = 120;
+const FONT_SIZE = '10px';
+const FONT_FAMILY = 'system-ui';
+
 const $ = id => document.getElementById(id);
 const loading = $('loading');
 const controls = $('controls');
@@ -18,6 +23,8 @@ let data = null;   // DebugLog
 let step = 0;      // current step index
 let tableSortKey = null;
 let tableSortAsc = false;
+
+const PAD = { l: 55, r: 10, t: 10, b: 20 };
 
 // --- Load ---
 
@@ -172,11 +179,11 @@ function drawBestChart() {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr;
-  canvas.height = 120 * dpr;
-  canvas.style.height = '120px';
+  canvas.height = CHART_HEIGHT * dpr;
+  canvas.style.height = `${CHART_HEIGHT}px`;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
-  const W = rect.width, H = 120;
+  const W = rect.width, H = CHART_HEIGHT;
 
   const costs = data.steps.map(s => s.best_cost).filter(c => c != null);
   if (costs.length === 0) return;
@@ -187,7 +194,7 @@ function drawBestChart() {
   ctx.clearRect(0, 0, W, H);
 
   // Axes padding
-  const pad = { l: 55, r: 10, t: 10, b: 20 };
+  const pad = PAD;
   const pw = W - pad.l - pad.r;
   const ph = H - pad.t - pad.b;
 
@@ -199,7 +206,7 @@ function drawBestChart() {
   ctx.beginPath(); ctx.moveTo(pad.l, origY); ctx.lineTo(W - pad.r, origY); ctx.stroke();
   ctx.setLineDash([]);
   ctx.fillStyle = '#9ca3af';
-  ctx.font = '10px system-ui';
+  ctx.font = `${FONT_SIZE} ${FONT_FAMILY}`;
   ctx.textAlign = 'right';
   ctx.fillText('init', pad.l - 4, origY + 3);
 
@@ -219,7 +226,7 @@ function drawBestChart() {
 
   // Y-axis labels
   ctx.fillStyle = '#6b7280';
-  ctx.font = '10px system-ui';
+  ctx.font = `${FONT_SIZE} ${FONT_FAMILY}`;
   ctx.textAlign = 'right';
   ctx.fillText(minC.toLocaleString(), pad.l - 4, pad.t + ph);
   ctx.fillText(maxC.toLocaleString(), pad.l - 4, pad.t + 10);
@@ -230,13 +237,12 @@ function drawBestChart() {
   ctx.fillText(String(n - 1), W - pad.r, H - 4);
 }
 
-let _highlightLine = null;
 function highlightStep(idx) {
   const canvas = $('bestChart');
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.width / dpr, H = 120;
-  const pad = { l: 55, r: 10, t: 10, b: 20 };
+  const W = canvas.width / dpr, H = CHART_HEIGHT;
+  const pad = PAD;
   const pw = W - pad.l - pad.r;
   const n = data.steps.length;
   // Redraw chart then overlay

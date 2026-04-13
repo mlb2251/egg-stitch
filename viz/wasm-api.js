@@ -22,7 +22,10 @@ export function runSearch(engine, searchType, params) {
   const t0 = performance.now();
   if (searchType === 'smc') {
     engine.run_smc(params.particles, params.steps, params.temperature, params.deadRuns);
+  } else if (searchType === 'best-first') {
+    engine.step_n(params.budget);
   } else {
+    console.warn(`Unknown search type: ${searchType}, defaulting to best-first`);
     engine.step_n(params.budget);
   }
   const elapsed = (performance.now() - t0) / 1000;

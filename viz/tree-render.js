@@ -166,10 +166,10 @@ function renderNode(id, ctx) {
   }
 
   if (isBest) {
-    const badge = document.createElement('span');
-    badge.className = 'badge best';
-    badge.textContent = 'best';
-    row.appendChild(badge);
+    const bestBadge = document.createElement('span');
+    bestBadge.className = 'badge best';
+    bestBadge.textContent = 'best';
+    row.appendChild(bestBadge);
   }
 
   row.addEventListener('click', e => ctx.onRowClick(id, e));
@@ -184,7 +184,7 @@ function renderNode(id, ctx) {
 }
 
 /// Render the side/detail pane for the selected node.
-export function renderSidePane(pane, id, ctx, extraHtml) {
+export function renderSidePane(pane, id, ctx, extraHtml = '') {
   if (id == null) {
     pane.innerHTML = '<div class="empty">click a node to inspect</div>';
     return;

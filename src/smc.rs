@@ -66,8 +66,7 @@ pub fn smc(search: &mut InteractiveSearch, config: &SmcConfig) {
 
         // === RESAMPLE ===
         let weights_acc = normalize_and_accumulate(&mut weights);
-        let old_particles = particles.clone();
-        particles = (0..config.num_particles).map(|_| old_particles[weighted_choice(&weights_acc)]).collect();
+        particles = (0..config.num_particles).map(|_| particles[weighted_choice(&weights_acc)]).collect();
     }
 }
 
@@ -75,8 +74,7 @@ pub fn smc(search: &mut InteractiveSearch, config: &SmcConfig) {
 pub fn weighted_choice(acc_weights: &[f64]) -> usize {
     let r: f64 = rand::rng().random_range(0.0..1.0);
     match acc_weights.binary_search_by(|&w| w.partial_cmp(&r).unwrap()) {
-        Ok(idx) => idx,
-        Err(idx) => idx,
+        Ok(idx) | Err(idx) => idx,
     }
 }
 
