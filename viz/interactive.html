@@ -124,11 +124,11 @@ main { flex: 1; display: flex; min-height: 0; }
 
 /* Results banner */
 #results-bar { padding: .5rem 1rem; font-size: .85rem; background: #ecfdf5; border-bottom: 1px solid #a7f3d0; display: none; }
-#results-bar.visible { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+#results-bar.visible { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
 #results-bar .result-label { color: var(--muted); }
 #results-bar .result-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 #results-bar .result-value.accent { color: var(--accent); }
-#results-bar .result-pattern { font-family: 'SF Mono', 'Fira Code', monospace; color: #0ea5e9; font-size: .82rem; max-width: 40rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#results-bar .result-pattern { font-family: 'SF Mono', 'Fira Code', monospace; color: #0ea5e9; font-size: .82rem; white-space: nowrap; }
 </style>
 </head>
 <body>
