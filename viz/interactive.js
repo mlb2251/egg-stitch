@@ -31,7 +31,8 @@ async function loadWasm() {
     wasm = await import('../pkg/egg_stitch.js');
     await wasm.default();
     overlay.classList.add('hidden');
-    $('btnLoadRun').disabled = false;
+    $('btnLoad').disabled = false;
+    $('btnRun').disabled = false;
     $('btnRunBatch').disabled = false;
     updateBatchUI();
     await autoLoadFromParams();
@@ -188,6 +189,13 @@ $('selSearch').addEventListener('change', () => {
   $('rowBf').style.display = isSmc ? 'none' : '';
 });
 
+$('cfgPriority').addEventListener('change', () => {
+  if (engine) {
+    engine.set_priority($('cfgPriority').value);
+    renderAll();
+  }
+});
+
 /// Apply a single config object to the config panel fields.
 function applyPresetToPanel(p) {
   if (p.search) { $('selSearch').value = p.search; $('selSearch').dispatchEvent(new Event('change')); }
@@ -318,35 +326,74 @@ async function saveSearchResults(eng, domain, rulesFile, searchType, elapsed, ou
   return { resultFile, replayFile, folder: getSessionFolder() };
 }
 
-/// Load & Run: create a fresh engine with config, run the selected search, save & show results.
-$('btnLoadRun').addEventListener('click', async () => {
-  const btn = $('btnLoadRun');
+/// Load: create a fresh engine with config, no search.
+$('btnLoad').addEventListener('click', async () => {
+  const btn = $('btnLoad');
+  btn.disabled = true;
+  btn.textContent = 'loading…';
+  statusBar.textContent = 'loading domain…';
+  await paint();
+
+  try {
+    const { programsText, rulesText } = await fetchDomainData();
+    engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+    openNodes.clear();
+    openNodes.add(0);
+    selectedId = 0;
+    enableControls(true);
+    renderAll();
+  } catch (e) {
+    alert('load failed: ' + e);
+    console.error(e);
+    statusBar.innerHTML = `<b class="bad">error: ${e}</b>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'load';
+  }
+});
+
+/// Run: run search on the current engine (or load first if none). Can be called repeatedly to expand more.
+$('btnRun').addEventListener('click', async () => {
+  const btn = $('btnRun');
   btn.disabled = true;
   btn.textContent = 'running…';
   const resultsBar = $('results-bar');
   resultsBar.className = '';
   resultsBar.innerHTML = '';
-  statusBar.textContent = 'loading domain…';
-  await paint();
 
   try {
-    const domain = $('selDomain').value;
-    const rulesFile = $('selRules').value;
-    const { programsText, rulesText } = await fetchDomainData();
-    statusBar.textContent = 'initializing engine…';
-    await paint();
+    // Load engine if not yet loaded.
+    if (!engine) {
+      statusBar.textContent = 'loading domain…';
+      await paint();
+      const { programsText, rulesText } = await fetchDomainData();
+      engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+      openNodes.clear();
+      openNodes.add(0);
+      selectedId = 0;
+    }
 
     const searchType = $('selSearch').value;
     statusBar.textContent = `running ${searchType}…`;
     await paint();
 
-    const { engine: eng, results, elapsed } = await runSingleSearch(programsText, rulesText);
-    engine = eng;
-    openNodes.clear();
-    openNodes.add(0);
-    selectedId = 0;
+    const t0 = performance.now();
+    if (searchType === 'smc') {
+      const particles = parseInt($('cfgParticles').value) || 1000;
+      const steps = parseInt($('cfgSteps').value) || 100;
+      const temp = parseFloat($('cfgTemp').value) || 100;
+      const deadRuns = parseInt($('cfgDeadRuns').value) || 50;
+      engine.run_smc(particles, steps, temp, deadRuns);
+    } else {
+      const budget = parseInt($('cfgBudget').value) || 500;
+      engine.step_n(budget);
+    }
+    const elapsed = (performance.now() - t0) / 1000;
+    const results = engine.results_json();
 
     // Save results.
+    const domain = $('selDomain').value;
+    const rulesFile = $('selRules').value;
     statusBar.textContent = 'saving…';
     await paint();
     const outputName = `${domain}_${searchType.replace('-', '_')}`;
@@ -358,14 +405,15 @@ $('btnLoadRun').addEventListener('click', async () => {
     statusBar.textContent = `rendering…`;
     await paint();
     renderAll();
-    statusBar.textContent = `${searchType} complete in ${elapsed.toFixed(2)}s · saved to ${saved.folder}/`;
+    showBest();
+    statusBar.innerHTML += ` · ${elapsed.toFixed(2)}s · saved to ${saved.folder}/`;
   } catch (e) {
     alert('search failed: ' + e);
     console.error(e);
     statusBar.innerHTML = `<b class="bad">error: ${e}</b>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'load & run';
+    btn.textContent = 'run';
   }
 });
 
@@ -463,7 +511,8 @@ $('btnRunBatch').addEventListener('click', async () => {
     showBatchResults(rows);
     enableControls(true);
     renderAll();
-    statusBar.textContent = `batch complete: ${rows.length} runs · saved to ${getSessionFolder()}/`;
+    showBest();
+    statusBar.innerHTML += ` · batch: ${rows.length} runs · saved to ${getSessionFolder()}/`;
   } catch (e) {
     alert('batch run failed: ' + e);
     console.error(e);
@@ -749,7 +798,9 @@ $('btnStep').addEventListener('click', () => {
 
 // ── UI controls ──────────────────────────────────────────────────────────────
 
-$('btnExpandBest').addEventListener('click', () => {
+/// Expand the tree path to the best node and scroll to it.
+function showBest() {
+  if (!engine) return;
   const bestId = engine.best_node_id();
   if (bestId < 0) return;
   const nodes = engine.nodes_json();
@@ -759,7 +810,9 @@ $('btnExpandBest').addEventListener('click', () => {
   renderAll();
   const el = treepane.querySelector(`.row[data-id="${bestId}"]`);
   if (el) el.scrollIntoView({ block: 'center', behavior: 'instant' });
-});
+}
+
+$('btnExpandBest').addEventListener('click', showBest);
 
 $('btnCollapseAll').addEventListener('click', () => {
   openNodes.clear();
