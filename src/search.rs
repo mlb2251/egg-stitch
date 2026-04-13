@@ -33,26 +33,38 @@ pub struct SearchState {
 
 impl SearchState {
     /// Randomly selects a match and variable, then expands or reuses the variable.
-    pub fn expand_random(&mut self, shared: &SharedSearchData) {
+    pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
-            crate::smc::normalize_and_accumulate(&mut weights);
-            crate::smc::weighted_choice(&weights)
+            let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
+            crate::smc::weighted_choice(&weights_acc)
         } else {
             rand::rng().random_range(0..self.matches.len())
         };
         let m = &self.matches[match_idx];
+        let extractor = if verbose { Some(egg::Extractor::new(&shared.egraph, egg::AstSize)) } else { None };
+        if let Some(ref ext) = extractor {
+            let (_cost, minimal_term) = ext.find_best(m.root_eclass);
+            println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
+        }
         let subst_idx = rand::rng().random_range(0..m.substs.len());
         let subst = &m.substs[subst_idx];
 
         let var_idx = rand::rng().random_range(0..self.pattern.vars.len());
+        if verbose {
+            println!("Expanding variable {:?} in pattern {}", self.pattern.vars[var_idx], self.pattern);
+        }
         let target_id = subst.vars[var_idx];
 
+        if let Some(ref ext) = extractor {
+            println!("Target eclass is represented by minimal term {}", ext.find_best(target_id).1);
+        }
+
         if rand::rng().random_bool(shared.p_reuse) {
-            let reuse_candidates: Vec<usize> = subst.vars.iter().enumerate().filter(|(idx, id)| *idx != var_idx && **id == target_id).map(|(idx, _)| idx).collect();
+            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)| *idx != var_idx && **id == target_id).collect::<Vec<_>>();
             if !reuse_candidates.is_empty() {
                 let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
-                let candidate_var_idx = reuse_candidates[candidate_idx];
+                let candidate_var_idx = reuse_candidates[candidate_idx].0;
                 self.reuse(var_idx, candidate_var_idx);
                 return;
             }
@@ -98,6 +110,9 @@ impl SearchState {
     }
 
     /// Filters matches to those where `var_idx` can be expanded with `target`, updating substitutions.
+    /// Mirrors `Pattern::expand`: drops the old var from `subst.vars` and inserts the new
+    /// child eclass ids at positions `var_idx..var_idx+k`, keeping substs aligned with
+    /// the pattern's DFS-ordered vars list.
     pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
@@ -106,8 +121,8 @@ impl SearchState {
                 if node.matches(target) {
                     let mut new_subst = subst.clone();
                     new_subst.vars.remove(var_idx);
-                    for child_id in &node.children {
-                        new_subst.vars.push(*child_id);
+                    for (j, child_id) in node.children.iter().enumerate() {
+                        new_subst.vars.insert(var_idx + j, *child_id);
                     }
                     out.push(new_subst);
                 }
@@ -116,11 +131,14 @@ impl SearchState {
     }
 
     /// Filters matches to those where `var_idx` and `second_var_idx` point to the same e-class.
+    /// Mirrors `Pattern::reuse`: keeps the lower-indexed var and removes the higher one,
+    /// so substs stay aligned with the pattern regardless of caller argument order.
     pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+        let drop_idx = var_idx.max(second_var_idx);
         self.update_matches(|subst, out| {
             if subst.vars[var_idx] == subst.vars[second_var_idx] {
                 let mut new_subst = subst.clone();
-                new_subst.vars.remove(second_var_idx);
+                new_subst.vars.remove(drop_idx);
                 out.push(new_subst);
             }
         });
