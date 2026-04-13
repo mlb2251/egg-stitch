@@ -96,20 +96,14 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         let mut best = size_current;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
-                let mut size_new: i64 = 1;
-                for &var in &subst.vars {
-                    size_new += get_size(var, &size_under_rewrite);
-                }
+                let size_new: i64 = 1 + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
                 if size_new < best {
                     best = size_new;
                 }
             }
         }
         if let Some(enode) = egraph[eclass].nodes.first() {
-            let mut size_no_rewrite: i64 = 1;
-            for &child in &enode.children {
-                size_no_rewrite += get_size(child, &size_under_rewrite);
-            }
+            let size_no_rewrite: i64 = 1 + enode.children.iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
             if size_no_rewrite < best {
                 best = size_no_rewrite;
             }
