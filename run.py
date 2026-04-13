@@ -164,7 +164,28 @@ def stitch():
         print("  ", abstraction["arity"])
         print("  ", abstraction["compression_ratio"])
 
-# def babble():
+def babble():
+    """Run babble on all domains, analogous to stitch()."""
+    babble_dir = "../babble"
+    outfiles = []
+    for domain in ALL_DOMAINS:
+        outfile = f"harness/data_gen/cache/{domain}.csv"
+        outfiles.append((domain, f"{babble_dir}/{outfile}"))
+        print(f"\033[92mRunning {domain}\033[0m")
+        babble_cmd = [
+            "cargo", "run", "--release", "--bin=drawings", "--",
+            f"harness/data/cogsci/{domain}.bab",
+            "--beams=400", "--lps=1", "--rounds=1", "--max-arity=2",
+            f"--output={outfile}",
+        ]
+        sp.run(babble_cmd, check=True, cwd=babble_dir)
+
+    for domain, outfile in outfiles:
+        with open(outfile) as f:
+            row = f.read().strip().split(",")
+        # CSV fields: type,round,beams_start,beams_end,lps,?,rounds,initial_cost,final_cost,compression,num_libs,time
+        initial_cost, final_cost, compression = row[7], row[8], row[9]
+        print(f"{domain}: {initial_cost} -> {final_cost} (compression {compression})")
 
 
 
