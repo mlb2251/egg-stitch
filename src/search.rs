@@ -1,13 +1,18 @@
 use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
-use egg::{Id, Language};
+use crate::revexpr::RevExpr;
+use egg::{ENodeOrVar, Id, Language};
 use rand::Rng;
 use rustc_hash::FxHashMap;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct SharedSearchData {
     pub egraph: StitchEgraph,
+    /// Follow pattern: particles whose pattern isn't a valid prefix get zero
+    /// weight at the resample step.
+    pub follow: Option<RevExpr<ENodeOrVar<StitchLang>>>,
     /// Probability of attempting variable reuse during expansion.
     pub p_reuse: f64,
     /// Enable slow rewrite check (assert fast == slow computation).
@@ -69,6 +74,12 @@ impl SearchState {
         let target_node = &target_eclass.nodes[node_idx];
 
         self.expand(var_idx, target_node, shared);
+    }
+
+    /// Check if this particle's pattern is a valid prefix of the follow target.
+    pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
+        let mut var_bindings = HashMap::new();
+        crate::follow::check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.

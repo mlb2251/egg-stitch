@@ -3,7 +3,7 @@ use colored::Colorize;
 use crate::cost::{compute_cost, compute_size};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::StitchEgraph;
-use crate::logging::print_top_particles;
+use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 use rand::Rng;
@@ -19,9 +19,11 @@ pub struct SmcResult {
 }
 
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
+    let follow_expr = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = crate::search::compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,
+        follow: follow_expr,
         p_reuse: args.p_reuse,
         check_slow: args.check_slow,
         weight_by_usage: args.weight_by_usage,
@@ -68,6 +70,10 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             if s.pattern.vars.is_empty() {
                 log_weights[i] = f64::NEG_INFINITY;
             }
+        }
+
+        if let Some(ref follow) = shared.follow {
+            apply_follow_constraint(&search_states, &mut log_weights, follow, &shared, original_size, &costs, verbose);
         }
 
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
