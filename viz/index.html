@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <title>egg-stitch</title>
 <link rel="stylesheet" href="style.css">
+<style>
+.batch-bar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .6rem 0; margin-bottom: .5rem; border-bottom: 1px solid var(--border); font-size: .82rem; }
+.batch-bar select, .batch-bar input { padding: .25rem .4rem; border: 1px solid var(--border); border-radius: 4px; font-size: .8rem; }
+.batch-bar input[type="number"] { width: 5rem; }
+.batch-bar label { color: var(--muted); }
+.batch-bar button { padding: .3rem .8rem; border: none; border-radius: 5px; cursor: pointer; font-size: .8rem; font-weight: 600; color: #fff; }
+.batch-bar button:disabled { opacity: .4; cursor: default; }
+.batch-bar .btn-go { background: var(--good); }
+.batch-bar .btn-go:hover:not(:disabled) { filter: brightness(.9); }
+.batch-bar .status { color: var(--muted); font-size: .78rem; }
+</style>
 </head>
 <body>
 <header class="site-header">
@@ -11,8 +22,22 @@
   <span class="site-subtitle">results</span>
   <a href="interactive.html" class="header-link">interactive explorer →</a>
 </header>
+
+<div class="batch-bar" id="batchBar">
+  <label>batch:</label>
+  <select id="batchPreset">
+    <option value="all-bf-cost">all domains · best-first cost</option>
+    <option value="all-smc">all domains · smc</option>
+    <option value="temp-sweep">temp sweep · T=1,10,100,1k,10k</option>
+    <option value="priority-sweep">priority sweep · cost,dfs,bfs,matches</option>
+  </select>
+  <button class="btn-go" id="btnBatchRun">run</button>
+  <span class="status" id="batchStatus"></span>
+</div>
+
 <div class="sub" id="meta">loading…</div>
 <div id="groups"></div>
 <script src="analysis.js"></script>
+<script type="module" src="batch.js"></script>
 </body>
 </html>

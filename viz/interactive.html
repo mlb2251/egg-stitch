@@ -182,21 +182,13 @@ main { flex: 1; display: flex; min-height: 0; }
       <label>preset:</label>
       <select id="selPreset">
         <option value="">custom</option>
-        <optgroup label="Single runs">
-          <option value="dev">dev (smc, T=1000)</option>
-          <option value="dials-compress">dials-compress (smc, quick)</option>
-          <option value="dials-follow">dials-follow (smc + follow)</option>
-          <option value="best-first" selected>best-first (cost)</option>
-          <option value="bf-dfs">best-first (depth-first)</option>
-          <option value="bf-bfs">best-first (breadth-first)</option>
-          <option value="bf-matches">best-first (most-matches)</option>
-        </optgroup>
-        <optgroup label="Batches">
-          <option value="all-bf-cost">all domains (best-first cost)</option>
-          <option value="all-smc">all domains (smc)</option>
-          <option value="temp-sweep">temperature sweep</option>
-          <option value="priority-sweep">priority sweep</option>
-        </optgroup>
+        <option value="dev">dev (smc, T=1000)</option>
+        <option value="dials-compress">dials-compress (smc, quick)</option>
+        <option value="dials-follow">dials-follow (smc + follow)</option>
+        <option value="best-first" selected>best-first (cost)</option>
+        <option value="bf-dfs">best-first (depth-first)</option>
+        <option value="bf-bfs">best-first (breadth-first)</option>
+        <option value="bf-matches">best-first (most-matches)</option>
       </select>
       <label>search:</label>
       <select id="selSearch">
@@ -244,8 +236,6 @@ main { flex: 1; display: flex; min-height: 0; }
       <span class="config-section"></span>
       <button class="btn-run" id="btnLoad" disabled style="background:var(--accent)">load</button>
       <button class="btn-run" id="btnRun" disabled>run</button>
-      <button class="btn-run" id="btnRunBatch" disabled style="background:var(--accent);display:none">run batch</button>
-      <span id="batchSummary" style="display:none;font-size:.78rem;color:var(--muted)"></span>
     </div>
   </div>
 </div>

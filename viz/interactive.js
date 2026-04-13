@@ -3,6 +3,7 @@
 // JS only manages UI state (open/selected nodes) and rendering.
 
 import { buildTreeMeta, buildExpOrder, buildBestPath, renderTree, renderSidePane, wireNavLinks } from './tree-render.js';
+import { fetchDomainData, saveSearchResults, getSessionFolder } from './shared.js';
 
 const $ = id => document.getElementById(id);
 const overlay = $('loading-overlay');
@@ -33,8 +34,6 @@ async function loadWasm() {
     overlay.classList.add('hidden');
     $('btnLoad').disabled = false;
     $('btnRun').disabled = false;
-    $('btnRunBatch').disabled = false;
-    updateBatchUI();
     await autoLoadFromParams();
   } catch (e) {
     overlay.textContent = `failed to load WASM: ${e}. Run "make wasm" first.`;
@@ -56,7 +55,7 @@ async function autoLoadFromParams() {
 
   // Load engine with current config for auto-load.
   try {
-    const { programsText, rulesText } = await fetchDomainData();
+    const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
     engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
     openNodes.clear();
     openNodes.add(0);
@@ -102,27 +101,6 @@ loadWasm();
 
 // ── Domain / rules ───────────────────────────────────────────────────────────
 
-const DOMAIN_DIR = '/data/domains/cogsci';
-const RULES_DIR = '/babble/harness/data/benchmark-dsrs';
-
-/// Fetch programs + rules texts for the currently selected domain.
-async function fetchDomainData() {
-  const domain = $('selDomain').value;
-  const rulesFile = $('selRules').value;
-  const programsText = await fetch(`${DOMAIN_DIR}/${domain}.json`).then(r => {
-    if (!r.ok) throw new Error(`${r.status} loading ${domain}.json`);
-    return r.text();
-  });
-  let rulesText = undefined;
-  if (rulesFile) {
-    rulesText = await fetch(`${RULES_DIR}/${rulesFile}`).then(r => {
-      if (!r.ok) throw new Error(`${r.status} loading ${rulesFile}`);
-      return r.text();
-    });
-  }
-  return { programsText, rulesText };
-}
-
 /// Build config JSON from the config panel for Engine constructor.
 function buildEngineConfig() {
   const follow = $('cfgFollow').value.trim() || undefined;
@@ -145,20 +123,7 @@ $('selDomain').addEventListener('change', () => {
 
 // ── Config panel ────────────────────────────────────────────────────────────
 
-const ALL_DOMAINS = ['dials', 'furniture', 'nuts-bolts', 'wheels'];
-
-const RULES_FOR_DOMAIN = {
-  'dials': 'drawings.dials.rewrites',
-  'furniture': 'drawings.furniture.rewrites',
-  'nuts-bolts': 'drawings.nuts-bolts.rewrites',
-  'wheels': 'drawings.wheels.rewrites',
-};
-
-/// Presets: single config objects or arrays of config objects (batches).
-/// Array items can include `domain` and `rules` to override the UI selectors.
-/// A `name` field on batch items controls the output filename.
 const PRESETS = {
-  // ── Single runs ──
   'dev':            { search: 'smc', particles: 1000, steps: 100, temperature: 1000, max_arity: 2, dead_runs: 50 },
   'dials-compress': { search: 'smc', particles: 100, steps: 10, temperature: 100, max_arity: 2, dead_runs: 50 },
   'dials-follow':   { search: 'smc', particles: 100, steps: 10, temperature: 100, max_arity: 2, dead_runs: 50,
@@ -167,14 +132,7 @@ const PRESETS = {
   'bf-dfs':         { search: 'best-first', priority: 'depth-first', budget: 500, max_arity: 2 },
   'bf-bfs':         { search: 'best-first', priority: 'breadth-first', budget: 500, max_arity: 2 },
   'bf-matches':     { search: 'best-first', priority: 'most-matches', budget: 500, max_arity: 2 },
-  // ── Batches ──
-  'all-bf-cost':    ALL_DOMAINS.map(d => ({ name: `${d}_bf_cost`, domain: d, rules: RULES_FOR_DOMAIN[d], search: 'best-first', priority: 'cost', budget: 500, max_arity: 2 })),
-  'all-smc':        ALL_DOMAINS.map(d => ({ name: `${d}_smc`, domain: d, rules: RULES_FOR_DOMAIN[d], search: 'smc', particles: 1000, steps: 100, temperature: 1000, max_arity: 2, dead_runs: 50 })),
-  'temp-sweep':     [1, 10, 100, 1000, 10000].map(t => ({ name: `T${t}`, search: 'smc', particles: 1000, steps: 100, temperature: t, max_arity: 2, dead_runs: 50 })),
-  'priority-sweep': ['cost', 'depth-first', 'breadth-first', 'most-matches'].map(p => ({ name: `bf_${p}`, search: 'best-first', priority: p, budget: 500, max_arity: 2 })),
 };
-
-function isBatchPreset(key) { return Array.isArray(PRESETS[key]); }
 
 $('configToggle').addEventListener('click', () => {
   const body = $('configBody');
@@ -196,11 +154,10 @@ $('cfgPriority').addEventListener('change', () => {
   }
 });
 
-/// Apply a single config object to the config panel fields.
-function applyPresetToPanel(p) {
+$('selPreset').addEventListener('change', () => {
+  const p = PRESETS[$('selPreset').value];
+  if (!p) return;
   if (p.search) { $('selSearch').value = p.search; $('selSearch').dispatchEvent(new Event('change')); }
-  if (p.domain) $('selDomain').value = p.domain;
-  if (p.rules != null) $('selRules').value = p.rules;
   if (p.particles != null) $('cfgParticles').value = p.particles;
   if (p.steps != null) $('cfgSteps').value = p.steps;
   if (p.temperature != null) $('cfgTemp').value = p.temperature;
@@ -211,82 +168,7 @@ function applyPresetToPanel(p) {
   $('cfgFollow').value = p.follow || '';
   $('cfgPReuse').value = p.p_reuse ?? 0.5;
   $('cfgWeightByUsage').checked = p.weight_by_usage ?? false;
-}
-
-/// Update visibility of batch vs single-run buttons.
-function updateBatchUI() {
-  const key = $('selPreset').value;
-  const isBatch = isBatchPreset(key);
-  $('btnRunBatch').style.display = isBatch ? '' : 'none';
-  $('batchSummary').style.display = isBatch ? '' : 'none';
-  if (isBatch) {
-    const items = PRESETS[key];
-    $('batchSummary').textContent = `${items.length} runs: ${items.map(i => i.name || i.domain || '?').join(', ')}`;
-  }
-}
-
-$('selPreset').addEventListener('change', () => {
-  const key = $('selPreset').value;
-  const p = PRESETS[key];
-  if (!p) { updateBatchUI(); return; }
-  if (Array.isArray(p)) {
-    // Batch: apply the first item to the panel for reference.
-    applyPresetToPanel(p[0]);
-  } else {
-    applyPresetToPanel(p);
-  }
-  updateBatchUI();
 });
-
-// ── Session folder for saving results ──────────────────────────────────────
-
-let sessionFolder = null;
-
-/// Get or create a timestamp-based session folder name.
-function getSessionFolder() {
-  if (!sessionFolder) {
-    const d = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    sessionFolder = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-  }
-  return sessionFolder;
-}
-
-/// Save a JSON string to viz/results/<session>/<filename> via PUT.
-async function saveResult(filename, jsonStr) {
-  const folder = getSessionFolder();
-  const path = `viz/results/${folder}/${filename}`;
-  const resp = await fetch(`/${path}`, { method: 'PUT', body: jsonStr, headers: { 'Content-Type': 'application/json' } });
-  if (!resp.ok) throw new Error(`save failed: ${resp.status}`);
-  return `${folder}/${filename}`;
-}
-
-/// Build a RunResult-compatible JSON object from engine state.
-function buildRunResult(engine, searchType, domain, rulesFile, elapsedSecs) {
-  const r = engine.results_json();
-  return {
-    timestamp: Date.now() / 1000,
-    search: searchType,
-    input_file: `data/domains/cogsci/${domain}.json`,
-    rules_file: rulesFile || null,
-    elapsed_secs: elapsedSecs,
-    initial_cost: r.original_size,
-    cost_after_rewrites: r.original_size,
-    final_cost: r.best_cost,
-    compression_ratio: r.compression_ratio,
-    pattern: r.pattern,
-    arity: r.arity,
-    pattern_size: null,
-    num_matches: r.num_matches,
-    usage_matches: null,
-    approx_cost: null,
-    num_expansions: r.num_expansions,
-    best_iteration: null,
-    num_steps_run: r.num_expansions,
-    rewritten_programs: null,
-    replay_log_file: null, // filled in after save
-  };
-}
 
 /// Run a single search with current config panel settings. Returns { engine, results, elapsed }.
 async function runSingleSearch(programsText, rulesText) {
@@ -309,23 +191,6 @@ async function runSingleSearch(programsText, rulesText) {
   return { engine: eng, results, elapsed, searchType };
 }
 
-/// Save engine results + replay log. Returns saved paths.
-async function saveSearchResults(eng, domain, rulesFile, searchType, elapsed, outputName) {
-  const result = buildRunResult(eng, searchType, domain, rulesFile, elapsed);
-
-  // Save replay log.
-  const budget = searchType === 'best-first' ? (parseInt($('cfgBudget').value) || 500) : 0;
-  const replayJson = eng.replay_log_json(budget);
-  const replayFile = `${outputName}_replay.json`;
-  await saveResult(replayFile, replayJson);
-  result.replay_log_file = replayFile;
-
-  // Save main result.
-  const resultFile = `${outputName}.json`;
-  await saveResult(resultFile, JSON.stringify(result, null, 2));
-  return { resultFile, replayFile, folder: getSessionFolder() };
-}
-
 /// Load: create a fresh engine with config, no search.
 $('btnLoad').addEventListener('click', async () => {
   const btn = $('btnLoad');
@@ -335,7 +200,7 @@ $('btnLoad').addEventListener('click', async () => {
   await paint();
 
   try {
-    const { programsText, rulesText } = await fetchDomainData();
+    const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
     engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
     openNodes.clear();
     openNodes.add(0);
@@ -366,7 +231,7 @@ $('btnRun').addEventListener('click', async () => {
     if (!engine) {
       statusBar.textContent = 'loading domain…';
       await paint();
-      const { programsText, rulesText } = await fetchDomainData();
+      const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
       engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
       openNodes.clear();
       openNodes.add(0);
@@ -397,7 +262,8 @@ $('btnRun').addEventListener('click', async () => {
     statusBar.textContent = 'saving…';
     await paint();
     const outputName = `${domain}_${searchType.replace('-', '_')}`;
-    const saved = await saveSearchResults(engine, domain, rulesFile, searchType, elapsed, outputName);
+    const budget = searchType === 'best-first' ? (parseInt($('cfgBudget').value) || 500) : 0;
+    const saved = await saveSearchResults(engine, domain, rulesFile, searchType, elapsed, outputName, budget);
 
     showResults(results, elapsed.toFixed(2), searchType, saved.folder);
     enableControls(true);
@@ -416,130 +282,6 @@ $('btnRun').addEventListener('click', async () => {
     btn.textContent = 'run';
   }
 });
-
-// ── Batch run ──────────────────────────────────────────────────────────────
-
-/// Fetch domain data for a specific domain/rules pair.
-async function fetchDomainDataFor(domain, rulesFile) {
-  const programsText = await fetch(`${DOMAIN_DIR}/${domain}.json`).then(r => {
-    if (!r.ok) throw new Error(`${r.status} loading ${domain}.json`);
-    return r.text();
-  });
-  let rulesText = undefined;
-  if (rulesFile) {
-    rulesText = await fetch(`${RULES_DIR}/${rulesFile}`).then(r => {
-      if (!r.ok) throw new Error(`${r.status} loading ${rulesFile}`);
-      return r.text();
-    });
-  }
-  return { programsText, rulesText };
-}
-
-/// Build engine config JSON from a batch item config object.
-function buildConfigFromItem(item) {
-  return JSON.stringify({
-    follow: item.follow || null,
-    weight_by_usage: item.weight_by_usage ?? false,
-    p_reuse: item.p_reuse ?? 0.5,
-    max_arity: item.max_arity ?? 2,
-    priority: item.search === 'best-first' ? (item.priority || 'cost') : 'cost',
-  });
-}
-
-/// Run a single search from a batch item config. Returns { engine, results, elapsed, searchType }.
-async function runFromItem(item, programsText, rulesText) {
-  const configJson = buildConfigFromItem(item);
-  const eng = new wasm.Engine(programsText, rulesText, configJson);
-
-  const t0 = performance.now();
-  if (item.search === 'smc') {
-    eng.run_smc(
-      item.particles ?? 1000,
-      item.steps ?? 100,
-      item.temperature ?? 100,
-      item.dead_runs ?? 50
-    );
-  } else {
-    eng.step_n(item.budget ?? 500);
-  }
-  const elapsed = (performance.now() - t0) / 1000;
-  const results = eng.results_json();
-  return { engine: eng, results, elapsed, searchType: item.search };
-}
-
-$('btnRunBatch').addEventListener('click', async () => {
-  const key = $('selPreset').value;
-  if (!isBatchPreset(key)) return;
-  const items = PRESETS[key];
-
-  const btn = $('btnRunBatch');
-  btn.disabled = true;
-  btn.textContent = 'running…';
-  const resultsBar = $('results-bar');
-  resultsBar.className = '';
-  resultsBar.innerHTML = '';
-  sessionFolder = null; // fresh session
-
-  const rows = [];
-
-  try {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const label = item.name || `run ${i + 1}`;
-      statusBar.textContent = `[${i + 1}/${items.length}] ${label}…`;
-      await paint();
-
-      // Use item's domain/rules or fall back to current UI selection.
-      const domain = item.domain || $('selDomain').value;
-      const rulesFile = item.rules ?? $('selRules').value;
-      const { programsText, rulesText } = await fetchDomainDataFor(domain, rulesFile);
-
-      const { engine: eng, results, elapsed, searchType } = await runFromItem(item, programsText, rulesText);
-
-      // Save.
-      const outputName = label;
-      await saveSearchResults(eng, domain, rulesFile, searchType, elapsed, outputName);
-      rows.push({ label, domain, results, elapsed });
-
-      // Keep last engine for tree viewing.
-      engine = eng;
-    }
-
-    openNodes.clear();
-    openNodes.add(0);
-    selectedId = 0;
-    showBatchResults(rows);
-    enableControls(true);
-    renderAll();
-    showBest();
-    statusBar.innerHTML += ` · batch: ${rows.length} runs · saved to ${getSessionFolder()}/`;
-  } catch (e) {
-    alert('batch run failed: ' + e);
-    console.error(e);
-    statusBar.innerHTML = `<b class="bad">error: ${e}</b>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'run batch';
-  }
-});
-
-/// Show a summary table of batch results.
-function showBatchResults(rows) {
-  const bar = $('results-bar');
-  const fmt = v => v != null ? Number(v).toLocaleString() : '—';
-  const lines = rows.map(r => {
-    const ratio = r.results.compression_ratio != null ? r.results.compression_ratio.toFixed(2) + 'x' : '—';
-    return `<span style="min-width:8rem;font-weight:600">${r.label}</span>
-      <span class="result-label" style="color:var(--muted)">${r.domain}</span>
-      <span class="result-label">cost:</span><span class="result-value" style="color:var(--good)">${fmt(r.results.best_cost)}</span>
-      <span class="result-label">ratio:</span><span class="result-value" style="color:var(--good)">${ratio}</span>
-      <span class="result-label">${r.elapsed.toFixed(2)}s</span>`;
-  });
-  bar.className = 'visible';
-  bar.style.background = '';
-  bar.style.borderColor = '';
-  bar.innerHTML = `<div style="display:flex;flex-direction:column;gap:.25rem;width:100%">${lines.map(l => `<div style="display:flex;gap:.75rem;align-items:center">${l}</div>`).join('')}</div>`;
-}
 
 /// Display search results in the results bar.
 function showResults(r, elapsed, searchType, folder) {
