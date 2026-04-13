@@ -167,10 +167,9 @@ def stitch():
 def babble():
     """Run babble on all domains, analogous to stitch()."""
     babble_dir = "../babble"
-    outfiles = []
+    results = []
     for domain in ALL_DOMAINS:
         outfile = f"harness/data_gen/cache/{domain}.csv"
-        outfiles.append((domain, f"{babble_dir}/{outfile}"))
         print(f"\033[92mRunning {domain}\033[0m")
         babble_cmd = [
             "cargo", "run", "--release", "--bin=drawings", "--",
@@ -178,14 +177,26 @@ def babble():
             "--beams=400", "--lps=1", "--rounds=1", "--max-arity=2",
             f"--output={outfile}",
         ]
-        sp.run(babble_cmd, check=True, cwd=babble_dir)
-
-    for domain, outfile in outfiles:
-        with open(outfile) as f:
+        proc = sp.run(babble_cmd, check=True, cwd=babble_dir, capture_output=True, text=True)
+        # Parse library definitions from stdout ("lib <name> =\n  <body>\nin")
+        libs = []
+        lines = proc.stdout.splitlines()
+        for i, l in enumerate(lines):
+            if l.startswith("lib "):
+                name = l.strip().removesuffix(" =")
+                body = lines[i + 1].strip() if i + 1 < len(lines) else "?"
+                libs.append(f"{name}: {body}")
+        # Parse CSV for stats
+        with open(f"{babble_dir}/{outfile}") as f:
             row = f.read().strip().split(",")
         # CSV fields: type,round,beams_start,beams_end,lps,?,rounds,initial_cost,final_cost,compression,num_libs,time
-        initial_cost, final_cost, compression = row[7], row[8], row[9]
-        print(f"{domain}: {initial_cost} -> {final_cost} (compression {compression})")
+        results.append((domain, row, libs))
+
+    for domain, row, libs in results:
+        initial_cost, final_cost, compression, time_s = row[7], row[8], row[9], row[11]
+        print(f"{domain}: {initial_cost} -> {final_cost} (compression {compression}, time {time_s}s)")
+        for lib in libs:
+            print(f"  {lib}")
 
 
 
