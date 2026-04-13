@@ -1,7 +1,7 @@
 PORT ?= 8066
 
 dev:
-	python3 -c 'import run; run.dev()'
+	python3 run.py $(or $(RUN),dev)
 
 .PHONY: server
 server:
