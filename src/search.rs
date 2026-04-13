@@ -142,21 +142,40 @@ impl SearchState {
             }
         });
     }
+
+    /// Creates the initial search state: a single-variable pattern matching every e-class.
+    pub fn new(shared: &SharedSearchData) -> Self {
+        Self {
+            pattern: Pattern::single_var(),
+            matches: identity_matches(&shared.egraph),
+        }
+    }
 }
 
+/// Parses the shared-context fields out of CLI args, computes usage counts, and
+/// returns the initial corpus size alongside the populated `SharedSearchData`.
+pub fn setup_search(egraph: StitchEgraph, root: Id, args: &crate::Args) -> (SharedSearchData, usize) {
+    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args
+        .follow
+        .as_deref()
+        .map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+    let usage_counts = compute_usage_counts(&egraph, root);
+    let shared = SharedSearchData {
+        egraph,
+        follow: follow_expr,
+        weight_by_usage: args.weight_by_usage,
+        usage_counts,
+        p_reuse: args.p_reuse,
+        check_slow: args.check_slow,
+    };
+    let initial = SearchState::new(&shared);
+    let original_size = crate::cost::compute_size(&shared.egraph, root, &initial, shared.check_slow);
+    (shared, original_size)
+}
 
 impl std::fmt::Display for SearchState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SearchState {{ pattern: {}, matches: {} }}", self.pattern, self.matches.len())
-    }
-}
-
-impl SearchState {
-    pub fn new(shared: &SharedSearchData) -> Self {
-        Self {
-            pattern: Pattern::single_var(),
-            matches: identity_matches(&shared.egraph)
-        }
     }
 }
 
