@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>egg-stitch tree viewer</title>
+<style>
+:root { --fg:#1b1b1f; --muted:#6b7280; --bg:#fafafa; --card:#fff; --accent:#3b82f6; --good:#10b981; --warn:#f59e0b; --dim:#cbd5e1; --border:#e5e7eb; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); display: flex; flex-direction: column; }
+
+header { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--card); flex-wrap: wrap; }
+header h1 { font-size: 1.1rem; font-weight: 600; }
+header .meta { color: var(--muted); font-size: .85rem; }
+a.back { color: var(--accent); text-decoration: none; font-size: .85rem; }
+
+main { flex: 1; display: flex; min-height: 0; }
+#treepane { flex: 1; overflow: auto; background: var(--card); padding: .5rem 0; }
+#sidepane { width: 380px; border-left: 1px solid var(--border); background: var(--card); padding: 1rem 1.25rem; overflow-y: auto; font-size: .85rem; }
+
+.controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .85rem; color: var(--muted); }
+.controls label { display: flex; align-items: center; gap: .3rem; cursor: pointer; }
+.controls button { padding: .3rem .65rem; border: 1px solid var(--border); background: var(--card); border-radius: 6px; cursor: pointer; font-size: .8rem; }
+.controls button:hover { background: #f3f4f6; }
+
+/* Nested tree rows */
+.tree-list { list-style: none; padding: 0; margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: .82rem; }
+.tree-list ul { list-style: none; padding-left: 1.1rem; margin: 0; border-left: 1px dashed var(--border); }
+.tree-list li { position: relative; }
+
+.row { display: flex; align-items: center; gap: .5rem; padding: .2rem .4rem .2rem .5rem; cursor: pointer; border-radius: 4px; white-space: nowrap; }
+.row:hover { background: #eef2ff; }
+.row.selected { background: #dbeafe; }
+.row.on-best { background: #ecfdf5; }
+.row.on-best.selected { background: #a7f3d0; }
+
+.row .caret { display: inline-block; width: .9rem; color: var(--muted); text-align: center; flex-shrink: 0; }
+.row .caret.leaf { color: transparent; }
+.row .id { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.2rem; }
+.row .eord { color: var(--accent); font-variant-numeric: tabular-nums; min-width: 3rem; font-size: .75rem; }
+.row .eord.none { color: transparent; }
+.row .cost { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 4.5rem; text-align: right; }
+.row .submin { font-variant-numeric: tabular-nums; color: var(--good); min-width: 5rem; font-size: .75rem; }
+.row .submin.same { color: transparent; }
+.row .stats { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .75rem; min-width: 4rem; }
+.row .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.row .dot.fringe { background: var(--dim); }
+.row .dot.expanded { background: var(--accent); }
+.row .dot.best { background: var(--good); box-shadow: 0 0 0 2px #d1fae5; }
+.row .action { color: #9ca3af; font-size: .75rem; }
+.row .pattern { color: #0ea5e9; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.row .badge { font-size: .7rem; color: var(--muted); background: #f3f4f6; padding: 0 .35rem; border-radius: 3px; }
+.row .badge.best { color: #065f46; background: #d1fae5; }
+
+/* Side pane */
+#sidepane h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .35rem; margin-top: 1rem; }
+#sidepane h2:first-child { margin-top: 0; }
+#sidepane .pattern { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .85rem; color: #0ea5e9; background: #f8fafc; padding: .5rem .6rem; border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; white-space: nowrap; }
+#sidepane dl { display: grid; grid-template-columns: auto 1fr; gap: .25rem .75rem; }
+#sidepane dt { color: var(--muted); }
+#sidepane dd { font-variant-numeric: tabular-nums; }
+#sidepane dd.good { color: var(--good); font-weight: 600; }
+#sidepane .action { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .8rem; color: var(--fg); background: #fef3c7; padding: .15rem .4rem; border-radius: 4px; display: inline-block; }
+#sidepane .empty { color: var(--muted); font-style: italic; }
+#sidepane a.nav { color: var(--accent); text-decoration: none; }
+#sidepane a.nav:hover { text-decoration: underline; }
+
+.legend { display: flex; gap: .75rem; font-size: .75rem; color: var(--muted); }
+.legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: .25rem; }
+.legend .exp { background: var(--accent); }
+.legend .fri { background: var(--dim); }
+.legend .bes { background: var(--good); }
+
+.loading { padding: 4rem; text-align: center; color: var(--muted); }
+.err { color: #dc2626; }
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="index.html">&larr; back</a>
+  <h1 id="title">tree viewer</h1>
+  <span class="meta" id="meta">loading...</span>
+  <div class="controls" style="margin-left:auto;">
+    <div class="legend">
+      <span><span class="swatch exp"></span>expanded</span>
+      <span><span class="swatch fri"></span>fringe</span>
+      <span><span class="swatch bes"></span>best</span>
+    </div>
+    <button id="btnExpandBest" title="expand path from root to best">expand best path</button>
+    <button id="btnCollapseAll" title="collapse all">collapse all</button>
+    <label><input type="checkbox" id="chkExpandedOnly"> expanded only</label>
+  </div>
+</header>
+
+<main>
+  <div id="treepane">
+    <div class="loading" id="loading">loading tree log...</div>
+  </div>
+  <aside id="sidepane">
+    <div class="empty">click a node to inspect</div>
+  </aside>
+</main>
+
+<script src="tree.js"></script>
+</body>
+</html>

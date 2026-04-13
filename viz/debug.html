@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>egg-stitch debug viewer</title>
+<style>
+:root { --fg:#1b1b1f; --muted:#6b7280; --bg:#fafafa; --card:#fff; --accent:#3b82f6; --good:#10b981; --border:#e5e7eb; --code-bg:#0f172a; --code-fg:#e2e8f0; }
+* { box-sizing: border-box; margin: 0; }
+body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); padding: 1.5rem; }
+
+header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+header h1 { font-size: 1.2rem; }
+header .meta { color: var(--muted); font-size: .85rem; }
+a.back { color: var(--accent); text-decoration: none; font-size: .85rem; }
+
+/* Step controls */
+.controls { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.controls button { padding: .35rem .75rem; border: 1px solid var(--border); background: var(--card); border-radius: 6px; cursor: pointer; font-size: .85rem; }
+.controls button:hover { background: #f3f4f6; }
+.controls button:disabled { opacity: .4; cursor: default; }
+.controls input[type=range] { flex: 1; min-width: 200px; max-width: 500px; }
+.controls .step-label { font-weight: 600; min-width: 7em; }
+
+/* Summary strip */
+.summary { display: flex; gap: 1.5rem; margin-bottom: 1rem; font-size: .85rem; color: var(--muted); flex-wrap: wrap; }
+.summary b { color: var(--fg); }
+.summary .best { color: var(--good); font-weight: 600; }
+
+/* Particle table */
+.ptable-wrap { overflow-x: auto; max-height: calc(100vh - 260px); border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+table.ptable { width: 100%; border-collapse: collapse; font-size: .8rem; }
+table.ptable th { position: sticky; top: 0; background: #f3f4f6; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); cursor: pointer; user-select: none; z-index: 1; }
+table.ptable th, table.ptable td { padding: .4rem .7rem; border-bottom: 1px solid var(--border); white-space: nowrap; text-align: left; }
+table.ptable tr:last-child td { border-bottom: none; }
+table.ptable td.pattern { white-space: pre; font-family: 'SF Mono', 'Fira Code', monospace; color: #0ea5e9; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; }
+table.ptable tr.dead td { opacity: .35; }
+table.ptable tr.best-row td { background: #ecfdf5; }
+table.ptable tr.resampled td { background: #eff6ff; }
+table.ptable tr.survived td { }
+
+/* Weight bar */
+.wbar { display: inline-block; height: 8px; background: var(--accent); border-radius: 3px; vertical-align: middle; }
+
+/* Resample info */
+.resample-info { margin-top: .75rem; font-size: .8rem; color: var(--muted); }
+.resample-info b { color: var(--fg); }
+
+/* Best tracker chart */
+.chart-wrap { margin-top: 1rem; }
+canvas#bestChart { width: 100%; height: 120px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+
+/* Loading */
+.loading { text-align: center; padding: 4rem; color: var(--muted); }
+.err { color: #dc2626; }
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="index.html">&larr; back</a>
+  <h1 id="title">debug viewer</h1>
+  <span class="meta" id="meta">loading...</span>
+</header>
+
+<div class="controls" id="controls" style="display:none;">
+  <button id="btnFirst" title="First step">&laquo;</button>
+  <button id="btnPrev" title="Previous step">&lsaquo;</button>
+  <input type="range" id="slider" min="0" max="0" value="0">
+  <button id="btnNext" title="Next step">&rsaquo;</button>
+  <button id="btnLast" title="Last step">&raquo;</button>
+  <span class="step-label" id="stepLabel">Step 0</span>
+  <label style="font-size:.8rem;color:var(--muted)">
+    <input type="checkbox" id="chkSort" checked> sort by weight
+  </label>
+  <label style="font-size:.8rem;color:var(--muted)">
+    <input type="checkbox" id="chkHideDead"> hide dead
+  </label>
+</div>
+
+<div class="summary" id="summary"></div>
+
+<div class="ptable-wrap">
+  <table class="ptable" id="ptable">
+    <thead><tr>
+      <th data-k="idx">#</th>
+      <th data-k="pattern">pattern</th>
+      <th data-k="arity">arity</th>
+      <th data-k="cost">cost</th>
+      <th data-k="weight">weight</th>
+      <th data-k="num_matches">matches</th>
+      <th>resampled</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="resample-info" id="resampleInfo"></div>
+
+<canvas id="bestChart"></canvas>
+
+<div class="loading" id="loading">loading debug log...</div>
+
+<script src="debug.js"></script>
+</body>
+</html>
