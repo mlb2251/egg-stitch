@@ -116,7 +116,7 @@ def best_first():
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         output="dials_bf_cost.json",
         search="best-first",
-        priority="cost",
+        # priority="cost",
         num_steps=5000,
         # debug_log=True,
         max_arity=2,
@@ -137,7 +137,7 @@ def best_first_all():
             rewrites=None,
             output=f"{domain}_bf_cost.json",
             search="best-first",
-            priority="cost",
+            # priority="cost",
             num_steps=5000,
             max_arity=2,
         )
