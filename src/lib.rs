@@ -208,6 +208,12 @@ mod wasm_api {
             Ok(serde_wasm_bindgen::to_value(self.inner.expansion_order())?)
         }
 
+        /// Replay log as a JSON string, suitable for saving to disk.
+        pub fn replay_log_json(&self, budget: usize) -> Result<String, JsError> {
+            let log = self.inner.replay_log(budget);
+            serde_json::to_string(&log).map_err(|e| JsError::new(&format!("serialize: {e}")))
+        }
+
         /// Summary of current search results as JSON.
         pub fn results_json(&self) -> Result<JsValue, JsError> {
             let original = self.inner.original_size();

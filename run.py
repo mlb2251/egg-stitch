@@ -128,15 +128,16 @@ def dev_best_first():
 
 
 def dev():
-    compress(
-        "data/domains/cogsci/dials.json",
-        rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
-        output="dials_T1000.json",
-        num_steps=100,
-        num_particles=1000,
-        temperature=1000,
-        max_arity=2,
-    )
+    best_first()
+    # compress(
+    #     "data/domains/cogsci/dials.json",
+    #     rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+    #     output="dials_T1000.json",
+    #     num_steps=100,
+    #     num_particles=1000,
+    #     temperature=1000,
+    #     max_arity=2,
+    # )
 
 
 
