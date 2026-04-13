@@ -197,10 +197,7 @@ impl SearchState {
                 let mut child = self.clone();
                 child.expand(var_idx, &shape, shared);
                 if !child.matches.is_empty() {
-                    out.push((
-                        Action::Expand { var_idx, op: shape.op, arity: shape.children.len() },
-                        child,
-                    ));
+                    out.push((Action::Expand { var_idx, op: shape.op, arity: shape.children.len() }, child));
                 }
             }
         }
@@ -208,10 +205,7 @@ impl SearchState {
         let n = self.pattern.vars.len();
         for i in 0..n {
             for j in (i + 1)..n {
-                let unifiable = self
-                    .matches
-                    .iter()
-                    .any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
+                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
                 if unifiable {
                     let mut child = self.clone();
                     child.reuse(i, j);
@@ -229,10 +223,7 @@ impl SearchState {
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search(egraph: StitchEgraph, root: Id, args: &crate::Args) -> (SharedSearchData, usize) {
-    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args
-        .follow
-        .as_deref()
-        .map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,

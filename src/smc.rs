@@ -13,12 +13,7 @@ use rustc_hash::FxHashMap;
 
 /// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
 /// buffer, either bumping the multiplicity of an existing group or pushing a new one.
-fn dedup_insert(
-    s: SearchState,
-    states: &mut Vec<SearchState>,
-    mults: &mut Vec<usize>,
-    dedup: &mut FxHashMap<RevExpr<ENodeOrVar<StitchLang>>, usize>,
-) {
+fn dedup_insert(s: SearchState, states: &mut Vec<SearchState>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<ENodeOrVar<StitchLang>>, usize>) {
     match dedup.get(&s.pattern.pattern) {
         Some(&idx) => mults[idx] += 1,
         None => {
@@ -107,11 +102,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         }
 
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-        let mut weights: Vec<f64> = if total_weight.is_finite() {
-            log_weights.iter().map(|lw| (lw - total_weight).exp()).collect()
-        } else {
-            vec![0.0; log_weights.len()]
-        };
+        let mut weights: Vec<f64> = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
 
         if weights.iter().sum::<f64>() == 0.0 {
             log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
@@ -133,11 +124,13 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         let weights_acc = normalize_and_accumulate(&mut weights);
         let mut counts: Vec<usize> = vec![0; expanded.len()];
-        let resample_indices: Vec<usize> = (0..num_particles).map(|_| {
-            let idx = weighted_choice(&weights_acc);
-            counts[idx] += 1;
-            idx
-        }).collect();
+        let resample_indices: Vec<usize> = (0..num_particles)
+            .map(|_| {
+                let idx = weighted_choice(&weights_acc);
+                counts[idx] += 1;
+                idx
+            })
+            .collect();
 
         if debug {
             debug_steps.push(StepLog {
@@ -168,7 +161,12 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     }
 
     let debug_log = if debug {
-        Some(DebugLog { original_size, num_particles, temperature, steps: debug_steps })
+        Some(DebugLog {
+            original_size,
+            num_particles,
+            temperature,
+            steps: debug_steps,
+        })
     } else {
         None
     };

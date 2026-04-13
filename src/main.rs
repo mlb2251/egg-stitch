@@ -26,14 +26,7 @@ fn main() {
     // Dispatch to the requested search algorithm, flattening each driver's result
     // into a common tuple so the downstream RunResult wiring stays shared.
     #[allow(clippy::type_complexity)]
-    let (best, original_size, best_found_at, num_steps_run, result_egraph, debug_log_json): (
-        Option<(usize, search::SearchState)>,
-        usize,
-        Option<usize>,
-        usize,
-        lang::StitchEgraph,
-        Option<String>,
-    ) = match args.search {
+    let (best, original_size, best_found_at, num_steps_run, result_egraph, debug_log_json): (Option<(usize, search::SearchState)>, usize, Option<usize>, usize, lang::StitchEgraph, Option<String>) = match args.search {
         SearchKind::Smc => {
             let r = smc::smc(egraph, root, &args);
             let json = r.debug_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize debug log"));
