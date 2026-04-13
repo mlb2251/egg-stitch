@@ -1,5 +1,7 @@
 
 
+> **Note:** The experiment runner (`expts/`, `run.py`) and visualization tools (`viz/`) were vibe-coded and have not been carefully reviewed. Use at your own risk.
+
 # Key commands
 
 
