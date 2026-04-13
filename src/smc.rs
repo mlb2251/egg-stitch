@@ -200,15 +200,12 @@ mod tests {
     }
 
     /// The full complex follow from the baseline invocation we're locking in.
-    const DIALS_FULL_FOLLOW: &str = "(T (T (T l (M 1 0 -0.5 0)) (M ?0 (/ pi 4) 0 0)) (M 1 0 (* ?0 (* 0.5 (cos (/ pi 4)))) (* ?0 (* 0.5 (sin (/ pi 4))))))";
+    const DIALS_FULL_FOLLOW: &str = "(T (T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0)) (M 1 0 (* ?#0 (* 0.5 (cos (/ pi 4)))) (* ?#0 (* 0.5 (sin (/ pi 4))))))";
 
-    /// Mirror of the baseline CLI:
-    ///   `cargo run --release -- -i data/domains/cogsci/dials.json -r <rules> \
-    ///     --num-steps 100 --num-particles 1000 --follow <DIALS_FULL_FOLLOW> --max-arity 2`
-    /// Marked `#[ignore]` because it takes too long in debug profile; run with
-    /// `cargo test --release -- --ignored` to exercise it.
+    /// Mirror of the baseline CLI. Needs high temperature (1000) so enough
+    /// particles survive random expansion at follow-Var positions.
     #[test]
-    #[ignore = "slow: 100 steps * 1000 particles; run with --release --ignored"]
+    #[ignore = "slow: 1000 steps * 1000 particles; run with --release --ignored"]
     fn follow_dials_full_baseline() {
         if !fixtures_present() {
             eprintln!("skipping: fixtures not available");
@@ -218,8 +215,9 @@ mod tests {
             "egg-stitch",
             "--input", INPUT,
             "--rules", RULES,
-            "--num-steps", "100",
+            "--num-steps", "1000",
             "--num-particles", "1000",
+            "--temperature", "1000",
             "--follow", DIALS_FULL_FOLLOW,
             "--max-arity", "2",
         ]);
@@ -249,22 +247,23 @@ mod tests {
         assert_best_matches_follow(&result, follow);
     }
 
-    /// Follow containing a `?0` variable: exercises the wildcard handling
-    /// where the follow has a Var and the pattern has either a Var or ENode.
+    /// Follow containing a `?#0` variable: exercises the strict check where
+    /// pattern ENode at a follow-Var position is rejected.
     #[test]
-    #[ignore = "slow: 100 steps * 1000 particles; run with --release --ignored"]
+    #[ignore = "slow: 1000 steps * 1000 particles; run with --release --ignored"]
     fn follow_single_placeholder() {
         if !fixtures_present() {
             eprintln!("skipping: fixtures not available");
             return;
         }
-        let follow = "(T (T l (M 1 0 -0.5 0)) (M ?0 (/ pi 4) 0 0))";
+        let follow = "(T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0))";
         let args = Args::parse_from([
             "egg-stitch",
             "--input", INPUT,
             "--rules", RULES,
-            "--num-steps", "100",
+            "--num-steps", "1000",
             "--num-particles", "1000",
+            "--temperature", "1000",
             "--follow", follow,
             "--max-arity", "2",
         ]);
