@@ -118,7 +118,7 @@ def best_first():
         priority="cost",
         debug_log=True,
         max_arity=2,
-        replay="/Users/maddy/proj/rust/egg-stitch/viz/results/2026-04-12_17-29-35/dials_bf_cost_replay.json",
+        # replay="/Users/maddy/proj/rust/egg-stitch/viz/results/2026-04-12_17-29-35/dials_bf_cost_replay.json",
         # samply=True,
     )
 

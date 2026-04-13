@@ -176,9 +176,6 @@ function renderGroup(g, maxRatio) {
     const tr = document.createElement('tr');
     tr.className = 'run';
     const barW = Math.round(60 * (r.compression_ratio || 0) / maxRatio);
-    const debugPath = r.debug_log_file
-      ? (r.folder ? `${r.folder}/${r.debug_log_file}` : r.debug_log_file)
-      : null;
     const replayPath = r.replay_log_file
       ? (r.folder ? `${r.folder}/${r.replay_log_file}` : r.replay_log_file)
       : null;
@@ -188,14 +185,13 @@ function renderGroup(g, maxRatio) {
     const rules = r.rules_file ? r.rules_file.replace(/.*\//, '') : '';
     const replayParams = replayPath ? `replay=${encodeURIComponent(replayPath)}&domain=${encodeURIComponent(domain)}&rules=${encodeURIComponent(rules)}` : '';
     const configParams = replayPath ? `config=${encodeURIComponent(replayPath)}&domain=${encodeURIComponent(domain)}&rules=${encodeURIComponent(rules)}` : '';
-    const debugLink = debugPath ? `<a class="debug-link" href="debug.html?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">debug</a>` : '';
     const replayLink = replayPath ? `<a class="debug-link" href="interactive.html?${replayParams}" onclick="event.stopPropagation()">replay</a>` : '';
     const configLink = replayPath ? `<a class="debug-link" href="interactive.html?${configParams}" onclick="event.stopPropagation()">config</a>` : '';
     tr.innerHTML = `
       <td><button class="del del-run" title="delete run">×</button></td>
       <td>${fmtTime(r.timestamp)}</td>
       <td><b>${r.name}</b></td>
-      <td style="display:flex;gap:.3rem;align-items:center">${debugLink}${replayLink}${configLink}</td>
+      <td style="display:flex;gap:.3rem;align-items:center">${replayLink}${configLink}</td>
       <td>${r.rewrites ? '<span class="pill">yes</span>' : '<span class="pill no">no</span>'}</td>
       <td>${fmt(r.final_cost)}</td>
       <td><span class="ratio">${(r.compression_ratio||0).toFixed(3)}×</span><span class="bar" style="width:${barW}px"></span></td>

@@ -1,4 +1,3 @@
-use colored::Colorize;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -48,18 +47,6 @@ pub struct BestFirstConfig {
     pub budget: usize,
     pub max_arity: usize,
     pub priority: SearchPriority,
-}
-
-/// Output of a completed best-first enumerative search.
-pub struct BestFirstResult {
-    pub best: Option<(usize, SearchState)>,
-    pub original_size: usize,
-    /// Expansion index (pop count) at which the current best was first discovered.
-    pub best_found_at: Option<usize>,
-    /// Total number of heap pops performed before the loop stopped.
-    pub num_expansions: usize,
-    /// Replay log: sequence of expansion decisions for reconstructing the run.
-    pub replay_log: ReplayLog,
 }
 
 /// One node in the in-memory search tree.
@@ -166,100 +153,6 @@ fn expand_one(node_id: usize, nodes: &mut Vec<Node>, heap: &mut BTreeSet<(i64, u
             expanded: false,
         });
         heap.insert((child_prio, child_id));
-    }
-}
-
-/// Runs best-first enumerative search to find a pattern that minimizes cost.
-///
-/// Maintains a min-heap keyed by `(priority, insertion_order)`. Each pop
-/// enumerates every deterministic successor of the node, deduplicates against
-/// previously-seen canonical patterns, applies `max_arity` and `follow` filters,
-/// and pushes survivors back. Stops at `budget` pops or an empty heap.
-pub fn best_first(shared: &SharedSearchData, root: egg::Id, original_size: usize, initial_state: SearchState, config: &BestFirstConfig) -> BestFirstResult {
-    println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
-
-    let budget = config.budget;
-    let max_arity = config.max_arity;
-    let strategy = &config.priority;
-
-    let initial_cost = compute_cost(&shared.egraph, root, &initial_state, shared.check_slow);
-    let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
-
-    let mut nodes: Vec<Node> = Vec::new();
-    let mut heap: BTreeSet<(i64, usize)> = BTreeSet::new();
-    let mut seen: FxHashSet<String> = FxHashSet::default();
-
-    seen.insert(initial_state.pattern.to_string());
-    nodes.push(Node {
-        parent: None,
-        action: None,
-        state: initial_state,
-        cost: initial_cost,
-        depth: 0,
-        priority: initial_prio,
-        expanded: false,
-    });
-    heap.insert((initial_prio, 0));
-
-    let mut best: Option<(usize, usize)> = None;
-    let mut best_found_at: Option<usize> = None;
-    let mut expansion_order: Vec<usize> = Vec::new();
-    let mut replay_steps: Vec<ReplayStep> = Vec::new();
-    let mut num_expansions: usize = 0;
-    let search_start = std::time::Instant::now();
-
-    while let Some((_, node_id)) = heap.pop_first() {
-        if num_expansions >= budget {
-            println!("{}", format!("reached expansion budget {}", budget).yellow());
-            break;
-        }
-
-        replay_steps.push(ReplayStep {
-            pattern: nodes[node_id].state.pattern.to_string(),
-            action: None,
-            num_matches: nodes[node_id].state.matches.len(),
-            cost: nodes[node_id].cost,
-        });
-
-        let old_best = best;
-        expand_one(node_id, &mut nodes, &mut heap, &mut seen, &mut best, &mut expansion_order, shared, root, strategy, max_arity);
-
-        if best != old_best {
-            let (cost, id) = best.unwrap();
-            println!("{} {} {}", format!("[expansion {}]", num_expansions).yellow().bold(), format!("new best: {}", cost).green().bold(), nodes[id].state.pattern.to_string().cyan(),);
-            best_found_at = Some(num_expansions);
-        }
-
-        num_expansions += 1;
-    }
-
-    let search_elapsed = search_start.elapsed();
-    println!("\n{}", "═══ RESULT ═══".green().bold());
-    println!("{} {}", "search time:".dimmed(), format!("{:.1?}", search_elapsed).yellow());
-    println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().yellow());
-    if let (Some(iter), Some((cost, best_id))) = (best_found_at, best) {
-        let state = &nodes[best_id].state;
-        println!("{} {}", "best found at expansion:".dimmed(), iter.to_string().yellow());
-        println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
-        println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
-        println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
-    }
-
-    let best_pair = best.map(|(cost, id)| (cost, nodes[id].state.clone()));
-
-    BestFirstResult {
-        best: best_pair,
-        original_size,
-        best_found_at,
-        num_expansions,
-        replay_log: ReplayLog {
-            config: ReplayConfig {
-                priority: strategy.as_str().to_string(),
-                budget,
-                max_arity,
-            },
-            steps: replay_steps,
-        },
     }
 }
 
@@ -453,6 +346,14 @@ impl InteractiveSearch {
     pub fn best_node_id(&self) -> Option<usize> {
         self.best.map(|(_, id)| id)
     }
+    /// Expansion index at which the best node was first found.
+    pub fn best_found_at(&self) -> Option<usize> {
+        self.best_found_at
+    }
+    /// Best cost and a reference to its search state.
+    pub fn best_state(&self) -> Option<(usize, &SearchState)> {
+        self.best.map(|(cost, id)| (cost, &self.nodes[id].state))
+    }
     pub fn shared(&self) -> &SharedSearchData {
         &self.shared
     }
@@ -490,12 +391,13 @@ impl InteractiveSearch {
 
     // ── Debug log generation ───────────────────────────────────────────
 
-    /// Build a `ReplayLog` from the expansion history.
-    pub fn replay_log(&self) -> ReplayLog {
+    /// Build a `ReplayLog` from the expansion history. Pass `budget` from the
+    /// search config (or 0 for WASM/interactive use where budget is open-ended).
+    pub fn replay_log(&self, budget: usize) -> ReplayLog {
         ReplayLog {
             config: ReplayConfig {
                 priority: self.strategy.as_str().to_string(),
-                budget: 0,
+                budget,
                 max_arity: self.max_arity,
             },
             steps: self
