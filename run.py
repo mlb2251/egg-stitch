@@ -3,8 +3,9 @@
 
 import sys
 import json
-from expts import compress, run_domain, runall
+from expts import compress, run_domain, runall, ALL_DOMAINS
 import subprocess as sp
+
 
 
 
@@ -128,9 +129,45 @@ def dev_best_first():
     best_first()
 
 
+
+def best_first_all():
+    for domain in ALL_DOMAINS:
+        compress(
+        f"data/domains/cogsci/{domain}.json",
+        # rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        rewrites=None,
+        output=f"{domain}_bf_cost.json",
+        search="best-first",
+        priority="cost",
+        num_steps=5000,
+        max_arity=2,
+    )
+
+
 def stitch():
-    stitch_cmd = ["cargo", "run", "--release", "--bin=compress", "data/cogsci/dials.json", "-i1", "-a2"]
-    sp.run(stitch_cmd, check=True, cwd="../stitch")
+    stitch_dir = "../stitch"
+    relative_outfiles = []
+    for domain in ALL_DOMAINS:
+        name = f"{domain}"
+        outfile = f"out/for-egg-stitch/{name}.json"
+        relative_outfiles.append(f"{stitch_dir}/{outfile}")
+        print(f"\033[92mRunning {domain}\033[0m")
+        stitch_cmd = ["cargo", "run", "--release", "--bin=compress", f"data/cogsci/{domain}.json", "-i1", "-a2", "--out", outfile, "--no-curried-bodies", "--no-curried-metavars", "--silent"]
+        sp.run(stitch_cmd, check=True, cwd=stitch_dir)
+    
+    for relative_outfile in relative_outfiles:
+        with open(relative_outfile) as f:
+            data = json.load(f)
+        abstraction = data["abstractions"][0]
+        print(f"From {relative_outfile}:")
+        print("  ", abstraction["body"])
+        print("  ", abstraction["arity"])
+        print("  ", abstraction["compression_ratio"])
+
+# def babble():
+
+
+
 
 
 def dev():
