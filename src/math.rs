@@ -2,7 +2,6 @@
 ///
 /// Handles `NEG_INFINITY` inputs so it can be used as a fold identity for
 /// computing log-sum-exp over a slice.
-#[allow(dead_code)]
 pub fn logaddexp(a: f64, b: f64) -> f64 {
     if a == f64::NEG_INFINITY {
         return b;

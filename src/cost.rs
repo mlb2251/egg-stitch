@@ -20,9 +20,7 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
-/// When `check_slow` is set, cross-checks the result against a slow egg-based
-/// reference implementation and panics on mismatch.
-pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState, check_slow: bool) -> usize {
+pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState, check_slow: bool) -> usize {
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
@@ -34,13 +32,11 @@ pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchS
         eclass_to_matches.insert(m.root_eclass, &m.substs);
     }
     while let Some(Reverse(eclass)) = work_queue.pop() {
-        // we assume that small numbers are children of large numbers, so when we pop we have already computed children
         if size_under_rewrite.contains_key(&eclass) {
             continue;
         }
         let size_current = get_size(eclass, &size_under_rewrite);
         let mut best = size_current;
-        // trying a rewrite; (fn_i arg0 ...)
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
                 let mut size_new: i64 = 1;
@@ -52,7 +48,6 @@ pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchS
                 }
             }
         }
-        // not doing a rewrite (just try all the enocdes)
         if let Some(enode) = egraph[eclass].nodes.first() {
             let mut size_no_rewrite: i64 = 1;
             for &child in &enode.children {
@@ -77,10 +72,9 @@ pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchS
     final_size as usize
 }
 
-/// Clones the egraph and unions each match root with an `inv_0(args...)` node, then
-/// rebuilds. Used both as a slow reference for `compute_size` and as a starting point
-/// for extracting rewritten programs.
-fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &SearchState) -> StitchEgraph {
+/// Clones the egraph and unions each match root with an `inv_0(args...)` node, then rebuilds.
+/// Used for validating `compute_size` and for extracting rewritten programs.
+pub(crate) fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &SearchState) -> StitchEgraph {
     let mut egraph = egraph.clone();
     for m in &search_state.matches {
         for subst in &m.substs {
