@@ -6,7 +6,7 @@ use crate::cost::compute_pattern_size;
 use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 
-/// Sets the log weight of particles that don't match the follow pattern to -inf, and prints status.
+/// Sets the log weight of particles that don't match the follow pattern to -inf.
 pub fn apply_follow_constraint(
     states: &[SearchState],
     log_weights: &mut [f64],
@@ -19,7 +19,6 @@ pub fn apply_follow_constraint(
     let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
 
     if verbose {
-        // Print top 5 particles by weight before zeroing out follow-mismatches.
         let weights_before: Vec<f64> = if log_total.is_finite() {
             log_weights.iter().map(|lw| (lw - log_total).exp()).collect()
         } else {
@@ -32,19 +31,10 @@ pub fn apply_follow_constraint(
             let usage_matches: usize = states[i].matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
             let pat_size = compute_pattern_size(&states[i].pattern);
             let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
-            let cost_i = costs[i];
-            let ratio = original_size as f64 / cost_i as f64;
-            println!("  {} {}", format!("p{}:", i).dimmed(), states[i].pattern.to_string().cyan());
-            println!(
-                "      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
-                cost_i,
-                ratio,
-                weights_before[i],
-                states[i].matches.len(),
-                usage_matches,
-                pat_size,
-                appx_cost
-            );
+            println!("  {} {} cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
+                format!("p{}:", i).dimmed(), states[i].pattern.to_string().cyan(),
+                costs[i], original_size as f64 / costs[i] as f64, weights_before[i],
+                states[i].matches.len(), usage_matches, pat_size, appx_cost);
         }
     }
 
@@ -79,13 +69,7 @@ pub fn print_top_particles(states: &[SearchState], weights: &[f64], shared: &Sha
         println!("  {} {}", format!("p{}:", i).dimmed(), states[i].pattern.to_string().cyan());
         println!(
             "      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
-            cost_i,
-            ratio,
-            weights[i],
-            states[i].matches.len(),
-            usage_matches,
-            pat_size,
-            appx_cost
+            cost_i, ratio, weights[i], states[i].matches.len(), usage_matches, pat_size, appx_cost
         );
     }
 }

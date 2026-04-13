@@ -40,16 +40,12 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(&shared)).collect();
 
     for step in 0..num_steps {
-
-        // === PROPOSE ===
         for ss in search_states.iter_mut() {
             ss.expand_random(&shared, false);
         }
 
-        // === COST ===
         let costs: Vec<usize> = search_states.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
-        
-        // === BEST-SO-FAR ===
+
         for (i, cost) in costs.iter().enumerate() {
             if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), search_states[i].pattern.to_string().cyan());
@@ -58,23 +54,19 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             }
         }
 
-        // === WEIGHT ===
-        // logweight = -cost / temperature
+        // log-space weights: logw_i = -cost_i / temperature
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
 
-        // logweight=-inf for programs without holes (to make space for new ones)
         for (i, s) in search_states.iter().enumerate() {
             if s.pattern.vars.is_empty() {
                 log_weights[i] = f64::NEG_INFINITY;
             }
         }
 
-        // logweight=-inf for programs that don't match the follow pattern (if provided)
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&search_states, &mut log_weights, follow, &shared, original_size, &costs, verbose);
         }
 
-        // normalize
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
         let mut weights: Vec<f64> = if total_weight.is_finite() {
             log_weights.iter().map(|lw| (lw - total_weight).exp()).collect()
@@ -100,18 +92,15 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
             print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
         }
 
-        // === RESAMPLE ===
         let weights_acc = normalize_and_accumulate(&mut weights);
         let resample_indices: Vec<usize> = (0..num_particles).map(|_| weighted_choice(&weights_acc)).collect();
-        // the clone here makes it safe to then mutate each state without cloning during expansion
         search_states = resample_indices.iter().map(|&idx| search_states[idx].clone()).collect();
 
-        let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &weights)) } else { None };
-        if let Some(particles) = debug_particles {
+        if debug {
             debug_steps.push(StepLog {
                 step,
-                particles,
-                resample_indices: resample_indices.clone(),
+                particles: build_particle_logs(&search_states, &costs, &weights),
+                resample_indices,
                 best_cost: best_so_far.as_ref().map(|(c, _)| *c),
                 best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
             });
@@ -133,12 +122,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     }
 
     let debug_log = if debug {
-        Some(DebugLog {
-            original_size,
-            num_particles,
-            temperature,
-            steps: debug_steps,
-        })
+        Some(DebugLog { original_size, num_particles, temperature, steps: debug_steps })
     } else {
         None
     };
@@ -161,7 +145,7 @@ pub fn weighted_choice(acc_weights: &[f64]) -> usize {
     }
 }
 
-/// Normalizes `weights` to sum to 1 in-place and returns a fresh cumulative distribution.
+/// Normalizes weights in-place and returns a separate cumulative distribution.
 pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
     let weight_sum = weights.iter().sum::<f64>();
     if weight_sum == 0.0 {

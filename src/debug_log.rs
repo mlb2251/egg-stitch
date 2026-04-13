@@ -43,13 +43,9 @@ pub struct TreeNodeLog {
 #[derive(Serialize)]
 pub struct StepLog {
     pub step: usize,
-    /// Each particle after the propose (expand) phase.
     pub particles: Vec<ParticleLog>,
-    /// Indices chosen during resampling (length = num_particles).
     pub resample_indices: Vec<usize>,
-    /// Global best cost so far (after this step).
     pub best_cost: Option<usize>,
-    /// Global best pattern so far.
     pub best_pattern: Option<String>,
 }
 

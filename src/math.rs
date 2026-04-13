@@ -10,5 +10,5 @@ pub fn logaddexp(a: f64, b: f64) -> f64 {
         return a;
     }
     let (hi, lo) = if a > b { (a, b) } else { (b, a) };
-    hi + (-((hi - lo).abs())).exp().ln_1p()
+    hi + (-(hi - lo)).exp().ln_1p()
 }

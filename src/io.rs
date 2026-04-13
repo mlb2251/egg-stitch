@@ -32,7 +32,6 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
         None => vec![],
     };
     println!("loaded {} rules", rules.len());
-    // println!("{:#?}", rules);
     egraph.rebuild();
     let mut runner: egg::Runner<StitchLang, StitchAnalysis> = egg::Runner::default();
     runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
@@ -69,6 +68,7 @@ pub fn print_programs(term: &egg::RecExpr<StitchLang>) {
 }
 
 /// Recursively prints an s-expression starting from the given node id.
+#[allow(dead_code)]
 fn print_expr(term: &egg::RecExpr<StitchLang>, id: usize) {
     let node = &term.as_ref()[id];
     if node.children.is_empty() {
