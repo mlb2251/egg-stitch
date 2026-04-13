@@ -39,7 +39,7 @@ struct Node {
 /// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
 /// improvement" just means we're grinding through a less promising branch.)
 pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> BestFirstResult {
-    let (shared, original_size) = setup_search(egraph, root, args);
+    let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let budget = args.num_steps;
@@ -47,7 +47,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let debug = args.debug_log;
 
     let initial_state = SearchState::new(&shared);
-    let initial_cost = compute_cost(&shared.egraph, root, &initial_state, shared.check_slow);
+    let initial_cost = compute_cost(&shared.egraph, root, &cost_cache, &initial_state, shared.check_slow);
 
     let mut nodes: Vec<Node> = Vec::new();
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
@@ -90,7 +90,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                 continue;
             }
 
-            let child_cost = compute_cost(&shared.egraph, root, &child_state, shared.check_slow);
+            let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow);
             let child_id = nodes.len();
 
             if child_state.pattern.vars.len() <= max_arity && best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
