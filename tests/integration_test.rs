@@ -79,3 +79,58 @@ fn check_slow_matches_fast() {
     let result = run(&args);
     assert!(result.best.is_some());
 }
+
+/// Verify fast == slow on dials without rewrite rules (no high-id children).
+#[test]
+fn check_slow_no_rules() {
+    if !fixtures_present() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let result = run(&args);
+    assert!(result.best.is_some());
+}
+
+const REWRITES_DIR: &str = "../babble/harness/data/benchmark-dsrs";
+
+/// Verify fast == slow across multiple domains with their rewrite rules.
+#[test]
+fn check_slow_furniture() {
+    let input = "data/domains/cogsci/furniture.json";
+    let rules = &format!("{}/drawings.furniture.rewrites", REWRITES_DIR);
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() { return; }
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let result = run(&args);
+    assert!(result.best.is_some());
+}
+
+#[test]
+fn check_slow_nuts_bolts() {
+    let input = "data/domains/cogsci/nuts-bolts.json";
+    let rules = &format!("{}/drawings.nuts-bolts.rewrites", REWRITES_DIR);
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() { return; }
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let result = run(&args);
+    assert!(result.best.is_some());
+}
+
+#[test]
+fn check_slow_wheels() {
+    let input = "data/domains/cogsci/wheels.json";
+    let rules = &format!("{}/drawings.wheels.rewrites", REWRITES_DIR);
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() { return; }
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let result = run(&args);
+    assert!(result.best.is_some());
+}
+
+/// Verify fast == slow with higher arity.
+#[test]
+fn check_slow_high_arity() {
+    if !fixtures_present() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow"]);
+    let result = run(&args);
+    assert!(result.best.is_some());
+}
