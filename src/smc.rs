@@ -2,11 +2,33 @@ use colored::Colorize;
 
 use crate::cost::compute_cost;
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::lang::StitchEgraph;
+use crate::lang::{StitchEgraph, StitchLang};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
+use crate::revexpr::RevExpr;
 use crate::search::{SearchState, setup_search};
+use egg::ENodeOrVar;
 use rand::Rng;
+use rustc_hash::FxHashMap;
+
+/// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
+/// buffer, either bumping the multiplicity of an existing group or pushing a new one.
+fn dedup_insert(
+    s: SearchState,
+    states: &mut Vec<SearchState>,
+    mults: &mut Vec<usize>,
+    dedup: &mut FxHashMap<RevExpr<ENodeOrVar<StitchLang>>, usize>,
+) {
+    match dedup.get(&s.pattern.pattern) {
+        Some(&idx) => mults[idx] += 1,
+        None => {
+            let idx = states.len();
+            dedup.insert(s.pattern.pattern.clone(), idx);
+            states.push(s);
+            mults.push(1);
+        }
+    }
+}
 
 /// Output of a completed SMC run.
 pub struct SmcResult {
@@ -19,6 +41,11 @@ pub struct SmcResult {
 }
 
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
+///
+/// Particles are stored as `(SearchState, multiplicity)` pairs. After each
+/// expansion step, identical patterns are deduplicated and their counts merged,
+/// so cost computation runs once per unique pattern instead of once per particle.
+#[allow(clippy::needless_range_loop)]
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
     let (shared, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
@@ -36,19 +63,32 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
-    let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(&shared)).collect();
+    let mut particles: Vec<(SearchState, usize)> = vec![(SearchState::new(&shared), num_particles)];
 
     for step in 0..num_steps {
-        for ss in search_states.iter_mut() {
-            ss.expand_random(&shared, false);
+        // Expand each (state, mult) group into `mult` independent random expansions,
+        // deduplicating identical resulting patterns.
+        let mut expanded: Vec<SearchState> = Vec::new();
+        let mut mults: Vec<usize> = Vec::new();
+        let mut dedup: FxHashMap<RevExpr<ENodeOrVar<StitchLang>>, usize> = FxHashMap::default();
+        for (state, mult) in particles.drain(..) {
+            for _ in 1..mult {
+                let mut s = state.clone();
+                s.expand_random(&shared, false);
+                dedup_insert(s, &mut expanded, &mut mults, &mut dedup);
+            }
+            let mut s = state;
+            s.expand_random(&shared, false);
+            dedup_insert(s, &mut expanded, &mut mults, &mut dedup);
         }
+        drop(dedup);
 
-        let costs: Vec<usize> = search_states.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
+        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
 
         for (i, cost) in costs.iter().enumerate() {
-            if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), search_states[i].pattern.to_string().cyan());
-                best_so_far = Some((*cost, search_states[i].clone()));
+            if expanded[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
+                best_so_far = Some((*cost, expanded[i].clone()));
                 best_found_at = Some(step);
             }
         }
@@ -56,14 +96,14 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         // log-space weights: logw_i = -cost_i / temperature
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
 
-        for (i, s) in search_states.iter().enumerate() {
+        for (i, s) in expanded.iter().enumerate() {
             if s.pattern.vars.is_empty() {
                 log_weights[i] = f64::NEG_INFINITY;
             }
         }
 
         if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&search_states, &mut log_weights, follow, &shared, original_size, &costs, verbose);
+            apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
         }
 
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
@@ -74,13 +114,13 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         };
 
         if weights.iter().sum::<f64>() == 0.0 {
-            log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);
+            log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
         if best_found_at.is_some_and(|bf| (step as i64) - (bf as i64) > dead_runs as i64) {
-            log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);
+            log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
@@ -88,17 +128,21 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         if verbose {
             println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-            print_top_particles(&search_states, &weights, &shared, original_size, |i| costs[i]);
+            print_top_particles(&expanded, &weights, &shared, original_size, |i| costs[i]);
         }
 
         let weights_acc = normalize_and_accumulate(&mut weights);
-        let resample_indices: Vec<usize> = (0..num_particles).map(|_| weighted_choice(&weights_acc)).collect();
-        search_states = resample_indices.iter().map(|&idx| search_states[idx].clone()).collect();
+        let mut counts: Vec<usize> = vec![0; expanded.len()];
+        let resample_indices: Vec<usize> = (0..num_particles).map(|_| {
+            let idx = weighted_choice(&weights_acc);
+            counts[idx] += 1;
+            idx
+        }).collect();
 
         if debug {
             debug_steps.push(StepLog {
                 step,
-                particles: build_particle_logs(&search_states, &costs, &weights),
+                particles: build_particle_logs(&expanded, &costs, &weights),
                 resample_indices,
                 best_cost: best_so_far.as_ref().map(|(c, _)| *c),
                 best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
@@ -107,8 +151,11 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         if verbose {
             println!("{}", format!("Step {}: resampled all particles", step).dimmed());
-            print_top_particles(&search_states, &weights, &shared, original_size, |i| compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow));
+            let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
+            print_top_particles(&expanded, &resample_weights, &shared, original_size, |i| costs[i]);
         }
+
+        particles = expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect();
         steps_run = step + 1;
     }
 
