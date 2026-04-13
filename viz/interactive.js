@@ -25,6 +25,20 @@ let openNodes = new Set();
 let selectedId = null;
 let expandedOnly = false;
 
+// Track engine-level config that requires a full reload to change
+// (baked into SharedSearchData at construction time).
+let lastLoadedEngineKey = null;
+function engineKey() {
+  return JSON.stringify({
+    domain: $('selDomain').value,
+    rules: $('selRules').value,
+    follow: $('cfgFollow').value.trim() || null,
+    weight_by_usage: $('cfgWeightByUsage').checked,
+    p_reuse: parseFloat($('cfgPReuse').value) || 0.5,
+  });
+}
+function trackLoadedConfig() { lastLoadedEngineKey = engineKey(); }
+
 // ── WASM loading ─────────────────────────────────────────────────────────────
 
 async function loadWasm() {
@@ -57,6 +71,7 @@ async function autoLoadFromParams() {
   try {
     const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
     engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+    trackLoadedConfig();
     openNodes.clear();
     openNodes.add(0);
     selectedId = 0;
@@ -202,6 +217,7 @@ $('btnLoad').addEventListener('click', async () => {
   try {
     const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
     engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+    trackLoadedConfig();
     openNodes.clear();
     openNodes.add(0);
     selectedId = 0;
@@ -227,8 +243,10 @@ $('btnRun').addEventListener('click', async () => {
   resultsBar.innerHTML = '';
 
   try {
-    // Load engine if not yet loaded.
-    if (!engine) {
+    // (Re)load engine if not yet loaded or if engine-level config changed
+    // (domain, rules, follow, weight_by_usage, p_reuse).
+    // Priority and max_arity can be changed live without reload.
+    if (!engine || engineKey() !== lastLoadedEngineKey) {
       statusBar.textContent = 'loading domain…';
       await paint();
       const { programsText, rulesText } = await fetchDomainData($('selDomain').value, $('selRules').value);
@@ -236,7 +254,12 @@ $('btnRun').addEventListener('click', async () => {
       openNodes.clear();
       openNodes.add(0);
       selectedId = 0;
+      trackLoadedConfig();
     }
+
+    // Sync live-changeable settings to the engine.
+    engine.set_priority($('cfgPriority').value || 'cost');
+    engine.set_max_arity(parseInt($('cfgArity').value) || 2);
 
     const searchType = $('selSearch').value;
     statusBar.textContent = `running ${searchType}…`;
