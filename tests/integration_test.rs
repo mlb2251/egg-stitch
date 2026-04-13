@@ -71,3 +71,14 @@ fn no_follow_still_produces_best() {
     let result = run(&args);
     assert!(result.best.is_some());
 }
+
+/// Verify fast rewrite cost matches slow (egraph-based) cost.
+#[test]
+fn check_slow_matches_fast() {
+    if !fixtures_present() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let result = run(&args);
+    assert!(result.best.is_some());
+}

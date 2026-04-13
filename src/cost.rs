@@ -20,10 +20,24 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
+///
+/// Uses a work-queue approach: starts from match locations, propagates size
+/// improvements upward through parents until no further improvements are found.
+/// We build our own parent map since `egraph.parents()` can have missing entries.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState, check_slow: bool) -> usize {
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
+
+    // Build a complete child->parents map from all enodes.
+    let mut parents_of: std::collections::HashMap<Id, Vec<Id>, rustc_hash::FxBuildHasher> = FxHashMap::<Id, Vec<Id>>::default();
+    for class in egraph.classes() {
+        for enode in &class.nodes {
+            for &child in &enode.children {
+                parents_of.entry(child).or_default().push(class.id);
+            }
+        }
+    }
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64) };
 
@@ -32,9 +46,6 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &
         eclass_to_matches.insert(m.root_eclass, &m.substs);
     }
     while let Some(Reverse(eclass)) = work_queue.pop() {
-        if size_under_rewrite.contains_key(&eclass) {
-            continue;
-        }
         let size_current = get_size(eclass, &size_under_rewrite);
         let mut best = size_current;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
@@ -48,7 +59,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &
                 }
             }
         }
-        if let Some(enode) = egraph[eclass].nodes.first() {
+        for enode in &egraph[eclass].nodes {
             let mut size_no_rewrite: i64 = 1;
             for &child in &enode.children {
                 size_no_rewrite += get_size(child, &size_under_rewrite);
@@ -58,8 +69,10 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &
             }
         }
         if best < size_current {
-            for parent in egraph[eclass].parents() {
-                work_queue.push(Reverse(parent));
+            if let Some(parents) = parents_of.get(&eclass) {
+                for &parent in parents {
+                    work_queue.push(Reverse(parent));
+                }
             }
             size_under_rewrite.insert(eclass, best);
         }
