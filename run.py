@@ -123,8 +123,20 @@ def best_first():
     )
 
 
-def dev():
+def dev_best_first():
     best_first()
+
+
+def dev():
+    compress(
+        "data/domains/cogsci/dials.json",
+        rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        output="dials_T1000.json",
+        num_steps=100,
+        num_particles=1000,
+        temperature=1000,
+        max_arity=2,
+    )
 
 
 
@@ -134,6 +146,7 @@ EXPTS = {
     "dials-compress": dials_compress,
     "dials-follow": dials_follow,
     "dev": dev,
+    "dev-best-first": dev_best_first,
     "temp-sweep": temp_sweep,
     "bf-dfs": bf_dfs,
     "bf-bfs": bf_bfs,
