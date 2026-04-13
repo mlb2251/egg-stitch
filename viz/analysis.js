@@ -39,7 +39,7 @@ async function load() {
       groupMap.get(folder).push(row);
     };
 
-    const isRunFile = f => !f.endsWith('_debug.json') && !f.endsWith('_replay.json');
+    const isRunFile = f => !f.endsWith('_debug.json');
 
     // Top-level (ungrouped / legacy) runs.
     const topPromises = topFiles
@@ -79,7 +79,6 @@ const COLUMNS = [
   [null, ''],
   ['timestamp', 'when'],
   ['name', 'run'],
-  [null, 'links'],
   ['rewrites', 'dsr'],
   ['final_cost', 'cost'],
   ['compression_ratio', 'ratio'],
@@ -107,9 +106,6 @@ async function deleteRun(r) {
   if (r.debug_log_file) {
     // Best-effort: ignore 404 if there's no debug file.
     await fetch(r.folder ? `results/${r.folder}/${r.debug_log_file}` : `results/${r.debug_log_file}`, { method: 'DELETE' });
-  }
-  if (r.replay_log_file) {
-    await fetch(r.folder ? `results/${r.folder}/${r.replay_log_file}` : `results/${r.replay_log_file}`, { method: 'DELETE' });
   }
   await load();
 }
@@ -167,22 +163,10 @@ function renderGroup(g, maxRatio) {
     const tr = document.createElement('tr');
     tr.className = 'run';
     const barW = Math.round(60 * (r.compression_ratio || 0) / maxRatio);
-    const replayPath = r.replay_log_file
-      ? (r.folder ? `${r.folder}/${r.replay_log_file}` : r.replay_log_file)
-      : null;
-    // Extract domain name from input_file (e.g. "data/domains/cogsci/dials.json" -> "dials")
-    const domain = r.input_file ? r.input_file.replace(/.*\//, '').replace(/\.json$/, '') : '';
-    // Extract rules file basename (e.g. ".../drawings.dials.rewrites" -> "drawings.dials.rewrites")
-    const rules = r.rules_file ? r.rules_file.replace(/.*\//, '') : '';
-    const replayParams = replayPath ? `replay=${encodeURIComponent(replayPath)}&domain=${encodeURIComponent(domain)}&rules=${encodeURIComponent(rules)}` : '';
-    const configParams = replayPath ? `config=${encodeURIComponent(replayPath)}&domain=${encodeURIComponent(domain)}&rules=${encodeURIComponent(rules)}` : '';
-    const replayLink = replayPath ? `<a class="debug-link" href="interactive.html?${replayParams}" onclick="event.stopPropagation()">replay</a>` : '';
-    const configLink = replayPath ? `<a class="debug-link" href="interactive.html?${configParams}" onclick="event.stopPropagation()">config</a>` : '';
     tr.innerHTML = `
       <td><button class="del del-run" title="delete run">×</button></td>
       <td>${fmtTime(r.timestamp)}</td>
       <td><b>${r.name}</b></td>
-      <td style="display:flex;gap:.3rem;align-items:center">${replayLink}${configLink}</td>
       <td>${r.rewrites ? '<span class="pill">yes</span>' : '<span class="pill no">no</span>'}</td>
       <td>${fmt(r.final_cost)}</td>
       <td><span class="ratio">${(r.compression_ratio||0).toFixed(3)}×</span><span class="bar" style="width:${barW}px"></span></td>

@@ -6,7 +6,6 @@ pub mod lang;
 pub mod matching;
 pub mod math;
 pub mod pattern;
-pub mod replay;
 pub mod results;
 pub mod revexpr;
 pub mod search;
@@ -133,28 +132,17 @@ mod wasm_api {
             self.inner.step_n(n)
         }
 
-        /// Expand a specific node (for manual clicks and replay).
+        /// Expand a specific node (for manual clicks).
         /// Returns true if the node was expanded.
         pub fn expand_node(&mut self, node_id: usize) -> bool {
             self.inner.expand_node(node_id)
-        }
-
-        /// Find an unexpanded node by pattern string (for replay).
-        /// Returns the node id, or -1 if not found.
-        pub fn find_unexpanded_by_pattern(&self, pattern: &str) -> i32 {
-            self.inner.find_unexpanded_by_pattern(pattern).map_or(-1, |id| id as i32)
-        }
-
-        /// Check if any node has the given pattern (for replay error reporting).
-        pub fn has_pattern(&self, pattern: &str) -> bool {
-            self.inner.has_pattern(pattern)
         }
 
         // ── SMC ────────────────────────────────────────────────────────
 
         /// Run SMC search over the shared tree. After this call, the tree
         /// is populated and can be queried with `nodes_json()`, `best_cost()`,
-        /// `expansion_order_json()`, etc. Replay also works.
+        /// `expansion_order_json()`, etc.
         pub fn run_smc(&mut self, num_particles: usize, num_steps: usize, temperature: f64, dead_runs: usize) {
             let config = SmcConfig {
                 num_particles,
@@ -185,14 +173,6 @@ mod wasm_api {
             self.inner.set_max_arity(max_arity);
         }
 
-        /// Parse a replay log JSON string, apply its config (priority, max_arity),
-        /// and run all steps entirely in Rust. Returns the config as JSON so JS
-        /// can update dropdowns.
-        pub fn replay_from_json(&mut self, json: &str) -> Result<JsValue, JsError> {
-            let config = crate::replay::replay_from_json(&mut self.inner, json).map_err(|e| JsError::new(&e))?;
-            Ok(serde_wasm_bindgen::to_value(&config)?)
-        }
-
         // ── Snapshots (JSON via serde-wasm-bindgen) ────────────────────
 
         /// Full node tree snapshot for rendering.
@@ -214,12 +194,6 @@ mod wasm_api {
         /// Expansion order as a JSON array of node ids.
         pub fn expansion_order_json(&self) -> Result<JsValue, JsError> {
             Ok(serde_wasm_bindgen::to_value(self.inner.expansion_order())?)
-        }
-
-        /// Replay log as a JSON string, suitable for saving to disk.
-        pub fn replay_log_json(&self, budget: usize) -> Result<String, JsError> {
-            let log = self.inner.replay_log(budget);
-            serde_json::to_string(&log).map_err(|e| JsError::new(&format!("serialize: {e}")))
         }
 
         /// Summary of current search results as JSON.

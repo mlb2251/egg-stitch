@@ -15,8 +15,8 @@ pub struct SmcConfig {
 
 /// Runs SMC over the interactive search tree. Particles are node IDs;
 /// expanding a particle enumerates all successors in the shared tree,
-/// then one child is chosen uniformly at random. Best tracking, replay
-/// log, and tree snapshots are all maintained by `InteractiveSearch`.
+/// then one child is chosen uniformly at random. Best tracking and
+/// tree snapshots are all maintained by `InteractiveSearch`.
 pub fn smc(search: &mut InteractiveSearch, config: &SmcConfig) {
     let mut particles: Vec<usize> = vec![0; config.num_particles];
     let mut best_found_at_step: Option<usize> = None;

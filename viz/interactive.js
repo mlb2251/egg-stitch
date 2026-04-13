@@ -5,11 +5,6 @@
 import { buildTreeMeta, buildExpOrder, buildBestPath, renderTree, renderSidePane, wireNavLinks, escapeHtml } from './tree-render.js';
 import { fetchDomainData, saveSearchResults, getSessionFolder, paint } from './shared.js';
 import { loadWasm, createEngine, runSearch } from './wasm-api.js';
-import {
-  scanReplays, applyReplayConfig, updateReplayButtons, replayOneStep,
-  runReplayFromJson, runReplayFromUrl, wireReplaySelect, getReplayJsonText,
-  getReplayExpectedCost, setReplayExpectedCost,
-} from './replay.js';
 
 const $ = id => document.getElementById(id);
 const overlay = $('loading-overlay');
@@ -56,12 +51,10 @@ async function initWasm() {
   }
 }
 
-/// If URL has ?domain=...&replay=... or ?domain=...&config=... params, auto-load.
+/// If URL has ?domain=... params, auto-load.
 async function autoLoadFromParams() {
   const params = new URLSearchParams(location.search);
   const domain = params.get('domain');
-  const replayFile = params.get('replay');
-  const configFile = params.get('config');
   if (!domain) return;
 
   const rules = params.get('rules') || '';
@@ -78,32 +71,6 @@ async function autoLoadFromParams() {
     enableControls(true);
   } catch (e) {
     console.warn('auto-load failed:', e);
-    return;
-  }
-
-  if (configFile) {
-    try {
-      const text = await fetch(`results/${configFile}`).then(r => {
-        if (!r.ok) throw new Error(r.status);
-        return r.text();
-      });
-      const log = JSON.parse(text);
-      applyReplayConfig(log.config, engine);
-      renderAll();
-      statusBar.textContent = `loaded config: priority=${log.config?.priority}, max_arity=${log.config?.max_arity}`;
-    } catch (e) { console.warn('failed to load config:', e); }
-  } else if (replayFile) {
-    const runPath = `results/${replayFile.replace('_replay.json', '.json')}`;
-    try {
-      const run = await fetch(runPath).then(r => r.ok ? r.json() : null);
-      if (run && run.final_cost != null) setReplayExpectedCost(run.final_cost);
-    } catch (e) { console.warn('failed to fetch run result:', e); }
-
-    const sel = $('selReplay');
-    const opt = [...sel.options].find(o => o.value === replayFile);
-    if (opt) sel.value = replayFile;
-
-    await doRunReplayFromUrl(`results/${replayFile}`);
   }
 }
 
@@ -250,8 +217,7 @@ $('btnRun').addEventListener('click', async () => {
     statusBar.textContent = 'saving\u2026';
     await paint();
     const outputName = `${domain}_${searchType.replace('-', '_')}`;
-    const budget = searchType === 'best-first' ? (searchParams.budget || 0) : 0;
-    const saved = await saveSearchResults(engine, domain, rulesFile, searchType, elapsed, outputName, budget);
+    const saved = await saveSearchResults(engine, domain, rulesFile, searchType, elapsed, outputName);
 
     showResults(results, elapsed.toFixed(2), searchType, saved.folder);
     enableControls(true);
@@ -307,63 +273,6 @@ function enableControls(on) {
   $('btnStep').disabled = !on;
   $('btnExpandBest').disabled = !on;
   $('btnCollapseAll').disabled = !on;
-  $('selReplay').disabled = !on;
-  if (on) scanReplays(engine);
-  updateReplayButtons(engine);
-}
-
-// ── Replay event handlers ───────────────────────────────────────────────────
-
-wireReplaySelect(engine, statusBar);
-
-$('btnReplay').addEventListener('click', () => {
-  if (replayOneStep(engine, openNodes, statusBar)) {
-    selectedId = engine.expansion_order_json().at(-1) ?? selectedId;
-    renderAll();
-    updateReplayButtons(engine);
-  }
-});
-
-$('btnReplayAll').addEventListener('click', () => {
-  const json = getReplayJsonText();
-  if (json) doRunReplayFromJson(json);
-});
-
-/// Run a full replay from JSON and update the UI.
-async function doRunReplayFromJson(json) {
-  const formatCost = (cost) => cost >= 0 ? cost.toLocaleString() : '\u2014';
-
-  $('btnReplayAll').disabled = true;
-  $('btnReplay').disabled = true;
-
-  const { error, replayMs, nExpanded, bestCost } = await runReplayFromJson(engine, json, statusBar);
-
-  if (error) {
-    statusBar.innerHTML = `<b class="bad">${error}</b> (${replayMs}ms)`;
-  } else {
-    const costStr = formatCost(bestCost);
-    statusBar.textContent = `replayed ${nExpanded} steps in ${replayMs}ms \u00b7 best cost ${costStr} \u00b7 rendering\u2026`;
-  }
-  await paint();
-
-  const t1 = performance.now();
-  renderAll();
-  updateReplayButtons(engine);
-  const renderMs = (performance.now() - t1).toFixed(0);
-  if (!error) {
-    const costStr = formatCost(bestCost);
-    const expected = getReplayExpectedCost();
-    statusBar.innerHTML = `replayed ${nExpanded} steps in <b>${replayMs}ms</b> \u00b7 render <b>${renderMs}ms</b> \u00b7 best cost <b>${costStr}</b>` + (expected != null ? ` (expected ${expected.toLocaleString()})` : '');
-  }
-}
-
-/// Run a full replay from a URL.
-async function doRunReplayFromUrl(url) {
-  const text = await fetch(url).then(r => {
-    if (!r.ok) throw new Error(`${r.status} loading ${url}`);
-    return r.text();
-  });
-  await doRunReplayFromJson(text);
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────

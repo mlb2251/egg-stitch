@@ -88,16 +88,12 @@ export function buildRunResult(eng, searchType, domain, rulesFile, elapsedSecs) 
     num_matches: r.num_matches,
     num_expansions: r.num_expansions,
     num_steps_run: r.num_expansions,
-    replay_log_file: null, // filled in by caller after saving replay
   };
 }
 
-/// Save engine results + replay log. Returns { folder }.
-export async function saveSearchResults(eng, domain, rulesFile, searchType, elapsed, outputName, budget) {
+/// Save engine results. Returns { folder }.
+export async function saveSearchResults(eng, domain, rulesFile, searchType, elapsed, outputName) {
   const result = buildRunResult(eng, searchType, domain, rulesFile, elapsed);
-  const replayFile = `${outputName}_replay.json`;
-  await saveFile(replayFile, eng.replay_log_json(budget || 0));
-  result.replay_log_file = replayFile;
   await saveFile(`${outputName}.json`, JSON.stringify(result, null, 2));
   return { folder: getSessionFolder() };
 }

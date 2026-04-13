@@ -52,12 +52,10 @@ make server
 
 The project is structured as a Rust library (`src/lib.rs`) with a CLI binary (`src/main.rs`).
 - **Library modules** (`search`, `best_first`, `smc`, `cost`, `pattern`, etc.) contain all core logic
-- **`replay.rs`** contains replay log structs and replay execution (planned for deprecation, kept isolated)
 - **`main.rs`** is the CLI entry point using `clap` for argument parsing
 - **WASM API** (`lib.rs`, behind the `wasm` feature) exposes an `Engine` struct to JavaScript for interactive exploration
 - **`viz/interactive.html`** is the web UI that loads the WASM module
 - **`viz/wasm-api.js`** centralizes all direct WASM/engine calls
-- **`viz/replay.js`** contains replay UI logic (planned for deprecation)
 - **`viz/shared.js`** has shared utilities (domain loading, file saving, `parseDirectoryListing`, `escapeHtml`)
 - **`viz/tree-render.js`** has tree rendering logic shared by the interactive explorer
 

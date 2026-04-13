@@ -4,7 +4,6 @@ use colored::Colorize;
 use egg_stitch::best_first::{InteractiveSearch, SearchPriority};
 use egg_stitch::cost;
 use egg_stitch::io;
-use egg_stitch::replay;
 use egg_stitch::results;
 use egg_stitch::search;
 use egg_stitch::smc::SmcConfig;
@@ -109,9 +108,6 @@ struct Args {
     #[arg(long, default_value_t = false)]
     verbose: bool,
 
-    /// Path to a replay JSON file to replay instead of running a fresh search.
-    #[arg(long)]
-    replay: Option<String>,
 }
 
 fn main() {
@@ -121,12 +117,6 @@ fn main() {
     let rules = args.rules.as_deref();
     let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
     let (shared, original_size) = search::setup_search(egraph, root, args.follow.as_deref(), args.weight_by_usage, args.p_reuse, args.check_slow);
-
-    // ── Replay mode ─────────────────────────────────────────────────────
-    if let Some(ref replay_path) = args.replay {
-        run_replay(shared, root, original_size, replay_path);
-        return;
-    }
 
     // ── Search ──────────────────────────────────────────────────────────
     let (priority, budget) = match args.search {
@@ -181,32 +171,14 @@ fn main() {
 
     // ── Save output ─────────────────────────────────────────────────────
     if let Some(ref output_path) = args.output {
-        let run_result = build_run_result(&args, &search, original_size, cost_before_rewrites, start.elapsed().as_secs_f64(), budget, output_path);
+        let run_result = build_run_result(&args, &search, original_size, cost_before_rewrites, start.elapsed().as_secs_f64());
         let json = serde_json::to_string_pretty(&run_result).expect("Failed to serialize result");
         std::fs::write(output_path, json).expect("Failed to write output file");
     }
 }
 
-/// Replay a saved search log and print summary.
-fn run_replay(shared: search::SharedSearchData, root: egg::Id, original_size: usize, path: &str) {
-    let json = std::fs::read_to_string(path).expect("Failed to read replay file");
-    let mut search = InteractiveSearch::new(shared, root, original_size, SearchPriority::Cost, 1000);
-    let t0 = std::time::Instant::now();
-    let config = replay::replay_from_json(&mut search, &json).expect("Replay failed");
-    let elapsed = t0.elapsed();
-    println!("{} {}", "priority:".dimmed(), config.priority.bold());
-    println!("{} {}", "max_arity:".dimmed(), config.max_arity.to_string().bold());
-    println!("{} {}", "steps replayed:".dimmed(), search.num_expansions().to_string().yellow());
-    println!("{} {}", "nodes created:".dimmed(), search.num_nodes().to_string().yellow());
-    println!("{} {}", "replay time:".dimmed(), format!("{:.1?}", elapsed).yellow());
-    if let Some(cost) = search.best_cost() {
-        println!("{} {}", "best cost:".dimmed(), cost.to_string().green().bold());
-        println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
-    }
-}
-
-/// Build a RunResult from the completed search, saving replay log as a side effect.
-fn build_run_result(args: &Args, search: &InteractiveSearch, original_size: usize, cost_before_rewrites: usize, elapsed_secs: f64, budget: usize, output_path: &str) -> results::RunResult {
+/// Build a RunResult from the completed search.
+fn build_run_result(args: &Args, search: &InteractiveSearch, original_size: usize, cost_before_rewrites: usize, elapsed_secs: f64) -> results::RunResult {
     let shared = search.shared();
     let root = search.root();
 
@@ -232,15 +204,6 @@ fn build_run_result(args: &Args, search: &InteractiveSearch, original_size: usiz
         None => (None, None, None, None, None, None, None, None, None),
     };
 
-    // Save replay log.
-    let replay_log_file = {
-        let replay_path = output_path.replace(".json", "_replay.json");
-        let replay_json = serde_json::to_string(&search.replay_log(budget)).expect("Failed to serialize replay log");
-        std::fs::write(&replay_path, &replay_json).expect("Failed to write replay log");
-        println!("wrote replay log to {}", replay_path);
-        Some(std::path::Path::new(&replay_path).file_name().unwrap().to_string_lossy().into_owned())
-    };
-
     let search_kind = args.search.to_string();
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
 
@@ -264,6 +227,5 @@ fn build_run_result(args: &Args, search: &InteractiveSearch, original_size: usiz
         best_iteration: search.best_found_at(),
         num_steps_run: search.num_expansions(),
         rewritten_programs,
-        replay_log_file,
     }
 }

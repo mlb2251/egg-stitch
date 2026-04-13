@@ -3,7 +3,6 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 
 use crate::cost::{compute_cost, compute_pattern_size};
-use crate::replay::{ReplayConfig, ReplayLog, ReplayStep};
 use crate::search::{Action, SearchState, SharedSearchData};
 
 /// How to order the best-first search heap.
@@ -20,7 +19,7 @@ pub enum SearchPriority {
 }
 
 impl SearchPriority {
-    /// Parse from the string format used by replay logs and the WASM API.
+    /// Parse from the string format used by the WASM API.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "cost" => Some(Self::Cost),
@@ -31,7 +30,7 @@ impl SearchPriority {
         }
     }
 
-    /// String representation matching replay log format.
+    /// String representation.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Cost => "cost",
@@ -188,7 +187,7 @@ impl InteractiveSearch {
         count
     }
 
-    /// Expand a specific node by id (for manual clicks and replay).
+    /// Expand a specific node by id (for manual clicks).
     /// Returns false if the node doesn't exist or is already expanded.
     pub fn expand_node(&mut self, node_id: usize) -> bool {
         if node_id >= self.nodes.len() || self.nodes[node_id].expanded {
@@ -197,16 +196,6 @@ impl InteractiveSearch {
         self.heap.remove(&(self.nodes[node_id].priority, node_id));
         self.do_expand(node_id);
         true
-    }
-
-    /// Find an unexpanded node by pattern string (for replay). O(1) lookup.
-    pub fn find_unexpanded_by_pattern(&self, pattern: &str) -> Option<usize> {
-        self.seen.get(pattern).copied().filter(|&id| !self.nodes[id].expanded)
-    }
-
-    /// Check if any node (expanded or not) has the given pattern.
-    pub fn has_pattern(&self, pattern: &str) -> bool {
-        self.seen.contains_key(pattern)
     }
 
     // ── Snapshots for rendering ────────────────────────────────────────
@@ -281,12 +270,6 @@ impl InteractiveSearch {
         self.nodes[node_id].cost
     }
 
-    /// Returns (num_matches, cost) for a node. Used by replay validation.
-    pub fn node_matches_and_cost(&self, node_id: usize) -> (usize, usize) {
-        let n = &self.nodes[node_id];
-        (n.state.matches.len(), n.cost)
-    }
-
     /// Number of pattern variables for a node.
     pub fn node_num_vars(&self, node_id: usize) -> usize {
         self.nodes[node_id].state.pattern.vars.len()
@@ -325,33 +308,6 @@ impl InteractiveSearch {
             if node.state.pattern.vars.len() <= max_arity && self.best.as_ref().is_none_or(|(c, _)| node.cost < *c) {
                 self.best = Some((node.cost, id));
             }
-        }
-    }
-
-    // ── Debug log generation ───────────────────────────────────────────
-
-    /// Build a `ReplayLog` from the expansion history. Pass `budget` from the
-    /// search config (or 0 for WASM/interactive use where budget is open-ended).
-    pub fn replay_log(&self, budget: usize) -> ReplayLog {
-        ReplayLog {
-            config: ReplayConfig {
-                priority: self.strategy.as_str().to_string(),
-                budget,
-                max_arity: self.max_arity,
-            },
-            steps: self
-                .expansion_order
-                .iter()
-                .map(|&id| {
-                    let n = &self.nodes[id];
-                    ReplayStep {
-                        pattern: n.state.pattern.to_string(),
-                        action: n.action.as_ref().map(|a| a.to_string()),
-                        num_matches: n.state.matches.len(),
-                        cost: n.cost,
-                    }
-                })
-                .collect(),
         }
     }
 
