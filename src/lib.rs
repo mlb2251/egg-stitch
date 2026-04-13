@@ -23,6 +23,36 @@ mod wasm_api {
     use crate::search::setup_search;
     use crate::smc::SmcConfig;
 
+    /// Optional config for engine initialization, parsed from JSON.
+    #[derive(serde::Deserialize)]
+    #[serde(default)]
+    struct EngineConfig {
+        follow: Option<String>,
+        weight_by_usage: bool,
+        p_reuse: f64,
+        max_arity: usize,
+        priority: String,
+    }
+
+    impl Default for EngineConfig {
+        fn default() -> Self {
+            Self { follow: None, weight_by_usage: false, p_reuse: 0.5, max_arity: 2, priority: "cost".into() }
+        }
+    }
+
+    /// Search results summary returned to JS.
+    #[derive(serde::Serialize)]
+    struct SearchResults {
+        best_cost: Option<usize>,
+        pattern: Option<String>,
+        arity: Option<usize>,
+        num_matches: Option<usize>,
+        compression_ratio: Option<f64>,
+        num_expansions: usize,
+        num_nodes: usize,
+        original_size: usize,
+    }
+
     /// Interactive search engine exposed to JavaScript via WASM.
     ///
     /// Wraps an `InteractiveSearch` that owns all search state (heap, seen
@@ -35,12 +65,21 @@ mod wasm_api {
 
     #[wasm_bindgen]
     impl Engine {
-        /// Load programs and initialize search. Priority defaults to "cost", max_arity to 2.
+        /// Load programs and initialize search.
+        ///
+        /// `config_json` is an optional JSON string with fields:
+        /// `follow`, `weight_by_usage`, `p_reuse`, `max_arity`, `priority`.
+        /// Omit or pass null/undefined for defaults.
         #[wasm_bindgen(constructor)]
-        pub fn new(programs_json: &str, rules_text: Option<String>) -> Result<Engine, JsError> {
+        pub fn new(programs_json: &str, rules_text: Option<String>, config_json: Option<String>) -> Result<Engine, JsError> {
+            let cfg: EngineConfig = match config_json {
+                Some(ref s) if !s.is_empty() => serde_json::from_str(s).map_err(|e| JsError::new(&format!("bad config: {e}")))?,
+                _ => EngineConfig::default(),
+            };
             let (egraph, root, _) = crate::io::load_egraph_from_strings(programs_json, rules_text.as_deref());
-            let (shared, original_size) = setup_search(egraph, root, None, false, 0.5, false);
-            let search = InteractiveSearch::new(shared, root, original_size, SearchPriority::Cost, 2);
+            let (shared, original_size) = setup_search(egraph, root, cfg.follow.as_deref(), cfg.weight_by_usage, cfg.p_reuse, false);
+            let priority = SearchPriority::parse(&cfg.priority).unwrap_or(SearchPriority::Cost);
+            let search = InteractiveSearch::new(shared, root, original_size, priority, cfg.max_arity);
             Ok(Engine { inner: search })
         }
 
@@ -167,6 +206,32 @@ mod wasm_api {
         /// Expansion order as a JSON array of node ids.
         pub fn expansion_order_json(&self) -> Result<JsValue, JsError> {
             Ok(serde_wasm_bindgen::to_value(self.inner.expansion_order())?)
+        }
+
+        /// Summary of current search results as JSON.
+        pub fn results_json(&self) -> Result<JsValue, JsError> {
+            let original = self.inner.original_size();
+            let (best_cost, pattern, arity, num_matches) = match self.inner.best_state() {
+                Some((cost, state)) => (
+                    Some(cost),
+                    Some(state.pattern.to_string()),
+                    Some(state.pattern.vars.len()),
+                    Some(state.matches.len()),
+                ),
+                None => (None, None, None, None),
+            };
+            let ratio = best_cost.map(|c| original as f64 / c as f64);
+            let result = SearchResults {
+                best_cost,
+                pattern,
+                arity,
+                num_matches,
+                compression_ratio: ratio,
+                num_expansions: self.inner.num_expansions(),
+                num_nodes: self.inner.num_nodes(),
+                original_size: original,
+            };
+            Ok(serde_wasm_bindgen::to_value(&result)?)
         }
     }
 }

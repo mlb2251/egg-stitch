@@ -103,6 +103,32 @@ main { flex: 1; display: flex; min-height: 0; }
 #status-bar b { color: var(--fg); }
 #status-bar b.bad { color: var(--bad); }
 #status-bar b.good { color: var(--good); }
+
+/* Config panel */
+#config-panel { border-bottom: 1px solid var(--border); background: var(--card); font-size: .85rem; }
+#config-panel .config-toggle { padding: .4rem 1rem; cursor: pointer; color: var(--muted); user-select: none; display: flex; align-items: center; gap: .4rem; }
+#config-panel .config-toggle:hover { color: var(--fg); }
+#config-panel .config-body { display: none; padding: 0 1rem .75rem; }
+#config-panel .config-body.open { display: block; }
+#config-panel .config-row { display: flex; align-items: center; gap: .6rem; margin-bottom: .4rem; flex-wrap: wrap; }
+#config-panel .config-row label { color: var(--muted); min-width: 5rem; text-align: right; }
+#config-panel .config-row input[type="number"],
+#config-panel .config-row input[type="text"] { padding: .25rem .4rem; border: 1px solid var(--border); border-radius: 4px; font-size: .8rem; }
+#config-panel .config-row input[type="number"] { width: 5.5rem; }
+#config-panel .config-row input[type="text"] { width: 20rem; font-family: 'SF Mono', 'Fira Code', monospace; font-size: .78rem; }
+#config-panel .config-row select { padding: .25rem .4rem; border: 1px solid var(--border); border-radius: 4px; font-size: .8rem; }
+#config-panel .config-section { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-right: .5rem; min-width: 5rem; text-align: right; }
+#config-panel .btn-run { padding: .4rem 1.2rem; background: var(--good); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: .85rem; font-weight: 600; }
+#config-panel .btn-run:hover { background: #059669; }
+#config-panel .btn-run:disabled { opacity: .4; cursor: default; }
+
+/* Results banner */
+#results-bar { padding: .5rem 1rem; font-size: .85rem; background: #ecfdf5; border-bottom: 1px solid #a7f3d0; display: none; }
+#results-bar.visible { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+#results-bar .result-label { color: var(--muted); }
+#results-bar .result-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+#results-bar .result-value.accent { color: var(--accent); }
+#results-bar .result-pattern { font-family: 'SF Mono', 'Fira Code', monospace; color: #0ea5e9; font-size: .82rem; max-width: 40rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -112,49 +138,15 @@ main { flex: 1; display: flex; min-height: 0; }
 <header>
   <h1><a href="/viz/" class="site-title-link">egg-stitch</a> <span style="font-weight:400;color:var(--muted)">· interactive explorer</span></h1>
   <div class="toolbar">
-    <label>domain:</label>
-    <select id="selDomain">
-      <option value="dials">dials</option>
-      <option value="furniture">furniture</option>
-      <option value="nuts-bolts">nuts-bolts</option>
-      <option value="wheels">wheels</option>
-      <option value="bridge">bridge</option>
-      <option value="castle">castle</option>
-      <option value="city">city</option>
-      <option value="house">house</option>
-    </select>
-    <label>rules:</label>
-    <select id="selRules">
-      <option value="">none</option>
-      <option value="drawings.dials.rewrites" selected>dials</option>
-      <option value="drawings.furniture.rewrites">furniture</option>
-      <option value="drawings.nuts-bolts.rewrites">nuts-bolts</option>
-      <option value="drawings.wheels.rewrites">wheels</option>
-    </select>
-    <button id="btnLoad" class="primary" disabled>load</button>
-    <span class="sep"></span>
-    <label>priority:</label>
-    <select id="selPriority">
-      <option value="cost">best-first (cost)</option>
-      <option value="depth-first">depth-first</option>
-      <option value="breadth-first">breadth-first</option>
-      <option value="most-matches">most-matches</option>
-    </select>
-    <label>budget:</label>
-    <input type="number" id="numBudget" value="100" min="1" max="100000">
-    <label>max arity:</label>
-    <input type="number" id="numArity" value="2" min="1" max="100">
     <button id="btnStep" disabled title="expand the top heap node">step</button>
-    <button id="btnRun" disabled title="run N expansions from heap">run</button>
+    <button id="btnExpandBest" disabled title="expand UI path to best node">show best</button>
+    <button id="btnCollapseAll" disabled title="collapse all tree disclosure">collapse</button>
+    <label><input type="checkbox" id="chkExpandedOnly"> expanded only</label>
     <span class="sep"></span>
     <label>replay:</label>
     <select id="selReplay" disabled><option value="">none</option></select>
     <button id="btnReplay" disabled title="replay one step">step</button>
     <button id="btnReplayAll" disabled title="replay all remaining steps">replay all</button>
-    <span class="sep"></span>
-    <button id="btnExpandBest" disabled title="expand UI path to best node">show best</button>
-    <button id="btnCollapseAll" disabled title="collapse all tree disclosure">collapse</button>
-    <label><input type="checkbox" id="chkExpandedOnly"> expanded only</label>
     <div class="legend" style="margin-left:auto;">
       <span><span class="swatch exp"></span>expanded</span>
       <span><span class="swatch fri"></span>fringe</span>
@@ -162,6 +154,93 @@ main { flex: 1; display: flex; min-height: 0; }
     </div>
   </div>
 </header>
+
+<div id="config-panel">
+  <div class="config-toggle" id="configToggle">&#9652; search config</div>
+  <div class="config-body open" id="configBody">
+    <div class="config-row">
+      <span class="config-section">data</span>
+      <label>domain:</label>
+      <select id="selDomain">
+        <option value="dials">dials</option>
+        <option value="furniture">furniture</option>
+        <option value="nuts-bolts">nuts-bolts</option>
+        <option value="wheels">wheels</option>
+        <option value="bridge">bridge</option>
+        <option value="castle">castle</option>
+        <option value="city">city</option>
+        <option value="house">house</option>
+      </select>
+      <label>rules:</label>
+      <select id="selRules">
+        <option value="">none</option>
+        <option value="drawings.dials.rewrites" selected>dials</option>
+        <option value="drawings.furniture.rewrites">furniture</option>
+        <option value="drawings.nuts-bolts.rewrites">nuts-bolts</option>
+        <option value="drawings.wheels.rewrites">wheels</option>
+      </select>
+      <span class="sep"></span>
+      <label>preset:</label>
+      <select id="selPreset">
+        <option value="">custom</option>
+        <option value="dev">dev (smc, T=1000)</option>
+        <option value="dials-compress">dials-compress (smc, quick)</option>
+        <option value="dials-follow">dials-follow (smc + follow)</option>
+        <option value="best-first" selected>best-first (cost)</option>
+        <option value="bf-dfs">best-first (depth-first)</option>
+        <option value="bf-bfs">best-first (breadth-first)</option>
+        <option value="bf-matches">best-first (most-matches)</option>
+      </select>
+      <label>search:</label>
+      <select id="selSearch">
+        <option value="smc">SMC</option>
+        <option value="best-first" selected>Best-First</option>
+      </select>
+    </div>
+    <div class="config-row" id="rowSmc" style="display:none">
+      <span class="config-section">smc</span>
+      <label>particles:</label>
+      <input type="number" id="cfgParticles" value="1000" min="1" max="1000000">
+      <label>steps:</label>
+      <input type="number" id="cfgSteps" value="100" min="1" max="100000">
+      <label>temperature:</label>
+      <input type="number" id="cfgTemp" value="1000" min="0" step="any">
+      <label>dead runs:</label>
+      <input type="number" id="cfgDeadRuns" value="50" min="1" max="100000">
+    </div>
+    <div class="config-row" id="rowBf">
+      <span class="config-section">best-first</span>
+      <label>budget:</label>
+      <input type="number" id="cfgBudget" value="500" min="1" max="1000000">
+      <label>priority:</label>
+      <select id="cfgPriority">
+        <option value="cost">cost</option>
+        <option value="depth-first">depth-first</option>
+        <option value="breadth-first">breadth-first</option>
+        <option value="most-matches">most-matches</option>
+      </select>
+    </div>
+    <div class="config-row">
+      <span class="config-section">common</span>
+      <label>max arity:</label>
+      <input type="number" id="cfgArity" value="2" min="1" max="100">
+      <label>follow:</label>
+      <input type="text" id="cfgFollow" value="" placeholder="optional follow constraint pattern">
+    </div>
+    <div class="config-row">
+      <span class="config-section">advanced</span>
+      <label>p_reuse:</label>
+      <input type="number" id="cfgPReuse" value="0.5" min="0" max="1" step="0.05">
+      <label><input type="checkbox" id="cfgWeightByUsage"> weight by usage</label>
+    </div>
+    <div class="config-row" style="margin-top:.4rem">
+      <span class="config-section"></span>
+      <button class="btn-run" id="btnLoadRun" disabled>load &amp; run</button>
+    </div>
+  </div>
+</div>
+
+<div id="results-bar"></div>
 
 <div id="status-bar">ready</div>
 

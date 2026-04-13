@@ -31,7 +31,7 @@ async function loadWasm() {
     wasm = await import('../pkg/egg_stitch.js');
     await wasm.default();
     overlay.classList.add('hidden');
-    $('btnLoad').disabled = false;
+    $('btnLoadRun').disabled = false;
     await autoLoadFromParams();
   } catch (e) {
     overlay.textContent = `failed to load WASM: ${e}. Run "make wasm" first.`;
@@ -51,13 +51,18 @@ async function autoLoadFromParams() {
   $('selDomain').value = domain;
   $('selRules').value = rules;
 
-  $('btnLoad').click();
-
-  // Wait for engine to be initialized.
-  await new Promise(resolve => {
-    const check = () => engine ? resolve() : setTimeout(check, 50);
-    check();
-  });
+  // Load engine with current config for auto-load.
+  try {
+    const { programsText, rulesText } = await fetchDomainData();
+    engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+    openNodes.clear();
+    openNodes.add(0);
+    selectedId = 0;
+    enableControls(true);
+  } catch (e) {
+    console.warn('auto-load failed:', e);
+    return;
+  }
 
   if (configFile) {
     // Apply config from replay file without replaying steps.
@@ -97,41 +102,35 @@ loadWasm();
 const DOMAIN_DIR = '/data/domains/cogsci';
 const RULES_DIR = '/babble/harness/data/benchmark-dsrs';
 
-$('btnLoad').addEventListener('click', async () => {
+/// Fetch programs + rules texts for the currently selected domain.
+async function fetchDomainData() {
   const domain = $('selDomain').value;
   const rulesFile = $('selRules').value;
-  const btn = $('btnLoad');
-  btn.disabled = true;
-  btn.textContent = 'loading…';
-  try {
-    const programsText = await fetch(`${DOMAIN_DIR}/${domain}.json`).then(r => {
-      if (!r.ok) throw new Error(`${r.status} loading ${domain}.json`);
+  const programsText = await fetch(`${DOMAIN_DIR}/${domain}.json`).then(r => {
+    if (!r.ok) throw new Error(`${r.status} loading ${domain}.json`);
+    return r.text();
+  });
+  let rulesText = undefined;
+  if (rulesFile) {
+    rulesText = await fetch(`${RULES_DIR}/${rulesFile}`).then(r => {
+      if (!r.ok) throw new Error(`${r.status} loading ${rulesFile}`);
       return r.text();
     });
-    let rulesText = undefined;
-    if (rulesFile) {
-      rulesText = await fetch(`${RULES_DIR}/${rulesFile}`).then(r => {
-        if (!r.ok) throw new Error(`${r.status} loading ${rulesFile}`);
-        return r.text();
-      });
-    }
-    engine = new wasm.Engine(programsText, rulesText);
-    // Apply current UI settings.
-    engine.set_priority($('selPriority').value);
-    engine.set_max_arity(parseInt($('numArity').value) || 2);
-    openNodes.clear();
-    openNodes.add(0);
-    selectedId = 0;
-    renderAll();
-    enableControls(true);
-  } catch (e) {
-    alert('failed to load: ' + e);
-    console.error(e);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'load';
   }
-});
+  return { programsText, rulesText };
+}
+
+/// Build config JSON from the config panel for Engine constructor.
+function buildEngineConfig() {
+  const follow = $('cfgFollow').value.trim() || undefined;
+  return JSON.stringify({
+    follow: follow || null,
+    weight_by_usage: $('cfgWeightByUsage').checked,
+    p_reuse: parseFloat($('cfgPReuse').value) || 0.5,
+    max_arity: parseInt($('cfgArity').value) || 2,
+    priority: $('selSearch').value === 'best-first' ? ($('cfgPriority').value || 'cost') : 'cost',
+  });
+}
 
 $('selDomain').addEventListener('change', () => {
   const domain = $('selDomain').value;
@@ -141,20 +140,138 @@ $('selDomain').addEventListener('change', () => {
   rulesSelect.value = opt ? match : '';
 });
 
-// Sync settings to Rust when changed.
-$('selPriority').addEventListener('change', () => {
-  if (engine) { engine.set_priority($('selPriority').value); renderAll(); }
+// ── Config panel ────────────────────────────────────────────────────────────
+
+const PRESETS = {
+  'dev':            { search: 'smc', particles: 1000, steps: 100, temperature: 1000, max_arity: 2, dead_runs: 50 },
+  'dials-compress': { search: 'smc', particles: 100, steps: 10, temperature: 100, max_arity: 2, dead_runs: 50 },
+  'dials-follow':   { search: 'smc', particles: 100, steps: 10, temperature: 100, max_arity: 2, dead_runs: 50,
+                      follow: '(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))' },
+  'best-first':     { search: 'best-first', priority: 'cost', budget: 500, max_arity: 2 },
+  'bf-dfs':         { search: 'best-first', priority: 'depth-first', budget: 500, max_arity: 2 },
+  'bf-bfs':         { search: 'best-first', priority: 'breadth-first', budget: 500, max_arity: 2 },
+  'bf-matches':     { search: 'best-first', priority: 'most-matches', budget: 500, max_arity: 2 },
+};
+
+$('configToggle').addEventListener('click', () => {
+  const body = $('configBody');
+  const toggle = $('configToggle');
+  const open = body.classList.toggle('open');
+  toggle.innerHTML = (open ? '&#9652;' : '&#9662;') + ' search config';
 });
-$('numArity').addEventListener('change', () => {
-  if (engine) {
-    engine.set_max_arity(parseInt($('numArity').value) || 2);
+
+$('selSearch').addEventListener('change', () => {
+  const isSmc = $('selSearch').value === 'smc';
+  $('rowSmc').style.display = isSmc ? '' : 'none';
+  $('rowBf').style.display = isSmc ? 'none' : '';
+});
+
+$('selPreset').addEventListener('change', () => {
+  const p = PRESETS[$('selPreset').value];
+  if (!p) return;
+  $('selSearch').value = p.search;
+  $('selSearch').dispatchEvent(new Event('change'));
+  if (p.particles != null) $('cfgParticles').value = p.particles;
+  if (p.steps != null) $('cfgSteps').value = p.steps;
+  if (p.temperature != null) $('cfgTemp').value = p.temperature;
+  if (p.dead_runs != null) $('cfgDeadRuns').value = p.dead_runs;
+  if (p.budget != null) $('cfgBudget').value = p.budget;
+  if (p.priority != null) $('cfgPriority').value = p.priority;
+  if (p.max_arity != null) $('cfgArity').value = p.max_arity;
+  $('cfgFollow').value = p.follow || '';
+  $('cfgPReuse').value = p.p_reuse ?? 0.5;
+  $('cfgWeightByUsage').checked = p.weight_by_usage ?? false;
+});
+
+/// Load & Run: create a fresh engine with config, run the selected search, show results.
+$('btnLoadRun').addEventListener('click', async () => {
+  const btn = $('btnLoadRun');
+  btn.disabled = true;
+  btn.textContent = 'running…';
+  const resultsBar = $('results-bar');
+  resultsBar.className = '';
+  resultsBar.innerHTML = '';
+  statusBar.textContent = 'loading domain…';
+  await paint();
+
+  try {
+    const { programsText, rulesText } = await fetchDomainData();
+    statusBar.textContent = 'initializing engine…';
+    await paint();
+
+    engine = new wasm.Engine(programsText, rulesText, buildEngineConfig());
+    openNodes.clear();
+    openNodes.add(0);
+    selectedId = 0;
+
+    const searchType = $('selSearch').value;
+    statusBar.textContent = `running ${searchType}…`;
+    await paint();
+
+    const t0 = performance.now();
+    if (searchType === 'smc') {
+      const particles = parseInt($('cfgParticles').value) || 1000;
+      const steps = parseInt($('cfgSteps').value) || 100;
+      const temp = parseFloat($('cfgTemp').value) || 100;
+      const deadRuns = parseInt($('cfgDeadRuns').value) || 50;
+      engine.run_smc(particles, steps, temp, deadRuns);
+    } else {
+      const budget = parseInt($('cfgBudget').value) || 500;
+      engine.step_n(budget);
+    }
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+
+    // Show results.
+    const results = engine.results_json();
+    showResults(results, elapsed, searchType);
+    enableControls(true);
+
+    statusBar.textContent = `rendering…`;
+    await paint();
     renderAll();
+    statusBar.textContent = `${searchType} complete in ${elapsed}s`;
+  } catch (e) {
+    alert('search failed: ' + e);
+    console.error(e);
+    statusBar.innerHTML = `<b class="bad">error: ${e}</b>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'load & run';
   }
 });
 
+/// Display search results in the results bar.
+function showResults(r, elapsed, searchType) {
+  const bar = $('results-bar');
+  const fmt = v => v != null ? Number(v).toLocaleString() : '—';
+  if (r.best_cost == null) {
+    bar.className = 'visible';
+    bar.style.background = '#fef3c7';
+    bar.style.borderColor = '#fcd34d';
+    bar.innerHTML = `<span class="result-label">no solution found</span>
+      <span class="result-label">expansions:</span><span class="result-value">${fmt(r.num_expansions)}</span>
+      <span class="result-label">time:</span><span class="result-value">${elapsed}s</span>`;
+    return;
+  }
+  bar.className = 'visible';
+  bar.style.background = '';
+  bar.style.borderColor = '';
+  const ratio = r.compression_ratio != null ? r.compression_ratio.toFixed(2) + 'x' : '—';
+  bar.innerHTML = `
+    <span class="result-label">${searchType}</span>
+    <span class="result-label">cost:</span><span class="result-value" style="color:var(--good)">${fmt(r.best_cost)}</span>
+    <span class="result-label">ratio:</span><span class="result-value" style="color:var(--good)">${ratio}</span>
+    <span class="result-label">arity:</span><span class="result-value">${r.arity ?? '—'}</span>
+    <span class="result-label">matches:</span><span class="result-value">${fmt(r.num_matches)}</span>
+    <span class="result-label">expansions:</span><span class="result-value">${fmt(r.num_expansions)}</span>
+    <span class="result-label">nodes:</span><span class="result-value">${fmt(r.num_nodes)}</span>
+    <span class="result-label">time:</span><span class="result-value">${elapsed}s</span>
+    <span class="result-pattern" title="${esc(r.pattern || '')}">${esc(r.pattern || '')}</span>
+  `;
+}
+
 function enableControls(on) {
   $('btnStep').disabled = !on;
-  $('btnRun').disabled = !on;
   $('btnExpandBest').disabled = !on;
   $('btnCollapseAll').disabled = !on;
   $('selReplay').disabled = !on;
@@ -231,9 +348,9 @@ function parseDirectoryListing(html) {
 
 function applyReplayConfig(config) {
   if (!config) return;
-  if (config.priority) $('selPriority').value = config.priority;
-  if (config.budget) $('numBudget').value = config.budget;
-  if (config.max_arity) $('numArity').value = config.max_arity;
+  if (config.priority) $('cfgPriority').value = config.priority;
+  if (config.budget) $('cfgBudget').value = config.budget;
+  if (config.max_arity) $('cfgArity').value = config.max_arity;
   // Sync to engine.
   if (engine) {
     engine.set_priority(config.priority || 'cost');
@@ -337,9 +454,9 @@ async function runReplayFromJson(json) {
   let error = null;
   try {
     const config = engine.replay_from_json(json);
-    // Sync UI dropdowns with the config Rust applied.
-    if (config.priority) $('selPriority').value = config.priority;
-    if (config.max_arity) $('numArity').value = config.max_arity;
+    // Sync config panel with the config Rust applied.
+    if (config.priority) $('cfgPriority').value = config.priority;
+    if (config.max_arity) $('cfgArity').value = config.max_arity;
     replayIdx = replaySteps.length;
   } catch (e) {
     error = e.message;
@@ -374,21 +491,6 @@ $('btnStep').addEventListener('click', () => {
   openNodes.add(nodeId);
   selectedId = nodeId;
   renderAll();
-});
-
-$('btnRun').addEventListener('click', async () => {
-  const budget = parseInt($('numBudget').value) || 100;
-  statusBar.textContent = `running ${budget} steps…`;
-  await paint();
-  const t0 = performance.now();
-  const expanded = engine.step_n(budget);
-  const searchMs = (performance.now() - t0).toFixed(0);
-  statusBar.textContent = `expanded ${expanded} nodes in ${searchMs}ms · rendering…`;
-  await paint();
-  const t1 = performance.now();
-  renderAll();
-  const renderMs = (performance.now() - t1).toFixed(0);
-  statusBar.textContent = `expanded ${expanded} nodes in ${searchMs}ms · render ${renderMs}ms`;
 });
 
 // ── UI controls ──────────────────────────────────────────────────────────────

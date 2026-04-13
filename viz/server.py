@@ -22,6 +22,11 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
+    def end_headers(self):
+        """Disable caching for pkg/ and viz/ assets during development."""
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
     def translate_path(self, path):
         """Serve /babble/... from the sibling babble repo."""
         clean = unquote(path)
