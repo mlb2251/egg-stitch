@@ -42,7 +42,7 @@ pub struct SmcResult {
 /// so cost computation runs once per unique pattern instead of once per particle.
 #[allow(clippy::needless_range_loop)]
 pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult {
-    let (shared, original_size) = setup_search(egraph, root, args);
+    let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = args.num_particles;
@@ -78,7 +78,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         }
         drop(dedup);
 
-        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
+        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, &cost_cache, s, shared.check_slow)).collect();
 
         for (i, cost) in costs.iter().enumerate() {
             if expanded[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
