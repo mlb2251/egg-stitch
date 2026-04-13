@@ -6,7 +6,7 @@ use egg_stitch::cost;
 use egg_stitch::io;
 use egg_stitch::results;
 use egg_stitch::search::{self, SearchState, SharedSearchData};
-use egg_stitch::smc::{SmcConfig, smc};
+use egg_stitch::smc::SmcConfig;
 
 /// Which search algorithm to run (CLI wrapper).
 #[derive(ValueEnum, Clone, Debug)]
@@ -139,7 +139,7 @@ fn main() {
     // Wrap shared in Option so the BestFirst arm can move it into InteractiveSearch
     // while still allowing the post-match analysis to borrow from whichever path ran.
     let mut shared = Some(shared);
-    let mut search_opt: Option<InteractiveSearch> = None;
+    let search_opt: Option<InteractiveSearch>;
 
     #[allow(clippy::type_complexity)]
     let (best, best_found_at, num_steps_run, debug_log_json, replay_log_json): (Option<(usize, SearchState)>, Option<usize>, usize, Option<String>, Option<String>) = match args.search {
@@ -149,13 +149,24 @@ fn main() {
                 num_steps: args.num_steps,
                 temperature: args.temperature,
                 dead_runs: args.dead_runs,
-                max_arity: args.max_arity,
                 verbose: args.verbose,
-                debug: args.debug_log,
             };
-            let r = smc(shared.as_ref().unwrap(), root, original_size, &config);
-            let json = r.debug_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize debug log"));
-            (r.best, r.best_found_at, r.num_steps_run, json, None)
+            let mut search = InteractiveSearch::new(shared.take().unwrap(), root, original_size, SearchPriority::Cost, args.max_arity);
+            println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
+            egg_stitch::smc::smc(&mut search, &config);
+            println!("\n{}", "═══ RESULT ═══".green().bold());
+            if let Some((cost, state)) = search.best_state() {
+                println!("{} {}", "best found at expansion:".dimmed(), search.best_found_at().unwrap_or(0).to_string().yellow());
+                println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
+                println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
+                println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / cost as f64).green().bold());
+            }
+            let best = search.best_state().map(|(c, s)| (c, s.clone()));
+            let best_found_at = search.best_found_at();
+            let num_expansions = search.num_expansions();
+            let replay_json = serde_json::to_string(&search.replay_log(0)).expect("Failed to serialize replay log");
+            search_opt = Some(search);
+            (best, best_found_at, num_expansions, None, Some(replay_json))
         }
         CliSearchKind::BestFirst => {
             let config = BestFirstConfig {

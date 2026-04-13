@@ -1,4 +1,4 @@
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use serde::Serialize;
 use std::collections::BTreeSet;
 
@@ -52,6 +52,7 @@ pub struct BestFirstConfig {
 /// One node in the in-memory search tree.
 pub(crate) struct Node {
     pub(crate) parent: Option<usize>,
+    pub(crate) children: Vec<usize>,
     pub(crate) action: Option<Action>,
     pub(crate) state: SearchState,
     pub(crate) cost: usize,
@@ -116,12 +117,13 @@ fn snapshot(id: usize, node: &Node) -> NodeSnapshot {
 ///
 /// Marks `node_id` as expanded, enumerates its successors, deduplicates
 /// against `seen`, pushes survivors onto `heap`, and updates `best`.
-fn expand_one(node_id: usize, nodes: &mut Vec<Node>, heap: &mut BTreeSet<(i64, usize)>, seen: &mut FxHashSet<String>, best: &mut Option<(usize, usize)>, expansion_order: &mut Vec<usize>, shared: &SharedSearchData, root: egg::Id, strategy: &SearchPriority, max_arity: usize) {
+fn expand_one(node_id: usize, nodes: &mut Vec<Node>, heap: &mut BTreeSet<(i64, usize)>, seen: &mut FxHashMap<String, usize>, best: &mut Option<(usize, usize)>, expansion_order: &mut Vec<usize>, shared: &SharedSearchData, root: egg::Id, strategy: &SearchPriority, max_arity: usize) {
     nodes[node_id].expanded = true;
     expansion_order.push(node_id);
 
     let successors = nodes[node_id].state.enumerate_successors(shared);
     let parent_depth = nodes[node_id].depth;
+    let first_child = nodes.len();
 
     for (action, child_state) in successors {
         if let Some(ref follow) = shared.follow
@@ -130,12 +132,14 @@ fn expand_one(node_id: usize, nodes: &mut Vec<Node>, heap: &mut BTreeSet<(i64, u
             continue;
         }
         let key = child_state.pattern.to_string();
-        if !seen.insert(key) {
+        let child_id = nodes.len();
+        if let std::collections::hash_map::Entry::Vacant(e) = seen.entry(key) {
+            e.insert(child_id);
+        } else {
             continue;
         }
 
         let child_cost = compute_cost(&shared.egraph, root, &child_state, shared.check_slow);
-        let child_id = nodes.len();
         let child_depth = parent_depth + 1;
 
         if child_state.pattern.vars.len() <= max_arity && best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
@@ -145,6 +149,7 @@ fn expand_one(node_id: usize, nodes: &mut Vec<Node>, heap: &mut BTreeSet<(i64, u
         let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
         nodes.push(Node {
             parent: Some(node_id),
+            children: Vec::new(),
             action: Some(action),
             state: child_state,
             cost: child_cost,
@@ -154,6 +159,7 @@ fn expand_one(node_id: usize, nodes: &mut Vec<Node>, heap: &mut BTreeSet<(i64, u
         });
         heap.insert((child_prio, child_id));
     }
+    nodes[node_id].children = (first_child..nodes.len()).collect();
 }
 
 // ── Interactive search (WASM-friendly, steppable) ──────────────────────────
@@ -167,7 +173,7 @@ pub struct InteractiveSearch {
     original_size: usize,
     nodes: Vec<Node>,
     heap: BTreeSet<(i64, usize)>,
-    seen: FxHashSet<String>,
+    seen: FxHashMap<String, usize>,
     best: Option<(usize, usize)>,
     best_found_at: Option<usize>,
     expansion_order: Vec<usize>,
@@ -185,8 +191,8 @@ impl InteractiveSearch {
 
         let mut heap = BTreeSet::new();
         heap.insert((prio, 0));
-        let mut seen = FxHashSet::default();
-        seen.insert(pat);
+        let mut seen = FxHashMap::default();
+        seen.insert(pat, 0);
 
         Self {
             shared,
@@ -194,6 +200,7 @@ impl InteractiveSearch {
             original_size,
             nodes: vec![Node {
                 parent: None,
+                children: Vec::new(),
                 action: None,
                 state: initial,
                 cost,
@@ -242,14 +249,14 @@ impl InteractiveSearch {
         true
     }
 
-    /// Find an unexpanded node by pattern string (for replay).
+    /// Find an unexpanded node by pattern string (for replay). O(1) lookup.
     pub fn find_unexpanded_by_pattern(&self, pattern: &str) -> Option<usize> {
-        self.nodes.iter().position(|n| !n.expanded && n.state.pattern.to_string() == pattern)
+        self.seen.get(pattern).copied().filter(|&id| !self.nodes[id].expanded)
     }
 
     /// Check if any node (expanded or not) has the given pattern.
     pub fn has_pattern(&self, pattern: &str) -> bool {
-        self.nodes.iter().any(|n| n.state.pattern.to_string() == pattern)
+        self.seen.contains_key(pattern)
     }
 
     /// Parse a replay log JSON string, apply its config, and run all steps.
@@ -358,6 +365,33 @@ impl InteractiveSearch {
         &self.shared
     }
 
+    // ── Node accessors (for SMC) ─────────────────────────────────────
+
+    /// Expand a node if not already expanded, return its child node IDs.
+    pub fn ensure_expanded(&mut self, node_id: usize) -> &[usize] {
+        if !self.nodes[node_id].expanded {
+            let prio = self.nodes[node_id].priority;
+            self.heap.remove(&(prio, node_id));
+            self.do_expand(node_id);
+        }
+        &self.nodes[node_id].children
+    }
+
+    /// Cost of a node.
+    pub fn node_cost(&self, node_id: usize) -> usize {
+        self.nodes[node_id].cost
+    }
+
+    /// Number of pattern variables for a node.
+    pub fn node_num_vars(&self, node_id: usize) -> usize {
+        self.nodes[node_id].state.pattern.vars.len()
+    }
+
+    /// Current max arity setting.
+    pub fn max_arity(&self) -> usize {
+        self.max_arity
+    }
+
     // ── Settings ───────────────────────────────────────────────────────
 
     /// Rebuild the heap with a new priority strategy.
@@ -407,7 +441,7 @@ impl InteractiveSearch {
                     let n = &self.nodes[id];
                     ReplayStep {
                         pattern: n.state.pattern.to_string(),
-                        action: None,
+                        action: n.action.as_ref().map(|a| a.to_string()),
                         num_matches: n.state.matches.len(),
                         cost: n.cost,
                     }

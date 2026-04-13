@@ -1,20 +1,8 @@
 use colored::Colorize;
 
-use crate::cost::compute_cost;
-use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::logging::{apply_follow_constraint, print_top_particles};
+use crate::best_first::InteractiveSearch;
 use crate::math::logaddexp;
-use crate::search::{SearchState, SharedSearchData};
 use rand::Rng;
-
-/// Output of a completed SMC run.
-pub struct SmcResult {
-    pub best: Option<(usize, SearchState)>,
-    pub original_size: usize,
-    pub best_found_at: Option<usize>,
-    pub num_steps_run: usize,
-    pub debug_log: Option<DebugLog>,
-}
 
 /// Configuration for an SMC search run.
 pub struct SmcConfig {
@@ -22,135 +10,70 @@ pub struct SmcConfig {
     pub num_steps: usize,
     pub temperature: f64,
     pub dead_runs: usize,
-    pub max_arity: usize,
     pub verbose: bool,
-    pub debug: bool,
 }
 
-/// Runs SMC to find a pattern that minimizes compressed corpus size.
-#[allow(clippy::needless_range_loop)]
-pub fn smc(shared: &SharedSearchData, root: egg::Id, original_size: usize, config: &SmcConfig) -> SmcResult {
-    println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
+/// Runs SMC over the interactive search tree. Particles are node IDs;
+/// expanding a particle enumerates all successors in the shared tree,
+/// then one child is chosen uniformly at random. Best tracking, replay
+/// log, and tree snapshots are all maintained by `InteractiveSearch`.
+pub fn smc(search: &mut InteractiveSearch, config: &SmcConfig) {
+    let mut particles: Vec<usize> = vec![0; config.num_particles];
+    let mut best_found_at_step: Option<usize> = None;
 
-    let num_particles = config.num_particles;
-    let num_steps = config.num_steps;
-    let temperature = config.temperature;
-    let dead_runs = config.dead_runs;
-    let max_arity = config.max_arity;
-    let verbose = config.verbose;
+    for step in 0..config.num_steps {
+        let old_best = search.best_cost();
 
-    let mut best_so_far: Option<(usize, SearchState)> = None;
-    let mut best_found_at = None;
-    let mut steps_run = 0;
-    let debug = config.debug;
-    let mut debug_steps: Vec<StepLog> = Vec::new();
-
-    let mut search_states: Vec<SearchState> = (0..num_particles).map(|_| SearchState::new(shared)).collect();
-
-    for step in 0..num_steps {
-        // === PROPOSE ===
-        for ss in search_states.iter_mut() {
-            ss.expand_random(shared, false);
+        // === PROPOSE: expand each particle's node, pick a random child ===
+        for p in particles.iter_mut() {
+            let children = search.ensure_expanded(*p).to_vec();
+            if !children.is_empty() {
+                *p = children[rand::rng().random_range(0..children.len())];
+            }
         }
 
-        // === COST ===
-        let costs: Vec<usize> = search_states.iter().map(|s| compute_cost(&shared.egraph, root, s, shared.check_slow)).collect();
-
-        // === BEST-SO-FAR ===
-        for (i, cost) in costs.iter().enumerate() {
-            if search_states[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), search_states[i].pattern.to_string().cyan());
-                best_so_far = Some((*cost, search_states[i].clone()));
-                best_found_at = Some(step);
+        if search.best_cost() != old_best {
+            if let Some((cost, state)) = search.best_state() {
+                println!("{} {} {}", format!("[step {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), state.pattern.to_string().cyan());
             }
+            best_found_at_step = Some(step);
         }
 
         // === WEIGHT ===
-        // logweight = -cost / temperature
-        let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
+        let costs: Vec<usize> = particles.iter().map(|&p| search.node_cost(p)).collect();
+        let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / config.temperature).collect();
 
-        // logweight=-inf for programs without holes (to make space for new ones)
-        for (i, s) in search_states.iter().enumerate() {
-            if s.pattern.vars.is_empty() {
+        // Terminal particles (no variables) get -inf weight
+        for (i, &p) in particles.iter().enumerate() {
+            if search.node_num_vars(p) == 0 {
                 log_weights[i] = f64::NEG_INFINITY;
             }
         }
+        // Follow constraint is enforced during tree expansion (children that
+        // don't match are never added), so no separate filtering needed here.
 
-        // logweight=-inf for programs that don't match the follow pattern (if provided)
-        if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&search_states, &mut log_weights, follow, shared, original_size, &costs, verbose);
-        }
-
-        // normalize
-        let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-        let mut weights: Vec<f64> = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
+        let total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
+        let mut weights: Vec<f64> = if total.is_finite() {
+            log_weights.iter().map(|lw| (lw - total).exp()).collect()
+        } else {
+            vec![0.0; config.num_particles]
+        };
 
         if weights.iter().sum::<f64>() == 0.0 {
-            log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);
-            steps_run = step + 1;
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
-        if best_found_at.is_some_and(|bf| (step as i64) - (bf as i64) > dead_runs as i64) {
-            log_debug_step(debug, &mut debug_steps, step, &search_states, &costs, &weights, &best_so_far, &[]);
-            steps_run = step + 1;
-            println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
+        if best_found_at_step.is_some_and(|bf| (step as i64 - bf as i64) > config.dead_runs as i64) {
+            println!("{}", format!("no progress in {} steps, stopping at {}", config.dead_runs, step).yellow());
             break;
-        }
-
-        if verbose {
-            println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-            print_top_particles(&search_states, &weights, shared, original_size, |i| costs[i]);
         }
 
         // === RESAMPLE ===
         let weights_acc = normalize_and_accumulate(&mut weights);
-        let resample_indices: Vec<usize> = (0..num_particles).map(|_| weighted_choice(&weights_acc)).collect();
-        // the clone here makes it safe to then mutate each state without cloning during expansion
-        search_states = resample_indices.iter().map(|&idx| search_states[idx].clone()).collect();
-
-        let debug_particles = if debug { Some(build_particle_logs(&search_states, &costs, &weights)) } else { None };
-        if let Some(particles) = debug_particles {
-            debug_steps.push(StepLog {
-                step,
-                particles,
-                resample_indices: resample_indices.clone(),
-                best_cost: best_so_far.as_ref().map(|(c, _)| *c),
-                best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
-            });
-        }
-
-        if verbose {
-            println!("{}", format!("Step {}: resampled all particles", step).dimmed());
-            print_top_particles(&search_states, &weights, shared, original_size, |i| compute_cost(&shared.egraph, root, &search_states[i], shared.check_slow));
-        }
-        steps_run = step + 1;
-    }
-
-    println!("\n{}", "═══ RESULT ═══".green().bold());
-    if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
-        println!("{} {}", "best found at iteration:".dimmed(), iter.to_string().yellow());
-        println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
-        println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
-        println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
-    }
-
-    let debug_log = if debug {
-        Some(DebugLog {
-            original_size,
-            num_particles,
-            temperature,
-            steps: debug_steps,
-        })
-    } else {
-        None
-    };
-    SmcResult {
-        best: best_so_far,
-        original_size,
-        best_found_at,
-        num_steps_run: steps_run,
-        debug_log,
+        let old_particles = particles.clone();
+        particles = (0..config.num_particles)
+            .map(|_| old_particles[weighted_choice(&weights_acc)])
+            .collect();
     }
 }
 

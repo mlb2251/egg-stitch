@@ -21,6 +21,7 @@ mod wasm_api {
 
     use crate::best_first::{InteractiveSearch, SearchPriority};
     use crate::search::setup_search;
+    use crate::smc::SmcConfig;
 
     /// Interactive search engine exposed to JavaScript via WASM.
     ///
@@ -103,6 +104,16 @@ mod wasm_api {
         /// Check if any node has the given pattern (for replay error reporting).
         pub fn has_pattern(&self, pattern: &str) -> bool {
             self.inner.has_pattern(pattern)
+        }
+
+        // ── SMC ────────────────────────────────────────────────────────
+
+        /// Run SMC search over the shared tree. After this call, the tree
+        /// is populated and can be queried with `nodes_json()`, `best_cost()`,
+        /// `expansion_order_json()`, etc. Replay also works.
+        pub fn run_smc(&mut self, num_particles: usize, num_steps: usize, temperature: f64, dead_runs: usize) {
+            let config = SmcConfig { num_particles, num_steps, temperature, dead_runs, verbose: false };
+            crate::smc::smc(&mut self.inner, &config);
         }
 
         // ── Settings ───────────────────────────────────────────────────
