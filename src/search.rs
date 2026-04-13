@@ -2,11 +2,29 @@ use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
-use egg::{ENodeOrVar, Id, Language};
+use egg::{ENodeOrVar, Id, Language, Symbol};
 use rand::Rng;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 
+/// A deterministic move taken at a search node: either expanding a pattern variable
+/// with a specific enode shape, or unifying two existing variables.
+#[derive(Debug, Clone)]
+pub enum Action {
+    Expand { var_idx: usize, op: Symbol, arity: usize },
+    Reuse { keep: usize, drop: usize },
+}
+
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Action::Expand { var_idx, op, arity } => write!(f, "expand #{} := {}/{}", var_idx, op, arity),
+            Action::Reuse { keep, drop } => write!(f, "reuse #{} = #{}", keep, drop),
+        }
+    }
+}
+
+/// Shared read-only context passed to all search operations.
 #[derive(Debug)]
 pub struct SharedSearchData {
     pub egraph: StitchEgraph,
@@ -149,6 +167,62 @@ impl SearchState {
             pattern: Pattern::single_var(),
             matches: identity_matches(&shared.egraph),
         }
+    }
+
+    /// Enumerates every successor state reachable in one `expand` or `reuse` step.
+    ///
+    /// Expansion candidates: for each variable, collect every distinct `(op, arity)`
+    /// pair appearing as an enode in any bound e-class across all matches, then produce
+    /// one child per shape. Reuse candidates: for every pair `(i, j)` with `i < j`,
+    /// emit a child if some match has `subst.vars[i] == subst.vars[j]`. Children whose
+    /// match set becomes empty after filtering are dropped.
+    pub fn enumerate_successors(&self, shared: &SharedSearchData) -> Vec<(Action, SearchState)> {
+        let mut out = Vec::new();
+
+        for var_idx in 0..self.pattern.vars.len() {
+            let mut seen: FxHashSet<(Symbol, usize)> = FxHashSet::default();
+            let mut shapes: Vec<StitchLang> = Vec::new();
+            for m in &self.matches {
+                for subst in &m.substs {
+                    let eclass = &shared.egraph[subst.vars[var_idx]];
+                    for node in &eclass.nodes {
+                        let key = (node.op, node.children.len());
+                        if seen.insert(key) {
+                            shapes.push(node.clone());
+                        }
+                    }
+                }
+            }
+            for shape in shapes {
+                let mut child = self.clone();
+                child.expand(var_idx, &shape, shared);
+                if !child.matches.is_empty() {
+                    out.push((
+                        Action::Expand { var_idx, op: shape.op, arity: shape.children.len() },
+                        child,
+                    ));
+                }
+            }
+        }
+
+        let n = self.pattern.vars.len();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let unifiable = self
+                    .matches
+                    .iter()
+                    .any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
+                if unifiable {
+                    let mut child = self.clone();
+                    child.reuse(i, j);
+                    if !child.matches.is_empty() {
+                        out.push((Action::Reuse { keep: i, drop: j }, child));
+                    }
+                }
+            }
+        }
+
+        out
     }
 }
 

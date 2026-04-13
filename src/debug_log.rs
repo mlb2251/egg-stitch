@@ -11,6 +11,34 @@ pub struct DebugLog {
     pub steps: Vec<StepLog>,
 }
 
+/// Full debug trace of a best-first enumerative search: the explored search tree
+/// plus the order in which nodes were popped for expansion and which one won.
+#[derive(Serialize)]
+pub struct SearchTreeLog {
+    pub original_size: usize,
+    pub nodes: Vec<TreeNodeLog>,
+    /// Node ids in the order they were popped from the heap and expanded.
+    pub expansion_order: Vec<usize>,
+    /// Id of the lowest-cost node ever seen (or None if the tree is degenerate).
+    pub best_node: Option<usize>,
+}
+
+/// One node in the best-first search tree.
+#[derive(Serialize)]
+pub struct TreeNodeLog {
+    pub id: usize,
+    pub parent: Option<usize>,
+    /// Human-readable label for the move that produced this node from its parent.
+    pub action: Option<String>,
+    pub pattern: String,
+    pub arity: usize,
+    pub pattern_size: usize,
+    pub num_matches: usize,
+    pub cost: usize,
+    /// Whether this node was actually popped and expanded (vs. just enqueued).
+    pub expanded: bool,
+}
+
 /// Per-step snapshot of all particles.
 #[derive(Serialize)]
 pub struct StepLog {

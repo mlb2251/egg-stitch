@@ -4,6 +4,8 @@ use serde::Serialize;
 #[derive(Serialize)]
 pub struct RunResult {
     pub timestamp: f64,
+    /// Which search algorithm produced this run ("smc" or "best-first").
+    pub search: String,
     pub input_file: String,
     pub rules_file: Option<String>,
     pub elapsed_secs: f64,
@@ -16,6 +18,7 @@ pub struct RunResult {
     pub pattern: Option<String>,
     pub arity: Option<usize>,
     pub pattern_size: Option<usize>,
+    pub num_expansions: Option<usize>,
     pub num_matches: Option<usize>,
     /// Sum of corpus usage counts across all matching e-classes.
     pub usage_matches: Option<usize>,
@@ -24,4 +27,7 @@ pub struct RunResult {
     pub best_iteration: Option<usize>,
     pub num_steps_run: usize,
     pub rewritten_programs: Option<Vec<String>>,
+    /// Filename of the debug log (in the same directory), if debug logging was enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_log_file: Option<String>,
 }
