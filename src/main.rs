@@ -14,7 +14,7 @@ mod search;
 mod smc;
 
 use clap::Parser;
-use egg_stitch::{Args, SearchKind};
+use egg_stitch::{Args, SearchKind, SearchPriority};
 
 fn main() {
     let args = Args::parse();
