@@ -21,7 +21,11 @@ impl MatchAtEClass {
     }
 }
 
-/// Returns one identity match per e-class in the egraph.
+/// Returns one identity match per e-class in the egraph, sorted by id for
+/// deterministic ordering across native (64-bit) and WASM (32-bit) targets,
+/// which use different `FxHasher` word sizes and thus different hashmap layouts.
 pub fn identity_matches(egraph: &StitchEgraph) -> Vec<MatchAtEClass> {
-    egraph.classes().map(|c| MatchAtEClass::identity_match(c.id)).collect()
+    let mut matches: Vec<_> = egraph.classes().map(|c| MatchAtEClass::identity_match(c.id)).collect();
+    matches.sort_unstable_by_key(|m| m.root_eclass);
+    matches
 }
