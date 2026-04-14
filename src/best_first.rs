@@ -46,12 +46,14 @@ impl SearchPriority {
 }
 
 /// Computes the heap priority for a node. Lower values are popped first.
-fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: usize) -> i64 {
+/// `DepthFirst` and `MostMatches` invert by subtracting from `usize::MAX` —
+/// safe since `depth` and `num_matches` won't approach that bound.
+fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: usize) -> usize {
     match strategy {
-        SearchPriority::Cost => cost as i64,
-        SearchPriority::DepthFirst => -(depth as i64),
-        SearchPriority::BreadthFirst => depth as i64,
-        SearchPriority::MostMatches => -(num_matches as i64),
+        SearchPriority::Cost => cost,
+        SearchPriority::DepthFirst => usize::MAX - depth,
+        SearchPriority::BreadthFirst => depth,
+        SearchPriority::MostMatches => usize::MAX - num_matches,
     }
 }
 
@@ -100,7 +102,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
 
     let mut nodes: Vec<Node> = Vec::new();
-    let mut heap: BinaryHeap<Reverse<(i64, usize)>> = BinaryHeap::new();
+    let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
     let mut seen: FxHashSet<String> = FxHashSet::default();
 
     nodes.push(Node {
