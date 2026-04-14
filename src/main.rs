@@ -1,20 +1,5 @@
-mod best_first;
-mod cost;
-mod debug_log;
-mod follow;
-mod io;
-mod lang;
-mod logging;
-mod matching;
-mod math;
-mod pattern;
-mod results;
-mod revexpr;
-mod search;
-mod smc;
-
 use clap::Parser;
-use egg_stitch::{Args, SearchKind, SearchPriority};
+use egg_stitch::{Args, SearchKind, best_first, cost, io, lang, results, search, smc};
 
 fn main() {
     let args = Args::parse();

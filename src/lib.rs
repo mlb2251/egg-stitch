@@ -1,3 +1,4 @@
+pub mod best_first;
 pub mod cost;
 pub mod debug_log;
 pub mod follow;
@@ -14,6 +15,8 @@ pub mod smc;
 
 use clap::{Parser, ValueEnum};
 
+pub use best_first::SearchPriority;
+
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
 pub enum SearchKind {
@@ -21,19 +24,6 @@ pub enum SearchKind {
     Smc,
     /// Best-first enumerative search over canonical patterns.
     BestFirst,
-}
-
-/// How to order the best-first search heap.
-#[derive(ValueEnum, Clone, Copy, Debug)]
-pub enum SearchPriority {
-    /// Lowest compressed-corpus-plus-pattern cost first (default).
-    Cost,
-    /// Deepest patterns first.
-    DepthFirst,
-    /// Shallowest patterns first.
-    BreadthFirst,
-    /// Patterns with the most e-class matches first.
-    MostMatches,
 }
 
 /// E-graph based program synthesis via SMC.

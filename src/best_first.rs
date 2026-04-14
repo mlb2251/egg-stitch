@@ -1,13 +1,49 @@
+use clap::ValueEnum;
 use colored::Colorize;
 use rustc_hash::FxHashSet;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-use crate::SearchPriority;
 use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::StitchEgraph;
 use crate::search::{Action, SearchState, setup_search};
+
+/// How to order the best-first search heap.
+#[derive(ValueEnum, Clone, Copy, Debug)]
+pub enum SearchPriority {
+    /// Lowest compressed-corpus-plus-pattern cost first (default).
+    Cost,
+    /// Deepest patterns first.
+    DepthFirst,
+    /// Shallowest patterns first.
+    BreadthFirst,
+    /// Patterns with the most e-class matches first.
+    MostMatches,
+}
+
+impl SearchPriority {
+    /// Parse from the kebab-case string form used by external APIs (e.g. WASM).
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "cost" => Some(Self::Cost),
+            "depth-first" => Some(Self::DepthFirst),
+            "breadth-first" => Some(Self::BreadthFirst),
+            "most-matches" => Some(Self::MostMatches),
+            _ => None,
+        }
+    }
+
+    /// Kebab-case string representation.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Cost => "cost",
+            Self::DepthFirst => "depth-first",
+            Self::BreadthFirst => "breadth-first",
+            Self::MostMatches => "most-matches",
+        }
+    }
+}
 
 /// Computes the heap priority for a node. Lower values are popped first.
 fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: usize) -> i64 {
