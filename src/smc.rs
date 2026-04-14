@@ -1,7 +1,6 @@
 use colored::Colorize;
 
 use crate::cost::compute_cost;
-use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::{StitchEgraph, StitchLang};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
@@ -32,7 +31,6 @@ pub struct SmcResult {
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
     pub egraph: StitchEgraph,
-    pub debug_log: Option<DebugLog>,
 }
 
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
@@ -55,8 +53,6 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let mut best_so_far: Option<(usize, SearchState)> = None;
     let mut best_found_at = None;
     let mut steps_run = 0;
-    let debug = args.debug_log;
-    let mut debug_steps: Vec<StepLog> = Vec::new();
 
     let mut particles: Vec<(SearchState, usize)> = vec![(SearchState::new(&shared), num_particles)];
 
@@ -105,13 +101,11 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         let mut weights: Vec<f64> = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
 
         if weights.iter().sum::<f64>() == 0.0 {
-            log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
         if best_found_at.is_some_and(|bf| (step as i64) - (bf as i64) > dead_runs as i64) {
-            log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
@@ -124,22 +118,9 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
 
         let weights_acc = normalize_and_accumulate(&mut weights);
         let mut counts: Vec<usize> = vec![0; expanded.len()];
-        let resample_indices: Vec<usize> = (0..num_particles)
-            .map(|_| {
-                let idx = weighted_choice(&weights_acc);
-                counts[idx] += 1;
-                idx
-            })
-            .collect();
-
-        if debug {
-            debug_steps.push(StepLog {
-                step,
-                particles: build_particle_logs(&expanded, &costs, &weights),
-                resample_indices,
-                best_cost: best_so_far.as_ref().map(|(c, _)| *c),
-                best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
-            });
+        for _ in 0..num_particles {
+            let idx = weighted_choice(&weights_acc);
+            counts[idx] += 1;
         }
 
         if verbose {
@@ -160,23 +141,12 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
     }
 
-    let debug_log = if debug {
-        Some(DebugLog {
-            original_size,
-            num_particles,
-            temperature,
-            steps: debug_steps,
-        })
-    } else {
-        None
-    };
     SmcResult {
         best: best_so_far,
         original_size,
         best_found_at,
         num_steps_run: steps_run,
         egraph: shared.egraph,
-        debug_log,
     }
 }
 

@@ -12,9 +12,6 @@ import subprocess as sp
 def all_mini():
     runall(num_steps=10, num_particles=100)
 
-def dials_debug():
-    run_domain("dials", num_steps=10, num_particles=1000, debug_log=True)
-
 
 def dials_compress():
     compress(
@@ -22,7 +19,6 @@ def dials_compress():
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         num_steps=10,
         num_particles=100,
-        debug_log=False,
     )
 
 
@@ -32,7 +28,6 @@ def dials_follow():
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         num_steps=10,
         num_particles=100,
-        debug_log=False,
         follow="(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))",
     )
 
@@ -77,7 +72,6 @@ def bf_dfs():
         search="best-first",
         priority="depth-first",
         num_steps=500,
-        debug_log=True,
         max_arity=2,
     )
 
@@ -91,7 +85,6 @@ def bf_bfs():
         search="best-first",
         priority="breadth-first",
         num_steps=500,
-        debug_log=True,
         max_arity=2,
     )
 
@@ -105,7 +98,6 @@ def bf_matches():
         search="best-first",
         priority="most-matches",
         num_steps=500,
-        debug_log=True,
         max_arity=2,
     )
 
@@ -118,7 +110,6 @@ def best_first():
         search="best-first",
         # priority="cost",
         num_steps=5000,
-        # debug_log=True,
         max_arity=2,
         # replay="/Users/maddy/proj/rust/egg-stitch/viz/results/2026-04-12_17-29-35/dials_bf_cost_replay.json",
         # samply=True,

@@ -4,10 +4,9 @@ use rustc_hash::FxHashSet;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-use crate::cost::{compute_cost, compute_pattern_size};
-use crate::debug_log::{SearchTreeLog, TreeNodeLog};
+use crate::cost::compute_cost;
 use crate::lang::StitchEgraph;
-use crate::search::{Action, SearchState, setup_search};
+use crate::search::{SearchState, setup_search};
 
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -66,18 +65,12 @@ pub struct BestFirstResult {
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
     pub egraph: StitchEgraph,
-    pub tree_log: Option<SearchTreeLog>,
 }
 
-/// One node in the in-memory search tree. Retained for parent-pointer lookups
-/// and for the optional serialized debug log.
+/// One node in the in-memory search tree.
 struct Node {
-    parent: Option<usize>,
-    action: Option<Action>,
     state: SearchState,
-    cost: usize,
     depth: usize,
-    expanded: bool,
 }
 
 /// Runs best-first enumerative search to find a pattern that minimizes cost.
@@ -94,7 +87,6 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
 
     let budget = args.num_steps;
     let max_arity = args.max_arity;
-    let debug = args.debug_log;
     let strategy = args.priority;
 
     let initial_state = SearchState::new(&shared);
@@ -106,19 +98,14 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let mut seen: FxHashSet<String> = FxHashSet::default();
 
     nodes.push(Node {
-        parent: None,
-        action: None,
         state: initial_state.clone(),
-        cost: initial_cost,
         depth: 0,
-        expanded: false,
     });
     heap.push(Reverse((initial_prio, 0)));
     seen.insert(initial_state.pattern.to_string());
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
     let mut best_found_at: Option<usize> = None;
-    let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
@@ -127,13 +114,10 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             break;
         }
 
-        nodes[node_id].expanded = true;
-        expansion_order.push(node_id);
-
         let successors = nodes[node_id].state.enumerate_successors(&shared);
         let parent_depth = nodes[node_id].depth;
 
-        for (action, child_state) in successors {
+        for (_action, child_state) in successors {
             if let Some(ref follow) = shared.follow
                 && !child_state.matches_follow(follow)
             {
@@ -156,12 +140,8 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             }
 
             nodes.push(Node {
-                parent: Some(node_id),
-                action: Some(action),
                 state: child_state,
-                cost: child_cost,
                 depth: child_depth,
-                expanded: false,
             });
             heap.push(Reverse((child_prio, child_id)));
         }
@@ -180,37 +160,11 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
 
     let best_pair = best.map(|(cost, id)| (cost, nodes[id].state.clone()));
 
-    let tree_log = if debug {
-        Some(SearchTreeLog {
-            original_size,
-            nodes: nodes
-                .iter()
-                .enumerate()
-                .map(|(id, n)| TreeNodeLog {
-                    id,
-                    parent: n.parent,
-                    action: n.action.as_ref().map(|a| a.to_string()),
-                    pattern: n.state.pattern.to_string(),
-                    arity: n.state.pattern.vars.len(),
-                    pattern_size: compute_pattern_size(&n.state.pattern),
-                    num_matches: n.state.matches.len(),
-                    cost: n.cost,
-                    expanded: n.expanded,
-                })
-                .collect(),
-            expansion_order,
-            best_node: best.map(|(_, id)| id),
-        })
-    } else {
-        None
-    };
-
     BestFirstResult {
         best: best_pair,
         original_size,
         best_found_at,
         num_expansions,
         egraph: shared.egraph,
-        tree_log,
     }
 }

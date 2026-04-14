@@ -27,7 +27,4 @@ pub struct RunResult {
     pub best_iteration: Option<usize>,
     pub num_steps_run: usize,
     pub rewritten_programs: Option<Vec<String>>,
-    /// Filename of the debug log (in the same directory), if debug logging was enabled.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub debug_log_file: Option<String>,
 }

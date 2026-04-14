@@ -11,16 +11,14 @@ fn main() {
     // Dispatch to the requested search algorithm, flattening each driver's result
     // into a common tuple so the downstream RunResult wiring stays shared.
     #[allow(clippy::type_complexity)]
-    let (best, original_size, best_found_at, num_steps_run, result_egraph, debug_log_json): (Option<(usize, search::SearchState)>, usize, Option<usize>, usize, lang::StitchEgraph, Option<String>) = match args.search {
+    let (best, original_size, best_found_at, num_steps_run, result_egraph): (Option<(usize, search::SearchState)>, usize, Option<usize>, usize, lang::StitchEgraph) = match args.search {
         SearchKind::Smc => {
             let r = smc::smc(egraph, root, &args);
-            let json = r.debug_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize debug log"));
-            (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, json)
+            (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
         }
         SearchKind::BestFirst => {
             let r = best_first::best_first(egraph, root, &args);
-            let json = r.tree_log.as_ref().map(|d| serde_json::to_string(d).expect("Failed to serialize tree log"));
-            (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph, json)
+            (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph)
         }
     };
 
@@ -48,15 +46,6 @@ fn main() {
     };
 
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-    // Write debug log if the driver produced one and an output path was given.
-    let debug_log_file = if let (Some(json), Some(output_path)) = (debug_log_json, &args.output) {
-        let debug_path = output_path.replace(".json", "_debug.json");
-        std::fs::write(&debug_path, json).expect("Failed to write debug log");
-        println!("wrote debug log to {}", debug_path);
-        Some(std::path::Path::new(&debug_path).file_name().unwrap().to_string_lossy().into_owned())
-    } else {
-        None
-    };
 
     let search_kind = match args.search {
         SearchKind::Smc => "smc",
@@ -83,7 +72,6 @@ fn main() {
         best_iteration: best_found_at,
         num_steps_run,
         rewritten_programs,
-        debug_log_file,
     };
 
     if let Some(ref output_path) = args.output {
