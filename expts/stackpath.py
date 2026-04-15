@@ -10,6 +10,7 @@ import json
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from .folders import unique_path
 
 RUNS_DIR = Path(__file__).parent.parent / "viz" / "stackpath"
 
