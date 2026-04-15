@@ -68,7 +68,7 @@ def run_ours(domain: str, search: str, *, num_steps: int, rewrites=_UNSET, **ext
         data = json.load(f)
     initial_cost = int(data["initial_cost"])
     final_cost = int(data.get("final_cost") or initial_cost)
-    pattern = data.get("pattern")
+    abstractions = data.get("library") or []
     method = "enum" if search == "best-first" else search
     cost_after = int(data["cost_after_rewrites"]) if rewrites is not None else None
     result = Result(
@@ -78,11 +78,10 @@ def run_ours(domain: str, search: str, *, num_steps: int, rewrites=_UNSET, **ext
         final_cost=final_cost,
         compression_ratio=ratio(initial_cost, final_cost),
         elapsed_secs=float(data["elapsed_secs"]),
-        library=[pattern] if pattern else [],
+        library=[a["pattern"] for a in abstractions],
         extra={
             "cost_after_rewrites": cost_after,
-            "arity": data.get("arity"),
-            "num_matches": data.get("num_matches"),
+            "abstractions": abstractions,
             "output_file": str(output),
         },
     )

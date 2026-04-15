@@ -14,6 +14,7 @@ pub mod search;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
+use egg::Id;
 
 pub use best_first::SearchPriority;
 
@@ -82,6 +83,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub check_slow: bool,
 
+    /// Number of abstractions to find sequentially (each stacks on the previous).
+    #[arg(long, default_value_t = 1)]
+    pub num_abstractions: usize,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
@@ -93,4 +98,69 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+}
+
+/// Runs the multi-abstraction search loop, returning the per-abstraction results,
+/// the corpus size after DSRs (before any abstractions), and the final combined cost.
+///
+/// Each abstraction is built on top of the previous: after finding `fn_N`, the
+/// rewritten programs (with `inv_0` renamed to `fn_N`) are used to seed the next
+/// egraph, and the next search finds `fn_{N+1}`.
+pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+    let rules = args.rules.as_deref();
+    let mut egraph = egraph;
+    let mut root = root;
+    let mut library: Vec<results::AbstractionResult> = Vec::new();
+    let mut original_size = 0;
+    let mut final_cost = None;
+
+    for abstraction_idx in 0..args.num_abstractions {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_egraph) = match args.search {
+            SearchKind::Smc => {
+                let r = smc::smc(egraph, root, args);
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
+            }
+            SearchKind::BestFirst => {
+                let r = best_first::best_first(egraph, root, args);
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph)
+            }
+        };
+
+        if abstraction_idx == 0 {
+            original_size = iter_original_size;
+        }
+
+        match best {
+            None => break,
+            Some((best_cost, state)) => {
+                let pat_size = cost::compute_pattern_size(&state.pattern);
+                let usage_counts = search::compute_usage_counts(&result_egraph, root);
+                let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
+                let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
+                let rewritten = cost::extract_rewritten_programs(&result_egraph, root, &state);
+                let fn_name = format!("fn_{abstraction_idx}");
+                let renamed: Vec<String> = rewritten.iter().map(|p| p.replace("inv_0", &fn_name)).collect();
+                final_cost = Some(best_cost);
+                library.push(results::AbstractionResult {
+                    pattern: format!("{fn_name}: {}", state.pattern),
+                    arity: state.pattern.vars.len(),
+                    pattern_size: pat_size,
+                    num_matches: state.matches.len(),
+                    usage_matches,
+                    approx_cost,
+                    num_steps_run,
+                    num_expansions: best_found_at.map(|n| n + 1),
+                    best_iteration: best_found_at,
+                    rewritten_programs: renamed.clone(),
+                });
+                if abstraction_idx + 1 < args.num_abstractions {
+                    (egraph, root, _) = io::load_egraph_from_programs(&renamed, rules);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    (library, original_size, final_cost)
 }
