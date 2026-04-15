@@ -18,6 +18,8 @@ const state = {
   selections: [],            // names of saved selections
   activeSelection: null,     // currently-loaded selection name (or null)
   runs: new Map(),           // path -> {config, result, type}
+  lastRuns: null,            // last set of runs passed to renderPlot (for axis re-draw)
+  lastAutoPlotDomain: null,  // {xMin, xMax, yMin, yMax} computed from data (for freeze)
 };
 
 // ---------- HTTP helpers ----------
@@ -429,6 +431,7 @@ async function renderRuns() {
   summary.textContent = paths.length === 0 ? 'no runs in current selection' : `${paths.length} run(s)`;
 
   const runs = await Promise.all(paths.map(loadRun));
+  state.lastRuns = runs;
 
   for (const run of runs) {
     const card = document.createElement('div');
@@ -501,7 +504,7 @@ function renderPlot(runs) {
   const points = runs
     .map(r => ({
       path: r.path, type: r.type, domain: r.config?.domain ?? '?',
-      algo: r.path.split('/').pop(),
+      algo: ({ 'best-first': 'enum' })[r.path.split('/').pop()] ?? r.path.split('/').pop(),
       time: r.result?.elapsed_secs, ratio: r.result?.compression_ratio,
       config: r.config || {}, result: r.result || {},
     }))
@@ -568,9 +571,22 @@ function renderPlot(runs) {
   }
 
   const size = Math.max(150, Math.min(div.clientWidth || 400, div.clientHeight || 400));
+
+  // Compute auto axis bounds.
   const ratios = allPoints.map(p => p.ratio);
-  const xMin = Math.min(1, Math.min(...ratios));
-  const xMax = Math.max(...ratios);
+  const times = allPoints.map(p => p.time).filter(t => Number.isFinite(t) && t > 0);
+  const autoXMin = Math.min(1, Math.min(...ratios));
+  const autoXMax = Math.max(...ratios);
+  const autoYMin = Math.min(...times);
+  const autoYMax = Math.max(...times);
+  state.lastAutoPlotDomain = { xMin: autoXMin, xMax: autoXMax, yMin: autoYMin, yMax: autoYMax };
+
+  // Apply manual overrides from inputs (empty = auto).
+  const ov = getAxisOverrides();
+  const xMin = ov.xMin ?? autoXMin;
+  const xMax = ov.xMax ?? autoXMax;
+  const yMin = ov.yMin ?? autoYMin;
+  const yMax = ov.yMax ?? autoYMax;
 
   // Build one dot mark per domain with a constant symbol. Each mark also
   // tracks its point array (in render order) so the tooltip can find the
@@ -609,11 +625,11 @@ function renderPlot(runs) {
     width: size, height: size,
     marginLeft: 75, marginBottom: 60, marginTop: 12, marginRight: 12,
     x: { domain: [xMin, xMax], label: 'compression ratio', labelAnchor: 'center', labelArrow: false, grid: true },
-    y: { type: 'log', label: 'time (s)', labelAnchor: 'center', labelArrow: false, grid: true },
+    y: { type: 'log', domain: [yMin, yMax], label: 'time (s)', labelAnchor: 'center', labelArrow: false, grid: true },
     color: {
       legend: true,
-      domain: ['enum', 'best-first', 'smc', 'babble'],
-      range: ['#3b82f6', '#3b82f6', '#f59e0b', '#10b981'],
+      domain: ['enum', 'smc', 'babble', 'stitch'],
+      range: ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'],
       unknown: '#6b7280',
     },
     marks: [
@@ -771,6 +787,17 @@ function escapeHtml(s) {
   ));
 }
 
+// ---------- axis overrides ----------
+
+/** Read the four axis override inputs; returns null for any that are blank. */
+function getAxisOverrides() {
+  const val = (id) => {
+    const v = parseFloat(document.getElementById(id)?.value);
+    return Number.isFinite(v) ? v : null;
+  };
+  return { xMin: val('x-min'), xMax: val('x-max'), yMin: val('y-min'), yMax: val('y-max') };
+}
+
 // ---------- refresh ----------
 
 async function refreshTree() {
@@ -810,6 +837,24 @@ document.getElementById('unsel-btn').onclick = () => {
 };
 document.getElementById('save-sel-btn').onclick = () => saveSelection();
 document.getElementById('hide-reps').onchange = () => renderRuns();
+
+// Axis override inputs: re-draw the plot instantly with cached runs.
+for (const id of ['x-min', 'x-max', 'y-min', 'y-max']) {
+  document.getElementById(id).addEventListener('change', () => {
+    if (state.lastRuns) renderPlot(state.lastRuns);
+  });
+}
+
+// Freeze: fill each input with the effective value currently in use.
+document.getElementById('freeze-btn').onclick = () => {
+  const d = state.lastAutoPlotDomain;
+  if (!d) return;
+  const ov = getAxisOverrides();
+  document.getElementById('x-min').value = ov.xMin ?? d.xMin;
+  document.getElementById('x-max').value = ov.xMax ?? d.xMax;
+  document.getElementById('y-min').value = ov.yMin ?? d.yMin;
+  document.getElementById('y-max').value = ov.yMax ?? d.yMax;
+};
 
 window.addEventListener('resize', () => renderRuns());
 
