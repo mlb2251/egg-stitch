@@ -8,13 +8,18 @@ from . import STITCH_BIN, STITCH_DIR
 from .result import Result, ratio
 
 
-def run_stitch(domain: str) -> Result:
+def run_stitch(domain: str, *, num_abstractions: int = 1) -> Result:
+    """Run stitch on ``domain``.
+
+    ``num_abstractions`` maps to stitch's ``-i`` (iterations) flag, so it
+    controls how many abstractions stitch is asked to learn.
+    """
     outfile = f"out/for-egg-stitch/{domain}.json"
     print(f"\033[92mRunning stitch on {domain}\033[0m", flush=True)
     cmd = [
         str(STITCH_BIN),
         f"data/cogsci/{domain}.json",
-        "-i1", "-a2", "--out", outfile,
+        f"-i{num_abstractions}", "-a2", "--out", outfile,
         "--no-curried-bodies", "--no-curried-metavars", "--silent",
     ]
     start = time.time()

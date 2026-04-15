@@ -22,21 +22,33 @@ from .table1 import TABLE1_DOMAINS, DOMAIN_LABELS, NUM_RUNS
 TABLE2_DOMAINS = TABLE1_DOMAINS
 
 
+DEFAULT_TABLE2_TITLE = "Table 2: Ours (SMC and Enum) vs Babble vs Stitch on benchmarks without DSRs"
+
+
 def table2(
     *,
     smc_num_steps: int = 100,
     smc_num_particles: int = 1000,
     smc_temperature: float = 1000.0,
     enum_num_steps: int = 500,
+    num_abstractions: int = 1,
+    folder_prefix: str = "table2",
     output_name: str = "table2.json",
+    title: str = DEFAULT_TABLE2_TITLE,
 ) -> Path:
-    """Run Enum, SMC, babble, and Stitch on the four domains with no DSRs."""
+    """Run Enum, SMC, babble, and Stitch on the four domains with no DSRs.
+
+    ``num_abstractions`` is forwarded to every compressor so each run
+    stacks that many abstractions sequentially.
+    """
     assert all(d in ALL_DOMAINS for d in TABLE2_DOMAINS), "domain typo"
-    set_folder(f"table2/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
+    set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
+        "title": title,
         "config": {
             "smc": {"num_steps": smc_num_steps, "num_particles": smc_num_particles, "temperature": smc_temperature},
             "enum": {"num_steps": enum_num_steps},
+            "num_abstractions": num_abstractions,
         },
         "domains": {},
     }
@@ -46,16 +58,17 @@ def table2(
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None)
+            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions)
             smc_res, _ = run_ours(
                 domain, "smc",
                 num_steps=smc_num_steps,
                 num_particles=smc_num_particles,
                 temperature=smc_temperature,
                 rewrites=None,
+                num_abstractions=num_abstractions,
             )
-            babble_res = run_babble(domain)
-            stitch_res = run_stitch(domain)
+            babble_res = run_babble(domain, num_abstractions=num_abstractions)
+            stitch_res = run_stitch(domain, num_abstractions=num_abstractions)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
@@ -93,7 +106,7 @@ def print_table2(path: str | Path) -> None:
         f"{'Enum':>10}{'SMC':>10}{'babble':>8}{'Stitch':>8}"
     )
     print()
-    print("Table 2: Ours (SMC and Enum) vs Babble vs Stitch on benchmarks without DSRs")
+    print(saved.get("title", DEFAULT_TABLE2_TITLE))
     print()
     print(header_top)
     print(header_sub)

@@ -53,6 +53,7 @@ from .stitch import *
 from .table1 import *
 from .table2 import *
 from .table3 import *
+from .table4 import *
 
 
 

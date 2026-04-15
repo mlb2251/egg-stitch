@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render Table 1 / Table 2 / Table 3 JSON result files as LaTeX tabulars (and plots).
+"""Render Table 1-4 JSON result files as LaTeX tabulars (and plots).
 
 By default, picks the newest timestamped run under
 ``viz/results/tableN/<timestamp>/tableN.json``. Pass an explicit JSON path to
@@ -32,6 +32,7 @@ TABLE_TITLES = {
     1: "Compression Using Rewrites",
     2: "Compression Without Rewrites",
     3: "Compression Using Rewrites, Stacked Abstractions",
+    4: "Compression Without Rewrites, Stacked Abstractions",
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
 TABLES_WITH_EGRAPH_MIN = {1, 3}
@@ -308,7 +309,7 @@ def main() -> None:
 
     FIGURES_DIR.mkdir(exist_ok=True)
     chunks = []
-    for table in (1, 2, 3):
+    for table in (1, 2, 3, 4):
         path = latest_json(table)
         with open(path) as f:
             saved = json.load(f)
