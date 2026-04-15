@@ -81,7 +81,8 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, &cost_cache, s, shared.check_slow)).collect();
 
         for (i, cost) in costs.iter().enumerate() {
-            if expanded[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
+            let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
+            if expanded[i].pattern.vars.len() <= max_arity && *cost < cost_to_beat {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, expanded[i].clone()));
                 best_found_at = Some(step);
