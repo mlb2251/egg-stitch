@@ -34,6 +34,7 @@ def table1(
     smc_num_particles: int = 1000,
     smc_temperature: float = 1000.0,
     enum_num_steps: int = 500,
+    max_arity: int = 2,
     output_name: str = "table1.json",
 ) -> Path:
     """Run Enum, SMC, and babble on the four Table 1 domains with rewrites.
@@ -49,6 +50,7 @@ def table1(
         "config": {
             "smc": {"num_steps": smc_num_steps, "num_particles": smc_num_particles, "temperature": smc_temperature},
             "enum": {"num_steps": enum_num_steps},
+            "max_arity": max_arity,
         },
         "domains": {},
     }
@@ -62,16 +64,17 @@ def table1(
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
             stackpathpush(f"rep{i}")
             with subgroup("best-first"):
-                enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps)
+                enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, max_arity=max_arity)
             with subgroup("smc"):
                 smc_res, _ = run_ours(
                     domain, "smc",
                     num_steps=smc_num_steps,
                     num_particles=smc_num_particles,
                     temperature=smc_temperature,
+                    max_arity=max_arity,
                 )
             with subgroup("babble"):
-                babble_res = run_babble(domain, dsr=rewrites_path(domain))
+                babble_res = run_babble(domain, dsr=rewrites_path(domain), max_arity=max_arity)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())

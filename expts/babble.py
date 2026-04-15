@@ -8,7 +8,7 @@ from .result import Result, ratio
 from .stackpath import save_run
 
 
-def run_babble(domain: str, *, dsr: str | None = None) -> Result:
+def run_babble(domain: str, *, dsr: str | None = None, max_arity: int = 2) -> Result:
     """Run babble on a cogsci ``domain`` and return a :class:`Result`.
 
     When ``dsr`` is provided, it is passed to babble as ``--dsr`` so the
@@ -20,7 +20,7 @@ def run_babble(domain: str, *, dsr: str | None = None) -> Result:
     cmd = [
         str(BABBLE_BIN),
         f"harness/data/cogsci/{domain}.bab",
-        "--beams=400", "--lps=1", "--rounds=1", "--max-arity=2",
+        f"--beams=400", "--lps=1", "--rounds=1", f"--max-arity={max_arity}",
         f"--output={outfile}",
     ]
     if dsr is not None:
@@ -54,6 +54,6 @@ def run_babble(domain: str, *, dsr: str | None = None) -> Result:
             "dsr": dsr,
         },
     )
-    config = {"domain": domain, "dsr": dsr}
+    config = {"domain": domain, "dsr": dsr, "max_arity": max_arity}
     save_run(result.to_dict(), config, "babble")
     return result

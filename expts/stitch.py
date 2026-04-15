@@ -9,13 +9,13 @@ from .result import Result, ratio
 from .stackpath import save_run
 
 
-def run_stitch(domain: str) -> Result:
+def run_stitch(domain: str, max_library_size: int = 1, max_arity: int = 2) -> Result:
     outfile = f"out/for-egg-stitch/{domain}.json"
     print(f"\033[92mRunning stitch on {domain}\033[0m", flush=True)
     cmd = [
         str(STITCH_BIN),
         f"data/cogsci/{domain}.json",
-        "-i1", "-a2", "--out", outfile,
+        f"-i{max_library_size}", f"-a{max_arity}", "--out", outfile,
         "--no-curried-bodies", "--no-curried-metavars", "--silent",
     ]
     start = time.time()
@@ -42,6 +42,6 @@ def run_stitch(domain: str) -> Result:
             "num_abstractions": int(data.get("num_abstractions", len(library))),
         },
     )
-    config = {"domain": domain}
+    config = {"domain": domain, "max_library_size": max_library_size, "max_arity": max_arity}
     save_run(result.to_dict(), config, "stitch")
     return result
