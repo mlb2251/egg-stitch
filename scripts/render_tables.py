@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render Table 1 / Table 2 JSON result files as LaTeX tabulars (and plots).
+"""Render Table 1 / Table 2 / Table 3 JSON result files as LaTeX tabulars (and plots).
 
 By default, picks the newest timestamped run under
 ``viz/results/tableN/<timestamp>/tableN.json``. Pass an explicit JSON path to
@@ -28,7 +28,13 @@ DOMAIN_LABELS = {
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
 METHOD_LABELS = {"enum": "Enum", "smc": "SMC", "babble": "babble", "stitch": "Stitch"}
-TABLE_TITLES = {1: "Compression Using Rewrites", 2: "Compression Without Rewrites"}
+TABLE_TITLES = {
+    1: "Compression Using Rewrites",
+    2: "Compression Without Rewrites",
+    3: "Compression Using Rewrites, Stacked Abstractions",
+}
+# Tables that include an "E-graph min term size" column (runs with DSRs).
+TABLES_WITH_EGRAPH_MIN = {1, 3}
 
 # Plot styling: each method gets a color, each domain a marker. Keeping these
 # as module-level dicts makes it easy to extend with new methods/domains.
@@ -125,13 +131,14 @@ def bold_best(xs: list[float | None], spec: str,
 def render(saved: dict, table: int) -> str:
     """Return a LaTeX ``tabular`` string for the given loaded results dict."""
     domains = saved["domains"]
-    # Table 1 runs with DSRs which Stitch doesn't accept; show the column
-    # anyway with N/A so the layout matches Table 2.
+    # Tables 1 & 3 run with DSRs (which Stitch doesn't accept); show the
+    # Stitch column anyway with N/A so the layout matches Table 2.
     methods = METHODS
     n = len(methods)
+    has_egraph_min = table in TABLES_WITH_EGRAPH_MIN
 
-    # Column layout: domain, original size, (egraph-min for table1,) CRs, times.
-    extra_col = "r" if table == 1 else ""
+    # Column layout: domain, original size, (egraph-min for DSR tables,) CRs, times.
+    extra_col = "r" if has_egraph_min else ""
     col_spec = "l r " + extra_col + " " + ("r" * n) + " " + ("r" * n)
 
     lines = []
@@ -140,7 +147,7 @@ def render(saved: dict, table: int) -> str:
     lines.append("\\toprule")
 
     # Header row 1: group spans.
-    size_cols = 2 if table == 1 else 1
+    size_cols = 2 if has_egraph_min else 1
     lines.append(
         f"& \\multicolumn{{{size_cols}}}{{c}}{{Size}} "
         f"& \\multicolumn{{{n}}}{{c}}{{Compression Ratio}} "
@@ -155,7 +162,7 @@ def render(saved: dict, table: int) -> str:
     lines.append(" ".join(mid))
 
     # Header row 2: column names.
-    size_hdr = "Original & E-graph min" if table == 1 else "Original"
+    size_hdr = "Original & E-graph min" if has_egraph_min else "Original"
     method_hdr = " & ".join(METHOD_LABELS[m] for m in methods)
     lines.append(
         f"Domain & {size_hdr} & {method_hdr} & {method_hdr} \\\\"
@@ -186,7 +193,7 @@ def render(saved: dict, table: int) -> str:
 
     for label, original, egraph_min, crs, ts in rows:
         size_cells = [fmt(original, "d")]
-        if table == 1:
+        if has_egraph_min:
             size_cells.append(fmt(egraph_min, "d"))
         lines.append(emit(label, size_cells, crs, ts))
 
@@ -195,7 +202,7 @@ def render(saved: dict, table: int) -> str:
         lines.append("\\midrule")
         agg_cr = [geomean_col([r[3][i] for r in rows]) for i in range(n)]
         agg_t = [geomean_col([r[4][i] for r in rows]) for i in range(n)]
-        size_cells = ["" ] * (2 if table == 1 else 1)
+        size_cells = [""] * (2 if has_egraph_min else 1)
         lines.append(emit("Geo. mean", size_cells, agg_cr, agg_t))
 
     lines.append("\\bottomrule")
@@ -301,7 +308,7 @@ def main() -> None:
 
     FIGURES_DIR.mkdir(exist_ok=True)
     chunks = []
-    for table in (1, 2):
+    for table in (1, 2, 3):
         path = latest_json(table)
         with open(path) as f:
             saved = json.load(f)

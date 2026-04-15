@@ -52,6 +52,7 @@ from .babble import *
 from .stitch import *
 from .table1 import *
 from .table2 import *
+from .table3 import *
 
 
 
