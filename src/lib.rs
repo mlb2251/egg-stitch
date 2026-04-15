@@ -103,14 +103,13 @@ pub struct Args {
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
 /// the corpus size after DSRs (before any abstractions), and the final combined cost.
 ///
-/// Each abstraction is built on top of the previous: after finding `fn_N`, the
-/// rewritten programs (with `inv_0` renamed to `fn_N`) are used to seed the next
-/// egraph, and the next search finds `fn_{N+1}`.
+/// After each abstraction is found, `fn_N(args...)` enodes are added directly to the
+/// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
+/// serialising programs to strings and re-parsing. The eclass arguments already carry
+/// all DSR equivalences, so no re-saturation is needed.
 pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
-    let rules = args.rules.as_deref();
     let mut egraph = egraph;
-    let mut root = root;
-    let mut library: Vec<results::AbstractionResult> = Vec::new();
+    let mut library = Vec::new();
     let mut original_size = 0;
     let mut final_cost = None;
 
@@ -137,9 +136,10 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
-                let rewritten = cost::extract_rewritten_programs(&result_egraph, root, &state);
                 let fn_name = format!("fn_{abstraction_idx}");
-                let renamed: Vec<String> = rewritten.iter().map(|p| p.replace("inv_0", &fn_name)).collect();
+                let (next_egraph, rewritten_programs) =
+                    apply_abstraction(result_egraph, root, &state, &fn_name);
+
                 final_cost = Some(best_cost);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {}", state.pattern),
@@ -151,10 +151,11 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
                     num_steps_run,
                     num_expansions: best_found_at.map(|n| n + 1),
                     best_iteration: best_found_at,
-                    rewritten_programs: renamed.clone(),
+                    rewritten_programs,
                 });
+
                 if abstraction_idx + 1 < args.num_abstractions {
-                    (egraph, root, _) = io::load_egraph_from_programs(&renamed, rules);
+                    egraph = next_egraph;
                 } else {
                     break;
                 }
@@ -163,4 +164,32 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
     }
 
     (library, original_size, final_cost)
+}
+
+/// Applies an abstraction to the egraph by adding `fn_name(args...)` enodes for every
+/// match substitution and unioning each with its match root, then rebuilds.
+///
+/// Returns the updated egraph and the rewritten program strings extracted from it.
+/// The eclass arguments already carry all DSR equivalences, so no re-saturation is needed.
+fn apply_abstraction(
+    egraph: lang::StitchEgraph,
+    root: Id,
+    state: &search::SearchState,
+    fn_name: &str,
+) -> (lang::StitchEgraph, Vec<String>) {
+    let fn_sym: egg::Symbol = fn_name.into();
+    let mut egraph = egraph;
+    for m in &state.matches {
+        for subst in &m.substs {
+            let node = lang::StitchLang { op: fn_sym, children: subst.vars.clone() };
+            let x = egraph.add(node);
+            egraph.union(x, m.root_eclass);
+        }
+    }
+    egraph.rebuild();
+    let extractor = egg::Extractor::new(&egraph, egg::AstSize);
+    let programs = egraph[root].nodes[0].children.iter()
+        .map(|&child| extractor.find_best(child).1.to_string())
+        .collect();
+    (egraph, programs)
 }

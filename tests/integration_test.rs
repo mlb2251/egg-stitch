@@ -140,3 +140,15 @@ fn check_slow_high_arity() {
     let result = run(&args);
     assert!(result.best.is_some());
 }
+
+
+/// Verify fast == slow with higher arity.
+#[test]
+fn check_slow_high_arity_multi_abstr() {
+    if !fixtures_present() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--num-abstractions", "2"]);
+    let result = run(&args);
+    assert!(result.best.is_some());
+}
