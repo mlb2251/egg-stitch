@@ -4,7 +4,10 @@
 import sys
 import json
 from expts import ALL_DOMAINS, egg_stitch, table1, table2
-from expts.stackpath import subgroup
+from expts.stackpath import subgroup, stackpathiter
+from expts.stitch import run_stitch
+from expts.egg_stitch import run_ours
+from expts.babble import run_babble
 
 
 def dials_compress():
@@ -152,6 +155,45 @@ def table2_arity_scaling(num_runs = 2):
     for max_arity in [0, 1, 2, 3]:
         with subgroup(f"max_arity={max_arity}"):
             table2(max_arity=max_arity, num_runs=num_runs)
+
+# def extra_arities(num_runs = 2):
+#     for max_arity in [4]:
+#         with subgroup(f"max_arity={max_arity}"):
+#             table2(max_arity=max_arity, num_runs=num_runs)
+
+# def extra_stitch_arities(num_runs = 2):
+#     for max_arity in stackpathiter([7, 8, 9]):
+#         for domain in stackpathiter(ALL_DOMAINS):
+#             stitch_config = dict(max_library_size=1, max_arity=max_arity)
+#             run_stitch(domain, **stitch_config)
+
+def extra_us_arities(num_runs = 2):
+    for max_arity in stackpathiter([5, 6, 7, 8, 9]):
+        for domain in stackpathiter(ALL_DOMAINS):
+            smc_config = dict(num_steps=100, max_arity=2, num_particles=1000, temperature=1000., rewrites=None)
+            enum_config = dict(num_steps=500, max_arity=2, rewrites=None)
+            with subgroup("best-first"):
+                run_ours(domain, "best-first", **enum_config)
+            with subgroup("smc"):
+                run_ours(domain, "smc", **smc_config)
+
+
+    # stitch_config = dict(max_library_size=1, max_arity=2)
+    # smc_config = dict(num_steps=100, max_arity=2, num_particles=1000, temperature=1000., rewrites=None)
+    # enum_config = dict(num_steps=500, max_arity=2, rewrites=None)
+    # babble_config = dict(max_arity=2, dsr=None)
+
+    # for domain in stackpathiter(ALL_DOMAINS):
+    #     for i in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+    #         with subgroup("best-first"):
+    #             run_ours(domain, "best-first", **enum_config)
+    #         with subgroup("smc"):
+    #             run_ours(
+    #                 domain, "smc", **smc_config)
+    #         with subgroup("babble"):
+    #             run_babble(domain, **babble_config)
+    #         with subgroup("stitch"):
+    #             run_stitch(domain, **stitch_config)
 
 
 

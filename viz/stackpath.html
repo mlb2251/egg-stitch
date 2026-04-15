@@ -211,6 +211,12 @@ ul.tree ul { list-style: none; padding-left: 14px; margin: 0; }
 }
 .toast.show { opacity: 1; }
 .toast.err { background: var(--danger); }
+#cfg-section { flex: 0 1 auto; }
+.cfg-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+.cfg-label { width: 62px; font-size: 11px; color: var(--muted); text-align: right; flex-shrink: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.cfg-sel { flex: 1; font-size: 11px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--fg); }
+.cfg-filter { flex: 1; font-size: 11px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--fg); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.cfg-sep { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 4px 0 2px; margin-top: 4px; border-top: 1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -235,6 +241,10 @@ ul.tree ul { list-style: none; padding-left: 14px; margin: 0; }
         </span>
       </h2>
       <div class="scroller" id="selections"></div>
+    </div>
+    <div class="section" id="cfg-section">
+      <h2><span>plot config</span></h2>
+      <div class="scroller"><div id="plot-config-body"></div></div>
     </div>
   </div>
   <div id="right">

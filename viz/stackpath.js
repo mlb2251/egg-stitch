@@ -20,6 +20,9 @@ const state = {
   runs: new Map(),           // path -> {config, result, type}
   lastRuns: null,            // last set of runs passed to renderPlot (for axis re-draw)
   lastAutoPlotDomain: null,  // {xMin, xMax, yMin, yMax} computed from data (for freeze)
+  plotConfig: {              // what gets mapped to color/shape/lightness, and active filters
+    color: 'algo', shape: 'domain', lightness: null, filters: {},
+  },
 };
 
 // ---------- HTTP helpers ----------
@@ -485,185 +488,264 @@ const DIAMOND_SQUARE = {
     context.closePath();
   },
 };
-// Fixed domain → symbol map. We render one <dot> mark per domain with the
-// symbol set to a constant, because Plot's symbol scale doesn't reliably
-// honour mixed built-in + custom ranges on the dot mark itself (the scale
-// renders fine in the legend though). Domain names match the values in
-// config.json.
-const DOMAIN_SYMBOLS = {
-  'nuts-bolts': d3.symbolSquare,
-  'dials': d3.symbolTriangle,
-  'wheels': DIAMOND_SQUARE,
-  'furniture': TRIANGLE_DOWN,
-};
+// Named colors for known algo values; unknown values fall through to d3.schemeTableau10.
+const BASE_COLORS = { enum: '#3b82f6', smc: '#f59e0b', babble: '#10b981', stitch: '#ef4444' };
+const UNKNOWN_COLOR = '#6b7280';
+// Symbol list for the shape dimension; values are assigned in sorted order by index.
+// We render one Plot.dot mark per symbol because Plot's symbol scale doesn't
+// reliably honour mixed built-in + custom symbols on the same dot mark.
+const SYMBOLS = [
+  d3.symbolSquare, d3.symbolTriangle, DIAMOND_SQUARE, TRIANGLE_DOWN,
+  d3.symbolCircle, d3.symbolStar, d3.symbolCross,
+];
+
+let _plotConfigDimsKey = null;
+
+/** Re-render the plot-config panel when dims change; skips if unchanged so
+ *  filter inputs the user is editing are not clobbered. */
+function renderPlotConfig(dims) {
+  const key = dims.join(',');
+  if (key === _plotConfigDimsKey) return;
+  _plotConfigDimsKey = key;
+
+  const body = document.getElementById('plot-config-body');
+  if (!body) return;
+  body.innerHTML = '';
+  const cfg = state.plotConfig;
+
+  for (const ch of ['color', 'shape', 'lightness']) {
+    const row = document.createElement('div');
+    row.className = 'cfg-row';
+    const label = document.createElement('span');
+    label.className = 'cfg-label'; label.textContent = ch;
+    const sel = document.createElement('select');
+    sel.className = 'cfg-sel';
+    sel.appendChild(Object.assign(document.createElement('option'), { value: '', textContent: '—' }));
+    for (const d of dims) {
+      const opt = document.createElement('option');
+      opt.value = d; opt.textContent = d;
+      if (cfg[ch] === d) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.onchange = () => {
+      cfg[ch] = sel.value || null;
+      _plotConfigDimsKey = null;
+      if (state.lastRuns) renderPlot(state.lastRuns);
+    };
+    row.appendChild(label); row.appendChild(sel);
+    body.appendChild(row);
+  }
+
+  body.appendChild(Object.assign(document.createElement('div'), { className: 'cfg-sep', textContent: 'filter' }));
+
+  for (const d of dims) {
+    const row = document.createElement('div');
+    row.className = 'cfg-row';
+    const label = document.createElement('span');
+    label.className = 'cfg-label'; label.textContent = d;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'cfg-filter'; inp.placeholder = 'any';
+    inp.value = cfg.filters[d] ?? '';
+    inp.onchange = () => {
+      const v = inp.value.trim();
+      if (v) cfg.filters[d] = v; else delete cfg.filters[d];
+      if (state.lastRuns) renderPlot(state.lastRuns);
+    };
+    row.appendChild(label); row.appendChild(inp);
+    body.appendChild(row);
+  }
+}
+
+/** Group an array of points by their shape-dim value. */
+function groupByShape(pts, shapeDim) {
+  const map = new Map();
+  for (const p of pts) {
+    const k = shapeDim ? String(p[shapeDim] ?? '?') : '__all__';
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(p);
+  }
+  return map;
+}
+
+/** Build a manual color+lightness legend (used when Plot's auto-legend isn't active). */
+function buildColorLegend(colorDim, meanPoints, lightnessDim, lightnessVals, colorFn) {
+  const colorVals = [...new Set(meanPoints.map(p => String(p[colorDim])))].sort();
+  if (colorVals.length === 0) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'sym-legend';
+  for (const cv of colorVals) {
+    for (const lv of (lightnessDim ? lightnessVals : [null])) {
+      const mockPt = { [colorDim]: cv };
+      if (lv !== null) mockPt[lightnessDim] = lv;
+      const color = colorFn(mockPt);
+      const item = document.createElement('span');
+      item.className = 'sym-legend-item';
+      const swatch = document.createElement('span');
+      swatch.style.cssText = `display:inline-block;width:12px;height:12px;background:${color};border-radius:2px;flex-shrink:0;`;
+      item.appendChild(swatch);
+      item.appendChild(Object.assign(document.createElement('span'), {
+        textContent: lightnessDim ? `${cv}/${lv}` : cv,
+      }));
+      wrap.appendChild(item);
+    }
+  }
+  return wrap;
+}
 
 function renderPlot(runs) {
   const div = document.getElementById('graph-inner');
   div.innerHTML = '';
+  const cfg = state.plotConfig;
 
-  const points = runs.map(r => {
-    const req = (val, name) => {
-      if (val === undefined || val === null) throw new Error(`${r.path}: missing ${name}`);
-      return val;
-    };
-    const time = req(r.result?.elapsed_secs, 'result.elapsed_secs');
-    const ratio = req(r.result?.compression_ratio, 'result.compression_ratio');
-    if (!Number.isFinite(time) || time <= 0) throw new Error(`${r.path}: elapsed_secs must be finite > 0, got ${time}`);
-    if (!Number.isFinite(ratio)) throw new Error(`${r.path}: compression_ratio must be finite, got ${ratio}`);
-    return {
-      path: r.path, type: r.type,
-      domain: req(r.config?.domain, 'config.domain'),
-      algo: req(r.result?.method, 'result.method'),
-      time, ratio,
-      config: r.config, result: r.result,
-    };
-  });
-
-  // Geomean over reps for each (algo, domain) pair, drawn as larger overlaid
-  // points. Skipped for groups with a single rep (mean would equal the point).
-  const groups = new Map();
-  for (const p of points) {
-    const k = `${p.algo}\u0001${p.domain}`;
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(p);
-  }
-  const means = [];
-  for (const pts of groups.values()) {
-    if (pts.length < 2) continue;
-    const gmean = (xs) => Math.exp(xs.reduce((a, b) => a + Math.log(b), 0) / xs.length);
-    const times = pts.map(p => p.time);
-    const ratios = pts.map(p => p.ratio);
-    means.push({
-      algo: pts[0].algo, domain: pts[0].domain,
-      time: gmean(times), ratio: gmean(ratios),
-      timeMin: Math.min(...times), timeMax: Math.max(...times),
-      ratioMin: Math.min(...ratios), ratioMax: Math.max(...ratios),
-      n: pts.length,
-      isMean: true,
+  // 1. Validate axes and extract all dims from each run.
+  let rawPoints;
+  try {
+    rawPoints = runs.map(r => {
+      const req = (v, name) => {
+        if (v == null) throw new Error(`${r.path}: missing ${name}`);
+        return v;
+      };
+      const time = req(r.result?.elapsed_secs, 'result.elapsed_secs');
+      const ratio = req(r.result?.compression_ratio, 'result.compression_ratio');
+      if (!Number.isFinite(time) || time <= 0) throw new Error(`${r.path}: elapsed_secs must be > 0, got ${time}`);
+      if (!Number.isFinite(ratio)) throw new Error(`${r.path}: compression_ratio not finite, got ${ratio}`);
+      const dims = {
+        algo: req(r.result?.method, 'result.method'),
+        domain: req(r.config?.domain, 'config.domain'),
+      };
+      for (const [k, v] of Object.entries(r.config || {})) {
+        if (k !== 'domain') dims[k] = v;
+      }
+      return { path: r.path, type: r.type, time, ratio, dims, config: r.config, result: r.result };
     });
-  }
-  // Per-algo geomean across domains (geomean of the per-(algo, domain)
-  // means). Drawn as circles with no error bars. Skipped for algos that
-  // only appear in a single domain.
-  const algoGroups = new Map();
-  for (const m of means) {
-    if (!algoGroups.has(m.algo)) algoGroups.set(m.algo, []);
-    algoGroups.get(m.algo).push(m);
-  }
-  const algoMeans = [];
-  for (const ms of algoGroups.values()) {
-    if (ms.length < 2) continue;
-    const gmean = (xs) => Math.exp(xs.reduce((a, b) => a + Math.log(b), 0) / xs.length);
-    algoMeans.push({
-      algo: ms[0].algo, domain: '*all*',  // falls through to `unknown` (circle)
-      time: gmean(ms.map(m => m.time)),
-      ratio: gmean(ms.map(m => m.ratio)),
-      n: ms.length,
-      isAlgoMean: true,
-    });
+  } catch (err) {
+    const el = document.createElement('div');
+    el.className = 'empty'; el.style.color = 'var(--danger)'; el.textContent = err.message;
+    div.appendChild(el); return;
   }
 
-  // Means rendered last so they sit above the rep points; "geomean only"
-  // checkbox suppresses the rep-level points entirely. Algo-means always
-  // show on top.
-  const hideReps = document.getElementById('hide-reps')?.checked;
-  const allPoints = hideReps
-    ? [...means, ...algoMeans]
-    : [...points, ...means, ...algoMeans];
+  // 2. Discover dims and update config panel (no-op if dims unchanged).
+  const allDims = [...new Set(rawPoints.flatMap(p => Object.keys(p.dims)))].sort();
+  renderPlotConfig(allDims);
 
-  if (points.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = 'no plottable runs (need elapsed_secs > 0 and compression_ratio)';
-    div.appendChild(empty);
+  // 3. Apply filters (string comparison so numeric "2" matches 2).
+  const filtered = rawPoints.filter(p =>
+    Object.entries(cfg.filters).every(([d, v]) => String(p.dims[d] ?? '') === String(v))
+  );
+  if (filtered.length === 0) {
+    div.appendChild(Object.assign(document.createElement('div'), {
+      className: 'empty', textContent: 'no runs match current filters',
+    }));
     return;
   }
 
+  // 4. Geomean: group by visual-channel dims, average over everything else.
+  const visDims = [cfg.color, cfg.shape, cfg.lightness].filter(Boolean);
+  const gmean = xs => Math.exp(xs.reduce((s, x) => s + Math.log(x), 0) / xs.length);
+
+  const groups = new Map();
+  for (const p of filtered) {
+    const k = visDims.map(d => String(p.dims[d])).join('\x01');
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(p);
+  }
+  const meanPoints = [...groups.values()].map(pts => {
+    const dv = Object.fromEntries(visDims.map(d => [d, pts[0].dims[d]]));
+    const ts = pts.map(p => p.time), rs = pts.map(p => p.ratio);
+    return { ...dv, _isMean: true, n: pts.length, _rep: pts[0],
+      time: gmean(ts), ratio: gmean(rs) };
+  });
+
+  // 5. Color scale. If lightness is active we compute colors manually; otherwise
+  //    let Plot handle it so we get the auto-legend for free.
+  const colorDim = cfg.color;
+  const lightnessDim = cfg.lightness;
+  const lightnessVals = lightnessDim
+    ? [...new Set(meanPoints.map(p => String(p[lightnessDim])))].sort()
+    : [];
+  let colorFn = null, plotColorScale = null;
+  if (!colorDim) {
+    colorFn = () => UNKNOWN_COLOR;
+  } else if (lightnessDim) {
+    const fb = d3.scaleOrdinal(d3.schemeTableau10)
+      .domain([...new Set(meanPoints.map(p => String(p[colorDim])))]);
+    colorFn = p => {
+      const base = BASE_COLORS[String(p[colorDim])] ?? fb(String(p[colorDim]));
+      const idx = lightnessVals.indexOf(String(p[lightnessDim]));
+      const frac = lightnessVals.length <= 1 ? 0.5 : idx / (lightnessVals.length - 1);
+      const hsl = d3.hsl(base);
+      hsl.l = 0.65 - frac * 0.35;
+      return hsl.formatHex();
+    };
+  } else {
+    const colorVals = [...new Set(meanPoints.map(p => String(p[colorDim])))].sort();
+    plotColorScale = {
+      legend: true,
+      domain: colorVals,
+      range: colorVals.map((v, i) => BASE_COLORS[v] ?? d3.schemeTableau10[i % 10]),
+    };
+  }
+
+  // 6. Symbol scale. Values are sorted and assigned symbols by index.
+  const shapeDim = cfg.shape;
+  const shapeVals = shapeDim
+    ? [...new Set(meanPoints.map(p => String(p[shapeDim])))].sort()
+    : [];
+  const symbolFor = val => {
+    if (!shapeDim) return d3.symbolCircle;
+    const idx = shapeVals.indexOf(String(val));
+    if (idx < 0 || idx >= SYMBOLS.length) throw new Error(`no symbol for ${shapeDim}=${val}`);
+    return SYMBOLS[idx];
+  };
+
+  // 7. Points to plot ("geomean only" suppresses the individual filtered points).
+  const hideReps = document.getElementById('hide-reps')?.checked;
+  const rawForPlot = hideReps ? [] : filtered.map(p => ({ ...p.dims, time: p.time, ratio: p.ratio, _raw: p }));
+  const allPlotPoints = [...rawForPlot, ...meanPoints];
+
+  // 8. Axis bounds.
+  const allTimes = allPlotPoints.map(p => p.time).filter(t => Number.isFinite(t) && t > 0);
+  const allRatios = allPlotPoints.map(p => p.ratio).filter(Number.isFinite);
+  const axAuto = {
+    xMin: Math.min(1, ...allRatios), xMax: Math.max(...allRatios),
+    yMin: Math.min(...allTimes),     yMax: Math.max(...allTimes),
+  };
+  state.lastAutoPlotDomain = axAuto;
+  const ov = getAxisOverrides();
+  const xMin = ov.xMin ?? axAuto.xMin, xMax = ov.xMax ?? axAuto.xMax;
+  const yMin = ov.yMin ?? axAuto.yMin, yMax = ov.yMax ?? axAuto.yMax;
   const size = Math.max(150, Math.min(div.clientWidth || 400, div.clientHeight || 400));
 
-  // Compute auto axis bounds.
-  const ratios = allPoints.map(p => p.ratio);
-  const times = allPoints.map(p => p.time).filter(t => Number.isFinite(t) && t > 0);
-  const autoXMin = Math.min(1, Math.min(...ratios));
-  const autoXMax = Math.max(...ratios);
-  const autoYMin = Math.min(...times);
-  const autoYMax = Math.max(...times);
-  state.lastAutoPlotDomain = { xMin: autoXMin, xMax: autoXMax, yMin: autoYMin, yMax: autoYMax };
-
-  // Apply manual overrides from inputs (empty = auto).
-  const ov = getAxisOverrides();
-  const xMin = ov.xMin ?? autoXMin;
-  const xMax = ov.xMax ?? autoXMax;
-  const yMin = ov.yMin ?? autoYMin;
-  const yMax = ov.yMax ?? autoYMax;
-
-  // Build one dot mark per domain with a constant symbol. Each mark also
-  // tracks its point array (in render order) so the tooltip can find the
-  // right datum for each rendered circle/path.
-  const dotMarks = [];
-  const dotData = [];
-  const byDomain = new Map();
-  for (const p of allPoints) {
-    if (p.isAlgoMean) continue;
-    if (!byDomain.has(p.domain)) byDomain.set(p.domain, []);
-    byDomain.get(p.domain).push(p);
-  }
-  for (const [dom, pts] of byDomain) {
-    const sym = DOMAIN_SYMBOLS[dom];
-    if (!sym) throw new Error(`unknown domain: ${dom}`);
-    dotMarks.push(Plot.dot(pts, {
-      x: 'ratio', y: 'time',
-      stroke: 'algo', fill: 'algo',
-      fillOpacity: d => d.isMean ? 0.95 : 0.4,
-      r: d => d.isMean ? 9 : 4,
-      strokeWidth: d => d.isMean ? 2 : 1,
-      symbol: sym,
-    }));
-    dotData.push(pts);
-  }
-  if (algoMeans.length > 0) {
-    dotMarks.push(Plot.dot(algoMeans, {
-      x: 'ratio', y: 'time',
-      stroke: 'algo', fill: 'algo',
-      fillOpacity: 0.95, r: 11, strokeWidth: 2,
-      symbol: d3.symbolCircle,
-    }));
-    dotData.push(algoMeans);
-  }
+  // 9. Dot marks: one per shape value to support custom symbols.
+  const dotMarks = [], dotData = [];
+  const fillStroke = colorFn ?? colorDim;
+  const addDots = (pts, r, opacity) => {
+    for (const [sv, grp] of groupByShape(pts, shapeDim)) {
+      dotMarks.push(Plot.dot(grp, {
+        x: 'ratio', y: 'time',
+        fill: fillStroke, stroke: fillStroke,
+        fillOpacity: opacity, r, strokeWidth: r > 4 ? 2 : 1,
+        symbol: symbolFor(sv),
+      }));
+      dotData.push(grp);
+    }
+  };
+  if (rawForPlot.length > 0) addDots(rawForPlot, 3, 0.3);
+  addDots(meanPoints, 9, 0.95);
 
   const plot = Plot.plot({
     width: size, height: size,
     marginLeft: 75, marginBottom: 60, marginTop: 12, marginRight: 12,
     x: { domain: [xMin, xMax], label: 'compression ratio', labelAnchor: 'center', labelArrow: false, grid: true },
     y: { type: 'log', domain: [yMin, yMax], label: 'time (s)', labelAnchor: 'center', labelArrow: false, grid: true },
-    color: {
-      legend: true,
-      domain: ['enum', 'smc', 'babble', 'stitch'],
-      range: ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'],
-      unknown: '#6b7280',
-    },
-    marks: [
-      // Vertical bar: time min↔max at the geomean ratio.
-      Plot.ruleX(means, { x: 'ratio', y1: 'timeMin', y2: 'timeMax', stroke: 'algo', strokeOpacity: 0.6, strokeWidth: 1.5 }),
-      // Horizontal bar: ratio min↔max at the geomean time.
-      Plot.ruleY(means, { y: 'time', x1: 'ratioMin', x2: 'ratioMax', stroke: 'algo', strokeOpacity: 0.6, strokeWidth: 1.5 }),
-      ...dotMarks,
-    ],
+    ...(plotColorScale ? { color: plotColorScale } : {}),
+    marks: dotMarks,
   });
 
-  // Render a matching symbol legend ourselves, since the dot marks use
-  // constant symbols (no symbol scale). Renders reliably in every version.
-  const symLegend = buildSymbolLegend([...byDomain.keys()], algoMeans.length > 0);
-  if (symLegend) plot.prepend(symLegend);
-  // Bump every text inside the plot svg (covers tick numbers); legend lives
-  // in an outer div so it's untouched. Then override axis labels by exact
-  // text match for a stronger emphasis.
+  // Style text.
   const labelText = new Set(['compression ratio', 'time (s)']);
-  const svgs = plot.tagName === 'svg' ? [plot] : plot.querySelectorAll('svg');
-  for (const svg of svgs) {
-    for (const t of svg.querySelectorAll('text')) {
-      t.style.setProperty('font-size', '12px', 'important');
-    }
+  for (const svg of (plot.tagName === 'svg' ? [plot] : plot.querySelectorAll('svg'))) {
+    for (const t of svg.querySelectorAll('text')) t.style.setProperty('font-size', '12px', 'important');
   }
   for (const t of plot.querySelectorAll('text')) {
     if (labelText.has(t.textContent.trim())) {
@@ -672,18 +754,22 @@ function renderPlot(runs) {
       t.style.setProperty('fill', '#1b1b1f', 'important');
     }
   }
+
+  // Legends: symbol (always manual) + color (manual only when lightness is active).
+  const symEntries = shapeVals.map(v => ({ sym: symbolFor(v), label: `${shapeDim}=${v}` }));
+  const symLegend = buildSymbolLegend(symEntries);
+  if (symLegend) plot.prepend(symLegend);
+  if (colorFn && colorDim) {
+    const cl = buildColorLegend(colorDim, meanPoints, lightnessDim, lightnessVals, colorFn);
+    if (cl) plot.prepend(cl);
+  }
+
   div.appendChild(plot);
   attachCustomTooltip(div, plot, dotData);
 }
 
-/** Render a simple inline symbol legend: SVG shapes next to domain labels.
- *  Skips domains not in DOMAIN_SYMBOLS. Appends a "geomean" circle entry if
- *  any algo-level geomean dots are present. Returns null if empty. */
-function buildSymbolLegend(domains, includeGeomean) {
-  const entries = domains
-    .filter(d => DOMAIN_SYMBOLS[d])
-    .map(d => ({ sym: DOMAIN_SYMBOLS[d], label: d }));
-  if (includeGeomean) entries.push({ sym: d3.symbolCircle, label: 'geomean' });
+/** Render a simple inline symbol legend from an array of {sym, label} entries. */
+function buildSymbolLegend(entries) {
   if (entries.length === 0) return null;
   const wrap = document.createElement('div');
   wrap.className = 'sym-legend';
@@ -746,39 +832,18 @@ function attachCustomTooltip(container, plot, pointGroups) {
 }
 
 function renderTipContent(p) {
-  if (p.isAlgoMean) {
-    const label = `${p.algo} (geomean across ${p.n} domains)`;
-    const head = `
-      <div class="head">
-        <span class="type-pill">geomean</span>
-        <span class="path" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
-      </div>
-    `;
+  if (p._isMean) {
+    const visDims = [state.plotConfig.color, state.plotConfig.shape, state.plotConfig.lightness].filter(Boolean);
+    const label = visDims.map(d => `${d}=${p[d]}`).join(', ') + (p.n > 1 ? ` (n=${p.n})` : '');
+    const head = `<div class="head"><span class="type-pill">mean</span><span class="path" title="${escapeHtml(label)}">${escapeHtml(label)}</span></div>`;
     return head + sectionRow('', { time: fmtNum(p.time) + 's', ratio: fmtNum(p.ratio) });
   }
-  if (p.isMean) {
-    const label = `${p.algo} / ${p.domain} (geomean of ${p.n} reps)`;
-    const head = `
-      <div class="head">
-        <span class="type-pill">geomean</span>
-        <span class="path" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
-      </div>
-    `;
-    return head + sectionRow('', { time: fmtNum(p.time) + 's', ratio: fmtNum(p.ratio) });
-  }
-  const head = `
-    <div class="head">
-      <span class="type-pill">${escapeHtml(p.type || '?')}</span>
-      <span class="path" title="${escapeHtml(p.path)}">${escapeHtml(p.path)}</span>
-    </div>
-  `;
-  const axes = sectionRow('', {
-    time: fmtNum(p.time) + 's',
-    ratio: fmtNum(p.ratio),
-  });
-  const cfg = sectionRow('config', p.config);
-  const res = sectionRow('result', flattenResult(p.result));
-  return head + axes + cfg + res;
+  const raw = p._raw;
+  const head = `<div class="head"><span class="type-pill">${escapeHtml(raw.type || '?')}</span><span class="path" title="${escapeHtml(raw.path)}">${escapeHtml(raw.path)}</span></div>`;
+  return head
+    + sectionRow('', { time: fmtNum(raw.time) + 's', ratio: fmtNum(raw.ratio) })
+    + sectionRow('config', raw.config)
+    + sectionRow('result', flattenResult(raw.result));
 }
 
 function sectionRow(label, obj) {

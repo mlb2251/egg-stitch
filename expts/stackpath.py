@@ -57,6 +57,13 @@ def subgroup(name: str):
     finally:
         stackpathpop()
 
+# stackpath generator
+def stackpathiter(xs, name_fn = lambda x: x):
+    for x in xs:
+        stackpathpush(str(name_fn(x)))
+        yield x
+        stackpathpop()
+
 
 def stackpath(filename: str) -> str:
     """Return the string path to ``filename`` inside the current stack directory."""
