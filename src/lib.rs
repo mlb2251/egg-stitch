@@ -137,8 +137,7 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{abstraction_idx}");
-                let (next_egraph, rewritten_programs) =
-                    apply_abstraction(result_egraph, root, &state, &fn_name);
+                let (next_egraph, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name);
 
                 final_cost = Some(best_cost);
                 library.push(results::AbstractionResult {
@@ -171,12 +170,7 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
 ///
 /// Returns the updated egraph and the rewritten program strings extracted from it.
 /// The eclass arguments already carry all DSR equivalences, so no re-saturation is needed.
-fn apply_abstraction(
-    egraph: lang::StitchEgraph,
-    root: Id,
-    state: &search::SearchState,
-    fn_name: &str,
-) -> (lang::StitchEgraph, Vec<String>) {
+fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::SearchState, fn_name: &str) -> (lang::StitchEgraph, Vec<String>) {
     let fn_sym: egg::Symbol = fn_name.into();
     let mut egraph = egraph;
     for m in &state.matches {
@@ -188,8 +182,6 @@ fn apply_abstraction(
     }
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    let programs = egraph[root].nodes[0].children.iter()
-        .map(|&child| extractor.find_best(child).1.to_string())
-        .collect();
+    let programs = egraph[root].nodes[0].children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
     (egraph, programs)
 }

@@ -9,21 +9,23 @@
 /// for the second round.
 use clap::Parser;
 use egg::FromOp;
-use egg_stitch::{Args, multiple_step_search, lang::{StitchEgraph, StitchLang}};
+use egg_stitch::{
+    Args,
+    lang::{StitchEgraph, StitchLang},
+    multiple_step_search,
+};
 
-const PROGRAMS: &[&str] = &[
-    "(+ (f (g (h a)) (g (h b))) 2 2 2)",
-    "(+ (f (g (a e)) (g (b f))) 3 3 3)",
-    "(+ (f (g (e i)) (g (f j))) 4 4 4)",
-    "(* (f (g (k m)) (g (l n))) 5)",
-];
+const PROGRAMS: &[&str] = &["(+ (f (g (h a)) (g (h b))) 2 2 2)", "(+ (f (g (a e)) (g (b f))) 3 3 3)", "(+ (f (g (e i)) (g (f j))) 4 4 4)", "(* (f (g (k m)) (g (l n))) 5)"];
 
 fn load() -> (StitchEgraph, egg::Id) {
     let mut egraph: StitchEgraph = egg::EGraph::default();
-    let ids: Vec<egg::Id> = PROGRAMS.iter().map(|s| {
-        let expr: egg::RecExpr<StitchLang> = s.parse().unwrap();
-        egraph.add_expr(&expr)
-    }).collect();
+    let ids: Vec<egg::Id> = PROGRAMS
+        .iter()
+        .map(|s| {
+            let expr: egg::RecExpr<StitchLang> = s.parse().unwrap();
+            egraph.add_expr(&expr)
+        })
+        .collect();
     let root = egraph.add(StitchLang::from_op("programs", ids).unwrap());
     egraph.rebuild();
     (egraph, root)

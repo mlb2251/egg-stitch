@@ -1,5 +1,5 @@
 use clap::Parser;
-use egg_stitch::{Args, SearchKind, io, results, multiple_step_search};
+use egg_stitch::{Args, SearchKind, io, multiple_step_search, results};
 
 fn main() {
     let args = Args::parse();

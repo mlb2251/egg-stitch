@@ -141,7 +141,6 @@ fn check_slow_high_arity() {
     assert!(result.best.is_some());
 }
 
-
 /// Verify fast == slow with higher arity.
 #[test]
 fn check_slow_high_arity_multi_abstr() {
