@@ -609,7 +609,8 @@ function renderPlot(runs) {
     byDomain.get(p.domain).push(p);
   }
   for (const [dom, pts] of byDomain) {
-    const sym = DOMAIN_SYMBOLS[dom] ?? d3.symbolCircle;
+    const sym = DOMAIN_SYMBOLS[dom];
+    if (!sym) throw new Error(`unknown domain: ${dom}`);
     dotMarks.push(Plot.dot(pts, {
       x: 'ratio', y: 'time',
       stroke: 'algo', fill: 'algo',
