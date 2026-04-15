@@ -3,7 +3,8 @@
 
 import sys
 import json
-from expts import *
+from expts import ALL_DOMAINS, egg_stitch, table1, table2
+from expts.stackpath import subgroup
 
 
 def dials_compress():
