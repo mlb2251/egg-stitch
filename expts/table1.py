@@ -10,9 +10,13 @@ import json
 import time
 from pathlib import Path
 
+import numpy as np
+
 from . import *
 from .babble import *
 from .egg_stitch import *
+
+NUM_RUNS = 10
 
 # Order matches the Table 1 screenshot.
 TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture"]
@@ -51,17 +55,24 @@ def table1(
 
     for domain in TABLE1_DOMAINS:
         print(f"\n=== {domain} ===", flush=True)
-        enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps)
-        smc_res, _ = run_ours(
-            domain, "smc",
-            num_steps=smc_num_steps,
-            num_particles=smc_num_particles,
-            temperature=smc_temperature,
-        )
-        babble_res = run_babble(domain, dsr=rewrites_path(domain))
+        enum_runs, smc_runs, babble_runs = [], [], []
+        egraph_min = None
+        for i in range(NUM_RUNS):
+            print(f"  run {i+1}/{NUM_RUNS}", flush=True)
+            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps)
+            smc_res, _ = run_ours(
+                domain, "smc",
+                num_steps=smc_num_steps,
+                num_particles=smc_num_particles,
+                temperature=smc_temperature,
+            )
+            babble_res = run_babble(domain, dsr=rewrites_path(domain))
+            enum_runs.append(enum_res.to_dict())
+            smc_runs.append(smc_res.to_dict())
+            babble_runs.append(babble_res.to_dict())
         results["domains"][domain] = {
             "egraph_min_size": egraph_min,
-            "results": [enum_res.to_dict(), smc_res.to_dict(), babble_res.to_dict()],
+            "runs": {"enum": enum_runs, "smc": smc_runs, "babble": babble_runs},
         }
 
     out_path = current_folder_path() / output_name
@@ -102,18 +113,21 @@ def print_table1(path: str | Path) -> None:
         if domain not in domains:
             continue
         d = domains[domain]
-        by_method = {r["method"]: r for r in d["results"]}
+        runs = d.get("runs", {})
         label = DOMAIN_LABELS.get(domain, domain)
-        # "original size" comes from any method's initial_cost (all use the same corpus);
-        # prefer our Enum run as the authoritative source.
-        any_result = by_method.get("enum") or next(iter(by_method.values()))
-        original_size = any_result["initial_cost"]
+        # "original size" is the same for all runs; take it from the first enum run.
+        any_run = (runs.get("enum") or next(iter(runs.values())))[0]
+        original_size = any_run["initial_cost"]
 
         def cr(m):
-            return by_method[m]["compression_ratio"] if m in by_method else None
+            if m not in runs:
+                return None
+            return float(np.exp(np.mean(np.log([r["compression_ratio"] for r in runs[m]]))))
 
         def t(m):
-            return by_method[m]["elapsed_secs"] if m in by_method else None
+            if m not in runs:
+                return None
+            return float(np.exp(np.mean(np.log([r["elapsed_secs"] for r in runs[m]]))))
 
         row = (
             f"{label:<14}"

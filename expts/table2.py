@@ -10,11 +10,13 @@ import json
 import time
 from pathlib import Path
 
+import numpy as np
+
 from . import *
 from .babble import *
 from .egg_stitch import *
 from .stitch import *
-from .table1 import TABLE1_DOMAINS, DOMAIN_LABELS
+from .table1 import TABLE1_DOMAINS, DOMAIN_LABELS, NUM_RUNS
 
 # Reuse the Table 1 domain list/labels so the HTML viewer sees the same order.
 TABLE2_DOMAINS = TABLE1_DOMAINS
@@ -41,18 +43,25 @@ def table2(
 
     for domain in TABLE2_DOMAINS:
         print(f"\n=== {domain} ===", flush=True)
-        enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None)
-        smc_res, _ = run_ours(
-            domain, "smc",
-            num_steps=smc_num_steps,
-            num_particles=smc_num_particles,
-            temperature=smc_temperature,
-            rewrites=None,
-        )
-        babble_res = run_babble(domain)
-        stitch_res = run_stitch(domain)
+        enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
+        for i in range(NUM_RUNS):
+            print(f"  run {i+1}/{NUM_RUNS}", flush=True)
+            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None)
+            smc_res, _ = run_ours(
+                domain, "smc",
+                num_steps=smc_num_steps,
+                num_particles=smc_num_particles,
+                temperature=smc_temperature,
+                rewrites=None,
+            )
+            babble_res = run_babble(domain)
+            stitch_res = run_stitch(domain)
+            enum_runs.append(enum_res.to_dict())
+            smc_runs.append(smc_res.to_dict())
+            babble_runs.append(babble_res.to_dict())
+            stitch_runs.append(stitch_res.to_dict())
         results["domains"][domain] = {
-            "results": [enum_res.to_dict(), smc_res.to_dict(), babble_res.to_dict(), stitch_res.to_dict()],
+            "runs": {"enum": enum_runs, "smc": smc_runs, "babble": babble_runs, "stitch": stitch_runs},
         }
 
     out_path = current_folder_path() / output_name
@@ -93,16 +102,20 @@ def print_table2(path: str | Path) -> None:
         if domain not in domains:
             continue
         d = domains[domain]
-        by_method = {r["method"]: r for r in d["results"]}
+        runs = d.get("runs", {})
         label = DOMAIN_LABELS.get(domain, domain)
-        any_result = by_method.get("enum") or next(iter(by_method.values()))
-        original_size = any_result["initial_cost"]
+        any_run = (runs.get("enum") or next(iter(runs.values())))[0]
+        original_size = any_run["initial_cost"]
 
         def cr(m):
-            return by_method[m]["compression_ratio"] if m in by_method else None
+            if m not in runs:
+                return None
+            return float(np.exp(np.mean(np.log([r["compression_ratio"] for r in runs[m]]))))
 
         def t(m):
-            return by_method[m]["elapsed_secs"] if m in by_method else None
+            if m not in runs:
+                return None
+            return float(np.exp(np.mean(np.log([r["elapsed_secs"] for r in runs[m]]))))
 
         row = (
             f"{label:<14}"
