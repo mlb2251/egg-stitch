@@ -501,14 +501,23 @@ function renderPlot(runs) {
   const div = document.getElementById('graph-inner');
   div.innerHTML = '';
 
-  const points = runs
-    .map(r => ({
-      path: r.path, type: r.type, domain: r.config?.domain ?? '?',
-      algo: ({ 'best-first': 'enum' })[r.path.split('/').pop()] ?? r.path.split('/').pop(),
-      time: r.result?.elapsed_secs, ratio: r.result?.compression_ratio,
-      config: r.config || {}, result: r.result || {},
-    }))
-    .filter(p => Number.isFinite(p.time) && p.time > 0 && Number.isFinite(p.ratio));
+  const points = runs.map(r => {
+    const req = (val, name) => {
+      if (val === undefined || val === null) throw new Error(`${r.path}: missing ${name}`);
+      return val;
+    };
+    const time = req(r.result?.elapsed_secs, 'result.elapsed_secs');
+    const ratio = req(r.result?.compression_ratio, 'result.compression_ratio');
+    if (!Number.isFinite(time) || time <= 0) throw new Error(`${r.path}: elapsed_secs must be finite > 0, got ${time}`);
+    if (!Number.isFinite(ratio)) throw new Error(`${r.path}: compression_ratio must be finite, got ${ratio}`);
+    return {
+      path: r.path, type: r.type,
+      domain: req(r.config?.domain, 'config.domain'),
+      algo: req(r.result?.method, 'result.method'),
+      time, ratio,
+      config: r.config, result: r.result,
+    };
+  });
 
   // Geomean over reps for each (algo, domain) pair, drawn as larger overlaid
   // points. Skipped for groups with a single rep (mean would equal the point).

@@ -45,7 +45,7 @@ def _build_tree(root: Path) -> dict:
     children = []
     is_run = False
     try:
-        entries = sorted(root.iterdir(), key=lambda p: p.name)
+        entries = sorted(root.iterdir(), key=lambda p: p.name, reverse=True)
     except OSError:
         entries = []
     for e in entries:
