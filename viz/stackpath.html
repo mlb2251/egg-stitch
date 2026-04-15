@@ -29,6 +29,13 @@ body {
   display: flex; align-items: center; justify-content: center;
   position: relative;
 }
+.sym-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 12px;
+  font-size: 11px; color: var(--fg); padding: 2px 0 4px;
+  align-items: center;
+}
+.sym-legend-item { display: inline-flex; gap: 4px; align-items: center; }
+.sym-legend svg path { stroke: #374151; stroke-width: 1; }
 .graph-toggle {
   position: absolute; top: 6px; right: 12px; z-index: 5;
   font-size: 11px; color: var(--muted);

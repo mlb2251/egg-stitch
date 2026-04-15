@@ -460,6 +460,40 @@ function flattenResult(result) {
   return out;
 }
 
+// Downward-pointing equilateral triangle centered at origin with area `size`.
+const TRIANGLE_DOWN = {
+  draw(context, size) {
+    const s = Math.sqrt(4 * size / Math.sqrt(3));
+    const h = s * Math.sqrt(3) / 2;
+    context.moveTo(0, h * 2 / 3);
+    context.lineTo(s / 2, -h / 3);
+    context.lineTo(-s / 2, -h / 3);
+    context.closePath();
+  },
+};
+// Diamond with equal width and height (Plot's default "diamond" is narrower).
+const DIAMOND_SQUARE = {
+  draw(context, size) {
+    const r = Math.sqrt(size / 2);
+    context.moveTo(0, -r);
+    context.lineTo(r, 0);
+    context.lineTo(0, r);
+    context.lineTo(-r, 0);
+    context.closePath();
+  },
+};
+// Fixed domain → symbol map. We render one <dot> mark per domain with the
+// symbol set to a constant, because Plot's symbol scale doesn't reliably
+// honour mixed built-in + custom ranges on the dot mark itself (the scale
+// renders fine in the legend though). Domain names match the values in
+// config.json.
+const DOMAIN_SYMBOLS = {
+  'nuts-bolts': d3.symbolSquare,
+  'dials': d3.symbolTriangle,
+  'wheels': DIAMOND_SQUARE,
+  'furniture': TRIANGLE_DOWN,
+};
+
 function renderPlot(runs) {
   const div = document.getElementById('graph-inner');
   div.innerHTML = '';
@@ -496,10 +530,34 @@ function renderPlot(runs) {
       isMean: true,
     });
   }
+  // Per-algo geomean across domains (geomean of the per-(algo, domain)
+  // means). Drawn as circles with no error bars. Skipped for algos that
+  // only appear in a single domain.
+  const algoGroups = new Map();
+  for (const m of means) {
+    if (!algoGroups.has(m.algo)) algoGroups.set(m.algo, []);
+    algoGroups.get(m.algo).push(m);
+  }
+  const algoMeans = [];
+  for (const ms of algoGroups.values()) {
+    if (ms.length < 2) continue;
+    const gmean = (xs) => Math.exp(xs.reduce((a, b) => a + Math.log(b), 0) / xs.length);
+    algoMeans.push({
+      algo: ms[0].algo, domain: '*all*',  // falls through to `unknown` (circle)
+      time: gmean(ms.map(m => m.time)),
+      ratio: gmean(ms.map(m => m.ratio)),
+      n: ms.length,
+      isAlgoMean: true,
+    });
+  }
+
   // Means rendered last so they sit above the rep points; "geomean only"
-  // checkbox suppresses the rep-level points entirely.
+  // checkbox suppresses the rep-level points entirely. Algo-means always
+  // show on top.
   const hideReps = document.getElementById('hide-reps')?.checked;
-  const allPoints = hideReps ? [...means] : [...points, ...means];
+  const allPoints = hideReps
+    ? [...means, ...algoMeans]
+    : [...points, ...means, ...algoMeans];
 
   if (points.length === 0) {
     const empty = document.createElement('div');
@@ -511,31 +569,66 @@ function renderPlot(runs) {
 
   const size = Math.max(150, Math.min(div.clientWidth || 400, div.clientHeight || 400));
   const ratios = allPoints.map(p => p.ratio);
-  const yMin = Math.min(1, Math.min(...ratios));
-  const yMax = Math.max(...ratios);
+  const xMin = Math.min(1, Math.min(...ratios));
+  const xMax = Math.max(...ratios);
+
+  // Build one dot mark per domain with a constant symbol. Each mark also
+  // tracks its point array (in render order) so the tooltip can find the
+  // right datum for each rendered circle/path.
+  const dotMarks = [];
+  const dotData = [];
+  const byDomain = new Map();
+  for (const p of allPoints) {
+    if (p.isAlgoMean) continue;
+    if (!byDomain.has(p.domain)) byDomain.set(p.domain, []);
+    byDomain.get(p.domain).push(p);
+  }
+  for (const [dom, pts] of byDomain) {
+    const sym = DOMAIN_SYMBOLS[dom] ?? d3.symbolCircle;
+    dotMarks.push(Plot.dot(pts, {
+      x: 'ratio', y: 'time',
+      stroke: 'algo', fill: 'algo',
+      fillOpacity: d => d.isMean ? 0.95 : 0.4,
+      r: d => d.isMean ? 9 : 4,
+      strokeWidth: d => d.isMean ? 2 : 1,
+      symbol: sym,
+    }));
+    dotData.push(pts);
+  }
+  if (algoMeans.length > 0) {
+    dotMarks.push(Plot.dot(algoMeans, {
+      x: 'ratio', y: 'time',
+      stroke: 'algo', fill: 'algo',
+      fillOpacity: 0.95, r: 11, strokeWidth: 2,
+      symbol: d3.symbolCircle,
+    }));
+    dotData.push(algoMeans);
+  }
 
   const plot = Plot.plot({
     width: size, height: size,
     marginLeft: 75, marginBottom: 60, marginTop: 12, marginRight: 12,
-    x: { type: 'log', label: 'time (s)', labelAnchor: 'center', labelArrow: false, grid: true },
-    y: { domain: [yMin, yMax], label: 'compression ratio', labelAnchor: 'center', labelArrow: false, grid: true },
-    color: { legend: true },
-    symbol: { legend: true },
+    x: { domain: [xMin, xMax], label: 'compression ratio', labelAnchor: 'center', labelArrow: false, grid: true },
+    y: { type: 'log', label: 'time (s)', labelAnchor: 'center', labelArrow: false, grid: true },
+    color: {
+      legend: true,
+      domain: ['enum', 'best-first', 'smc', 'babble'],
+      range: ['#3b82f6', '#3b82f6', '#f59e0b', '#10b981'],
+      unknown: '#6b7280',
+    },
     marks: [
-      // Vertical bar: ratio min↔max at the geomean time.
-      Plot.ruleX(means, { x: 'time', y1: 'ratioMin', y2: 'ratioMax', stroke: 'algo', strokeOpacity: 0.6, strokeWidth: 1.5 }),
-      // Horizontal bar: time min↔max at the geomean ratio.
-      Plot.ruleY(means, { y: 'ratio', x1: 'timeMin', x2: 'timeMax', stroke: 'algo', strokeOpacity: 0.6, strokeWidth: 1.5 }),
-      Plot.dot(allPoints, {
-        x: 'time', y: 'ratio',
-        stroke: 'algo', fill: 'algo',
-        fillOpacity: d => d.isMean ? 0.95 : 0.4,
-        r: d => d.isMean ? 9 : 4,
-        strokeWidth: d => d.isMean ? 2 : 1,
-        symbol: 'domain',
-      }),
+      // Vertical bar: time min↔max at the geomean ratio.
+      Plot.ruleX(means, { x: 'ratio', y1: 'timeMin', y2: 'timeMax', stroke: 'algo', strokeOpacity: 0.6, strokeWidth: 1.5 }),
+      // Horizontal bar: ratio min↔max at the geomean time.
+      Plot.ruleY(means, { y: 'time', x1: 'ratioMin', x2: 'ratioMax', stroke: 'algo', strokeOpacity: 0.6, strokeWidth: 1.5 }),
+      ...dotMarks,
     ],
   });
+
+  // Render a matching symbol legend ourselves, since the dot marks use
+  // constant symbols (no symbol scale). Renders reliably in every version.
+  const symLegend = buildSymbolLegend([...byDomain.keys()]);
+  if (symLegend) plot.prepend(symLegend);
   // Bump every text inside the plot svg (covers tick numbers); legend lives
   // in an outer div so it's untouched. Then override axis labels by exact
   // text match for a stronger emphasis.
@@ -554,28 +647,51 @@ function renderPlot(runs) {
     }
   }
   div.appendChild(plot);
-  attachCustomTooltip(div, plot, allPoints);
+  attachCustomTooltip(div, plot, dotData);
 }
 
-/** Wire mouseenter/move/leave on every <circle> in the plot to a single
- *  floating tooltip showing path/type plus compact config and result rows.
- *  Assumes Plot renders one <circle> per data point in input order. */
-function attachCustomTooltip(container, plot, points) {
+/** Render a simple inline symbol legend: SVG shapes next to domain labels.
+ *  Skips domains not in DOMAIN_SYMBOLS. Returns null if nothing to show. */
+function buildSymbolLegend(domains) {
+  const known = domains.filter(d => DOMAIN_SYMBOLS[d]);
+  if (known.length === 0) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'sym-legend';
+  for (const dom of known) {
+    const sym = DOMAIN_SYMBOLS[dom];
+    const item = document.createElement('span');
+    item.className = 'sym-legend-item';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '14'); svg.setAttribute('height', '14');
+    svg.setAttribute('viewBox', '-8 -8 16 16');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d3.symbol(sym, 64)());
+    path.setAttribute('fill', '#374151');
+    svg.appendChild(path);
+    item.appendChild(svg);
+    const label = document.createElement('span');
+    label.textContent = dom;
+    item.appendChild(label);
+    wrap.appendChild(item);
+  }
+  return wrap;
+}
+
+/** Wire hover handlers on every dot shape to a single floating tooltip.
+ *  ``pointGroups`` is an array of arrays, one per dot mark in render order,
+ *  matching the order of ``g[aria-label="dot"]`` groups in the SVG. */
+function attachCustomTooltip(container, plot, pointGroups) {
   const tip = document.createElement('div');
   tip.className = 'plot-tip';
   container.appendChild(tip);
 
-  // With a symbol channel Plot renders <path> per point; without one it's
-  // <circle>. Grab whichever direct children the dot group has.
-  const dotGroup = plot.querySelector('g[aria-label="dot"]');
-  const circles = dotGroup ? dotGroup.querySelectorAll('circle, path') : [];
-  if (circles.length !== points.length) return;
+  const dotGroups = plot.querySelectorAll('g[aria-label="dot"]');
+  if (dotGroups.length !== pointGroups.length) return;
 
   const place = (e) => {
     const rect = container.getBoundingClientRect();
     let x = e.clientX - rect.left + 10;
     let y = e.clientY - rect.top + 10;
-    // Keep tip inside the container.
     const tw = tip.offsetWidth, th = tip.offsetHeight;
     if (x + tw > rect.width) x = e.clientX - rect.left - tw - 10;
     if (y + th > rect.height) y = e.clientY - rect.top - th - 10;
@@ -583,19 +699,34 @@ function attachCustomTooltip(container, plot, points) {
     tip.style.top = Math.max(0, y) + 'px';
   };
 
-  circles.forEach((circle, i) => {
-    const p = points[i];
-    circle.addEventListener('mouseenter', (e) => {
-      tip.innerHTML = renderTipContent(p);
-      tip.classList.add('show');
-      place(e);
+  dotGroups.forEach((g, gi) => {
+    const pts = pointGroups[gi];
+    const shapes = g.querySelectorAll('circle, path');
+    if (shapes.length !== pts.length) return;
+    shapes.forEach((shape, i) => {
+      const p = pts[i];
+      shape.addEventListener('mouseenter', (e) => {
+        tip.innerHTML = renderTipContent(p);
+        tip.classList.add('show');
+        place(e);
+      });
+      shape.addEventListener('mousemove', place);
+      shape.addEventListener('mouseleave', () => tip.classList.remove('show'));
     });
-    circle.addEventListener('mousemove', place);
-    circle.addEventListener('mouseleave', () => tip.classList.remove('show'));
   });
 }
 
 function renderTipContent(p) {
+  if (p.isAlgoMean) {
+    const label = `${p.algo} (geomean across ${p.n} domains)`;
+    const head = `
+      <div class="head">
+        <span class="type-pill">geomean</span>
+        <span class="path" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+      </div>
+    `;
+    return head + sectionRow('', { time: fmtNum(p.time) + 's', ratio: fmtNum(p.ratio) });
+  }
   if (p.isMean) {
     const label = `${p.algo} / ${p.domain} (geomean of ${p.n} reps)`;
     const head = `
