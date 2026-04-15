@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 from .folders import *
+from .stackpath import *
 
 
 # Project roots for the three compressors we call out to.
