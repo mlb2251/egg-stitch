@@ -55,25 +55,32 @@ def table1(
 
     for domain in TABLE1_DOMAINS:
         print(f"\n=== {domain} ===", flush=True)
+        stackpathpush(domain)
         enum_runs, smc_runs, babble_runs = [], [], []
         egraph_min = None
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps)
-            smc_res, _ = run_ours(
-                domain, "smc",
-                num_steps=smc_num_steps,
-                num_particles=smc_num_particles,
-                temperature=smc_temperature,
-            )
-            babble_res = run_babble(domain, dsr=rewrites_path(domain))
+            stackpathpush(f"rep{i}")
+            with subgroup("best-first"):
+                enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps)
+            with subgroup("smc"):
+                smc_res, _ = run_ours(
+                    domain, "smc",
+                    num_steps=smc_num_steps,
+                    num_particles=smc_num_particles,
+                    temperature=smc_temperature,
+                )
+            with subgroup("babble"):
+                babble_res = run_babble(domain, dsr=rewrites_path(domain))
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
+            stackpathpop()
         results["domains"][domain] = {
             "egraph_min_size": egraph_min,
             "runs": {"enum": enum_runs, "smc": smc_runs, "babble": babble_runs},
         }
+        stackpathpop()
 
     out_path = current_folder_path() / output_name
     with open(out_path, "w") as f:

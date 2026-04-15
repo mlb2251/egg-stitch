@@ -6,6 +6,7 @@ import time
 
 from . import STITCH_BIN, STITCH_DIR
 from .result import Result, ratio
+from .stackpath import save_run
 
 
 def run_stitch(domain: str) -> Result:
@@ -28,7 +29,7 @@ def run_stitch(domain: str) -> Result:
         f"{a.get('name', f'fn_{i}')}: {a['body']}"
         for i, a in enumerate(data.get("abstractions", []))
     ]
-    return Result(
+    result = Result(
         method="stitch",
         domain=domain,
         initial_cost=initial_cost,
@@ -41,3 +42,6 @@ def run_stitch(domain: str) -> Result:
             "num_abstractions": int(data.get("num_abstractions", len(library))),
         },
     )
+    config = {"domain": domain}
+    save_run(result.to_dict(), config, "stitch")
+    return result

@@ -43,26 +43,34 @@ def table2(
 
     for domain in TABLE2_DOMAINS:
         print(f"\n=== {domain} ===", flush=True)
+        stackpathpush(domain)
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None)
-            smc_res, _ = run_ours(
-                domain, "smc",
-                num_steps=smc_num_steps,
-                num_particles=smc_num_particles,
-                temperature=smc_temperature,
-                rewrites=None,
-            )
-            babble_res = run_babble(domain)
-            stitch_res = run_stitch(domain)
+            stackpathpush(f"rep{i}")
+            with subgroup("best-first"):
+                enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None)
+            with subgroup("smc"):
+                smc_res, _ = run_ours(
+                    domain, "smc",
+                    num_steps=smc_num_steps,
+                    num_particles=smc_num_particles,
+                    temperature=smc_temperature,
+                    rewrites=None,
+                )
+            with subgroup("babble"):
+                babble_res = run_babble(domain)
+            with subgroup("stitch"):
+                stitch_res = run_stitch(domain)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
             stitch_runs.append(stitch_res.to_dict())
+            stackpathpop()
         results["domains"][domain] = {
             "runs": {"enum": enum_runs, "smc": smc_runs, "babble": babble_runs, "stitch": stitch_runs},
         }
+        stackpathpop()
 
     out_path = current_folder_path() / output_name
     with open(out_path, "w") as f:

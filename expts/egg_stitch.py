@@ -7,6 +7,7 @@ import subprocess
 from . import EGG_STITCH_BIN, rewrites_path
 from .folders import current_folder_path, unique_path
 from .result import Result, ratio
+from .stackpath import save_run
 
 
 def egg_stitch(input, output="out.json", rewrites=None, flamegraph=False, samply=False, **kwargs):
@@ -86,4 +87,6 @@ def run_ours(domain: str, search: str, *, num_steps: int, rewrites=_UNSET, **ext
             "output_file": str(output),
         },
     )
+    config = {"domain": domain, "search": search, "num_steps": num_steps, "rewrites": rewrites, **extra}
+    save_run(result.to_dict(), config, "egg_stitch")
     return result, cost_after

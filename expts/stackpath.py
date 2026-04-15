@@ -6,13 +6,14 @@ context manager to push a subdirectory for the duration of a block, and
 :func:`stackpath` to get the path to a file inside the current directory.
 """
 
+import json
 import time
 from contextlib import contextmanager
 from pathlib import Path
 
 from .folders import unique_path
 
-RUNS_DIR = Path(__file__).parent.parent / "viz" / "runs"
+RUNS_DIR = Path(__file__).parent.parent / "viz" / "stackpath"
 
 _root: Path | None = None
 _stack: list[str] = []
@@ -37,16 +38,45 @@ def current_dir() -> Path:
     return d
 
 
+def stackpathpush(name: str) -> Path:
+    """Push ``name`` onto the stack and return the new current directory."""
+    _stack.append(name)
+    return current_dir()
+
+
+def stackpathpop() -> str:
+    """Pop the top of the stack and return the popped name."""
+    return _stack.pop()
+
+
 @contextmanager
 def subgroup(name: str):
     """Push ``name`` onto the stack for the duration of the ``with`` block."""
-    _stack.append(name)
+    stackpathpush(name)
     try:
         yield current_dir()
     finally:
-        _stack.pop()
+        stackpathpop()
 
 
 def stackpath(filename: str) -> str:
     """Return the string path to ``filename`` inside the current stack directory."""
     return str(current_dir() / filename)
+
+
+def save_run(result: dict, config: dict, type_: str) -> Path:
+    """Write ``result.json``, ``config.json``, and ``type.txt`` into the current
+    stack directory, collision-suffixing all three with the same ``_N`` tag.
+
+    ``result`` and ``config`` are dumped as JSON; ``type_`` is written as a
+    single-line string into ``type.txt``. Returns the result file path.
+    """
+    result_path = unique_path(Path(stackpath("result.json")))
+    suffix = result_path.name[len("result"):]
+    with open(result_path, "w") as f:
+        json.dump(result, f, indent=2)
+    with open(result_path.with_name("config" + suffix), "w") as f:
+        json.dump(config, f, indent=2)
+    with open(result_path.with_name("type" + suffix).with_suffix(".txt"), "w") as f:
+        f.write(f"{type_}\n")
+    return result_path

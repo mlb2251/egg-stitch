@@ -5,6 +5,7 @@ import time
 
 from . import BABBLE_BIN, BABBLE_DIR
 from .result import Result, ratio
+from .stackpath import save_run
 
 
 def run_babble(domain: str, *, dsr: str | None = None) -> Result:
@@ -39,7 +40,7 @@ def run_babble(domain: str, *, dsr: str | None = None) -> Result:
             name = l.strip().removesuffix(" =")
             body = lines[i + 1].strip() if i + 1 < len(lines) else "?"
             libs.append(f"{name}: {body}")
-    return Result(
+    result = Result(
         method="babble",
         domain=domain,
         initial_cost=initial_cost,
@@ -53,3 +54,6 @@ def run_babble(domain: str, *, dsr: str | None = None) -> Result:
             "dsr": dsr,
         },
     )
+    config = {"domain": domain, "dsr": dsr}
+    save_run(result.to_dict(), config, "babble")
+    return result
