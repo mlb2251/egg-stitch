@@ -1,7 +1,7 @@
 """Global directory stack for grouping run outputs.
 
 The bottom of the stack is a uniquely-named timestamp directory under
-``viz/runs/``, created lazily on first use. Use :func:`subgroup` as a
+``viz/stackpath/``, created lazily on first use. Use :func:`subgroup` as a
 context manager to push a subdirectory for the duration of a block, and
 :func:`stackpath` to get the path to a file inside the current directory.
 """
