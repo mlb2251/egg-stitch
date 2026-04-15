@@ -11,8 +11,6 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from .folders import unique_path
-
 RUNS_DIR = Path(__file__).parent.parent / "viz" / "stackpath"
 
 _root: Path | None = None
@@ -66,17 +64,20 @@ def stackpath(filename: str) -> str:
 
 def save_run(result: dict, config: dict, type_: str) -> Path:
     """Write ``result.json``, ``config.json``, and ``type.txt`` into the current
-    stack directory, collision-suffixing all three with the same ``_N`` tag.
+    stack directory. Crashes if a run is already saved there (detected via the
+    presence of ``type.txt``).
 
     ``result`` and ``config`` are dumped as JSON; ``type_`` is written as a
     single-line string into ``type.txt``. Returns the result file path.
     """
-    result_path = unique_path(Path(stackpath("result.json")))
-    suffix = result_path.name[len("result"):]
+    d = current_dir()
+    type_path = d / "type.txt"
+    assert not type_path.exists(), f"run already exists at {d}"
+    result_path = d / "result.json"
     with open(result_path, "w") as f:
         json.dump(result, f, indent=2)
-    with open(result_path.with_name("config" + suffix), "w") as f:
+    with open(d / "config.json", "w") as f:
         json.dump(config, f, indent=2)
-    with open(result_path.with_name("type" + suffix).with_suffix(".txt"), "w") as f:
+    with open(type_path, "w") as f:
         f.write(f"{type_}\n")
     return result_path
