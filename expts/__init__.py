@@ -9,8 +9,8 @@ session-wide folder helpers (``current_folder``, ``new_folder``,
 import subprocess
 from pathlib import Path
 
-from .folders import *
-from .stackpath import *
+from .folders import current_folder, current_folder_path, new_folder, set_folder, unique_path
+from .stackpath import current_dir, stackpathpush, stackpathpop, subgroup, stackpath, save_run
 
 
 # Project roots for the three compressors we call out to.
@@ -48,11 +48,11 @@ def rewrites_path(domain: str) -> str:
 
 # Pulled in at the bottom so submodules can import the constants/helpers
 # defined above. `from expts import *` then re-exports everything.
-from .egg_stitch import *
-from .babble import *
-from .stitch import *
-from .table1 import *
-from .table2 import *
+from .egg_stitch import egg_stitch, run_ours
+from .babble import run_babble
+from .stitch import run_stitch
+from .table1 import table1, print_table1, DOMAIN_LABELS
+from .table2 import table2, print_table2
 
 
 
