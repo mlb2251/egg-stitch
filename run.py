@@ -147,6 +147,12 @@ def dev():
     # )
 
 
+def table2_arity_scaling(num_runs = 2):
+    for max_arity in [0, 1, 2, 3]:
+        with subgroup(f"max_arity={max_arity}"):
+            table2(max_arity=max_arity, num_runs=num_runs)
+
+
 
 if __name__ == "__main__":
     fn = globals().get(sys.argv[1]) if len(sys.argv) == 2 else None
