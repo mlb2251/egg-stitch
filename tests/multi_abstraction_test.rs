@@ -8,7 +8,8 @@
 /// abstraction (8 matches across 4 programs), leaving (+ (fn_0 ..) (fn_0 ..)) programs
 /// for the second round.
 use clap::Parser;
-use egg_stitch::{Args, io, multiple_step_search};
+use egg::FromOp;
+use egg_stitch::{Args, multiple_step_search, lang::{StitchEgraph, StitchLang}};
 
 const PROGRAMS: &[&str] = &[
     "(+ (f (g (h a)) (g (h b))) 2 2 2)",
@@ -17,10 +18,15 @@ const PROGRAMS: &[&str] = &[
     "(* (f (g (k m)) (g (l n))) 5)",
 ];
 
-fn load() -> (egg_stitch::lang::StitchEgraph, egg::Id) {
-    let owned: Vec<String> = PROGRAMS.iter().map(|s| s.to_string()).collect();
-    let (eg, root, _) = io::load_egraph_from_programs(&owned, None);
-    (eg, root)
+fn load() -> (StitchEgraph, egg::Id) {
+    let mut egraph: StitchEgraph = egg::EGraph::default();
+    let ids: Vec<egg::Id> = PROGRAMS.iter().map(|s| {
+        let expr: egg::RecExpr<StitchLang> = s.parse().unwrap();
+        egraph.add_expr(&expr)
+    }).collect();
+    let root = egraph.add(StitchLang::from_op("programs", ids).unwrap());
+    egraph.rebuild();
+    (egraph, root)
 }
 
 fn args(num_steps: usize, num_abstractions: usize) -> Args {
