@@ -16,10 +16,7 @@ from . import *
 from .babble import *
 from .egg_stitch import *
 from .stitch import *
-from .table1 import TABLE1_DOMAINS, DOMAIN_LABELS, NUM_RUNS
-
-# Reuse the Table 1 domain list/labels so the HTML viewer sees the same order.
-TABLE2_DOMAINS = TABLE1_DOMAINS
+from .table1 import DOMAIN_LABELS
 
 
 def table2(
@@ -28,10 +25,15 @@ def table2(
     smc_num_particles: int = 1000,
     smc_temperature: float = 1000.0,
     enum_num_steps: int = 500,
+    max_arity: int = 2,
+    num_runs: int = 10,
+    domains: list[str] | None = None,
     output_name: str = "table2.json",
 ) -> Path:
-    """Run Enum, SMC, babble, and Stitch on the four domains with no DSRs."""
-    assert all(d in ALL_DOMAINS for d in TABLE2_DOMAINS), "domain typo"
+    """Run Enum, SMC, babble, and Stitch on ``domains`` with no DSRs."""
+    if domains is None:
+        domains = ALL_DOMAINS
+    assert all(d in ALL_DOMAINS for d in domains), "domain typo"
     set_folder(f"table2/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "config": {
@@ -39,17 +41,19 @@ def table2(
             "enum": {"num_steps": enum_num_steps},
         },
         "domains": {},
+        "max_arity": max_arity,
+        "num_runs": num_runs,
     }
 
-    for domain in TABLE2_DOMAINS:
+    for domain in domains:
         print(f"\n=== {domain} ===", flush=True)
         stackpathpush(domain)
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
-        for i in range(NUM_RUNS):
-            print(f"  run {i+1}/{NUM_RUNS}", flush=True)
+        for i in range(num_runs):
+            print(f"  run {i+1}/{num_runs}", flush=True)
             stackpathpush(f"rep{i}")
             with subgroup("best-first"):
-                enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None)
+                enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, max_arity=max_arity)
             with subgroup("smc"):
                 smc_res, _ = run_ours(
                     domain, "smc",
@@ -57,11 +61,12 @@ def table2(
                     num_particles=smc_num_particles,
                     temperature=smc_temperature,
                     rewrites=None,
+                    max_arity=max_arity,
                 )
             with subgroup("babble"):
-                babble_res = run_babble(domain)
+                babble_res = run_babble(domain, max_arity=max_arity)
             with subgroup("stitch"):
-                stitch_res = run_stitch(domain)
+                stitch_res = run_stitch(domain, max_arity=max_arity)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
@@ -106,9 +111,7 @@ def print_table2(path: str | Path) -> None:
     print(header_top)
     print(header_sub)
     print("-" * len(header_sub))
-    for domain in TABLE2_DOMAINS:
-        if domain not in domains:
-            continue
+    for domain in domains:
         d = domains[domain]
         runs = d.get("runs", {})
         label = DOMAIN_LABELS.get(domain, domain)

@@ -16,10 +16,6 @@ from . import *
 from .babble import *
 from .egg_stitch import *
 
-NUM_RUNS = 10
-
-# Order matches the Table 1 screenshot.
-TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -35,33 +31,37 @@ def table1(
     smc_temperature: float = 1000.0,
     enum_num_steps: int = 500,
     max_arity: int = 2,
+    num_runs: int = 10,
+    domains: list[str] | None = None,
     output_name: str = "table1.json",
 ) -> Path:
-    """Run Enum, SMC, and babble on the four Table 1 domains with rewrites.
+    """Run Enum, SMC, and babble on ``domains`` with rewrites.
 
-    Collects one :class:`Result` per (method, domain) pair into a single
-    JSON in the current results folder and calls :func:`print_table1`.
+    Defaults to all four cogsci domains. Collects one :class:`Result` per
+    (method, domain) pair into a single JSON in the current results folder
+    and calls :func:`print_table1`.
     """
-    assert all(d in ALL_DOMAINS for d in TABLE1_DOMAINS), "domain typo"
-    # Each table1 run gets its own subfolder under viz/results/table1/ so the
-    # HTML viewer can enumerate them independently of other experiments.
+    if domains is None:
+        domains = ALL_DOMAINS
+    assert all(d in ALL_DOMAINS for d in domains), "domain typo"
     set_folder(f"table1/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "config": {
             "smc": {"num_steps": smc_num_steps, "num_particles": smc_num_particles, "temperature": smc_temperature},
             "enum": {"num_steps": enum_num_steps},
-            "max_arity": max_arity,
         },
         "domains": {},
+        "max_arity": max_arity,
+        "num_runs": num_runs,
     }
 
-    for domain in TABLE1_DOMAINS:
+    for domain in domains:
         print(f"\n=== {domain} ===", flush=True)
         stackpathpush(domain)
         enum_runs, smc_runs, babble_runs = [], [], []
         egraph_min = None
-        for i in range(NUM_RUNS):
-            print(f"  run {i+1}/{NUM_RUNS}", flush=True)
+        for i in range(num_runs):
+            print(f"  run {i+1}/{num_runs}", flush=True)
             stackpathpush(f"rep{i}")
             with subgroup("best-first"):
                 enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, max_arity=max_arity)
@@ -119,9 +119,7 @@ def print_table1(path: str | Path) -> None:
     print(header_top)
     print(header_sub)
     print("-" * len(header_sub))
-    for domain in TABLE1_DOMAINS:
-        if domain not in domains:
-            continue
+    for domain in domains:
         d = domains[domain]
         runs = d.get("runs", {})
         label = DOMAIN_LABELS.get(domain, domain)
