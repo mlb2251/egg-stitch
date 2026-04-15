@@ -627,7 +627,7 @@ function renderPlot(runs) {
 
   // Render a matching symbol legend ourselves, since the dot marks use
   // constant symbols (no symbol scale). Renders reliably in every version.
-  const symLegend = buildSymbolLegend([...byDomain.keys()]);
+  const symLegend = buildSymbolLegend([...byDomain.keys()], algoMeans.length > 0);
   if (symLegend) plot.prepend(symLegend);
   // Bump every text inside the plot svg (covers tick numbers); legend lives
   // in an outer div so it's untouched. Then override axis labels by exact
@@ -651,14 +651,17 @@ function renderPlot(runs) {
 }
 
 /** Render a simple inline symbol legend: SVG shapes next to domain labels.
- *  Skips domains not in DOMAIN_SYMBOLS. Returns null if nothing to show. */
-function buildSymbolLegend(domains) {
-  const known = domains.filter(d => DOMAIN_SYMBOLS[d]);
-  if (known.length === 0) return null;
+ *  Skips domains not in DOMAIN_SYMBOLS. Appends a "geomean" circle entry if
+ *  any algo-level geomean dots are present. Returns null if empty. */
+function buildSymbolLegend(domains, includeGeomean) {
+  const entries = domains
+    .filter(d => DOMAIN_SYMBOLS[d])
+    .map(d => ({ sym: DOMAIN_SYMBOLS[d], label: d }));
+  if (includeGeomean) entries.push({ sym: d3.symbolCircle, label: 'geomean' });
+  if (entries.length === 0) return null;
   const wrap = document.createElement('div');
   wrap.className = 'sym-legend';
-  for (const dom of known) {
-    const sym = DOMAIN_SYMBOLS[dom];
+  for (const { sym, label } of entries) {
     const item = document.createElement('span');
     item.className = 'sym-legend-item';
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -669,9 +672,9 @@ function buildSymbolLegend(domains) {
     path.setAttribute('fill', '#374151');
     svg.appendChild(path);
     item.appendChild(svg);
-    const label = document.createElement('span');
-    label.textContent = dom;
-    item.appendChild(label);
+    const text = document.createElement('span');
+    text.textContent = label;
+    item.appendChild(text);
     wrap.appendChild(item);
   }
   return wrap;
