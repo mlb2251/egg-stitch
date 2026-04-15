@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>stackpath viewer</title>
+<style>
+:root {
+  --fg:#1b1b1f; --muted:#6b7280; --bg:#fafafa; --card:#fff;
+  --accent:#3b82f6; --border:#e5e7eb; --danger:#dc2626;
+  --sel-dark:#bfdbfe; --sel-light:#eff6ff;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: -apple-system, system-ui, sans-serif; color: var(--fg);
+  background: var(--bg); font-size: 13px;
+  display: grid; grid-template-rows: 1fr;
+}
+#main {
+  display: grid; grid-template-columns: 320px 1fr;
+  min-height: 0;
+}
+#right {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+}
+#graph {
+  background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 6px 12px; flex: 0 0 auto; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.graph-toggle {
+  position: absolute; top: 6px; right: 12px; z-index: 5;
+  font-size: 11px; color: var(--muted);
+  display: flex; align-items: center; gap: 3px;
+  background: var(--card); padding: 2px 6px; border-radius: 4px;
+  border: 1px solid var(--border); cursor: pointer; user-select: none;
+}
+#graph-inner {
+  width: min(100%, calc(100vh - 220px)); aspect-ratio: 1 / 1;
+  position: relative;
+}
+.plot-tip {
+  position: absolute; pointer-events: none; z-index: 10;
+  background: rgba(17, 24, 39, 0.96); color: #f9fafb;
+  border: 1px solid #374151; border-radius: 6px;
+  padding: 6px 8px; font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+  max-width: 360px; min-width: 200px;
+  display: none;
+}
+.plot-tip.show { display: block; }
+.plot-tip .head {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 4px; padding-bottom: 4px;
+  border-bottom: 1px solid #374151;
+}
+.plot-tip .head .type-pill {
+  font-size: 9px; padding: 1px 5px; border-radius: 999px;
+  background: #064e3b; color: #6ee7b7; border: 1px solid #047857;
+  text-transform: lowercase;
+}
+.plot-tip .head .path {
+  flex: 1; color: #d1d5db; font-size: 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;
+}
+.plot-tip .sect {
+  display: flex; flex-wrap: wrap; gap: 2px 8px;
+  margin-top: 2px;
+}
+.plot-tip .sect .lab {
+  font-size: 9px; text-transform: uppercase; letter-spacing: .05em;
+  color: #9ca3af; width: 100%; margin-top: 2px;
+}
+.plot-tip .sect .kv { display: inline-flex; gap: 3px; align-items: baseline; }
+.plot-tip .sect .kv .k { color: #9ca3af; }
+.plot-tip .sect .kv .v { color: #f9fafb; }
+#graph .empty { color: var(--muted); padding: 1rem; }
+#runs-panel {
+  flex: 1 1 auto; overflow-y: auto; padding: 8px 12px; min-height: 0;
+}
+#left {
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  background: var(--card); min-height: 0;
+}
+.section {
+  border-bottom: 1px solid var(--border); padding: 6px 8px;
+  display: flex; flex-direction: column; min-height: 0;
+}
+.section h2 {
+  margin: 0 0 4px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); display: flex;
+  justify-content: space-between; align-items: center;
+}
+.section-actions { display: flex; gap: 4px; }
+button.mini {
+  font-size: 11px; padding: 1px 6px; border: 1px solid var(--border);
+  background: var(--card); border-radius: 3px; cursor: pointer; color: var(--fg);
+}
+button.mini:hover { background: #f3f4f6; }
+button.mini.danger:hover { color: var(--danger); border-color: #fecaca; }
+.scroller { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+
+#tree-section { flex: 1 1 auto; min-height: 100px; }
+#sel-section { flex: 0 1 200px; min-height: 60px; }
+
+.unsafe-toggle { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 3px; }
+
+ul.tree { list-style: none; padding: 0; margin: 0; }
+ul.tree ul { list-style: none; padding-left: 14px; margin: 0; }
+.node {
+  display: flex; align-items: center; gap: 2px;
+  padding: 1px 4px; border-radius: 3px; cursor: pointer; user-select: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  white-space: nowrap;
+}
+.node:hover { background: #f3f4f6; }
+.node.sel-direct { background: var(--sel-dark); }
+.node.sel-descendant { background: var(--sel-light); }
+.node .twist {
+  display: inline-block; width: 12px; text-align: center; color: var(--muted);
+  cursor: pointer;
+}
+.node .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.node .name.run { color: #047857; font-weight: 600; }
+.node .name[contenteditable="true"] {
+  background: #fff; outline: 1px solid var(--accent); border-radius: 2px;
+  padding: 0 2px; cursor: text;
+}
+.node .del {
+  visibility: hidden; cursor: pointer; color: var(--muted);
+  border: none; background: transparent; padding: 0 4px; font-size: 13px;
+}
+.node:hover .del { visibility: visible; }
+.node .del:hover { color: var(--danger); }
+
+.sel-item {
+  display: flex; align-items: center; padding: 2px 6px; border-radius: 3px;
+  cursor: pointer; font-size: 12px;
+}
+.sel-item:hover { background: #f3f4f6; }
+.sel-item.active { background: var(--sel-dark); font-weight: 600; }
+.sel-item .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.sel-item .name[contenteditable="true"] {
+  background: #fff; outline: 1px solid var(--accent); border-radius: 2px;
+  padding: 0 2px; cursor: text;
+}
+.sel-item .del {
+  visibility: hidden; cursor: pointer; color: var(--muted);
+  border: none; background: transparent; padding: 0 4px; font-size: 13px;
+}
+.sel-item:hover .del { visibility: visible; }
+.sel-item .del:hover { color: var(--danger); }
+
+#runs-summary { color: var(--muted); margin-bottom: 6px; font-size: 12px; }
+.run-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 10px; margin-bottom: 6px;
+}
+.run-card .path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  color: var(--muted); margin-bottom: 4px; word-break: break-all;
+}
+.run-card .row {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline;
+  font-size: 12px;
+}
+.run-card .group {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+}
+.run-card .group .label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin-right: 2px;
+}
+.run-card .kv { display: inline-flex; gap: 4px; align-items: baseline; }
+.run-card .kv .k { color: var(--muted); }
+.run-card .kv .v { font-variant-numeric: tabular-nums; }
+.run-card .type-pill {
+  display: inline-block; font-size: 10px; padding: 1px 6px;
+  border-radius: 999px; background: #ecfdf5; color: #047857;
+  border: 1px solid #a7f3d0; text-transform: lowercase;
+}
+.err { color: var(--danger); font-size: 11px; margin-top: 4px; }
+.toast {
+  position: fixed; bottom: 12px; right: 12px; padding: 6px 10px;
+  background: #1f2937; color: #fff; border-radius: 4px; font-size: 12px;
+  opacity: 0; transition: opacity .2s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.err { background: var(--danger); }
+</style>
+</head>
+<body>
+<div id="main">
+  <div id="left">
+    <div class="section" id="tree-section">
+      <h2>
+        <span>directories</span>
+        <span class="section-actions">
+          <label class="unsafe-toggle"><input type="checkbox" id="unsafe-del">unsafe delete</label>
+          <button class="mini" id="unsel-btn">unselect all</button>
+          <button class="mini" id="refresh-btn">refresh</button>
+        </span>
+      </h2>
+      <div class="scroller"><ul class="tree" id="tree"></ul></div>
+    </div>
+    <div class="section" id="sel-section">
+      <h2>
+        <span>selections</span>
+        <span class="section-actions">
+          <button class="mini" id="save-sel-btn">save</button>
+        </span>
+      </h2>
+      <div class="scroller" id="selections"></div>
+    </div>
+  </div>
+  <div id="right">
+    <div id="graph">
+      <label class="graph-toggle"><input type="checkbox" id="hide-reps" checked>geomean only</label>
+      <div id="graph-inner"><div class="empty">no runs in current selection</div></div>
+    </div>
+    <div id="runs-panel">
+      <div id="runs-summary"></div>
+      <div id="runs"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
+<script src="stackpath.js"></script>
+</body>
+</html>
