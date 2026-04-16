@@ -774,9 +774,19 @@ function renderPlot(runs) {
   if (rawForPlot.length > 0) addDots(rawForPlot, 3, 0.3);
   addDots(meanPoints, 9, 0.95);
 
+  // Lightness value labels: small text next to each mean point.
+  if (lightnessDim) {
+    dotMarks.push(Plot.text(meanPoints, {
+      x: 'ratio', y: 'time',
+      text: d => String(d[lightnessDim]),
+      dx: 13, dy: 1,
+      fontSize: 9, fill: '#6b7280', textAnchor: 'start',
+    }));
+  }
+
   const plot = Plot.plot({
     width: size, height: size,
-    marginLeft: 75, marginBottom: 60, marginTop: 12, marginRight: 12,
+    marginLeft: 75, marginBottom: 60, marginTop: 12, marginRight: 48,
     x: { domain: [xMin, xMax], label: 'compression ratio', labelAnchor: 'center', labelArrow: false, grid: true },
     y: { type: 'log', domain: [yMin, yMax], label: 'time (s)', labelAnchor: 'center', labelArrow: false, grid: true },
     marks: dotMarks,

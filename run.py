@@ -178,18 +178,26 @@ def table2_arity_scaling(num_runs = 2):
 #                 with subgroup("smc"):
 #                     run_ours(domain, "smc", **smc_config)
 
-# def sweep_num_steps_enum(num_runs = 3):
-#     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
-#         for num_steps in stackpathiter([100, 500, 1000, 2000, 3000]):
-#             for domain in stackpathiter(ALL_DOMAINS):
-#                 enum_config = dict(num_steps=num_steps, max_arity=2, rewrites=None)
-#                 run_ours(domain, "best-first", **enum_config)
+def sweep_num_steps_enum(num_runs = 3):
+    for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+        for num_steps in stackpathiter([64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]):
+            for domain in stackpathiter(ALL_DOMAINS):
+                enum_config = dict(num_steps=num_steps, max_arity=2, rewrites=None)
+                run_ours(domain, "best-first", **enum_config)
 
 def sweep_num_particles_smc(num_runs = 3):
     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
-        for num_particles in stackpathiter([100, 200, 400, 800, 1600, 3200]):
+        for num_particles in stackpathiter([4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]):
             for domain in stackpathiter(ALL_DOMAINS):
                 smc_config = dict(num_steps=100, num_particles=num_particles, max_arity=2, rewrites=None)
+                run_ours(domain, "smc", **smc_config)
+
+
+def sweep_num_steps_smc(num_runs = 3):
+    for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+        for num_steps in stackpathiter([4, 8, 16, 32, 64, 128, 256, 512, 1024]):
+            for domain in stackpathiter(ALL_DOMAINS):
+                smc_config = dict(num_steps=num_steps, num_particles=1000, max_arity=2, rewrites=None)
                 run_ours(domain, "smc", **smc_config)
 
 
