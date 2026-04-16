@@ -7,7 +7,7 @@ from . import BABBLE_BIN, BABBLE_DIR
 from .result import Result, ratio
 
 
-def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1) -> Result:
+def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1, max_arity: int) -> Result:
     """Run babble on a cogsci ``domain`` and return a :class:`Result`.
 
     When ``dsr`` is provided, it is passed to babble as ``--dsr`` so the

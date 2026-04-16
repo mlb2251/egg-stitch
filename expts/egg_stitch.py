@@ -42,7 +42,7 @@ def egg_stitch(input, output="out.json", rewrites=None, flamegraph=False, samply
 _UNSET = object()
 
 
-def run_ours(domain: str, search: str, *, num_steps: int, rewrites=_UNSET, **extra) -> tuple[Result, int | None]:
+def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrites=_UNSET, **extra) -> tuple[Result, int | None]:
     """Run our compressor on ``domain``.
 
     ``rewrites`` defaults to the domain's standard rewrite file; pass
@@ -61,7 +61,7 @@ def run_ours(domain: str, search: str, *, num_steps: int, rewrites=_UNSET, **ext
         output=f"{domain}_{search.replace('-', '_')}.json",
         search=search,
         num_steps=num_steps,
-        max_arity=2,
+        max_arity=max_arity,
         **extra,
     )
     with open(output) as f:

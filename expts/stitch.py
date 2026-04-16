@@ -32,7 +32,7 @@ def ast_size(programs: list[str]) -> int:
     return total
 
 
-def run_stitch(domain: str, *, num_abstractions: int = 1) -> Result:
+def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Result:
     """Run stitch on ``domain``.
 
     ``num_abstractions`` maps to stitch's ``-i`` (iterations) flag, so it

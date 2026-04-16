@@ -24,6 +24,8 @@ TABLE2_DOMAINS = TABLE1_DOMAINS
 
 DEFAULT_TABLE2_TITLE = "Table 2: Ours (SMC and Enum) vs Babble vs Stitch on benchmarks without DSRs"
 
+MAX_ARITY = 2
+
 
 def table2(
     *,
@@ -51,6 +53,7 @@ def table2(
             "enum": {"num_steps": enum_num_steps},
             "num_abstractions": num_abstractions,
             "rebuild_egraph": rebuild_egraph,
+            "max_arity": MAX_ARITY,
         },
         "domains": {},
     }
@@ -60,7 +63,7 @@ def table2(
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph)
+            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY)
             smc_res, _ = run_ours(
                 domain, "smc",
                 num_steps=smc_num_steps,
@@ -69,9 +72,10 @@ def table2(
                 rewrites=None,
                 num_abstractions=num_abstractions,
                 rebuild_egraph=rebuild_egraph,
+                max_arity=MAX_ARITY,
             )
-            babble_res = run_babble(domain, num_abstractions=num_abstractions)
-            stitch_res = run_stitch(domain, num_abstractions=num_abstractions)
+            babble_res = run_babble(domain, num_abstractions=num_abstractions, max_arity=MAX_ARITY)
+            stitch_res = run_stitch(domain, num_abstractions=num_abstractions, max_arity=MAX_ARITY)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())

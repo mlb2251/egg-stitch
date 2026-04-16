@@ -30,6 +30,8 @@ DOMAIN_LABELS = {
 
 DEFAULT_TABLE1_TITLE = "Table 1: Ours (SMC and Enum) vs Babble on benchmarks with domain-specific rewrites"
 
+MAX_ARITY = 2
+
 
 def table1(
     *,
@@ -61,6 +63,7 @@ def table1(
             "enum": {"num_steps": enum_num_steps},
             "num_abstractions": num_abstractions,
             "rebuild_egraph": rebuild_egraph,
+            "max_arity": MAX_ARITY,
         },
         "domains": {},
     }
@@ -71,7 +74,7 @@ def table1(
         egraph_min = None
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph)
+            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY)
             smc_res, _ = run_ours(
                 domain, "smc",
                 num_steps=smc_num_steps,
@@ -79,8 +82,9 @@ def table1(
                 temperature=smc_temperature,
                 num_abstractions=num_abstractions,
                 rebuild_egraph=rebuild_egraph,
+                max_arity=MAX_ARITY,
             )
-            babble_res = run_babble(domain, dsr=rewrites_path(domain), num_abstractions=num_abstractions)
+            babble_res = run_babble(domain, dsr=rewrites_path(domain), num_abstractions=num_abstractions, max_arity=MAX_ARITY)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
