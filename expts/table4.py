@@ -24,6 +24,7 @@ def table4(**kwargs) -> Path:
     Any keyword arguments accepted by :func:`table2` can be passed through.
     """
     kwargs.setdefault("num_abstractions", NUM_ABSTRACTIONS)
+    kwargs.setdefault("rebuild_egraph", True)
     kwargs.setdefault("folder_prefix", "table4")
     kwargs.setdefault("output_name", "table4.json")
     kwargs.setdefault("title", TABLE4_TITLE)

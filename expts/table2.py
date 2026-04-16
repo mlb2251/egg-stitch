@@ -32,6 +32,7 @@ def table2(
     smc_temperature: float = 1000.0,
     enum_num_steps: int = 500,
     num_abstractions: int = 1,
+    rebuild_egraph: bool = False,
     folder_prefix: str = "table2",
     output_name: str = "table2.json",
     title: str = DEFAULT_TABLE2_TITLE,
@@ -49,6 +50,7 @@ def table2(
             "smc": {"num_steps": smc_num_steps, "num_particles": smc_num_particles, "temperature": smc_temperature},
             "enum": {"num_steps": enum_num_steps},
             "num_abstractions": num_abstractions,
+            "rebuild_egraph": rebuild_egraph,
         },
         "domains": {},
     }
@@ -58,7 +60,7 @@ def table2(
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions)
+            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph)
             smc_res, _ = run_ours(
                 domain, "smc",
                 num_steps=smc_num_steps,
@@ -66,6 +68,7 @@ def table2(
                 temperature=smc_temperature,
                 rewrites=None,
                 num_abstractions=num_abstractions,
+                rebuild_egraph=rebuild_egraph,
             )
             babble_res = run_babble(domain, num_abstractions=num_abstractions)
             stitch_res = run_stitch(domain, num_abstractions=num_abstractions)
