@@ -28,27 +28,39 @@ DOMAIN_LABELS = {
 }
 
 
+DEFAULT_TABLE1_TITLE = "Table 1: Ours (SMC and Enum) vs Babble on benchmarks with domain-specific rewrites"
+
+
 def table1(
     *,
     smc_num_steps: int = 100,
     smc_num_particles: int = 1000,
     smc_temperature: float = 1000.0,
     enum_num_steps: int = 500,
+    num_abstractions: int = 1,
+    rebuild_egraph: bool = False,
+    folder_prefix: str = "table1",
     output_name: str = "table1.json",
+    title: str = DEFAULT_TABLE1_TITLE,
 ) -> Path:
     """Run Enum, SMC, and babble on the four Table 1 domains with rewrites.
 
     Collects one :class:`Result` per (method, domain) pair into a single
     JSON in the current results folder and calls :func:`print_table1`.
+    ``num_abstractions`` is forwarded to our compressor so each run stacks
+    that many abstractions sequentially.
     """
     assert all(d in ALL_DOMAINS for d in TABLE1_DOMAINS), "domain typo"
-    # Each table1 run gets its own subfolder under viz/results/table1/ so the
+    # Each run gets its own subfolder under viz/results/<folder_prefix>/ so the
     # HTML viewer can enumerate them independently of other experiments.
-    set_folder(f"table1/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
+    set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
+        "title": title,
         "config": {
             "smc": {"num_steps": smc_num_steps, "num_particles": smc_num_particles, "temperature": smc_temperature},
             "enum": {"num_steps": enum_num_steps},
+            "num_abstractions": num_abstractions,
+            "rebuild_egraph": rebuild_egraph,
         },
         "domains": {},
     }
@@ -59,14 +71,16 @@ def table1(
         egraph_min = None
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps)
+            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph)
             smc_res, _ = run_ours(
                 domain, "smc",
                 num_steps=smc_num_steps,
                 num_particles=smc_num_particles,
                 temperature=smc_temperature,
+                num_abstractions=num_abstractions,
+                rebuild_egraph=rebuild_egraph,
             )
-            babble_res = run_babble(domain, dsr=rewrites_path(domain))
+            babble_res = run_babble(domain, dsr=rewrites_path(domain), num_abstractions=num_abstractions)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
@@ -104,7 +118,7 @@ def print_table1(path: str | Path) -> None:
         f"{'Enum':>10}{'SMC':>10}{'babble':>8}{'Stitch':>8}"
     )
     print()
-    print("Table 1: Ours (SMC and Enum) vs Babble on benchmarks with domain-specific rewrites")
+    print(saved.get("title", DEFAULT_TABLE1_TITLE))
     print()
     print(header_top)
     print(header_sub)
