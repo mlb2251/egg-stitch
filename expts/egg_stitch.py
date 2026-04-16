@@ -70,7 +70,8 @@ def run_ours(domain: str, search: str, *, num_steps: int, rewrites=_UNSET, **ext
     final_cost = int(data.get("final_cost") or initial_cost)
     abstractions = data.get("library") or []
     method = "enum" if search == "best-first" else search
-    cost_after = int(data["cost_after_rewrites"]) if rewrites is not None else None
+    size_abstractions = sum(a["pattern_size"] for a in abstractions)
+    cost_after = int(data["cost_after_rewrites"]) + size_abstractions if rewrites is not None else None
     result = Result(
         method=method,
         domain=domain,

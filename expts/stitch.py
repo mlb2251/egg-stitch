@@ -7,6 +7,30 @@ import time
 from . import STITCH_BIN, STITCH_DIR
 from .result import Result, ratio
 
+from s_expression_parser import parse, ParserConfig, Pair, nil
+
+# make sure stitch's cost multiplier is large enough that our AstSize metric
+# isn't that far off it's metric, which counts App as 1 (we count it as 0)
+COST_MULTIPLIER = str(10_000)
+
+
+def recursive_pair_size(p: type[nil] | Pair | str) -> int:
+    if isinstance(p, str):
+        return 1
+    result = 0
+    while p is not nil:
+        result += recursive_pair_size(p.car)
+        p = p.cdr
+    return result
+
+
+def ast_size(programs: list[str]) -> int:
+    total = 0
+    for prog in programs:
+        [p] = parse(prog, ParserConfig(prefix_symbols={}, dots_are_cons=False))
+        total += recursive_pair_size(p)
+    return total
+
 
 def run_stitch(domain: str, *, num_abstractions: int = 1) -> Result:
     """Run stitch on ``domain``.
@@ -19,16 +43,30 @@ def run_stitch(domain: str, *, num_abstractions: int = 1) -> Result:
     cmd = [
         str(STITCH_BIN),
         f"data/cogsci/{domain}.json",
-        f"-i{num_abstractions}", "-a2", "--out", outfile,
-        "--no-curried-bodies", "--no-curried-metavars", "--silent",
+        f"-i{num_abstractions}",
+        "-a2",
+        "--out",
+        outfile,
+        "--no-curried-bodies",
+        "--no-curried-metavars",
+        "--silent",
+        "--allow-single-task",
+        "--cost-var",
+        COST_MULTIPLIER,
+        "--cost-ivar",
+        COST_MULTIPLIER,
+        "--cost-prim-default",
+        COST_MULTIPLIER,
+        "--cost-lam",
+        COST_MULTIPLIER,
     ]
     start = time.time()
     sp.run(cmd, check=True, cwd=STITCH_DIR)
     wall_secs = time.time() - start
     with open(STITCH_DIR / outfile) as f:
         data = json.load(f)
-    initial_cost = int(data["original_cost"])
-    final_cost = int(data["final_cost"])
+    initial_cost = ast_size(data["original"])
+    final_cost = ast_size(data["rewritten"]) + ast_size(data.get("library", []))
     library = [
         f"{a.get('name', f'fn_{i}')}: {a['body']}"
         for i, a in enumerate(data.get("abstractions", []))
