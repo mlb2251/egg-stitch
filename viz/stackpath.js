@@ -120,7 +120,7 @@ function renderTree() {
   const ul = document.getElementById('tree');
   ul.innerHTML = '';
   if (!state.tree) return;
-  for (const child of state.tree.children) ul.appendChild(renderNode(child));
+  for (const child of [...state.tree.children].reverse()) ul.appendChild(renderNode(child));
 }
 
 function renderNode(node) {
@@ -289,6 +289,15 @@ async function loadSelection(name) {
   try {
     const sel = await getJSON(`/viz/selections/${encodeURIComponent(name)}.json`);
     state.selected = new Set(sel.dirs || []);
+    if (sel.plotConfig) Object.assign(state.plotConfig, sel.plotConfig);
+    if (sel.axisLimits) {
+      const { xMin, xMax, yMin, yMax } = sel.axisLimits;
+      document.getElementById('x-min').value = xMin ?? '';
+      document.getElementById('x-max').value = xMax ?? '';
+      document.getElementById('y-min').value = yMin ?? '';
+      document.getElementById('y-max').value = yMax ?? '';
+    }
+    _plotConfigDimsKey = null;
     state.activeSelection = name;
     renderTree();
     renderSelectionsList();
@@ -311,8 +320,11 @@ async function saveSelection() {
     }
   }
   try {
+    const ov = getAxisOverrides();
     await putJSON(`/viz/selections/${encodeURIComponent(name)}.json`, {
       dirs: [...state.selected],
+      plotConfig: { ...state.plotConfig, filters: { ...state.plotConfig.filters } },
+      axisLimits: { xMin: ov.xMin, xMax: ov.xMax, yMin: ov.yMin, yMax: ov.yMax },
     });
     state.activeSelection = name;
     await refreshSelections();
@@ -567,27 +579,58 @@ function groupByShape(pts, shapeDim) {
   return map;
 }
 
-/** Build a manual color+lightness legend (used when Plot's auto-legend isn't active). */
-function buildColorLegend(colorDim, meanPoints, lightnessDim, lightnessVals, colorFn) {
-  const colorVals = [...new Set(meanPoints.map(p => String(p[colorDim])))].sort();
-  if (colorVals.length === 0) return null;
+/** Build a unified legend with a labeled row per active channel (color, shape, lightness). */
+function buildLegend({ colorDim, colorVals, baseColorFor, shapeDim, shapeVals, symbolFor, lightnessDim, lightnessVals }) {
+  const rows = [];
+
+  if (colorDim && colorVals.length > 0) {
+    rows.push({ label: `color: ${colorDim}`, items: colorVals.map(v => ({ type: 'swatch', color: baseColorFor(v), label: v })) });
+  }
+  if (shapeDim && shapeVals.length > 0) {
+    rows.push({ label: `shape: ${shapeDim}`, items: shapeVals.map(v => ({ type: 'symbol', sym: symbolFor(v), label: v })) });
+  }
+  if (lightnessDim && lightnessVals.length > 0) {
+    const baseHex = colorVals.length > 0 ? baseColorFor(colorVals[0]) : UNKNOWN_COLOR;
+    rows.push({ label: `lightness: ${lightnessDim}`, items: lightnessVals.map((v) => {
+      const lo = Number(lightnessVals[0]), hi = Number(lightnessVals[lightnessVals.length - 1]);
+      const frac = lightnessVals.length <= 1 ? 0.5 : (Number(v) - lo) / (hi - lo);
+      const hsl = d3.hsl(baseHex);
+      hsl.l = 0.65 - frac * 0.35;
+      return { type: 'swatch', color: hsl.formatHex(), label: v };
+    }) });
+  }
+  if (rows.length === 0) return null;
+
   const wrap = document.createElement('div');
-  wrap.className = 'sym-legend';
-  for (const cv of colorVals) {
-    for (const lv of (lightnessDim ? lightnessVals : [null])) {
-      const mockPt = { [colorDim]: cv };
-      if (lv !== null) mockPt[lightnessDim] = lv;
-      const color = colorFn(mockPt);
-      const item = document.createElement('span');
-      item.className = 'sym-legend-item';
-      const swatch = document.createElement('span');
-      swatch.style.cssText = `display:inline-block;width:12px;height:12px;background:${color};border-radius:2px;flex-shrink:0;`;
-      item.appendChild(swatch);
-      item.appendChild(Object.assign(document.createElement('span'), {
-        textContent: lightnessDim ? `${cv}/${lv}` : cv,
-      }));
-      wrap.appendChild(item);
+  wrap.className = 'plot-legend';
+  for (const { label, items } of rows) {
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    row.appendChild(Object.assign(document.createElement('span'), { className: 'legend-dim', textContent: label }));
+    const itemsSpan = document.createElement('span');
+    itemsSpan.className = 'legend-items';
+    for (const item of items) {
+      const entry = document.createElement('span');
+      entry.className = 'sym-legend-item';
+      if (item.type === 'swatch') {
+        const sw = document.createElement('span');
+        sw.style.cssText = `display:inline-block;width:12px;height:12px;background:${item.color};border-radius:2px;flex-shrink:0;`;
+        entry.appendChild(sw);
+      } else {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '14'); svg.setAttribute('height', '14');
+        svg.setAttribute('viewBox', '-8 -8 16 16');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d3.symbol(item.sym, 64)());
+        path.setAttribute('fill', '#374151');
+        svg.appendChild(path);
+        entry.appendChild(svg);
+      }
+      entry.appendChild(Object.assign(document.createElement('span'), { textContent: item.label }));
+      itemsSpan.appendChild(entry);
     }
+    row.appendChild(itemsSpan);
+    wrap.appendChild(row);
   }
   return wrap;
 }
@@ -595,6 +638,7 @@ function buildColorLegend(colorDim, meanPoints, lightnessDim, lightnessVals, col
 function renderPlot(runs) {
   const div = document.getElementById('graph-inner');
   div.innerHTML = '';
+  document.getElementById('graph-legend').innerHTML = '';
   const cfg = state.plotConfig;
 
   // 1. Validate axes and extract all dims from each run.
@@ -656,34 +700,31 @@ function renderPlot(runs) {
       time: gmean(ts), ratio: gmean(rs) };
   });
 
-  // 5. Color scale. If lightness is active we compute colors manually; otherwise
-  //    let Plot handle it so we get the auto-legend for free.
+  // 5. Color scale. Always use a manual colorFn so we can build a consistent legend.
   const colorDim = cfg.color;
   const lightnessDim = cfg.lightness;
   const lightnessVals = lightnessDim
-    ? [...new Set(meanPoints.map(p => String(p[lightnessDim])))].sort()
+    ? [...new Set(meanPoints.map(p => String(p[lightnessDim])))].sort((a, b) => Number(a) - Number(b))
     : [];
-  let colorFn = null, plotColorScale = null;
+  const colorVals = colorDim
+    ? [...new Set(meanPoints.map(p => String(p[colorDim])))].sort()
+    : [];
+  const fallbackColors = d3.scaleOrdinal(d3.schemeTableau10).domain(colorVals);
+  const baseColorFor = v => BASE_COLORS[String(v)] ?? fallbackColors(String(v));
+  let colorFn;
   if (!colorDim) {
     colorFn = () => UNKNOWN_COLOR;
   } else if (lightnessDim) {
-    const fb = d3.scaleOrdinal(d3.schemeTableau10)
-      .domain([...new Set(meanPoints.map(p => String(p[colorDim])))]);
     colorFn = p => {
-      const base = BASE_COLORS[String(p[colorDim])] ?? fb(String(p[colorDim]));
-      const idx = lightnessVals.indexOf(String(p[lightnessDim]));
-      const frac = lightnessVals.length <= 1 ? 0.5 : idx / (lightnessVals.length - 1);
+      const base = baseColorFor(p[colorDim]);
+      const lo = Number(lightnessVals[0]), hi = Number(lightnessVals[lightnessVals.length - 1]);
+      const frac = lightnessVals.length <= 1 ? 0.5 : (Number(p[lightnessDim]) - lo) / (hi - lo);
       const hsl = d3.hsl(base);
       hsl.l = 0.65 - frac * 0.35;
       return hsl.formatHex();
     };
   } else {
-    const colorVals = [...new Set(meanPoints.map(p => String(p[colorDim])))].sort();
-    plotColorScale = {
-      legend: true,
-      domain: colorVals,
-      range: colorVals.map((v, i) => BASE_COLORS[v] ?? d3.schemeTableau10[i % 10]),
-    };
+    colorFn = p => baseColorFor(p[colorDim]);
   }
 
   // 6. Symbol scale. Values are sorted and assigned symbols by index.
@@ -738,7 +779,6 @@ function renderPlot(runs) {
     marginLeft: 75, marginBottom: 60, marginTop: 12, marginRight: 12,
     x: { domain: [xMin, xMax], label: 'compression ratio', labelAnchor: 'center', labelArrow: false, grid: true },
     y: { type: 'log', domain: [yMin, yMax], label: 'time (s)', labelAnchor: 'center', labelArrow: false, grid: true },
-    ...(plotColorScale ? { color: plotColorScale } : {}),
     marks: dotMarks,
   });
 
@@ -755,42 +795,15 @@ function renderPlot(runs) {
     }
   }
 
-  // Legends: symbol (always manual) + color (manual only when lightness is active).
-  const symEntries = shapeVals.map(v => ({ sym: symbolFor(v), label: `${shapeDim}=${v}` }));
-  const symLegend = buildSymbolLegend(symEntries);
-  if (symLegend) plot.prepend(symLegend);
-  if (colorFn && colorDim) {
-    const cl = buildColorLegend(colorDim, meanPoints, lightnessDim, lightnessVals, colorFn);
-    if (cl) plot.prepend(cl);
-  }
+  const legendEl = document.getElementById('graph-legend');
+  legendEl.innerHTML = '';
+  const legend = buildLegend({ colorDim, colorVals, baseColorFor, shapeDim, shapeVals, symbolFor, lightnessDim, lightnessVals });
+  if (legend) legendEl.appendChild(legend);
 
   div.appendChild(plot);
   attachCustomTooltip(div, plot, dotData);
 }
 
-/** Render a simple inline symbol legend from an array of {sym, label} entries. */
-function buildSymbolLegend(entries) {
-  if (entries.length === 0) return null;
-  const wrap = document.createElement('div');
-  wrap.className = 'sym-legend';
-  for (const { sym, label } of entries) {
-    const item = document.createElement('span');
-    item.className = 'sym-legend-item';
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '14'); svg.setAttribute('height', '14');
-    svg.setAttribute('viewBox', '-8 -8 16 16');
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d3.symbol(sym, 64)());
-    path.setAttribute('fill', '#374151');
-    svg.appendChild(path);
-    item.appendChild(svg);
-    const text = document.createElement('span');
-    text.textContent = label;
-    item.appendChild(text);
-    wrap.appendChild(item);
-  }
-  return wrap;
-}
 
 /** Wire hover handlers on every dot shape to a single floating tooltip.
  *  ``pointGroups`` is an array of arrays, one per dot mark in render order,
@@ -888,10 +901,6 @@ async function refreshTree() {
   const walk2 = (n) => { all.add(n.path); for (const c of n.children) walk2(c); };
   walk2(root);
   for (const s of [...state.selected]) if (!all.has(s)) state.selected.delete(s);
-  // Default selection: first top-level dir.
-  if (state.selected.size === 0 && root.children.length > 0) {
-    state.selected.add(root.children[0].path);
-  }
   renderTree();
   renderRuns();
 }

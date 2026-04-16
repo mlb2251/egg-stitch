@@ -217,6 +217,15 @@ ul.tree ul { list-style: none; padding-left: 14px; margin: 0; }
 .cfg-sel { flex: 1; font-size: 11px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--fg); }
 .cfg-filter { flex: 1; font-size: 11px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--fg); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .cfg-sep { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 4px 0 2px; margin-top: 4px; border-top: 1px solid var(--border); }
+#graph-legend {
+  position: absolute; top: 6px; left: 12px; z-index: 5;
+  font-size: 11px; background: var(--card); padding: 4px 8px;
+  border-radius: 4px; border: 1px solid var(--border);
+}
+.plot-legend { display: flex; flex-direction: column; gap: 4px; }
+.legend-row { display: flex; flex-direction: column; gap: 2px; }
+.legend-dim { font-size: 10px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.legend-items { display: flex; flex-direction: column; gap: 2px; padding-left: 4px; }
 </style>
 </head>
 <body>
@@ -250,6 +259,7 @@ ul.tree ul { list-style: none; padding-left: 14px; margin: 0; }
   <div id="right">
     <div id="graph">
       <label class="graph-toggle"><input type="checkbox" id="hide-reps" checked>geomean only</label>
+      <div id="graph-legend"></div>
       <div id="graph-inner"><div class="empty">no runs in current selection</div></div>
       <div id="axis-controls">
         <span class="ax-group">x: <input type="number" id="x-min" step="any" placeholder="auto" title="x min"> – <input type="number" id="x-max" step="any" placeholder="auto" title="x max"></span>

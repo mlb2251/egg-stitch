@@ -167,14 +167,29 @@ def table2_arity_scaling(num_runs = 2):
 #             stitch_config = dict(max_library_size=1, max_arity=max_arity)
 #             run_stitch(domain, **stitch_config)
 
-def extra_us_arities(num_runs = 2):
-    for max_arity in stackpathiter([5, 6, 7, 8, 9]):
-        for domain in stackpathiter(ALL_DOMAINS):
-            smc_config = dict(num_steps=100, max_arity=2, num_particles=1000, temperature=1000., rewrites=None)
-            enum_config = dict(num_steps=500, max_arity=2, rewrites=None)
-            with subgroup("best-first"):
-                run_ours(domain, "best-first", **enum_config)
-            with subgroup("smc"):
+# def extra_us_arities(num_runs = 2):
+#     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+#         for max_arity in stackpathiter([5, 6, 7, 8, 9], lambda x: f"max_arity={x}"):
+#             for domain in stackpathiter(ALL_DOMAINS):
+#                 smc_config = dict(num_steps=100, max_arity=max_arity, num_particles=1000, temperature=1000., rewrites=None)
+#                 enum_config = dict(num_steps=500, max_arity=max_arity, rewrites=None)
+#                 with subgroup("best-first"):
+#                     run_ours(domain, "best-first", **enum_config)
+#                 with subgroup("smc"):
+#                     run_ours(domain, "smc", **smc_config)
+
+# def sweep_num_steps_enum(num_runs = 3):
+#     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+#         for num_steps in stackpathiter([100, 500, 1000, 2000, 3000]):
+#             for domain in stackpathiter(ALL_DOMAINS):
+#                 enum_config = dict(num_steps=num_steps, max_arity=2, rewrites=None)
+#                 run_ours(domain, "best-first", **enum_config)
+
+def sweep_num_particles_smc(num_runs = 3):
+    for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+        for num_particles in stackpathiter([100, 200, 400, 800, 1600, 3200]):
+            for domain in stackpathiter(ALL_DOMAINS):
+                smc_config = dict(num_steps=100, num_particles=num_particles, max_arity=2, rewrites=None)
                 run_ours(domain, "smc", **smc_config)
 
 
