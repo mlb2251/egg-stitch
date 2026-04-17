@@ -4,3 +4,18 @@ viz/results/
 __pycache__/
 cargo-flamegraph.trace
 profile.json.gz
+
+# LaTeX build artifacts (intermediate + output)
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.out
+*.toc
+*.nav
+*.snm
+*.vrb
+*.bbl
+*.blg
+figures/**/*.pdf
