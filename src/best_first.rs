@@ -149,7 +149,8 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
             let child_id = nodes.len();
 
-            if child_state.pattern.vars.len() <= max_arity && best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
+            let cost_to_beat = best.as_ref().map_or(original_size, |(c, _)| *c);
+            if child_state.pattern.vars.len() <= max_arity && child_cost < cost_to_beat {
                 println!("{} {} {}", format!("[expansion {}]", num_expansions).yellow().bold(), format!("new best: {}", child_cost).green().bold(), child_state.pattern.to_string().cyan());
                 best = Some((child_cost, child_id));
                 best_found_at = Some(num_expansions);
