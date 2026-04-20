@@ -28,6 +28,9 @@ impl std::fmt::Display for Action {
 #[derive(Debug)]
 pub struct SharedSearchData {
     pub egraph: StitchEgraph,
+    /// Root e-class of the corpus (the `(programs ...)` wrapper). Excluded
+    /// from the initial match set so patterns can't be rooted there.
+    pub root: Id,
     /// Follow pattern: particles whose pattern isn't a valid prefix get zero
     /// weight at the resample step.
     pub follow: Option<RevExpr<ENodeOrVar<StitchLang>>>,
@@ -165,7 +168,7 @@ impl SearchState {
     pub fn new(shared: &SharedSearchData) -> Self {
         Self {
             pattern: Pattern::single_var(),
-            matches: identity_matches(&shared.egraph),
+            matches: identity_matches(&shared.egraph, shared.root),
         }
     }
 
@@ -227,6 +230,7 @@ pub fn setup_search(egraph: StitchEgraph, root: Id, args: &crate::Args) -> (Shar
     let usage_counts = compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,
+        root,
         follow: follow_expr,
         weight_by_usage: args.weight_by_usage,
         usage_counts,

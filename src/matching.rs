@@ -21,7 +21,12 @@ impl MatchAtEClass {
     }
 }
 
-/// Returns one identity match per e-class in the egraph.
-pub fn identity_matches(egraph: &StitchEgraph) -> Vec<MatchAtEClass> {
-    egraph.classes().map(|c| MatchAtEClass::identity_match(c.id)).collect()
+/// Returns one identity match per e-class in the egraph, skipping the root
+/// e-class. The root holds the synthetic `(programs ...)` node that wraps the
+/// whole corpus; letting the search match there produces abstractions like
+/// `(programs ?#0 ?#0)` that collapse the program list itself, which is never
+/// what we want.
+pub fn identity_matches(egraph: &StitchEgraph, root: egg::Id) -> Vec<MatchAtEClass> {
+    let root = egraph.find(root);
+    egraph.classes().filter(|c| c.id != root).map(|c| MatchAtEClass::identity_match(c.id)).collect()
 }
