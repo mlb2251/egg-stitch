@@ -79,7 +79,7 @@ struct Sizes<'a> {
 }
 impl Sizes<'_> {
     fn get(&self, id: Id) -> i64 {
-        self.overrides.get(&id).copied().unwrap_or(self.egraph[id].data as i64)
+        self.overrides.get(&id).copied().unwrap_or(self.original_size(id))
     }
     fn set(&mut self, id: Id, v: i64) {
         self.overrides.insert(id, v);
@@ -90,6 +90,9 @@ impl Sizes<'_> {
     /// Sum of `get` over a list of eclass ids.
     fn sum(&self, ids: &[Id]) -> i64 {
         ids.iter().map(|&id| self.get(id)).sum()
+    }
+    fn original_size(&self, id: Id) -> i64 {
+        self.egraph[id].data as i64
     }
 }
 
@@ -112,7 +115,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         }
 
         // size without rewriting self NOR any descendants
-        let size_current = egraph[eclass].data as i64;
+        let size_current = sizes.original_size(eclass);
         let mut best = size_current;
 
         // For every way we match at this eclass (if any), try all ways of rewriting it
