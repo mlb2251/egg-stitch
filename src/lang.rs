@@ -1,19 +1,44 @@
 use egg::{Analysis, FromOp, Id, Language, Symbol};
+use rustc_hash::FxHashSet;
 use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
-/// A simple language based on egg's SymbolLang.
+/// A tagged operator for `StitchLang` enodes.
+///
+/// `Lam` and `Var` are binding-aware; `Sym` is an opaque symbolic operator
+/// (e.g. `+`, `cos`, `programs`, learned `fn_0`, …).
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
+pub enum Op {
+    /// Lambda abstraction (arity 1).
+    Lam,
+    /// De Bruijn-indexed bound variable (arity 0).
+    Var(u32),
+    /// Opaque symbolic operator.
+    Sym(Symbol),
+}
+
+impl Display for Op {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Op::Lam => f.write_str("lam"),
+            Op::Var(n) => write!(f, "${}", n),
+            Op::Sym(s) => Display::fmt(s, f),
+        }
+    }
+}
+
+/// A simple language based on egg's SymbolLang, with first-class lambda/variable nodes.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct StitchLang {
-    /// The operator for an enode
-    pub op: Symbol,
-    /// The enode's children `Id`s
+    /// The operator for an enode.
+    pub op: Op,
+    /// The enode's children `Id`s.
     pub children: Vec<Id>,
 }
 
 impl Language for StitchLang {
     /// Used for short-circuiting the search for equivalent nodes.
-    type Discriminant = Symbol;
+    type Discriminant = Op;
 
     fn discriminant(&self) -> Self::Discriminant {
         self.op
@@ -44,33 +69,85 @@ impl Display for StitchLang {
 impl FromOp for StitchLang {
     type Error = Infallible;
 
+    /// Parses `"lam"` as `Op::Lam`, `"$n"` as `Op::Var(n)` (when the suffix is a valid `u32`),
+    /// and anything else as `Op::Sym`.
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        Ok(Self { op: op.into(), children })
+        let parsed_op = if op == "lam" {
+            Op::Lam
+        } else if let Some(rest) = op.strip_prefix('$')
+            && let Ok(n) = rest.parse::<u32>()
+        {
+            Op::Var(n)
+        } else {
+            Op::Sym(op.into())
+        };
+        Ok(Self { op: parsed_op, children })
     }
 }
 
-/// Egg analysis that tracks the minimum AST size of each e-class.
+/// Per-e-class analysis data: minimum AST size and free-variable set.
+///
+/// `fv` holds the De Bruijn indices that are free in every member of the e-class
+/// (i.e., the intersection across members). This is the "guaranteed-free" semantics:
+/// if `n ∉ fv`, at least one representative of the class does not mention `$n` freely,
+/// so substituting the class under a binder is unsafe iff `n ∈ fv` for any member of
+/// the class — which under intersection semantics means `n ∈ fv` strictly.
+///
+/// Using intersection (rather than union) makes `fv = ∅` the conservative "closed"
+/// witness: if the set is empty, there is at least one representative with no free vars
+/// ≥ the claimed bound, and we can safely pick that one during rewriting.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StitchData {
+    /// Minimum AST size among e-nodes in this e-class.
+    pub size: u32,
+    /// Free-variable set (intersection of members' free-var sets).
+    pub fv: FxHashSet<u32>,
+}
+
+/// Egg analysis that tracks per-e-class size and free-variable set.
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis;
 
 impl Analysis<StitchLang> for StitchAnalysis {
-    type Data = u32;
+    type Data = StitchData;
 
-    /// Computes the minimum AST size of a new enode as 1 + sum of children's sizes.
+    /// Computes the data for a new enode:
+    /// - `size` = 1 + sum of children's sizes.
+    /// - `fv`   = `{n}` for `$n`, `{i-1 | i ∈ fv(body), i ≥ 1}` for `lam`, else union of children.
     fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: Id) -> Self::Data {
-        1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+        let size = 1 + enode.children.iter().map(|&c| egraph[c].data.size).sum::<u32>();
+        let fv = match enode.op {
+            Op::Var(n) => {
+                let mut s = FxHashSet::default();
+                s.insert(n);
+                s
+            }
+            Op::Lam => egraph[enode.children[0]].data.fv.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }).collect(),
+            Op::Sym(_) => {
+                let mut s = FxHashSet::default();
+                for &c in &enode.children {
+                    s.extend(egraph[c].data.fv.iter().copied());
+                }
+                s
+            }
+        };
+        StitchData { size, fv }
     }
 
-    /// Keeps the minimum size when two e-classes are merged.
+    /// On merge: keep the minimum size, and take the intersection of the two fv sets.
+    /// Intersection preserves the "guaranteed-free" invariant: a var is guaranteed free
+    /// in the merged class only if every representative (from both sides) has it free.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
-        if from < *to {
-            *to = from;
-            egg::DidMerge(true, false)
-        } else if from == *to {
-            egg::DidMerge(false, false)
-        } else {
-            egg::DidMerge(false, true)
+        let size_to_changed = from.size < to.size;
+        let size_from_changed = from.size > to.size;
+        if size_to_changed {
+            to.size = from.size;
         }
+        let before_len = to.fv.len();
+        to.fv.retain(|x| from.fv.contains(x));
+        let fv_to_changed = to.fv.len() != before_len;
+        let fv_from_changed = from.fv.iter().any(|x| !to.fv.contains(x));
+        egg::DidMerge(size_to_changed || fv_to_changed, size_from_changed || fv_from_changed)
     }
 }
 

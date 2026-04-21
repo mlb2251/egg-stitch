@@ -185,14 +185,15 @@ fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::Searc
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {
-            let node = lang::StitchLang { op: fn_sym, children: subst.vars.clone() };
+            let node = lang::StitchLang { op: lang::Op::Sym(fn_sym), children: subst.vars.clone() };
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
         }
     }
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    let programs_node = egraph[root].nodes.iter().find(|n| n.op.as_str() == "programs").expect("root e-class should contain a `programs` enode");
+    let programs_op = lang::Op::Sym("programs".into());
+    let programs_node = egraph[root].nodes.iter().find(|n| n.op == programs_op).expect("root e-class should contain a `programs` enode");
     let programs: Vec<String> = programs_node.children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
 
     if rebuild {

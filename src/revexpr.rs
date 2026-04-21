@@ -70,3 +70,49 @@ impl<L: egg::Language> From<egg::RecExpr<L>> for RevExpr<L> {
         RevExpr::new(nodes)
     }
 }
+
+/// Shift free De Bruijn variables in a `RevExpr<ENodeOrVar<StitchLang>>` reachable from `root`.
+///
+/// `by` is the delta to apply to each free occurrence (so `by = 1` turns `$0` into `$1`).
+/// `initial_depth` is the number of enclosing binders outside the root (usually 0 when the
+/// root is a pattern top, or >0 when splicing under existing binders).
+///
+/// Meta-variable leaves (`ENodeOrVar::Var`) are untouched. A `lam` node increments the depth
+/// for its single child. A `Var(n)` leaf is free iff `n >= depth`, in which case it's replaced
+/// by `Var((n as i32 + by) as u32)`.
+///
+/// Visits each node at most once via a memo table, which assumes the DAG is well-formed
+/// (every shared subterm seen at a consistent binder depth). Panics if a shift would produce
+/// a negative index.
+pub fn shift_free(expr: &mut RevExpr<egg::ENodeOrVar<crate::lang::StitchLang>>, root: egg::Id, by: i32, initial_depth: u32) {
+    use rustc_hash::FxHashSet;
+    let mut seen: FxHashSet<egg::Id> = FxHashSet::default();
+    shift_free_rec(expr, root, by, initial_depth, &mut seen);
+}
+
+fn shift_free_rec(expr: &mut RevExpr<egg::ENodeOrVar<crate::lang::StitchLang>>, id: egg::Id, by: i32, depth: u32, seen: &mut rustc_hash::FxHashSet<egg::Id>) {
+    use crate::lang::Op;
+    if !seen.insert(id) {
+        return;
+    }
+    // Handle leaf cases in one match; collect children for recursion if this is an interior node.
+    let (child_depth, children): (u32, Vec<egg::Id>) = match &mut expr[id] {
+        egg::ENodeOrVar::Var(_) => return,
+        egg::ENodeOrVar::ENode(n) => match n.op {
+            Op::Var(k) => {
+                if k >= depth {
+                    let shifted = k as i32 + by;
+                    assert!(shifted >= 0, "shift_free produced a negative index");
+                    n.op = Op::Var(shifted as u32);
+                }
+                return;
+            }
+            Op::Lam => (depth + 1, n.children.clone()),
+            Op::Sym(_) => (depth, n.children.clone()),
+        },
+    };
+    for c in children {
+        shift_free_rec(expr, c, by, child_depth, seen);
+    }
+}
+

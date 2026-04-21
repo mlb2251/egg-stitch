@@ -81,7 +81,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         eclass_to_matches.insert(m.root_eclass, &m.substs);
     }
 
-    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64) };
+    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data.size as i64) };
 
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
@@ -121,7 +121,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
     }
     let final_size = get_size(root, &size_under_rewrite);
     if check_slow {
-        let slow_size = build_rewritten_egraph(egraph, search_state)[root].data as i64;
+        let slow_size = build_rewritten_egraph(egraph, search_state)[root].data.size as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
     }
     final_size as usize
@@ -133,7 +133,7 @@ pub(crate) fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &Searc
     let mut egraph = egraph.clone();
     for m in &search_state.matches {
         for subst in &m.substs {
-            let node = StitchLang { op: "inv_0".into(), children: subst.vars.clone() };
+            let node = StitchLang { op: crate::lang::Op::Sym("inv_0".into()), children: subst.vars.clone() };
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
         }

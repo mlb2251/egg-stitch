@@ -76,7 +76,7 @@ fn extract_root_size(egraph: &StitchEgraph, root: egg::Id) -> usize {
 #[allow(dead_code)]
 pub fn print_programs(term: &egg::RecExpr<StitchLang>) {
     let root_node = &term.as_ref()[term.as_ref().len() - 1];
-    if root_node.op.as_str() == "programs" {
+    if root_node.op == crate::lang::Op::Sym("programs".into()) {
         println!("(programs");
         for &child_id in &root_node.children {
             print!("  ");

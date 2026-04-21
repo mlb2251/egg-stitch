@@ -1,8 +1,8 @@
-use crate::lang::{StitchEgraph, StitchLang};
+use crate::lang::{Op, StitchEgraph, StitchLang};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
-use egg::{ENodeOrVar, Id, Language, Symbol};
+use egg::{ENodeOrVar, Id, Language};
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 /// with a specific enode shape, or unifying two existing variables.
 #[derive(Debug, Clone)]
 pub enum Action {
-    Expand { var_idx: usize, op: Symbol, arity: usize },
+    Expand { var_idx: usize, op: Op, arity: usize },
     Reuse { keep: usize, drop: usize },
 }
 
@@ -183,7 +183,7 @@ impl SearchState {
         let mut out = Vec::new();
 
         for var_idx in 0..self.pattern.vars.len() {
-            let mut seen: FxHashSet<(Symbol, usize)> = FxHashSet::default();
+            let mut seen: FxHashSet<(Op, usize)> = FxHashSet::default();
             let mut shapes: Vec<StitchLang> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
