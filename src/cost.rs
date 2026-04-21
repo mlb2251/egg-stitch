@@ -92,8 +92,13 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         if size_under_rewrite.contains_key(&eclass) {
             continue;
         }
+
+        // size without rewriting self NOR any descendants
         let size_current = get_size(eclass, &size_under_rewrite);
         let mut best = size_current;
+
+        // For every way we match at this eclass (if any), try all ways of rewriting it
+        // (relies on postorder guaranteeing descendants (arguments) have get_size done)
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
                 let size_new: i64 = 1 + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
@@ -102,12 +107,18 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
                 }
             }
         }
+
+        // Try not rewriting self but YES allowing rewrites of descendants
+        // (relies on postorder guaranteeing children have get_size done)
         for enode in &egraph[eclass].nodes {
             let size_no_rewrite: i64 = 1 + enode.children.iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
             if size_no_rewrite < best {
                 best = size_no_rewrite;
             }
         }
+
+        // If we found a smaller size than the "no rewriting and no descendant rewriting" size, push
+        // our parents to the queue to make sure they get updated
         if best < size_current {
             if let Some(parents) = cache.parents_of.get(&eclass) {
                 for &parent in parents {
