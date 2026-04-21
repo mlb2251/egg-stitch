@@ -77,6 +77,8 @@ struct Sizes<'a> {
     egraph: &'a StitchEgraph,
     cache: &'a CostCache,
     overrides: FxHashMap<Id, i64>,
+    work_queue: BinaryHeap<Reverse<(u32, Id)>>,
+    eclass_to_substs: FxHashMap<Id, &'a Vec<Subst>>,
 }
 impl Sizes<'_> {
     fn get(&self, id: Id) -> i64 {
@@ -103,14 +105,18 @@ impl Sizes<'_> {
 /// match-root eclasses; when an eclass's size strictly improves we write it into
 /// `sizes` and push its parents so they can reconsider with the new child value.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
-    let mut eclass_to_substs = FxHashMap::<Id, &Vec<Subst>>::default();
-    let mut sizes = Sizes { egraph, cache, overrides: FxHashMap::default() };
-    let mut work_queue = BinaryHeap::new();
+    let mut sizes = Sizes {
+        egraph,
+        cache,
+        overrides: FxHashMap::default(),
+        work_queue: BinaryHeap::new(),
+        eclass_to_substs: FxHashMap::default(),
+    };
     for m in &search_state.matches {
-        eclass_to_substs.insert(m.root_eclass, &m.substs);
-        work_queue.push(Reverse((sizes.cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
+        sizes.eclass_to_substs.insert(m.root_eclass, &m.substs);
+        sizes.work_queue.push(Reverse((sizes.cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
     }
-    while let Some(Reverse((_, eclass))) = work_queue.pop() {
+    while let Some(Reverse((_, eclass))) = sizes.work_queue.pop() {
         if sizes.contains(eclass) {
             continue;
         }
@@ -121,7 +127,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
 
         // For every way we match at this eclass (if any), try all ways of rewriting it
         // (relies on postorder guaranteeing descendants (arguments) have sizes.get done)
-        if let Some(substs) = eclass_to_substs.get(&eclass) {
+        if let Some(substs) = sizes.eclass_to_substs.get(&eclass) {
             for subst in *substs {
                 best = best.min(1 + sizes.sum(&subst.vars));
             }
@@ -139,7 +145,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
             if let Some(parents) = sizes.cache.parents_of.get(&eclass) {
                 for &parent in parents {
                     if let Some(po) = sizes.cache.postorder[usize::from(parent)] {
-                        work_queue.push(Reverse((po, parent)));
+                        sizes.work_queue.push(Reverse((po, parent)));
                     }
                 }
             }
