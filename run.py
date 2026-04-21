@@ -221,11 +221,11 @@ def sweep_num_steps_smc(num_runs = 3):
 
 
 
-def quick_eval(num_runs = 3):
+def quick_eval(num_runs = 3, check_slow=False):
     results = []
     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
         for domain in stackpathiter(ALL_DOMAINS):
-            enum_config = dict(num_steps=500, max_arity=2, rewrites=rewrites_path(domain))
+            enum_config = dict(num_steps=500, max_arity=2, rewrites=rewrites_path(domain), check_slow=check_slow)
             res, _ = run_ours(domain, "best-first", **enum_config)
             results.append(dict(domain=domain, elapsed_secs=res.elapsed_secs))
     
@@ -237,6 +237,9 @@ def quick_eval(num_runs = 3):
             print(f"{res["elapsed_secs"]:.2f}", end=" ")
         print()
 
+
+def quick_check():
+    quick_eval(num_runs=1, check_slow=True)
 
 if __name__ == "__main__":
     fn = globals().get(sys.argv[1]) if len(sys.argv) == 2 else None
