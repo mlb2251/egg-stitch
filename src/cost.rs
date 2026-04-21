@@ -105,6 +105,23 @@ impl Sizes<'_> {
     fn min_rewrite_size(&self, eclass: Id) -> Option<i64> {
         self.eclass_to_substs.get(&eclass).and_then(|substs| substs.iter().map(|subst| 1 + self.sum(&subst.vars)).min())
     }
+    /// If `new` improves on the current size of `eclass`, record it and enqueue parents for re-relaxation.
+    fn update(&mut self, eclass: Id, new: i64) {
+        if new < self.get(eclass) {
+            self.notify_parents(eclass);
+            self.set(eclass, new);
+        }
+    }
+    /// Re-enqueues every parent of `eclass` so they reconsider the new child size.
+    fn notify_parents(&mut self, eclass: Id) {
+        if let Some(parents) = self.cache.parents_of.get(&eclass) {
+            for &parent in parents {
+                if let Some(po) = self.cache.postorder[usize::from(parent)] {
+                    self.work_queue.push(Reverse((po, parent)));
+                }
+            }
+        }
+    }
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
@@ -129,9 +146,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
             continue;
         }
 
-        // size without rewriting self NOR any descendants
-        let size_current = sizes.original_size(eclass);
-        let mut best = size_current;
+        let mut best = sizes.original_size(eclass);
 
         // For every way we match at this eclass (if any), try all ways of rewriting it
         // (relies on postorder guaranteeing descendants (arguments) have sizes.get done)
@@ -143,18 +158,8 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         // (relies on postorder guaranteeing children have sizes.get done)
         best = best.min(sizes.min_enode_size(eclass));
 
-        // If we found a smaller size than the "no rewriting and no descendant rewriting" size, push
-        // our parents to the queue to make sure they get updated
-        if best < size_current {
-            if let Some(parents) = sizes.cache.parents_of.get(&eclass) {
-                for &parent in parents {
-                    if let Some(po) = sizes.cache.postorder[usize::from(parent)] {
-                        sizes.work_queue.push(Reverse((po, parent)));
-                    }
-                }
-            }
-            sizes.set(eclass, best);
-        }
+        // If `best` improves on what we have, record it and re-enqueue parents.
+        sizes.update(eclass, best);
     }
     let final_size = sizes.get(root);
     if check_slow {
