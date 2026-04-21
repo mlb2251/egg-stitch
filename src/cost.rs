@@ -98,8 +98,8 @@ impl Sizes<'_> {
         self.egraph[id].data as i64
     }
     /// Minimum size over the enodes of `eclass`, or `None` if the eclass has no enodes.
-    fn min_enode_size(&self, eclass: Id) -> Option<i64> {
-        self.egraph[eclass].nodes.iter().map(|enode| 1 + self.sum(&enode.children)).min()
+    fn min_enode_size(&self, eclass: Id) -> i64 {
+        self.egraph[eclass].nodes.iter().map(|enode| 1 + self.sum(&enode.children)).min().unwrap()
     }
     /// Minimum size over the rewrites (substs) applicable at `eclass`, or `None` if no match applies here.
     fn min_rewrite_size(&self, eclass: Id) -> Option<i64> {
@@ -141,7 +141,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
 
         // Try not rewriting self but YES allowing rewrites of descendants
         // (relies on postorder guaranteeing children have sizes.get done)
-        best = best.min(sizes.min_enode_size(eclass).unwrap());
+        best = best.min(sizes.min_enode_size(eclass));
 
         // If we found a smaller size than the "no rewriting and no descendant rewriting" size, push
         // our parents to the queue to make sure they get updated
