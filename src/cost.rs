@@ -71,10 +71,6 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
     1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
 }
 
-/// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
-///
-/// Uses a work-queue ordered by postorder (children before parents) so each
-/// eclass is visited at most once.
 /// Sparse per-eclass size map with a fallback to the unrewritten AstSize (`egraph[id].data`).
 /// Entries represent eclasses whose rewritten size is strictly smaller than the default.
 struct Sizes<'a> {
@@ -91,14 +87,23 @@ impl Sizes<'_> {
     fn contains(&self, id: Id) -> bool {
         self.overrides.contains_key(&id)
     }
+    /// Sum of `get` over a list of eclass ids.
+    fn sum(&self, ids: &[Id]) -> i64 {
+        ids.iter().map(|&id| self.get(id)).sum()
+    }
 }
 
+/// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
+///
+/// Uses a postorder min-heap so children pop before parents. Initial entries are the
+/// match-root eclasses; when an eclass's size strictly improves we write it into
+/// `sizes` and push its parents so they can reconsider with the new child value.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
-    let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
+    let mut eclass_to_substs = FxHashMap::<Id, &Vec<Subst>>::default();
     let mut sizes = Sizes { egraph, overrides: FxHashMap::default() };
     let mut work_queue = BinaryHeap::new();
     for m in &search_state.matches {
-        eclass_to_matches.insert(m.root_eclass, &m.substs);
+        eclass_to_substs.insert(m.root_eclass, &m.substs);
         work_queue.push(Reverse((cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
     }
     while let Some(Reverse((_, eclass))) = work_queue.pop() {
@@ -112,18 +117,16 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
 
         // For every way we match at this eclass (if any), try all ways of rewriting it
         // (relies on postorder guaranteeing descendants (arguments) have sizes.get done)
-        if let Some(substs) = eclass_to_matches.get(&eclass) {
+        if let Some(substs) = eclass_to_substs.get(&eclass) {
             for subst in *substs {
-                let size_new: i64 = 1 + subst.vars.iter().map(|&v| sizes.get(v)).sum::<i64>();
-                best = best.min(size_new);
+                best = best.min(1 + sizes.sum(&subst.vars));
             }
         }
 
         // Try not rewriting self but YES allowing rewrites of descendants
         // (relies on postorder guaranteeing children have sizes.get done)
         for enode in &egraph[eclass].nodes {
-            let size_no_rewrite: i64 = 1 + enode.children.iter().map(|&c| sizes.get(c)).sum::<i64>();
-            best = best.min(size_no_rewrite);
+            best = best.min(1 + sizes.sum(&enode.children));
         }
 
         // If we found a smaller size than the "no rewriting and no descendant rewriting" size, push
