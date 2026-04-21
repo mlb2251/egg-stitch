@@ -68,7 +68,7 @@ fn build_expected(library: Vec<AbstractionResult>, input: &str) -> Expected {
     let abstractions: Vec<ExpectedAbstraction> = library
         .iter()
         .map(|r| ExpectedAbstraction {
-            body: egg_to_stitch(r.pattern.splitn(2, ": ").nth(1).expect("pattern prefixed with fn_N:")),
+            body: egg_to_stitch(r.pattern.split_once(": ").expect("pattern prefixed with fn_N:").1),
             num_matches: r.num_matches,
         })
         .collect();
