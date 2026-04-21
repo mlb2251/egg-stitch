@@ -2,7 +2,7 @@ use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, Stit
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
-use egg::{Id, Language, RecExpr};
+use egg::{Analysis, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -249,8 +249,12 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     }
     let final_size = get_size(root, &size_under_rewrite);
     if check_slow {
-        let slow_size = build_rewritten_egraph(egraph, search_state, ho_arity)[root].data.size as i64;
+        let rewritten = build_rewritten_egraph(egraph, search_state, ho_arity);
+        let slow_size = rewritten[root].data.size as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
+        let cost_only = CostOnlyExtractor::new(&rewritten, egg::AstSize);
+        let cost_only_size = cost_only.cost(root).expect("root has no cost") as i64;
+        assert_eq!(final_size, cost_only_size, "Fast rewrite size {} != CostOnlyExtractor size {}", final_size, cost_only_size);
     }
     final_size as usize
 }
@@ -336,4 +340,72 @@ pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected:
     let fv = recexpr_fv(expr);
     let actual = fv.last().expect("non-empty RecExpr");
     assert_eq!(actual, expected, "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", actual, expected,);
+}
+
+/// Like `egg::Extractor`, but only computes the minimum cost per eclass — it
+/// doesn't track the winning enode or reconstruct the `RecExpr`. Uses the same
+/// fixpoint relaxation as egg's extractor: iterate until no eclass's best cost
+/// improves, relying on `CostFunction`'s monotonicity for termination.
+pub struct CostOnlyExtractor<'a, CF: CostFunction<L>, L: Language, N: Analysis<L>> {
+    cost_function: CF,
+    costs: FxHashMap<Id, CF::Cost>,
+    egraph: &'a EGraph<L, N>,
+}
+
+impl<'a, CF, L, N> CostOnlyExtractor<'a, CF, L, N>
+where
+    CF: CostFunction<L>,
+    L: Language,
+    N: Analysis<L>,
+{
+    /// Builds the extractor and runs the cost-only fixpoint to completion.
+    pub fn new(egraph: &'a EGraph<L, N>, cost_function: CF) -> Self {
+        let mut this = Self { cost_function, costs: FxHashMap::default(), egraph };
+        this.saturate();
+        this
+    }
+
+    /// Returns the minimum cost for `eclass`, or `None` if no finite-cost term exists.
+    pub fn cost(&self, eclass: Id) -> Option<CF::Cost> {
+        self.costs.get(&self.egraph.find(eclass)).cloned()
+    }
+
+    /// Iteratively relaxes per-eclass costs until a full pass produces no improvement.
+    fn saturate(&mut self) {
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for class in self.egraph.classes() {
+                if let Some(new) = self.best_cost(class) {
+                    let improved = match self.costs.get(&class.id) {
+                        None => true,
+                        Some(old) => new.partial_cmp(old) == Some(std::cmp::Ordering::Less),
+                    };
+                    if improved {
+                        self.costs.insert(class.id, new);
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Minimum cost over enodes in this eclass whose children all have known costs.
+    fn best_cost(&mut self, class: &EClass<L, N::Data>) -> Option<CF::Cost> {
+        class
+            .iter()
+            .filter_map(|n| self.node_cost(n))
+            .min_by(|a, b| a.partial_cmp(b).expect("CostFunction returned incomparable costs"))
+    }
+
+    /// Cost of a single enode if every child eclass already has a cost; else `None`.
+    fn node_cost(&mut self, node: &L) -> Option<CF::Cost> {
+        let eg = self.egraph;
+        if node.all(|id| self.costs.contains_key(&eg.find(id))) {
+            let costs = &self.costs;
+            Some(self.cost_function.cost(node, |id| costs[&eg.find(id)].clone()))
+        } else {
+            None
+        }
+    }
 }
