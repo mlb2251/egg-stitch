@@ -80,7 +80,22 @@ struct Sizes<'a> {
     work_queue: BinaryHeap<Reverse<(u32, Id)>>,
     eclass_to_substs: FxHashMap<Id, &'a Vec<Subst>>,
 }
-impl Sizes<'_> {
+impl<'a> Sizes<'a> {
+    /// Builds an empty size table seeded with the match roots from `search_state`.
+    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, search_state: &'a SearchState) -> Self {
+        let mut sizes = Sizes {
+            egraph,
+            cache,
+            overrides: FxHashMap::default(),
+            work_queue: BinaryHeap::new(),
+            eclass_to_substs: FxHashMap::default(),
+        };
+        for m in &search_state.matches {
+            sizes.eclass_to_substs.insert(m.root_eclass, &m.substs);
+            sizes.work_queue.push(Reverse((sizes.cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
+        }
+        sizes
+    }
     fn get(&self, id: Id) -> i64 {
         self.overrides.get(&id).copied().unwrap_or(self.original_size(id))
     }
@@ -130,17 +145,7 @@ impl Sizes<'_> {
 /// match-root eclasses; when an eclass's size strictly improves we write it into
 /// `sizes` and push its parents so they can reconsider with the new child value.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
-    let mut sizes = Sizes {
-        egraph,
-        cache,
-        overrides: FxHashMap::default(),
-        work_queue: BinaryHeap::new(),
-        eclass_to_substs: FxHashMap::default(),
-    };
-    for m in &search_state.matches {
-        sizes.eclass_to_substs.insert(m.root_eclass, &m.substs);
-        sizes.work_queue.push(Reverse((sizes.cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
-    }
+    let mut sizes = Sizes::new(egraph, cache, search_state);
     while let Some(Reverse((_, eclass))) = sizes.work_queue.pop() {
         if sizes.contains(eclass) {
             continue;
