@@ -75,19 +75,34 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
 ///
 /// Uses a work-queue ordered by postorder (children before parents) so each
 /// eclass is visited at most once.
+/// Sparse per-eclass size map with a fallback to the unrewritten AstSize (`egraph[id].data`).
+/// Entries represent eclasses whose rewritten size is strictly smaller than the default.
+struct Sizes<'a> {
+    egraph: &'a StitchEgraph,
+    overrides: FxHashMap<Id, i64>,
+}
+impl Sizes<'_> {
+    fn get(&self, id: Id) -> i64 {
+        self.overrides.get(&id).copied().unwrap_or(self.egraph[id].data as i64)
+    }
+    fn set(&mut self, id: Id, v: i64) {
+        self.overrides.insert(id, v);
+    }
+    fn contains(&self, id: Id) -> bool {
+        self.overrides.contains_key(&id)
+    }
+}
+
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
-
-    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).copied().unwrap_or(egraph[eclass].data as i64) };
-
-    let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
+    let mut sizes = Sizes { egraph, overrides: FxHashMap::default() };
     let mut work_queue = BinaryHeap::new();
     for m in &search_state.matches {
         eclass_to_matches.insert(m.root_eclass, &m.substs);
         work_queue.push(Reverse((cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
     }
     while let Some(Reverse((_, eclass))) = work_queue.pop() {
-        if size_under_rewrite.contains_key(&eclass) {
+        if sizes.contains(eclass) {
             continue;
         }
 
@@ -96,23 +111,19 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         let mut best = size_current;
 
         // For every way we match at this eclass (if any), try all ways of rewriting it
-        // (relies on postorder guaranteeing descendants (arguments) have get_size done)
+        // (relies on postorder guaranteeing descendants (arguments) have sizes.get done)
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
-                let size_new: i64 = 1 + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
-                if size_new < best {
-                    best = size_new;
-                }
+                let size_new: i64 = 1 + subst.vars.iter().map(|&v| sizes.get(v)).sum::<i64>();
+                best = best.min(size_new);
             }
         }
 
         // Try not rewriting self but YES allowing rewrites of descendants
-        // (relies on postorder guaranteeing children have get_size done)
+        // (relies on postorder guaranteeing children have sizes.get done)
         for enode in &egraph[eclass].nodes {
-            let size_no_rewrite: i64 = 1 + enode.children.iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
-            if size_no_rewrite < best {
-                best = size_no_rewrite;
-            }
+            let size_no_rewrite: i64 = 1 + enode.children.iter().map(|&c| sizes.get(c)).sum::<i64>();
+            best = best.min(size_no_rewrite);
         }
 
         // If we found a smaller size than the "no rewriting and no descendant rewriting" size, push
@@ -125,10 +136,10 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
                     }
                 }
             }
-            size_under_rewrite.insert(eclass, best);
+            sizes.set(eclass, best);
         }
     }
-    let final_size = get_size(root, &size_under_rewrite);
+    let final_size = sizes.get(root);
     if check_slow {
         let slow_size = build_rewritten_egraph(egraph, search_state)[root].data as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
