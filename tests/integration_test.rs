@@ -23,7 +23,6 @@ const DIALS_FULL_FOLLOW: &str = "(T (T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0)
 
 /// Full follow baseline — needs high temperature.
 #[test]
-#[ignore = "slow: 1000 steps * 1000 particles; run with --release --ignored"]
 fn follow_dials_full_baseline() {
     if !fixtures_present() {
         return;
@@ -47,7 +46,6 @@ fn follow_shallow_no_placeholders() {
 
 /// Follow with a `?#0` variable — verifies the search doesn't crash.
 #[test]
-#[ignore = "slow: 1000 steps * 1000 particles; run with --release --ignored"]
 fn follow_single_placeholder() {
     if !fixtures_present() {
         return;
