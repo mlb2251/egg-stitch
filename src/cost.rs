@@ -77,15 +77,13 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
 /// eclass is visited at most once.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
-    for m in &search_state.matches {
-        eclass_to_matches.insert(m.root_eclass, &m.substs);
-    }
 
-    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64) };
+    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).copied().unwrap_or(egraph[eclass].data as i64) };
 
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
     for m in &search_state.matches {
+        eclass_to_matches.insert(m.root_eclass, &m.substs);
         work_queue.push(Reverse((cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
     }
     while let Some(Reverse((_, eclass))) = work_queue.pop() {
@@ -94,7 +92,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         }
 
         // size without rewriting self NOR any descendants
-        let size_current = get_size(eclass, &size_under_rewrite);
+        let size_current = egraph[eclass].data as i64;
         let mut best = size_current;
 
         // For every way we match at this eclass (if any), try all ways of rewriting it
