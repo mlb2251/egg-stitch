@@ -127,6 +127,29 @@ impl<'a> Sizes<'a> {
             self.set(eclass, new);
         }
     }
+    /// Runs the postorder relaxation until the work queue drains.
+    fn solve(&mut self) {
+        while let Some(Reverse((_, eclass))) = self.work_queue.pop() {
+            if self.contains(eclass) {
+                continue;
+            }
+
+            let mut best = self.original_size(eclass);
+
+            // For every way we match at this eclass (if any), try all ways of rewriting it
+            // (relies on postorder guaranteeing descendants (arguments) have self.get done)
+            if let Some(rewrite_size) = self.min_rewrite_size(eclass) {
+                best = best.min(rewrite_size);
+            }
+
+            // Try not rewriting self but YES allowing rewrites of descendants
+            // (relies on postorder guaranteeing children have self.get done)
+            best = best.min(self.min_enode_size(eclass));
+
+            // If `best` improves on what we have, record it and re-enqueue parents.
+            self.update(eclass, best);
+        }
+    }
     /// Re-enqueues every parent of `eclass` so they reconsider the new child size.
     fn notify_parents(&mut self, eclass: Id) {
         if let Some(parents) = self.cache.parents_of.get(&eclass) {
@@ -146,26 +169,7 @@ impl<'a> Sizes<'a> {
 /// `sizes` and push its parents so they can reconsider with the new child value.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
     let mut sizes = Sizes::new(egraph, cache, search_state);
-    while let Some(Reverse((_, eclass))) = sizes.work_queue.pop() {
-        if sizes.contains(eclass) {
-            continue;
-        }
-
-        let mut best = sizes.original_size(eclass);
-
-        // For every way we match at this eclass (if any), try all ways of rewriting it
-        // (relies on postorder guaranteeing descendants (arguments) have sizes.get done)
-        if let Some(rewrite_size) = sizes.min_rewrite_size(eclass) {
-            best = best.min(rewrite_size);
-        }
-
-        // Try not rewriting self but YES allowing rewrites of descendants
-        // (relies on postorder guaranteeing children have sizes.get done)
-        best = best.min(sizes.min_enode_size(eclass));
-
-        // If `best` improves on what we have, record it and re-enqueue parents.
-        sizes.update(eclass, best);
-    }
+    sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {
         let rewritten = build_rewritten_egraph(egraph, search_state);
