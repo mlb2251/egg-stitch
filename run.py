@@ -8,6 +8,7 @@ from expts.stackpath import subgroup, stackpathiter
 from expts.stitch import run_stitch
 from expts.egg_stitch import run_ours
 from expts.babble import run_babble
+from expts import rewrites_path
 
 
 def dials_compress():
@@ -218,6 +219,23 @@ def sweep_num_steps_smc(num_runs = 3):
     #         with subgroup("stitch"):
     #             run_stitch(domain, **stitch_config)
 
+
+
+def quick_eval(num_runs = 3):
+    results = []
+    for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+        for domain in stackpathiter(ALL_DOMAINS):
+            enum_config = dict(num_steps=500, max_arity=2, rewrites=rewrites_path(domain))
+            res, _ = run_ours(domain, "best-first", **enum_config)
+            results.append(dict(domain=domain, elapsed_secs=res.elapsed_secs))
+    
+    for domain in ALL_DOMAINS:
+        domain_results = [r for r in results if r["domain"] == domain]
+        mean = sum(r["elapsed_secs"] for r in domain_results) / len(domain_results)
+        print(f"{domain} [{mean:.2f}]: ", end=" ")
+        for res in domain_results:
+            print(f"{res["elapsed_secs"]:.2f}", end=" ")
+        print()
 
 
 if __name__ == "__main__":
