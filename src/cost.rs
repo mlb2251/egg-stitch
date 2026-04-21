@@ -75,6 +75,7 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
 /// Entries represent eclasses whose rewritten size is strictly smaller than the default.
 struct Sizes<'a> {
     egraph: &'a StitchEgraph,
+    cache: &'a CostCache,
     overrides: FxHashMap<Id, i64>,
 }
 impl Sizes<'_> {
@@ -103,11 +104,11 @@ impl Sizes<'_> {
 /// `sizes` and push its parents so they can reconsider with the new child value.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
     let mut eclass_to_substs = FxHashMap::<Id, &Vec<Subst>>::default();
-    let mut sizes = Sizes { egraph, overrides: FxHashMap::default() };
+    let mut sizes = Sizes { egraph, cache, overrides: FxHashMap::default() };
     let mut work_queue = BinaryHeap::new();
     for m in &search_state.matches {
         eclass_to_substs.insert(m.root_eclass, &m.substs);
-        work_queue.push(Reverse((cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
+        work_queue.push(Reverse((sizes.cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
     }
     while let Some(Reverse((_, eclass))) = work_queue.pop() {
         if sizes.contains(eclass) {
@@ -135,9 +136,9 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         // If we found a smaller size than the "no rewriting and no descendant rewriting" size, push
         // our parents to the queue to make sure they get updated
         if best < size_current {
-            if let Some(parents) = cache.parents_of.get(&eclass) {
+            if let Some(parents) = sizes.cache.parents_of.get(&eclass) {
                 for &parent in parents {
-                    if let Some(po) = cache.postorder[usize::from(parent)] {
+                    if let Some(po) = sizes.cache.postorder[usize::from(parent)] {
                         work_queue.push(Reverse((po, parent)));
                     }
                 }
