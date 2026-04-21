@@ -192,7 +192,8 @@ fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::Searc
     }
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    let programs: Vec<String> = egraph[root].nodes[0].children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
+    let programs_node = egraph[root].nodes.iter().find(|n| n.op.as_str() == "programs").expect("root e-class should contain a `programs` enode");
+    let programs: Vec<String> = programs_node.children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
 
     if rebuild {
         let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file);
