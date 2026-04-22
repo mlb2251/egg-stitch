@@ -71,7 +71,6 @@ impl FromOp for StitchLang {
     }
 }
 
-
 /// Egg analysis that tracks the minimum AST size of each e-class.
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis;

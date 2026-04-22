@@ -133,7 +133,10 @@ pub(crate) fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &Searc
     let mut egraph = egraph.clone();
     for m in &search_state.matches {
         for subst in &m.substs {
-            let node = StitchLang { op: Op::Sym("inv_0".into()), children: subst.vars.clone() };
+            let node = StitchLang {
+                op: Op::Sym("inv_0".into()),
+                children: subst.vars.clone(),
+            };
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
         }
