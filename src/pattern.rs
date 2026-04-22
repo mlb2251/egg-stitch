@@ -95,6 +95,8 @@ impl std::fmt::Display for Pattern {
 
 #[cfg(test)]
 mod tests {
+    use crate::lang::Op;
+
     use super::*;
     use egg::Symbol;
 
@@ -102,7 +104,7 @@ mod tests {
     /// the children, so the dummy Ids here are never read.
     fn op(name: &str, arity: usize) -> StitchLang {
         StitchLang {
-            op: Symbol::from(name),
+            op: Op::Sym(Symbol::from(name)),
             children: vec![Id::from(0); arity],
         }
     }
