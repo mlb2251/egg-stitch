@@ -3,17 +3,39 @@ use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
 /// A simple language based on egg's SymbolLang.
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
+pub enum Op {
+    /// Opaque symbolic operator.
+    Sym(Symbol),
+}
+
+impl Display for Op {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Op::Sym(s) => Display::fmt(s, f),
+        }
+    }
+}
+
+impl Op {
+    pub fn as_str(&self) -> String {
+        return format!("{}", self)
+    }
+}
+
+/// A simple language based on egg's SymbolLang, with first-class lambda/variable nodes.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct StitchLang {
-    /// The operator for an enode
-    pub op: Symbol,
-    /// The enode's children `Id`s
+    /// The operator for an enode.
+    pub op: Op,
+    /// The enode's children `Id`s.
     pub children: Vec<Id>,
 }
 
 impl Language for StitchLang {
     /// Used for short-circuiting the search for equivalent nodes.
-    type Discriminant = Symbol;
+    type Discriminant = Op;
 
     fn discriminant(&self) -> Self::Discriminant {
         self.op
@@ -45,9 +67,11 @@ impl FromOp for StitchLang {
     type Error = Infallible;
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        Ok(Self { op: op.into(), children })
+        let parsed_op = Op::Sym(op.into());
+        Ok(Self { op: parsed_op, children })
     }
 }
+
 
 /// Egg analysis that tracks the minimum AST size of each e-class.
 #[derive(Clone, Debug, Default)]

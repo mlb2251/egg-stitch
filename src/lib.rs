@@ -18,6 +18,8 @@ use egg::Id;
 
 pub use best_first::SearchPriority;
 
+use crate::lang::Op;
+
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
 pub enum SearchKind {
@@ -185,7 +187,7 @@ fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::Searc
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {
-            let node = lang::StitchLang { op: fn_sym, children: subst.vars.clone() };
+            let node = lang::StitchLang { op: Op::Sym(fn_sym), children: subst.vars.clone() };
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
         }
