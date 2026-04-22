@@ -6,7 +6,7 @@ fn main() {
     let start = std::time::Instant::now();
 
     let rules = args.rules.as_deref();
-    let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
+    let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules, args.appify);
 
     let (library, original_size, final_cost) = multiple_step_search(egraph, root, &args);
 

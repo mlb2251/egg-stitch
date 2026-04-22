@@ -1,4 +1,4 @@
-use crate::lang::{StitchAnalysis, StitchEgraph, StitchLang};
+use crate::{appify::insert_apps, lang::{StitchAnalysis, StitchEgraph, StitchLang}};
 use anyhow::anyhow;
 use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
 use std::{error::Error, fs, path::Path};
@@ -7,12 +7,12 @@ use std::{error::Error, fs, path::Path};
 /// All programs are combined into a single term (programs A B C ...).
 /// Returns the egraph, the root e-class Id of the programs node, and the
 /// minimum AST cost of that root *before* any rewrites were applied.
-pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, egg::Id, usize) {
+pub fn load_egraph(filename: &str, rule_file: Option<&str>, appify: bool) -> (StitchEgraph, egg::Id, usize) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
     println!("Loaded {} programs", exprs.len());
 
-    let (egraph_before_rules, root) = programs_to_egraph(&exprs);
+    let (egraph_before_rules, root) = programs_to_egraph(&exprs, appify);
     println!("Egraph size: {}", egraph_before_rules.classes().len());
 
     let cost_before_rewrites = extract_root_size(&egraph_before_rules, root);
@@ -36,8 +36,8 @@ pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, eg
 ///
 /// Used when `--rebuild-egraph` is set: after each abstraction the rewritten programs are
 /// extracted as strings and fed into a clean egraph, discarding all prior equivalences.
-pub fn egraph_from_programs(programs: &[String], rule_file: Option<&str>) -> (StitchEgraph, egg::Id) {
-    let (egraph, root) = programs_to_egraph(programs);
+pub fn egraph_from_programs(programs: &[String], rule_file: Option<&str>, appify: bool) -> (StitchEgraph, egg::Id) {
+    let (egraph, root) = programs_to_egraph(programs, appify);
     let rules: Vec<egg::Rewrite<StitchLang, StitchAnalysis>> = match rule_file {
         Some(f) => from_file(f).expect("Failed to parse rules file"),
         None => vec![],
@@ -49,12 +49,15 @@ pub fn egraph_from_programs(programs: &[String], rule_file: Option<&str>) -> (St
 }
 
 /// Parses a list of s-expression strings into a fresh egraph wrapped in a `(programs ...)` root.
-fn programs_to_egraph(programs: &[String]) -> (StitchEgraph, egg::Id) {
+fn programs_to_egraph(programs: &[String], appify: bool) -> (StitchEgraph, egg::Id) {
     let mut egraph: StitchEgraph = egg::EGraph::default();
     let expr_ids: Vec<egg::Id> = programs
         .iter()
         .map(|s| {
-            let expr: egg::RecExpr<StitchLang> = s.parse().expect("Failed to parse expression");
+            let mut expr: egg::RecExpr<StitchLang> = s.parse().expect("Failed to parse expression");
+            if appify {
+                expr = insert_apps(expr);
+            }
             egraph.add_expr(&expr)
         })
         .collect();

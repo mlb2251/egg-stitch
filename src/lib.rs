@@ -1,3 +1,4 @@
+pub mod appify;
 pub mod best_first;
 pub mod cost;
 pub mod debug_log;
@@ -18,7 +19,7 @@ use egg::Id;
 
 pub use best_first::SearchPriority;
 
-use crate::lang::Op;
+use crate::{appify::remove_apps, lang::Op};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -105,6 +106,11 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+
+    /// App-ify the inputs and outputs: i.e., rewrite (a b c) to (@ (@ a b) c) when parsing
+    /// and undo this when outputting.
+    #[arg(long, default_value_t = false)]
+    pub appify: bool
 }
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
@@ -145,7 +151,7 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{abstraction_idx}");
-                let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref());
+                let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref(), args.appify);
 
                 final_cost = Some(best_cost);
                 library.push(results::AbstractionResult {
@@ -182,7 +188,7 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::SearchState, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (lang::StitchEgraph, Id, Vec<String>) {
+fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::SearchState, fn_name: &str, rebuild: bool, rule_file: Option<&str>, appify: bool) -> (lang::StitchEgraph, Id, Vec<String>) {
     let fn_sym: egg::Symbol = fn_name.into();
     let mut egraph = egraph;
     for m in &state.matches {
@@ -195,10 +201,16 @@ fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::Searc
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
     let programs_node = egraph[root].nodes.iter().find(|n| n.op.as_str() == "programs").expect("root e-class should contain a `programs` enode");
-    let programs: Vec<String> = programs_node.children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
+    let programs: Vec<String> = programs_node.children.iter().map(|&child| {
+        let (_, mut program) = extractor.find_best(child);
+        if appify {
+            program = remove_apps(program);
+        }
+        program.to_string()
+    }).collect();
 
     if rebuild {
-        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file);
+        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file, appify);
         (fresh_egraph, fresh_root, programs)
     } else {
         (egraph, root, programs)
