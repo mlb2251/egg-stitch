@@ -134,17 +134,14 @@ impl<'a> Sizes<'a> {
                 continue;
             }
 
-            let mut best = self.original_size(eclass);
+            // Try not rewriting self but YES allowing rewrites of descendants
+            let mut best = self.min_enode_size(eclass);
 
             // For every way we match at this eclass (if any), try all ways of rewriting it
-            // (relies on postorder guaranteeing descendants (arguments) have self.get done)
             if let Some(rewrite_size) = self.min_rewrite_size(eclass) {
                 best = best.min(rewrite_size);
             }
 
-            // Try not rewriting self but YES allowing rewrites of descendants
-            // (relies on postorder guaranteeing children have self.get done)
-            best = best.min(self.min_enode_size(eclass));
 
             // If `best` improves on what we have, record it and re-enqueue parents.
             self.update(eclass, best);
