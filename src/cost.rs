@@ -135,6 +135,7 @@ impl<'a> Sizes<'a> {
             }
 
             // Try not rewriting self but YES allowing rewrites of descendants
+            // (technically we could just use self.original_size if we knew we weren't enqueued by a child)
             let mut best = self.min_enode_size(eclass);
 
             // For every way we match at this eclass (if any), try all ways of rewriting it
