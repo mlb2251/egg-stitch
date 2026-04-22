@@ -87,6 +87,58 @@ impl Pattern {
     }
 }
 
+/// Recursively compare two nodes for structural equality.
+fn nodes_eq(
+    a: &RevExpr<ENodeOrVar<StitchLang>>,
+    b: &RevExpr<ENodeOrVar<StitchLang>>,
+    ai: Id,
+    bi: Id,
+) -> bool {
+    match (&a[ai], &b[bi]) {
+        (ENodeOrVar::Var(va), ENodeOrVar::Var(vb)) => va == vb,
+        (ENodeOrVar::ENode(na), ENodeOrVar::ENode(nb)) => {
+            na.op == nb.op
+                && na.children.len() == nb.children.len()
+                && na.children.iter().zip(&nb.children).all(|(&ca, &cb)| nodes_eq(a, b, ca, cb))
+        }
+        _ => false,
+    }
+}
+
+/// Recursively hash a node by tree structure.
+fn hash_node<H: std::hash::Hasher>(expr: &RevExpr<ENodeOrVar<StitchLang>>, id: Id, state: &mut H) {
+    use std::hash::Hash;
+    match &expr[id] {
+        ENodeOrVar::Var(v) => {
+            0u8.hash(state);
+            v.hash(state);
+        }
+        ENodeOrVar::ENode(n) => {
+            1u8.hash(state);
+            n.op.hash(state);
+            for &child in &n.children {
+                hash_node(expr, child, state);
+            }
+        }
+    }
+}
+
+/// The underlying vec layout depends on expansion order and is not canonical.
+/// These impls recurse from the root (Id(0)) using canonical var names instead.
+impl PartialEq for Pattern {
+    fn eq(&self, other: &Self) -> bool {
+        nodes_eq(&self.pattern, &other.pattern, Id::from(0), Id::from(0))
+    }
+}
+
+impl Eq for Pattern {}
+
+impl std::hash::Hash for Pattern {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_node(&self.pattern, Id::from(0), state);
+    }
+}
+
 impl std::fmt::Display for Pattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.pattern)

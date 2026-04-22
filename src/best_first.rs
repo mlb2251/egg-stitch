@@ -7,6 +7,7 @@ use std::collections::BinaryHeap;
 use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::StitchEgraph;
+use crate::pattern::Pattern;
 use crate::search::{Action, SearchState, setup_search};
 
 /// How to order the best-first search heap.
@@ -103,7 +104,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
 
     let mut nodes: Vec<Node> = Vec::new();
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
-    let mut seen: FxHashSet<String> = FxHashSet::default();
+    let mut seen: FxHashSet<Pattern> = FxHashSet::default();
 
     nodes.push(Node {
         parent: None,
@@ -114,7 +115,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         expanded: false,
     });
     heap.push(Reverse((initial_prio, 0)));
-    seen.insert(initial_state.pattern.to_string());
+    seen.insert(initial_state.pattern.clone());
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
     let mut best_found_at: Option<usize> = None;
@@ -139,10 +140,10 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             {
                 continue;
             }
-            let key = child_state.pattern.to_string();
-            if !seen.insert(key) {
+            if seen.contains(&child_state.pattern) {
                 continue;
             }
+            seen.insert(child_state.pattern.clone());
 
             let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow);
             let child_depth = parent_depth + 1;
