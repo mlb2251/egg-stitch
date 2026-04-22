@@ -110,7 +110,7 @@ pub struct Args {
     /// App-ify the inputs and outputs: i.e., rewrite (a b c) to (@ (@ a b) c) when parsing
     /// and undo this when outputting.
     #[arg(long, default_value_t = false)]
-    pub appify: bool
+    pub appify: bool,
 }
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
@@ -201,13 +201,17 @@ fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::Searc
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
     let programs_node = egraph[root].nodes.iter().find(|n| n.op.as_str() == "programs").expect("root e-class should contain a `programs` enode");
-    let programs: Vec<String> = programs_node.children.iter().map(|&child| {
-        let (_, mut program) = extractor.find_best(child);
-        if appify {
-            program = remove_apps(program);
-        }
-        program.to_string()
-    }).collect();
+    let programs: Vec<String> = programs_node
+        .children
+        .iter()
+        .map(|&child| {
+            let (_, mut program) = extractor.find_best(child);
+            if appify {
+                program = remove_apps(program);
+            }
+            program.to_string()
+        })
+        .collect();
 
     if rebuild {
         let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file, appify);

@@ -1,4 +1,7 @@
-use crate::{appify::insert_apps, lang::{StitchAnalysis, StitchEgraph, StitchLang}};
+use crate::{
+    appify::insert_apps,
+    lang::{StitchAnalysis, StitchEgraph, StitchLang},
+};
 use anyhow::anyhow;
 use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
 use std::{error::Error, fs, path::Path};
