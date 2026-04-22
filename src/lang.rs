@@ -27,7 +27,12 @@ impl Display for Op {
     }
 }
 
-/// A simple language based on egg's SymbolLang, with first-class lambda/variable nodes.
+impl Op {
+    pub fn as_str(&self) -> String {
+        format!("{}", self)
+    }
+}
+
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct StitchLang {
     /// The operator for an enode.

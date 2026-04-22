@@ -1,4 +1,4 @@
-use crate::lang::{StitchEgraph, StitchLang};
+use crate::lang::{Op, StitchEgraph, StitchLang};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;

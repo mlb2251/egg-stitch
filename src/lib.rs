@@ -18,6 +18,8 @@ use egg::Id;
 
 pub use best_first::SearchPriority;
 
+use crate::lang::Op;
+
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
 pub enum SearchKind {
