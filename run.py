@@ -221,15 +221,15 @@ def sweep_num_steps_smc(num_runs = 3):
 
 
 
-def quick_eval(num_runs = 3, check_slow=False):
+def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=500, max_arity=2, rewrites=True, **kwargs):
     results = []
     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
-        for domain in stackpathiter(ALL_DOMAINS):
-            enum_config = dict(num_steps=500, max_arity=2, rewrites=rewrites_path(domain), check_slow=check_slow)
-            res, _ = run_ours(domain, "best-first", **enum_config)
+        for domain in stackpathiter(domains):
+            rewrites_file = rewrites_path(domain) if rewrites else None
+            res, _ = run_ours(domain, "best-first", num_steps=num_steps, max_arity=max_arity, rewrites=rewrites_file, **kwargs)
             results.append(dict(domain=domain, elapsed_secs=res.elapsed_secs))
     
-    for domain in ALL_DOMAINS:
+    for domain in domains:
         domain_results = [r for r in results if r["domain"] == domain]
         mean = sum(r["elapsed_secs"] for r in domain_results) / len(domain_results)
         print(f"{domain} [{mean:.2f}]: ", end=" ")
@@ -240,6 +240,13 @@ def quick_eval(num_runs = 3, check_slow=False):
 
 def quick_check():
     quick_eval(num_runs=1, check_slow=True)
+
+def quick_samply(domain="nuts-bolts"):
+    quick_eval(domains=[domain], num_runs=1, num_steps=5000, samply=True)
+
+
+
+
 
 if __name__ == "__main__":
     fn = globals().get(sys.argv[1]) if len(sys.argv) == 2 else None
