@@ -26,7 +26,12 @@ impl MatchAtEClass {
 /// whole corpus; letting the search match there produces abstractions like
 /// `(programs ?#0 ?#0)` that collapse the program list itself, which is never
 /// what we want.
+///
+/// Also excludes open e-classes: the initial meta-var `?#0` has `d_0 = 0`, so any
+/// match with free vars would be rejected at abstraction-emission time (free vars
+/// ≥ `d_k` aren't yet handled — babble would hoist them as extra params). Keeping
+/// them in the search would mislead cost estimation.
 pub fn identity_matches(egraph: &StitchEgraph, root: egg::Id) -> Vec<MatchAtEClass> {
     let root = egraph.find(root);
-    egraph.classes().filter(|c| c.id != root).map(|c| MatchAtEClass::identity_match(c.id)).collect()
+    egraph.classes().filter(|c| c.id != root && c.data.fv.is_empty()).map(|c| MatchAtEClass::identity_match(c.id)).collect()
 }

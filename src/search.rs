@@ -106,7 +106,9 @@ impl SearchState {
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
     pub fn expand(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
         self.pattern.expand(var_idx, target);
-        self.subset_matches(var_idx, target, shared);
+        let target_arity = target.children.len();
+        let child_depths: Vec<u32> = (0..target_arity).map(|j| self.pattern.var_depth[var_idx + j]).collect();
+        self.subset_matches(var_idx, target, shared, &child_depths);
     }
 
     /// Merges two pattern variables and filters matches to those where both point to the same e-class.
@@ -133,19 +135,29 @@ impl SearchState {
     /// Mirrors `Pattern::expand`: drops the old var from `subst.vars` and inserts the new
     /// child eclass ids at positions `var_idx..var_idx+k`, keeping substs aligned with
     /// the pattern's DFS-ordered vars list.
-    pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
+    ///
+    /// `child_depths[j]` is the pattern-internal depth of the new meta-var at position
+    /// `var_idx + j`. Each child e-class is only accepted if its free-var set fits within
+    /// that depth (i.e. all `i < child_depths[j]`); otherwise the child carries a free
+    /// var the abstraction emitter can't bind, and the subst is dropped.
+    pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData, child_depths: &[u32]) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
             let var_eclass = &shared.egraph[var_id];
             for node in &var_eclass.nodes {
-                if node.matches(target) {
-                    let mut new_subst = subst.clone();
-                    new_subst.vars.remove(var_idx);
-                    for (j, child_id) in node.children.iter().enumerate() {
-                        new_subst.vars.insert(var_idx + j, *child_id);
-                    }
-                    out.push(new_subst);
+                if !node.matches(target) {
+                    continue;
                 }
+                let fits = node.children.iter().zip(child_depths.iter()).all(|(&c, &d)| shared.egraph[c].data.fv.iter().all(|&i| i < d));
+                if !fits {
+                    continue;
+                }
+                let mut new_subst = subst.clone();
+                new_subst.vars.remove(var_idx);
+                for (j, child_id) in node.children.iter().enumerate() {
+                    new_subst.vars.insert(var_idx + j, *child_id);
+                }
+                out.push(new_subst);
             }
         });
     }

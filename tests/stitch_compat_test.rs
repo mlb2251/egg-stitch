@@ -10,13 +10,12 @@
 //!
 //! Only the smallest, most deterministic cases are included — egg-stitch's SMC
 //! is stochastic, so we pick corpora where both backends reliably converge.
-//! Most of the remaining `basic/` cases use DeBruijn indices (`$0`, `$1`, ...)
-//! or symbol variables (`%1`, `&x:0`). egg-stitch parses these as plain symbol
-//! tokens with no scope awareness, so any abstraction it finds over them isn't
-//! semantically valid under Stitch.jl's lambda-calculus reading — we skip all
-//! such fixtures. A handful (`simple_hof`, `safe_ctx_thread_bug`) also have a
-//! list in operator position, which egg's `RecExpr` parser rejects outright.
-//! `minimum-matches-seq` depends on Stitch.jl's special `/seq` matching.
+//! egg-stitch now parses `lam`/`$n` as first-class binding nodes (with a
+//! free-variable analysis on the e-graph), so De Bruijn-using fixtures are
+//! covered in the lambda group below. A handful (`simple_hof`,
+//! `safe_ctx_thread_bug`) have a list in operator position, which egg's
+//! `RecExpr` parser rejects outright; `minimum-matches-seq` depends on
+//! Stitch.jl's special `/seq` matching. Those remain skipped.
 //!
 //! From `../stitch/data/basic/` we additionally port `simple3`; `simple4`,
 //! `simple5`, and `lio_test*` use DeBruijn vars, `symbol_weighting_test_*`
@@ -179,4 +178,37 @@ fn arithmetic_aplusbplusc() {
 #[test]
 fn arithmetic_aplusbplus1234() {
     check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", Some(ARITH_RULES));
+}
+
+// -------- fixtures containing lambdas and De Bruijn vars --------
+//
+// Ported from `../stitch/data/basic/`. These rely on egg-stitch's binding-aware lexing
+// of `lam` / `$n` and exercise patterns that sit under (possibly nested) lambdas.
+
+/// Two `(lam ...)` programs with a shared skeleton; the abstraction should sit under
+/// the top lambda and capture the structural common core around `$0`.
+#[test]
+fn stitch_map_minimal() {
+    check_fixture("data/domains/stitch/map_minimal.json", None);
+}
+
+/// Context-threading test: duplicated subterms under two lambdas differ only at one leaf.
+#[test]
+fn stitch_ctx_thread_1() {
+    check_fixture("data/domains/stitch/ctx_thread_1.json", None);
+}
+
+/// Like ctx_thread_1 but without the outer `A` wrapper — the two programs start with
+/// `(lam (lam …))` directly. Exercises hole matching when the pattern root sits
+/// at the program root.
+#[test]
+fn stitch_ctx_thread_2() {
+    check_fixture("data/domains/stitch/ctx_thread_2.json", None);
+}
+
+/// Variant with a deeper `(lam (lam …))` body that references both `$0` and `$1`.
+/// Exercises holes whose matches contain multiple distinct pattern-internal free vars.
+#[test]
+fn stitch_ctx_thread_twice() {
+    check_fixture("data/domains/stitch/ctx_thread_twice.json", None);
 }

@@ -87,15 +87,11 @@ impl FromOp for StitchLang {
 
 /// Per-e-class analysis data: minimum AST size and free-variable set.
 ///
-/// `fv` holds the De Bruijn indices that are free in every member of the e-class
-/// (i.e., the intersection across members). This is the "guaranteed-free" semantics:
-/// if `n ∉ fv`, at least one representative of the class does not mention `$n` freely,
-/// so substituting the class under a binder is unsafe iff `n ∈ fv` for any member of
-/// the class — which under intersection semantics means `n ∈ fv` strictly.
-///
-/// Using intersection (rather than union) makes `fv = ∅` the conservative "closed"
-/// witness: if the set is empty, there is at least one representative with no free vars
-/// ≥ the claimed bound, and we can safely pick that one during rewriting.
+/// `fv` is the *union* of free-variable sets across all e-nodes in the class: a De
+/// Bruijn index `n` appears in `fv` if any representative of the class mentions `$n`
+/// freely. This is the over-approximation we need for sound capture-handling at
+/// extraction — if any member *could* carry `$n` free, the extractor might pick that
+/// member, and the downstream wrapping needs to bind `$n`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StitchData {
     /// Minimum AST size among e-nodes in this e-class.
@@ -117,12 +113,16 @@ impl Analysis<StitchLang> for StitchAnalysis {
     fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: Id) -> Self::Data {
         let size = 1 + enode.children.iter().map(|&c| egraph[c].data.size).sum::<u32>();
         let fv = match enode.op {
+            Op::Lam => egraph[enode.children[0]].data.fv.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }).collect(),
             Op::Var(n) => {
+                // `($n child...)` is `$n` applied to children; fv = {n} ∪ ⋃ fv(children).
                 let mut s = FxHashSet::default();
                 s.insert(n);
+                for &c in &enode.children {
+                    s.extend(egraph[c].data.fv.iter().copied());
+                }
                 s
             }
-            Op::Lam => egraph[enode.children[0]].data.fv.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }).collect(),
             Op::Sym(_) => {
                 let mut s = FxHashSet::default();
                 for &c in &enode.children {
@@ -134,19 +134,19 @@ impl Analysis<StitchLang> for StitchAnalysis {
         StitchData { size, fv }
     }
 
-    /// On merge: keep the minimum size, and take the intersection of the two fv sets.
-    /// Intersection preserves the "guaranteed-free" invariant: a var is guaranteed free
-    /// in the merged class only if every representative (from both sides) has it free.
+    /// On merge: keep the minimum size, and take the *union* of the two fv sets.
+    /// Union is the over-approximation: `n ∈ fv` iff some representative carries `$n`
+    /// free. Any extraction-time wrapping must cover everything in `fv`.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
         let size_to_changed = from.size < to.size;
         let size_from_changed = from.size > to.size;
         if size_to_changed {
             to.size = from.size;
         }
+        let fv_from_changed = to.fv.iter().any(|x| !from.fv.contains(x));
         let before_len = to.fv.len();
-        to.fv.retain(|x| from.fv.contains(x));
+        to.fv.extend(from.fv.iter().copied());
         let fv_to_changed = to.fv.len() != before_len;
-        let fv_from_changed = from.fv.iter().any(|x| !to.fv.contains(x));
         egg::DidMerge(size_to_changed || fv_to_changed, size_from_changed || fv_from_changed)
     }
 }

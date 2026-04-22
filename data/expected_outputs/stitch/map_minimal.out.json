@@ -1,0 +1,12 @@
+{
+  "abstractions": [
+    {
+      "body": "(lam (app (app cons (app (app (#0 $0) (app car $0)) (#1 $0))) (app rec (app cdr $0))))",
+      "num_matches": 2
+    }
+  ],
+  "rewritten": [
+    "(fn_0 (lam +) (lam (app car $0)))",
+    "(fn_0 (lam -) (lam t1))"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "abstractions": [
+    {
+      "body": "(lam (+ (#0 $0) (#0 $0)))",
+      "num_matches": 2
+    }
+  ],
+  "rewritten": [
+    "(A (lam (fn_0 (lam (a b c $0 f)))))",
+    "(A (lam (fn_0 (lam (a b z $0 f)))))"
+  ]
+}

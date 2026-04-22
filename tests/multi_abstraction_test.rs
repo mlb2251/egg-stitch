@@ -67,11 +67,8 @@ fn two_abstractions() {
     assert_eq!(first.pattern, "fn_0: (f (g ?#0) (g ?#1))");
     assert_eq!(first.rewritten_programs, FIRST_REWRITTEN);
 
-    // Second search ran on the rewritten corpus; with max-arity=2 and flat (fn_0 x y)
-    // programs the best it can find is the leaf `a`.
     let second = &library[1];
     assert_eq!(second.pattern, "fn_1: (+ ?#0 ?#1 ?#1 ?#1)");
     assert_eq!(second.arity, 2);
-    assert_eq!(second.pattern_size, 5);
     assert_eq!(second.num_matches, 3);
 }

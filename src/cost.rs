@@ -2,7 +2,7 @@ use crate::lang::{StitchEgraph, StitchLang};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
-use egg::{Id, Language};
+use egg::Id;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -66,9 +66,11 @@ pub fn compute_cost(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, sea
     cost + pattern_size
 }
 
-/// Returns the AST size of the pattern (counting each node and edge once).
+/// Returns the AST size of the pattern's λ-materialised body (what `apply_abstraction`
+/// actually emits). This counts the `K` outer lams, every pattern node, and — for each
+/// hole occurrence — the `d_k + 1` nodes of its `($k_ref $(d_k-1) ... $0)` apply form.
 pub fn compute_pattern_size(pattern: &Pattern) -> usize {
-    1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
+    pattern.lambda_body().as_ref().len()
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
@@ -80,6 +82,10 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
     for m in &search_state.matches {
         eclass_to_matches.insert(m.root_eclass, &m.substs);
     }
+
+    // Per-match-site overhead: each arg k is wrapped in d_k lams at the call site.
+    // Summed across holes, this is the fixed additional cost on top of arg e-class sizes.
+    let wrap_overhead: i64 = search_state.pattern.var_depth.iter().map(|&d| d as i64).sum();
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data.size as i64) };
 
@@ -96,7 +102,8 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         let mut best = size_current;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
-                let size_new: i64 = 1 + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
+                let args_size: i64 = subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum();
+                let size_new: i64 = 1 + wrap_overhead + args_size;
                 if size_new < best {
                     best = size_new;
                 }
@@ -127,13 +134,30 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
     final_size as usize
 }
 
-/// Clones the egraph and unions each match root with an `inv_0(args...)` node, then rebuilds.
+/// Clones the egraph and unions each match root with an `inv_0(wrapped_args...)` node, then rebuilds.
 /// Used for validating `compute_size` and for extracting rewritten programs.
+///
+/// Each arg is wrapped in `d_k` lams to match the λ-emission convention — so the slow path
+/// produces the same rewritten-program cost as `compute_size` computes analytically.
 pub(crate) fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &SearchState) -> StitchEgraph {
     let mut egraph = egraph.clone();
+    let var_depth = &search_state.pattern.var_depth;
     for m in &search_state.matches {
         for subst in &m.substs {
-            let node = StitchLang { op: crate::lang::Op::Sym("inv_0".into()), children: subst.vars.clone() };
+            let wrapped_args: Vec<Id> = subst
+                .vars
+                .iter()
+                .enumerate()
+                .map(|(k, &arg_id)| {
+                    let mut w = arg_id;
+                    for _ in 0..var_depth[k] {
+                        let lam = StitchLang { op: crate::lang::Op::Lam, children: vec![w] };
+                        w = egraph.add(lam);
+                    }
+                    w
+                })
+                .collect();
+            let node = StitchLang { op: crate::lang::Op::Sym("inv_0".into()), children: wrapped_args };
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
         }

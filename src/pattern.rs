@@ -105,6 +105,53 @@ impl Pattern {
     }
 }
 
+impl Pattern {
+    /// Materialises this pattern as an abstraction template, stitch-style.
+    ///
+    /// The body is the pattern tree unchanged, except that each `?#k` leaf becomes
+    /// `(?#k $(d_k-1) ... $0)` — an n-ary application of the hole placeholder to the
+    /// `d_k` pattern-internal binder refs. When `d_k == 0`, the hole stays as the
+    /// bare `?#k` leaf. Arity is implicit in the number of distinct `?#k` symbols.
+    ///
+    /// At each call site, the arg for `#k` is wrapped in `d_k` lams so that
+    /// substituting it in place of `?#k` produces β-redexes that reduce back to the
+    /// original subterm. Only lams that appeared in the original pattern appear here;
+    /// no extra outer param lams are inserted.
+    pub fn lambda_body(&self) -> egg::RecExpr<StitchLang> {
+        let mut out: Vec<StitchLang> = Vec::new();
+        self.walk_lambda(Id::from(0), &mut out);
+        egg::RecExpr::from(out)
+    }
+
+    fn walk_lambda(&self, id: Id, out: &mut Vec<StitchLang>) -> Id {
+        match &self.pattern[id] {
+            ENodeOrVar::Var(v) => {
+                let k = parse_var_index(v);
+                let d_k = self.var_depth[k];
+                // Collect binder-ref children: $(d_k-1), ..., $0 (outer-first).
+                let mut children: Vec<Id> = Vec::with_capacity(d_k as usize);
+                for i in (0..d_k).rev() {
+                    out.push(StitchLang { op: crate::lang::Op::Var(i), children: vec![] });
+                    children.push(Id::from(out.len() - 1));
+                }
+                let hole_sym = egg::Symbol::from(format!("?#{k}"));
+                out.push(StitchLang { op: crate::lang::Op::Sym(hole_sym), children });
+                Id::from(out.len() - 1)
+            }
+            ENodeOrVar::ENode(n) => {
+                let children: Vec<Id> = n.children.iter().map(|&c| self.walk_lambda(c, out)).collect();
+                out.push(StitchLang { op: n.op, children });
+                Id::from(out.len() - 1)
+            }
+        }
+    }
+}
+
+/// Parse `"?#k"` from an `egg::Var`'s Display form back to `k: usize`.
+fn parse_var_index(v: &egg::Var) -> usize {
+    v.to_string().strip_prefix("?#").and_then(|s| s.parse().ok()).expect("pattern var must be `?#k`")
+}
+
 impl std::fmt::Display for Pattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.pattern)

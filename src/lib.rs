@@ -143,11 +143,12 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{abstraction_idx}");
+                let lambda_body = state.pattern.lambda_body();
                 let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref());
 
                 final_cost = Some(best_cost);
                 library.push(results::AbstractionResult {
-                    pattern: format!("{fn_name}: {}", state.pattern),
+                    pattern: format!("{fn_name}: {lambda_body}"),
                     arity: state.pattern.vars.len(),
                     pattern_size: pat_size,
                     num_matches: state.matches.len(),
@@ -183,9 +184,32 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
 fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::SearchState, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (lang::StitchEgraph, Id, Vec<String>) {
     let fn_sym: egg::Symbol = fn_name.into();
     let mut egraph = egraph;
+    let var_depth = &state.pattern.var_depth;
     for m in &state.matches {
-        for subst in &m.substs {
-            let node = lang::StitchLang { op: lang::Op::Sym(fn_sym), children: subst.vars.clone() };
+        'subst: for subst in &m.substs {
+            // Reject matches whose args carry free vars beyond the pattern's enclosing
+            // binders. Babble would hoist these as extra params; we don't yet. Vars that
+            // reference pattern-internal binders (j < d_k) are captured by the wrapping.
+            for (k, &arg_id) in subst.vars.iter().enumerate() {
+                let d_k = var_depth[k];
+                if egraph[arg_id].data.fv.iter().any(|&j| j >= d_k) {
+                    continue 'subst;
+                }
+            }
+            let wrapped_args: Vec<Id> = subst
+                .vars
+                .iter()
+                .enumerate()
+                .map(|(k, &arg_id)| {
+                    let mut wrapped = arg_id;
+                    for _ in 0..var_depth[k] {
+                        let lam = lang::StitchLang { op: lang::Op::Lam, children: vec![wrapped] };
+                        wrapped = egraph.add(lam);
+                    }
+                    wrapped
+                })
+                .collect();
+            let node = lang::StitchLang { op: lang::Op::Sym(fn_sym), children: wrapped_args };
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
         }
