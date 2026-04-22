@@ -20,11 +20,10 @@ impl Display for Op {
 
 impl Op {
     pub fn as_str(&self) -> String {
-        return format!("{}", self)
+        format!("{}", self)
     }
 }
 
-/// A simple language based on egg's SymbolLang, with first-class lambda/variable nodes.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct StitchLang {
     /// The operator for an enode.
