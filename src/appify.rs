@@ -1,9 +1,12 @@
-use egg::FromOp;
+use egg::{ENodeOrVar, FromOp, Var};
 
-use crate::lang::{Op, StitchLang};
+use crate::{
+    lang::{Op, StitchLang},
+    pattern::Pattern,
+};
 
 pub trait Appifiable<O>: egg::Language + FromOp {
-    fn get_op(&self) -> &O;
+    fn get_op(&self) -> O;
     fn get_children(&self) -> &[egg::Id];
     fn construct(op: O, children: Vec<egg::Id>) -> Self;
     fn leaf(op: O) -> Self {
@@ -13,8 +16,8 @@ pub trait Appifiable<O>: egg::Language + FromOp {
 }
 
 impl Appifiable<Op> for StitchLang {
-    fn get_op(&self) -> &Op {
-        &self.op
+    fn get_op(&self) -> Op {
+        self.op
     }
     fn get_children(&self) -> &[egg::Id] {
         &self.children
@@ -24,6 +27,49 @@ impl Appifiable<Op> for StitchLang {
     }
     fn is_app(&self) -> bool {
         self.op.as_str() == "@"
+    }
+}
+
+#[derive(Clone, Debug)]
+enum OpPlus<O> {
+    Op(O),
+    Var(Var),
+}
+
+impl<L, O> Appifiable<OpPlus<O>> for ENodeOrVar<L>
+where
+    L: Appifiable<O>,
+    O: Clone,
+{
+    fn get_op(&self) -> OpPlus<O> {
+        match self {
+            ENodeOrVar::ENode(node) => OpPlus::Op(node.get_op()),
+            ENodeOrVar::Var(var) => OpPlus::Var(*var),
+        }
+    }
+
+    fn get_children(&self) -> &[egg::Id] {
+        match self {
+            ENodeOrVar::ENode(node) => node.get_children(),
+            ENodeOrVar::Var(_) => &[],
+        }
+    }
+
+    fn construct(op: OpPlus<O>, children: Vec<egg::Id>) -> Self {
+        match op {
+            OpPlus::Op(op) => ENodeOrVar::ENode(L::construct(op, children)),
+            OpPlus::Var(var) => {
+                assert!(children.is_empty(), "Vars should not have children");
+                ENodeOrVar::Var(var)
+            }
+        }
+    }
+
+    fn is_app(&self) -> bool {
+        match self {
+            ENodeOrVar::ENode(node) => node.is_app(),
+            ENodeOrVar::Var(_) => false,
+        }
     }
 }
 
@@ -87,4 +133,11 @@ where
     assert!(node.get_children().is_empty(), "Non-app nodes should have no children");
     let node = L::construct(node.get_op().clone(), children_reversed.into_iter().rev().collect());
     new_expr.add(node)
+}
+
+pub fn remove_apps_in_pattern(pat: Pattern) -> Pattern {
+    Pattern {
+        pattern: remove_apps::<ENodeOrVar<_>, OpPlus<Op>>(pat.pattern.into()).into(),
+        vars: pat.vars,
+    }
 }

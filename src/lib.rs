@@ -19,7 +19,10 @@ use egg::Id;
 
 pub use best_first::SearchPriority;
 
-use crate::{appify::remove_apps, lang::Op};
+use crate::{
+    appify::{remove_apps, remove_apps_in_pattern},
+    lang::Op,
+};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -153,9 +156,14 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
                 let fn_name = format!("fn_{abstraction_idx}");
                 let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref(), args.appify);
 
+                let mut pat = state.pattern.clone();
+                if args.appify {
+                    pat = remove_apps_in_pattern(pat)
+                }
+
                 final_cost = Some(best_cost);
                 library.push(results::AbstractionResult {
-                    pattern: format!("{fn_name}: {}", state.pattern),
+                    pattern: format!("{fn_name}: {}", pat),
                     arity: state.pattern.vars.len(),
                     pattern_size: pat_size,
                     num_matches: state.matches.len(),
