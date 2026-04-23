@@ -208,10 +208,7 @@ fn arith_rewrites() {
         }
         // assert_eq!(abstr, ["+", "+", "a", "b", "c", "d"], "expected abstraction to contain all variables and the + operator");
         let rewr = r.rewritten.iter().map(|x| all_symbols_hack(x.clone())).collect::<Vec<_>>();
-        let rewr = rewr.iter()
-            .map(|x|
-                x.iter().filter(|x| **x != <&str as Into<String>>::into("+")).collect::<Vec<_>>()
-            ).collect::<Vec<_>>();
+        let rewr = rewr.iter().map(|x| x.iter().filter(|x| **x != <&str as Into<String>>::into("+")).collect::<Vec<_>>()).collect::<Vec<_>>();
         assert_eq!(
             rewr,
             vec![
@@ -230,7 +227,6 @@ fn arith_rewrites() {
 fn varying_head() {
     check_fixture("data/domains/basic-apps/varying-head.json", &["--appify"]);
 }
-
 
 #[test]
 fn multiple_with_apps() {
