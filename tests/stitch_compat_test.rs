@@ -76,25 +76,25 @@ fn build_expected(library: Vec<AbstractionResult>, input: &str) -> Expected {
     Expected { abstractions, rewritten }
 }
 
-fn run_backend(search: &str, input: &str, rules: Option<&str>) -> Expected {
+/// Runs the backend with the given search, input, and extra CLI args.
+fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Expected {
     let mut argv: Vec<&str> = vec!["egg-stitch", "--search", search, "--input", input, "--check-slow", "--num-abstractions", "1"];
     if search == "best-first" {
         argv.extend(["--num-steps", "10000"]);
     } else {
         argv.extend(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
     }
-    if let Some(r) = rules {
-        argv.extend(["--rules", r]);
-    }
+    argv.extend(extra_args);
     let args = Args::parse_from(argv);
     let (egraph, root, _) = io::load_egraph(&args.input, args.rules.as_deref());
     let (library, _, _) = multiple_step_search(egraph, root, &args);
     build_expected(library, input)
 }
 
-fn check_fixture(input: &str, rules: Option<&str>) {
-    let bf = run_backend("best-first", input, rules);
-    let smc = run_backend("smc", input, rules);
+/// Checks the fixture for the given input and extra CLI args (e.g., ["-r", path]).
+fn check_fixture(input: &str, extra_args: &[&str]) {
+    let bf = run_backend("best-first", input, extra_args);
+    let smc = run_backend("smc", input, extra_args);
 
     // Best-first is deterministic and is the canonical fixture. SMC is stochastic
     // and — once rewrite rules introduce non-trivial e-class equivalences like
@@ -120,7 +120,7 @@ fn check_fixture(input: &str, rules: Option<&str>) {
 
 #[test]
 fn identical() {
-    check_fixture("data/domains/stitch/identical.json", None);
+    check_fixture("data/domains/stitch/identical.json", &[]);
 }
 
 /// Diverges from Stitch.jl: Stitch.jl finds the arity-0 body
@@ -129,22 +129,22 @@ fn identical() {
 /// `(a b c d e f g h #0 #0 #0 #0)` instead.
 #[test]
 fn cex() {
-    check_fixture("data/domains/stitch/cex.json", None);
+    check_fixture("data/domains/stitch/cex.json", &[]);
 }
 
 #[test]
 fn minimum_matches() {
-    check_fixture("data/domains/stitch/minimum-matches.json", None);
+    check_fixture("data/domains/stitch/minimum-matches.json", &[]);
 }
 
 #[test]
 fn simple1() {
-    check_fixture("data/domains/stitch/simple1.json", None);
+    check_fixture("data/domains/stitch/simple1.json", &[]);
 }
 
 #[test]
 fn simple2() {
-    check_fixture("data/domains/stitch/simple2.json", None);
+    check_fixture("data/domains/stitch/simple2.json", &[]);
 }
 
 /// From `../stitch/data/basic/`. Rust stitch finds `(#0 (lam_1 (#0 #0)))` under
@@ -152,12 +152,12 @@ fn simple2() {
 /// compression doesn't pay, so no abstraction is returned.
 #[test]
 fn simple3() {
-    check_fixture("data/domains/stitch/simple3.json", None);
+    check_fixture("data/domains/stitch/simple3.json", &[]);
 }
 
 #[test]
 fn tmp_minimal() {
-    check_fixture("data/domains/stitch/tmp_minimal.json", None);
+    check_fixture("data/domains/stitch/tmp_minimal.json", &[]);
 }
 
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
@@ -166,17 +166,17 @@ fn tmp_minimal() {
 /// e-class so the inner `(* (- v) (- v))` becomes a match too).
 #[test]
 fn nested() {
-    check_fixture("data/domains/stitch/nested.json", Some("data/domains/stitch/nested.rewrites"));
+    check_fixture("data/domains/stitch/nested.json", &["-r", "data/domains/stitch/nested.rewrites"]);
 }
 
 const ARITH_RULES: &str = "data/domains/simple-arithmetic/arithmetic.rewrites";
 
 #[test]
 fn arithmetic_aplusbplusc() {
-    check_fixture("data/domains/simple-arithmetic/aplusbplusc.json", Some(ARITH_RULES));
+    check_fixture("data/domains/simple-arithmetic/aplusbplusc.json", &["-r", ARITH_RULES]);
 }
 
 #[test]
 fn arithmetic_aplusbplus1234() {
-    check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", Some(ARITH_RULES));
+    check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES]);
 }
