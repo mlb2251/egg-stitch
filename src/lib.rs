@@ -20,7 +20,7 @@ use egg::Id;
 pub use best_first::SearchPriority;
 
 use crate::{
-    appify::{remove_apps, remove_apps_in_pattern},
+    appify::{construct_appified_stub, remove_apps, remove_apps_in_pattern},
     lang::Op,
 };
 
@@ -201,8 +201,11 @@ fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::Searc
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {
-            let node = lang::StitchLang { op: Op::Sym(fn_sym), children: subst.vars.clone() };
-            let x = egraph.add(node);
+            let x = if appify {
+                construct_appified_stub(fn_sym, subst.vars.clone(), &mut egraph)
+            } else {
+                egraph.add(lang::StitchLang { op: Op::Sym(fn_sym), children: subst.vars.clone() })
+            };
             egraph.union(x, m.root_eclass);
         }
     }

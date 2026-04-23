@@ -41,7 +41,7 @@ struct Expected {
     rewritten: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 struct ExpectedAbstraction {
     body: String,
     num_matches: usize,
@@ -181,8 +181,39 @@ fn arithmetic_aplusbplus1234() {
     check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES]);
 }
 
-
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--appify"]);
+}
+
+fn all_symbols_hack(x: String) -> Vec<String> {
+    let x = x.replace("(", " ").replace(")", " ");
+    let mut symbols: Vec<_> = x.split_whitespace().map(|s| s.to_string()).collect();
+    symbols.sort();
+    symbols
+}
+
+#[test]
+fn arith_rewrites() {
+    let input = "data/domains/basic-apps/multi-arg-assoc.json";
+    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--appify", "--max-arity", "0"];
+    let bf = run_backend("best-first", input, extra_args);
+    let smc = run_backend("smc", input, extra_args);
+    let results = &[bf, smc];
+    for r in results {
+        assert!(r.abstractions.len() == 1, "expected exactly one abstraction");
+        assert_eq!(all_symbols_hack(r.abstractions[0].body.clone()), ["+", "+", "a", "b", "c", "d"], "expected abstraction to contain all variables and the + operator");
+        let rewr = r.rewritten.iter().map(|x| all_symbols_hack(x.clone())).collect::<Vec<_>>();
+        assert_eq!(
+            rewr,
+            vec![
+                // these 3 can be rewritten
+                vec!["+", "fn_0", "g"],
+                vec!["+", "f", "fn_0"],
+                vec!["e", "fn_0"],
+                // this one can't be
+                vec!["*", "+", "a", "b", "c", "d", "e"]
+            ]
+        )
+    }
 }

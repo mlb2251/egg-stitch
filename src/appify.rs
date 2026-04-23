@@ -1,7 +1,7 @@
-use egg::{ENodeOrVar, FromOp, Var};
+use egg::{ENodeOrVar, FromOp, Id, Symbol, Var};
 
 use crate::{
-    lang::{Op, StitchLang},
+    lang::{Op, StitchEgraph, StitchLang},
     pattern::Pattern,
 };
 
@@ -59,8 +59,9 @@ where
         match op {
             OpPlus::Op(op) => ENodeOrVar::ENode(L::construct(op, children)),
             OpPlus::Var(var) => {
-                assert!(children.is_empty(), "Vars should not have children");
-                ENodeOrVar::Var(var)
+                // TODO this is a hack, we shouldn't be using symbols here
+                let symbol_version = L::from_op(&format!("{:?}", var), children).expect("Failed to construct var node");
+                ENodeOrVar::ENode(symbol_version)
             }
         }
     }
@@ -130,7 +131,7 @@ where
     }
     let node = &expr_ref[ptr];
     assert!(!node.is_app(), "Should have removed all apps by now");
-    assert!(node.get_children().is_empty(), "Non-app nodes should have no children");
+    assert!(node.get_children().is_empty(), "Non-app nodes should have no children; but received {:?}", node);
     let node = L::construct(node.get_op().clone(), children_reversed.into_iter().rev().collect());
     new_expr.add(node)
 }
@@ -140,4 +141,12 @@ pub fn remove_apps_in_pattern(pat: Pattern) -> Pattern {
         pattern: remove_apps::<ENodeOrVar<_>, OpPlus<Op>>(pat.pattern.into()).into(),
         vars: pat.vars,
     }
+}
+
+pub fn construct_appified_stub(sym: Symbol, children: Vec<Id>, egraph: &mut StitchEgraph) -> Id {
+    let mut current = egraph.add(StitchLang::leaf(Op::Sym(sym)));
+    for child in children {
+        current = egraph.add(StitchLang::construct(Op::Sym("@".into()), vec![current, child]));
+    }
+    current
 }
