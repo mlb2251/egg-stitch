@@ -180,3 +180,9 @@ fn arithmetic_aplusbplusc() {
 fn arithmetic_aplusbplus1234() {
     check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES]);
 }
+
+
+#[test]
+fn common_start() {
+    check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--appify"]);
+}
