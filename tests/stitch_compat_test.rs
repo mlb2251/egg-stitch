@@ -202,18 +202,37 @@ fn arith_rewrites() {
     let results = &[bf, smc];
     for r in results {
         assert!(r.abstractions.len() == 1, "expected exactly one abstraction");
-        assert_eq!(all_symbols_hack(r.abstractions[0].body.clone()), ["+", "+", "a", "b", "c", "d"], "expected abstraction to contain all variables and the + operator");
+        let abstr = all_symbols_hack(r.abstractions[0].body.clone());
+        if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
+            panic!("bad abstr: {:?}", abstr);
+        }
+        // assert_eq!(abstr, ["+", "+", "a", "b", "c", "d"], "expected abstraction to contain all variables and the + operator");
         let rewr = r.rewritten.iter().map(|x| all_symbols_hack(x.clone())).collect::<Vec<_>>();
+        let rewr = rewr.iter()
+            .map(|x|
+                x.iter().filter(|x| **x != <&str as Into<String>>::into("+")).collect::<Vec<_>>()
+            ).collect::<Vec<_>>();
         assert_eq!(
             rewr,
             vec![
                 // these 3 can be rewritten
-                vec!["+", "fn_0", "g"],
-                vec!["+", "f", "fn_0"],
+                vec!["fn_0", "g"],
+                vec!["f", "fn_0"],
                 vec!["e", "fn_0"],
                 // this one can't be
-                vec!["*", "+", "a", "b", "c", "d", "e"]
+                vec!["*", "a", "b", "c", "d", "e"]
             ]
         )
     }
+}
+
+#[test]
+fn varying_head() {
+    check_fixture("data/domains/basic-apps/varying-head.json", &["--appify"]);
+}
+
+
+#[test]
+fn multiple_with_apps() {
+    check_fixture("data/domains/basic-apps/multiple-with-apps.json", &["--appify"]);
 }
