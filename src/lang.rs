@@ -3,14 +3,12 @@ use std::convert::Infallible;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::Hash;
 
-/// Trait for the operator stored inside a `StitchLang` node.
+/// Trait for the operator stored inside a language node.
 ///
 /// Anything that names enodes works: a single `Symbol`, an enum of typed
 /// constants, etc. The `from_name` constructor must be infallible because
-/// `StitchLang::from_op` parses arbitrary strings via egg's RecExpr parser.
+/// `OpChildrenLanguage::from_op` parses arbitrary strings via egg's RecExpr parser.
 pub trait StitchOp: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 'static {
-    /// The operator's display name. Used to compare against literals like `"programs"`.
-    fn op_name(&self) -> &str;
     /// Builds an op from its display name. Must succeed for every input string.
     fn from_name(s: &str) -> Self;
     /// The intrinsic size of this operator, used for AST size analysis.
@@ -40,11 +38,6 @@ impl Op {
 }
 
 impl StitchOp for Op {
-    fn op_name(&self) -> &str {
-        match self {
-            Op::Sym(s) => s.as_str(),
-        }
-    }
     fn from_name(s: &str) -> Self {
         Op::Sym(Symbol::from(s))
     }
@@ -100,9 +93,16 @@ impl<O: StitchOp> FromOp for OpChildrenLanguage<O> {
 }
 
 /// Trait covering every language usable with the search machinery.
-pub trait StitchLanguage: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {}
+pub trait StitchLanguage: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {
+        /// Returns true if this operator represents a `programs` node, which is used as the root of the egraph and has special handling in `apply_abstraction`.
+    fn is_programs_node(&self) -> bool;
+}
 
-impl<L> StitchLanguage for L where L: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {}
+impl StitchLanguage for OpChildrenLanguage<Op> {
+    fn is_programs_node(&self) -> bool {
+        self.op.to_string() == "programs"
+    }
+}
 
 /// Egg analysis that tracks the minimum AST size of each e-class.
 #[derive(Clone, Debug, Default)]

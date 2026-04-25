@@ -1,4 +1,4 @@
-use crate::lang::{OpChildrenLanguage, StitchAnalysis, StitchEgraph, StitchLanguage, StitchOp};
+use crate::lang::{StitchAnalysis, StitchEgraph, StitchLanguage};
 use anyhow::anyhow;
 use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
 use std::{error::Error, fs, path::Path};
@@ -74,9 +74,9 @@ fn extract_root_size<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id)
 /// Prints a programs term with each child on a new line.
 /// If the term is not a programs node, prints it normally.
 #[allow(dead_code)]
-pub fn print_programs(term: &egg::RecExpr<OpChildrenLanguage>) {
+pub fn print_programs<L: StitchLanguage>(term: &egg::RecExpr<L>) {
     let root_node = &term.as_ref()[term.as_ref().len() - 1];
-    if root_node.discriminant().op_name() == "programs" {
+    if root_node.is_programs_node() {
         println!("(programs");
         for &child_id in root_node.children() {
             print!("  ");
@@ -91,12 +91,12 @@ pub fn print_programs(term: &egg::RecExpr<OpChildrenLanguage>) {
 
 /// Recursively prints an s-expression starting from the given node id.
 #[allow(dead_code)]
-fn print_expr(term: &egg::RecExpr<OpChildrenLanguage>, id: usize) {
+fn print_expr<L: StitchLanguage>(term: &egg::RecExpr<L>, id: usize) {
     let node = &term.as_ref()[id];
     if node.children().is_empty() {
-        print!("{}", node.op);
+        print!("{}", node.discriminant());
     } else {
-        print!("({}", node.op);
+        print!("({}", node.discriminant());
         for &child_id in node.children() {
             print!(" ");
             print_expr(term, child_id.into());

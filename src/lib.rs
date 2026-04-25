@@ -18,7 +18,7 @@ use egg::Id;
 
 pub use best_first::SearchPriority;
 
-use crate::lang::{StitchEgraph, StitchLanguage, StitchOp};
+use crate::lang::{StitchEgraph, StitchLanguage};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -193,7 +193,7 @@ fn apply_abstraction<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, state
     }
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    let programs_node = egraph[root].nodes.iter().find(|n| n.discriminant().op_name() == "programs").expect("root e-class should contain a `programs` enode");
+    let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
     let programs: Vec<String> = programs_node.children().iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
 
     if rebuild {
