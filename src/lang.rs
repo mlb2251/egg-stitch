@@ -94,7 +94,7 @@ impl<O: StitchOp> FromOp for OpChildrenLanguage<O> {
 
 /// Trait covering every language usable with the search machinery.
 pub trait StitchLanguage: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {
-        /// Returns true if this operator represents a `programs` node, which is used as the root of the egraph and has special handling in `apply_abstraction`.
+    /// Returns true if this operator represents a `programs` node, which is used as the root of the egraph and has special handling in `apply_abstraction`.
     fn is_programs_node(&self) -> bool;
 }
 
