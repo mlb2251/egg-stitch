@@ -2,7 +2,7 @@ use crate::lang::{Op, StitchEgraph, StitchLang};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
-use egg::{Id, Language};
+use egg::{ENodeOrVar, Id, RecExpr};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -66,9 +66,16 @@ pub fn compute_cost(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, sea
     cost + pattern_size
 }
 
-/// Returns the AST size of the pattern (counting each node and edge once).
 pub fn compute_pattern_size(pattern: &Pattern) -> usize {
-    1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
+    let rec_expr: RecExpr<ENodeOrVar<StitchLang>> = pattern.pattern.clone().into();
+    compute_recexpr_size(&rec_expr, (rec_expr.len() - 1) .into())
+}
+
+pub fn compute_recexpr_size(rec_expr: &RecExpr<ENodeOrVar<StitchLang>>, ptr: Id) -> usize {
+    match &rec_expr[ptr] {
+        ENodeOrVar::Var(_) => 1,
+        ENodeOrVar::ENode(enode) => 1 + enode.children.iter().map(|&child| compute_recexpr_size(rec_expr, child)).sum::<usize>(),
+    }
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
