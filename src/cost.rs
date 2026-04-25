@@ -1,4 +1,4 @@
-use crate::lang::{StitchEgraph, StitchLanguage};
+use crate::lang::{StitchEgraph, StitchLanguage, StitchOp};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -74,7 +74,7 @@ pub fn compute_pattern_size<L: StitchLanguage>(pattern: &Pattern<L>) -> usize {
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<ENodeOrVar<L>>, ptr: Id) -> usize {
     match &rec_expr[ptr] {
         ENodeOrVar::Var(_) => 1,
-        ENodeOrVar::ENode(enode) => 1 + enode.children().iter().map(|&child| compute_recexpr_size(rec_expr, child)).sum::<usize>(),
+        ENodeOrVar::ENode(enode) => enode.discriminant().intrinsic_size() as usize + enode.children().iter().map(|&child| compute_recexpr_size(rec_expr, child)).sum::<usize>(),
     }
 }
 
@@ -89,6 +89,7 @@ pub(crate) fn compute_size<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: eg
     }
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64) };
+    let inv_op_size = <L::Discriminant as StitchOp>::from_name("inv_0").intrinsic_size() as i64;
 
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
@@ -103,14 +104,14 @@ pub(crate) fn compute_size<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: eg
         let mut best = size_current;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
-                let size_new: i64 = 1 + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
+                let size_new: i64 = inv_op_size + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
                 if size_new < best {
                     best = size_new;
                 }
             }
         }
         for enode in &egraph[eclass].nodes {
-            let size_no_rewrite: i64 = 1 + enode.children().iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
+            let size_no_rewrite: i64 = enode.discriminant().intrinsic_size() as i64 + enode.children().iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
             if size_no_rewrite < best {
                 best = size_no_rewrite;
             }
