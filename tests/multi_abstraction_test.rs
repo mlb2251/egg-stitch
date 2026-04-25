@@ -8,25 +8,24 @@
 /// abstraction (8 matches across 4 programs), leaving (+ (fn_0 ..) (fn_0 ..)) programs
 /// for the second round.
 use clap::Parser;
-use egg::FromOp;
 use egg_stitch::{
     Args,
-    lang::{StitchEgraph, StitchLang},
+    lang::{OpChildrenLanguage, StitchEgraph, StitchLanguage},
     multiple_step_search,
 };
 
 const PROGRAMS: &[&str] = &["(+ (f (g (h a)) (g (h b))) 2 2 2)", "(+ (f (g (a e)) (g (b f))) 3 3 3)", "(+ (f (g (e i)) (g (f j))) 4 4 4)", "(* (f (g (k m)) (g (l n))) 5)"];
 
-fn load() -> (StitchEgraph, egg::Id) {
-    let mut egraph: StitchEgraph = egg::EGraph::default();
+fn load<L: StitchLanguage>() -> (StitchEgraph<L>, egg::Id) {
+    let mut egraph: StitchEgraph<L> = egg::EGraph::default();
     let ids: Vec<egg::Id> = PROGRAMS
         .iter()
         .map(|s| {
-            let expr: egg::RecExpr<StitchLang> = s.parse().unwrap();
+            let expr: egg::RecExpr<L> = s.parse().unwrap();
             egraph.add_expr(&expr)
         })
         .collect();
-    let root = egraph.add(StitchLang::from_op("programs", ids).unwrap());
+    let root = egraph.add(L::from_op("programs", ids).unwrap());
     egraph.rebuild();
     (egraph, root)
 }
@@ -40,7 +39,7 @@ const FIRST_REWRITTEN: &[&str] = &["(+ (fn_0 (h a) (h b)) 2 2 2)", "(+ (fn_0 (a 
 /// Baseline: num_abstractions=0 gives an empty library.
 #[test]
 fn zero_abstractions() {
-    let (eg, root) = load();
+    let (eg, root) = load::<OpChildrenLanguage>();
     let (library, _original_size, final_cost) = multiple_step_search(eg, root, &args(100, 0));
     assert!(library.is_empty());
     assert!(final_cost.is_none());
@@ -51,7 +50,7 @@ fn zero_abstractions() {
 /// abstraction is the leaf `a` (appears once in the first program).
 #[test]
 fn two_abstractions() {
-    let (eg, root) = load();
+    let (eg, root) = load::<OpChildrenLanguage>();
     let (library, original_size, final_cost) = multiple_step_search(eg, root, &args(500, 2));
 
     println!("Abstractions found:");

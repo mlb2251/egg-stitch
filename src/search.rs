@@ -1,8 +1,8 @@
-use crate::lang::{Op, StitchEgraph, StitchLang};
+use crate::lang::{StitchEgraph, StitchLanguage};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
-use egg::{ENodeOrVar, Id, Language};
+use egg::{ENodeOrVar, Id};
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
@@ -10,12 +10,12 @@ use std::collections::HashMap;
 /// A deterministic move taken at a search node: either expanding a pattern variable
 /// with a specific enode shape, or unifying two existing variables.
 #[derive(Debug, Clone)]
-pub enum Action {
-    Expand { var_idx: usize, op: Op, arity: usize },
+pub enum Action<L: StitchLanguage> {
+    Expand { var_idx: usize, op: L::Discriminant, arity: usize },
     Reuse { keep: usize, drop: usize },
 }
 
-impl std::fmt::Display for Action {
+impl<L: StitchLanguage> std::fmt::Display for Action<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Action::Expand { var_idx, op, arity } => write!(f, "expand #{} := {}/{}", var_idx, op, arity),
@@ -26,14 +26,14 @@ impl std::fmt::Display for Action {
 
 /// Shared read-only context passed to all search operations.
 #[derive(Debug)]
-pub struct SharedSearchData {
-    pub egraph: StitchEgraph,
+pub struct SharedSearchData<L: StitchLanguage> {
+    pub egraph: StitchEgraph<L>,
     /// Root e-class of the corpus (the `(programs ...)` wrapper). Excluded
     /// from the initial match set so patterns can't be rooted there.
     pub root: Id,
     /// Follow pattern: particles whose pattern isn't a valid prefix get zero
     /// weight at the resample step.
-    pub follow: Option<RevExpr<ENodeOrVar<StitchLang>>>,
+    pub follow: Option<RevExpr<ENodeOrVar<L>>>,
     /// Probability of attempting variable reuse during expansion.
     pub p_reuse: f64,
     /// Enable slow rewrite check (assert fast == slow computation).
@@ -45,15 +45,15 @@ pub struct SharedSearchData {
 }
 
 #[derive(Debug, Clone)]
-pub struct SearchState {
-    pub pattern: Pattern,
+pub struct SearchState<L: StitchLanguage> {
+    pub pattern: Pattern<L>,
     // each match represents a different eclass at which `pattern` can be rooted
     pub matches: Vec<MatchAtEClass>,
 }
 
-impl SearchState {
+impl<L: StitchLanguage> SearchState<L> {
     /// Randomly selects a match and variable, then expands or reuses the variable.
-    pub fn expand_random(&mut self, shared: &SharedSearchData, verbose: bool) {
+    pub fn expand_random(&mut self, shared: &SharedSearchData<L>, verbose: bool) {
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
@@ -98,13 +98,13 @@ impl SearchState {
     }
 
     /// Check if this particle's pattern is a valid prefix of the follow target.
-    pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
+    pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<L>>) -> bool {
         let mut var_bindings = HashMap::new();
         crate::follow::check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
-    pub fn expand(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
+    pub fn expand(&mut self, var_idx: usize, target: &L, shared: &SharedSearchData<L>) {
         self.pattern.expand(var_idx, target);
         self.subset_matches(var_idx, target, shared);
     }
@@ -133,7 +133,7 @@ impl SearchState {
     /// Mirrors `Pattern::expand`: drops the old var from `subst.vars` and inserts the new
     /// child eclass ids at positions `var_idx..var_idx+k`, keeping substs aligned with
     /// the pattern's DFS-ordered vars list.
-    pub fn subset_matches(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
+    pub fn subset_matches(&mut self, var_idx: usize, target: &L, shared: &SharedSearchData<L>) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
             let var_eclass = &shared.egraph[var_id];
@@ -141,7 +141,7 @@ impl SearchState {
                 if node.matches(target) {
                     let mut new_subst = subst.clone();
                     new_subst.vars.remove(var_idx);
-                    for (j, child_id) in node.children.iter().enumerate() {
+                    for (j, child_id) in node.children().iter().enumerate() {
                         new_subst.vars.insert(var_idx + j, *child_id);
                     }
                     out.push(new_subst);
@@ -165,7 +165,7 @@ impl SearchState {
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
-    pub fn new(shared: &SharedSearchData) -> Self {
+    pub fn new(shared: &SharedSearchData<L>) -> Self {
         Self {
             pattern: Pattern::single_var(),
             matches: identity_matches(&shared.egraph, shared.root),
@@ -179,17 +179,17 @@ impl SearchState {
     /// one child per shape. Reuse candidates: for every pair `(i, j)` with `i < j`,
     /// emit a child if some match has `subst.vars[i] == subst.vars[j]`. Children whose
     /// match set becomes empty after filtering are dropped.
-    pub fn enumerate_successors(&self, shared: &SharedSearchData) -> Vec<(Action, SearchState)> {
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<L>) -> Vec<(Action<L>, SearchState<L>)> {
         let mut out = Vec::new();
 
         for var_idx in 0..self.pattern.vars.len() {
-            let mut seen: FxHashSet<(Op, usize)> = FxHashSet::default();
-            let mut shapes: Vec<StitchLang> = Vec::new();
+            let mut seen: FxHashSet<(L::Discriminant, usize)> = FxHashSet::default();
+            let mut shapes: Vec<L> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
-                        let key = (node.op, node.children.len());
+                        let key = (node.discriminant(), node.children().len());
                         if seen.insert(key) {
                             shapes.push(node.clone());
                         }
@@ -200,7 +200,14 @@ impl SearchState {
                 let mut child = self.clone();
                 child.expand(var_idx, &shape, shared);
                 if !child.matches.is_empty() {
-                    out.push((Action::Expand { var_idx, op: shape.op, arity: shape.children.len() }, child));
+                    out.push((
+                        Action::Expand {
+                            var_idx,
+                            op: shape.discriminant(),
+                            arity: shape.children().len(),
+                        },
+                        child,
+                    ));
                 }
             }
         }
@@ -225,8 +232,8 @@ impl SearchState {
 
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
-pub fn setup_search(egraph: StitchEgraph, root: Id, args: &crate::Args) -> (SharedSearchData, crate::cost::CostCache, usize) {
-    let follow_expr: Option<RevExpr<ENodeOrVar<StitchLang>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+pub fn setup_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, args: &crate::Args) -> (SharedSearchData<L>, crate::cost::CostCache, usize) {
+    let follow_expr: Option<RevExpr<ENodeOrVar<L>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,
@@ -243,7 +250,7 @@ pub fn setup_search(egraph: StitchEgraph, root: Id, args: &crate::Args) -> (Shar
     (shared, cache, original_size)
 }
 
-impl std::fmt::Display for SearchState {
+impl<L: StitchLanguage> std::fmt::Display for SearchState<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SearchState {{ pattern: {}, matches: {} }}", self.pattern, self.matches.len())
     }
@@ -251,7 +258,7 @@ impl std::fmt::Display for SearchState {
 
 /// Computes how many times each e-class appears in the fully-expanded corpus tree.
 /// Top-down pass: root gets count 1, then propagate to children of the best (first) enode.
-pub fn compute_usage_counts(egraph: &StitchEgraph, root: Id) -> FxHashMap<Id, usize> {
+pub fn compute_usage_counts<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> FxHashMap<Id, usize> {
     let mut counts = FxHashMap::<Id, usize>::default();
     counts.insert(root, 1);
     let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
@@ -262,7 +269,7 @@ pub fn compute_usage_counts(egraph: &StitchEgraph, root: Id) -> FxHashMap<Id, us
             None => continue,
         };
         if let Some(enode) = egraph[id].nodes.first() {
-            for &child in &enode.children {
+            for &child in enode.children() {
                 *counts.entry(child).or_insert(0) += count;
             }
         }

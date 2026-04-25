@@ -31,7 +31,12 @@
 //! ```
 
 use clap::Parser;
-use egg_stitch::{Args, io, multiple_step_search, results::AbstractionResult};
+use egg_stitch::{
+    Args, io,
+    lang::{LambdaCalcLanguage, OpChildrenLanguage, StitchLanguage},
+    multiple_step_search,
+    results::AbstractionResult,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -86,8 +91,12 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Expected {
     }
     argv.extend(extra_args);
     let args = Args::parse_from(argv);
-    let (egraph, root, _) = io::load_egraph(&args.input, args.rules.as_deref(), args.appify);
-    let (library, _, _) = multiple_step_search(egraph, root, &args);
+    if args.appify { run_with::<LambdaCalcLanguage>(&args, input) } else { run_with::<OpChildrenLanguage>(&args, input) }
+}
+
+fn run_with<L: StitchLanguage>(args: &Args, input: &str) -> Expected {
+    let (egraph, root, _) = io::load_egraph::<L>(&args.input, args.rules.as_deref());
+    let (library, _, _) = multiple_step_search(egraph, root, args);
     build_expected(library, input)
 }
 
