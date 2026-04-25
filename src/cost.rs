@@ -68,7 +68,7 @@ pub fn compute_cost(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, sea
 
 pub fn compute_pattern_size(pattern: &Pattern) -> usize {
     let rec_expr: RecExpr<ENodeOrVar<StitchLang>> = pattern.pattern.clone().into();
-    compute_recexpr_size(&rec_expr, (rec_expr.len() - 1) .into())
+    compute_recexpr_size(&rec_expr, (rec_expr.len() - 1).into())
 }
 
 pub fn compute_recexpr_size(rec_expr: &RecExpr<ENodeOrVar<StitchLang>>, ptr: Id) -> usize {
