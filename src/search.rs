@@ -233,7 +233,7 @@ impl<L: StitchLanguage> SearchState<L> {
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, args: &crate::Args) -> (SharedSearchData<L>, crate::cost::CostCache, usize) {
-    let follow_expr: Option<RevExpr<ENodeOrVar<L>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|_| panic!("failed to parse follow pattern '{}'", s)));
+    let follow_expr: Option<RevExpr<ENodeOrVar<L>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,
