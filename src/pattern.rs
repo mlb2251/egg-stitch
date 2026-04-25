@@ -1,8 +1,8 @@
-use crate::lang::StitchLang;
+use crate::lang::StitchLanguage;
 use crate::revexpr::RevExpr;
-use egg::{ENodeOrVar, Id, Language};
+use egg::{ENodeOrVar, Id};
 
-/// A partially-built pattern over `StitchLang`, tracking which nodes are open variables.
+/// A partially-built pattern over a `StitchLanguage`, tracking which nodes are open variables.
 ///
 /// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds
 /// `ENodeOrVar::Var(egg::Var::from(k as u32))` in the tree — i.e. the tree's var names
@@ -10,15 +10,15 @@ use egg::{ENodeOrVar, Id, Language};
 /// by actively rewriting affected `Var(n)` leaves, so `pattern.to_string()` is itself
 /// canonical: two alpha-equivalent patterns render identically.
 #[derive(Debug, Clone)]
-pub struct Pattern {
-    pub pattern: RevExpr<ENodeOrVar<StitchLang>>,
+pub struct Pattern<L: StitchLanguage> {
+    pub pattern: RevExpr<ENodeOrVar<L>>,
     pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
 }
 
-impl Pattern {
+impl<L: StitchLanguage> Pattern<L> {
     /// Creates the initial `?#0` pattern: a single variable.
     pub fn single_var() -> Self {
-        let e: RevExpr<ENodeOrVar<StitchLang>> = RevExpr::new(vec![ENodeOrVar::Var(egg::Var::from(0))]);
+        let e: RevExpr<ENodeOrVar<L>> = RevExpr::new(vec![ENodeOrVar::Var(egg::Var::from(0))]);
         Pattern { pattern: e, vars: vec![vec![0.into()]] }
     }
 
@@ -26,7 +26,7 @@ impl Pattern {
     /// at list positions `var_idx..var_idx+k`; any vars that previously followed
     /// `var_idx` shift right and get their in-tree `Var(n)` leaves rewritten to
     /// match their new position, so the canonical-form invariant is preserved.
-    pub fn expand(&mut self, var_idx: usize, target: &StitchLang) {
+    pub fn expand(&mut self, var_idx: usize, target: &L) {
         let var_positions = self.vars.remove(var_idx);
         assert!(matches!(self.pattern[var_positions[0]], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
         let num_children = target.len();
@@ -49,7 +49,7 @@ impl Pattern {
             let new_var = ENodeOrVar::Var(egg::Var::from((var_idx + j) as u32));
             self.pattern.nodes.push(new_var);
             let new_id = Id::from(self.pattern.nodes.len() - 1);
-            new_node.children[j] = new_id;
+            new_node.children_mut()[j] = new_id;
             self.vars.insert(var_idx + j, vec![new_id]);
         }
 
@@ -87,7 +87,7 @@ impl Pattern {
     }
 }
 
-impl std::fmt::Display for Pattern {
+impl<L: StitchLanguage> std::fmt::Display for Pattern<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.pattern)
     }
@@ -95,15 +95,15 @@ impl std::fmt::Display for Pattern {
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::Op;
+    use crate::lang::{Op, OpChildrenLanguage};
 
     use super::*;
     use egg::Symbol;
 
     /// Build a StitchLang enode with `arity` placeholder children. `expand` overwrites
     /// the children, so the dummy Ids here are never read.
-    fn op(name: &str, arity: usize) -> StitchLang {
-        StitchLang {
+    fn op(name: &str, arity: usize) -> OpChildrenLanguage {
+        OpChildrenLanguage {
             op: Op::Sym(Symbol::from(name)),
             children: vec![Id::from(0); arity],
         }
@@ -111,7 +111,7 @@ mod tests {
 
     /// Asserts the canonical-form invariant: every id in `vars[k]` holds `Var(k)`,
     /// and nothing in `vars` is non-Var.
-    fn assert_vars_canonical(p: &Pattern) {
+    fn assert_vars_canonical(p: &Pattern<OpChildrenLanguage>) {
         for (k, ids) in p.vars.iter().enumerate() {
             let expected = egg::Var::from(k as u32);
             for id in ids {
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn single_var_is_canonical() {
-        let p = Pattern::single_var();
+        let p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         assert_eq!(p.vars.len(), 1);
         assert_eq!(p.to_string(), "?#0");
         assert_vars_canonical(&p);
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn expand_fresh_var_binary() {
-        let mut p = Pattern::single_var();
+        let mut p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p.expand(0, &op("+", 2));
         assert_eq!(p.vars.len(), 2);
         assert_eq!(p.to_string(), "(+ ?#0 ?#1)");
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn expand_nested_left_first() {
-        let mut p = Pattern::single_var();
+        let mut p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
         assert_eq!(p.to_string(), "(+ (- ?#0 ?#1) ?#2)");
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn expand_right_keeps_earlier_vars_first() {
-        let mut p = Pattern::single_var();
+        let mut p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
         assert_eq!(p.to_string(), "(+ ?#0 (* ?#1 ?#2))");
@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn expand_ternary() {
-        let mut p = Pattern::single_var();
+        let mut p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p.expand(0, &op("f", 3));
         assert_eq!(p.to_string(), "(f ?#0 ?#1 ?#2)");
         assert_eq!(p.vars.len(), 3);
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn reuse_adjacent() {
-        let mut p = Pattern::single_var();
+        let mut p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.reuse(0, 1); // (+ ?#0 ?#0)
         assert_eq!(p.to_string(), "(+ ?#0 ?#0)");
@@ -181,12 +181,12 @@ mod tests {
 
     #[test]
     fn reuse_normalizes_reversed_args() {
-        let mut p1 = Pattern::single_var();
+        let mut p1: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p1.expand(0, &op("+", 2));
         p1.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
         p1.reuse(0, 2);
 
-        let mut p2 = Pattern::single_var();
+        let mut p2: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p2.expand(0, &op("+", 2));
         p2.expand(1, &op("*", 2));
         p2.reuse(2, 0); // reversed
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn reuse_with_intervening_var() {
-        let mut p = Pattern::single_var();
+        let mut p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p.expand(0, &op("f", 3)); // (f ?#0 ?#1 ?#2)
         p.reuse(0, 2); // (f ?#0 ?#1 ?#0)
         assert_eq!(p.to_string(), "(f ?#0 ?#1 ?#0)");
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn expand_reused_var_preserves_dag_sharing() {
-        let mut p = Pattern::single_var();
+        let mut p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.reuse(0, 1); // (+ ?#0 ?#0)
         assert_eq!(p.vars.len(), 1);
@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn expand_then_reuse_across_structure() {
-        let mut p = Pattern::single_var();
+        let mut p: Pattern<OpChildrenLanguage> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
         p.reuse(1, 2); // (+ ?#0 (* ?#1 ?#1))
@@ -245,12 +245,12 @@ mod tests {
 
     #[test]
     fn to_string_distinguishes_non_equivalent_shapes() {
-        let mut a = Pattern::single_var();
+        let mut a: Pattern<OpChildrenLanguage> = Pattern::single_var();
         a.expand(0, &op("+", 2));
         a.reuse(0, 1); // (+ ?#0 ?#0)
         a.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
 
-        let mut b = Pattern::single_var();
+        let mut b: Pattern<OpChildrenLanguage> = Pattern::single_var();
         b.expand(0, &op("+", 2));
         b.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) ?#2)
         b.expand(2, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#2 ?#3))

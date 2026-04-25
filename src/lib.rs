@@ -18,7 +18,7 @@ use egg::Id;
 
 pub use best_first::SearchPriority;
 
-use crate::lang::Op;
+use crate::lang::{StitchEgraph, StitchLanguage, StitchOp};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -114,7 +114,7 @@ pub struct Args {
 /// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
 /// serialising programs to strings and re-parsing. The eclass arguments already carry
 /// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
     let mut egraph = egraph;
     let mut root = root;
     let mut library = Vec::new();
@@ -182,23 +182,22 @@ pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::SearchState, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (lang::StitchEgraph, Id, Vec<String>) {
-    let fn_sym: egg::Symbol = fn_name.into();
+fn apply_abstraction<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, state: &search::SearchState<L>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<L>, Id, Vec<String>) {
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {
-            let node = lang::StitchLang { op: Op::Sym(fn_sym), children: subst.vars.clone() };
+            let node = L::from_op(fn_name, subst.vars.clone()).expect("from_op should be infallible for stitch languages");
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
         }
     }
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    let programs_node = egraph[root].nodes.iter().find(|n| n.op.as_str() == "programs").expect("root e-class should contain a `programs` enode");
-    let programs: Vec<String> = programs_node.children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
+    let programs_node = egraph[root].nodes.iter().find(|n| n.discriminant().op_name() == "programs").expect("root e-class should contain a `programs` enode");
+    let programs: Vec<String> = programs_node.children().iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
 
     if rebuild {
-        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file);
+        let (fresh_egraph, fresh_root) = io::egraph_from_programs::<L>(&programs, rule_file);
         (fresh_egraph, fresh_root, programs)
     } else {
         (egraph, root, programs)

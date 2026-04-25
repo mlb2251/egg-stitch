@@ -1,8 +1,23 @@
 use egg::{Analysis, FromOp, Id, Language, Symbol};
 use std::convert::Infallible;
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
+use std::hash::Hash;
 
-/// A simple language based on egg's SymbolLang.
+/// Trait for the operator stored inside a `StitchLang` node.
+///
+/// Anything that names enodes works: a single `Symbol`, an enum of typed
+/// constants, etc. The `from_name` constructor must be infallible because
+/// `StitchLang::from_op` parses arbitrary strings via egg's RecExpr parser.
+pub trait StitchOp: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 'static {
+    /// The operator's display name. Used to compare against literals like `"programs"`.
+    fn op_name(&self) -> &str;
+    /// Builds an op from its display name. Must succeed for every input string.
+    fn from_name(s: &str) -> Self;
+    /// The intrinsic size of this operator, used for AST size analysis.
+    fn intrinsic_size(&self) -> u32 {
+        1
+    }
+}
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum Op {
@@ -24,20 +39,34 @@ impl Op {
     }
 }
 
+impl StitchOp for Op {
+    fn op_name(&self) -> &str {
+        match self {
+            Op::Sym(s) => s.as_str(),
+        }
+    }
+    fn from_name(s: &str) -> Self {
+        Op::Sym(Symbol::from(s))
+    }
+}
+
+/// Language where each enode is an operator plus a list of child Ids.
+/// This language does not have currying-by-default but is more efficient
+/// due to a smaller graph.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
-pub struct StitchLang {
+pub struct OpChildrenLanguage<O = Op> {
     /// The operator for an enode.
-    pub op: Op,
+    pub op: O,
     /// The enode's children `Id`s.
     pub children: Vec<Id>,
 }
 
-impl Language for StitchLang {
+impl<O: StitchOp> Language for OpChildrenLanguage<O> {
     /// Used for short-circuiting the search for equivalent nodes.
-    type Discriminant = Op;
+    type Discriminant = O;
 
     fn discriminant(&self) -> Self::Discriminant {
-        self.op
+        self.op.clone()
     }
 
     /// Returns true if this enode matches another enode.
@@ -56,31 +85,35 @@ impl Language for StitchLang {
     }
 }
 
-impl Display for StitchLang {
+impl<O: StitchOp> Display for OpChildrenLanguage<O> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.op, f)
     }
 }
 
-impl FromOp for StitchLang {
+impl<O: StitchOp> FromOp for OpChildrenLanguage<O> {
     type Error = Infallible;
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        let parsed_op = Op::Sym(op.into());
-        Ok(Self { op: parsed_op, children })
+        Ok(Self { op: O::from_name(op), children })
     }
 }
+
+/// Trait covering every language usable with the search machinery.
+pub trait StitchLanguage: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {}
+
+impl<L> StitchLanguage for L where L: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {}
 
 /// Egg analysis that tracks the minimum AST size of each e-class.
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis;
 
-impl Analysis<StitchLang> for StitchAnalysis {
+impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
     type Data = u32;
 
-    /// Computes the minimum AST size of a new enode as 1 + sum of children's sizes.
-    fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: Id) -> Self::Data {
-        1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+    /// Computes the minimum AST size of a new enode as op size + sum of children's sizes.
+    fn make(egraph: &mut egg::EGraph<L, Self>, enode: &L, _id: Id) -> Self::Data {
+        enode.discriminant().intrinsic_size() + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
     }
 
     /// Keeps the minimum size when two e-classes are merged.
@@ -97,4 +130,4 @@ impl Analysis<StitchLang> for StitchAnalysis {
 }
 
 /// Type alias for the e-graph used throughout this codebase.
-pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
+pub type StitchEgraph<L> = egg::EGraph<L, StitchAnalysis>;

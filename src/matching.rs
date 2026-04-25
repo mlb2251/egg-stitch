@@ -1,4 +1,4 @@
-use crate::lang::StitchEgraph;
+use crate::lang::{StitchEgraph, StitchLanguage};
 use egg::Id;
 
 /// All the ways the current pattern can match at a specific e-class.
@@ -26,7 +26,7 @@ impl MatchAtEClass {
 /// whole corpus; letting the search match there produces abstractions like
 /// `(programs ?#0 ?#0)` that collapse the program list itself, which is never
 /// what we want.
-pub fn identity_matches(egraph: &StitchEgraph, root: egg::Id) -> Vec<MatchAtEClass> {
+pub fn identity_matches<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id) -> Vec<MatchAtEClass> {
     let root = egraph.find(root);
     egraph.classes().filter(|c| c.id != root).map(|c| MatchAtEClass::identity_match(c.id)).collect()
 }

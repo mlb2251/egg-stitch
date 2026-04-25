@@ -1,12 +1,12 @@
 use clap::Parser;
-use egg_stitch::{Args, SearchKind, io, multiple_step_search, results};
+use egg_stitch::{Args, SearchKind, io, lang::OpChildrenLanguage, multiple_step_search, results};
 
 fn main() {
     let args = Args::parse();
     let start = std::time::Instant::now();
 
     let rules = args.rules.as_deref();
-    let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
+    let (egraph, root, cost_before_rewrites) = io::load_egraph::<OpChildrenLanguage>(&args.input, rules);
 
     let (library, original_size, final_cost) = multiple_step_search(egraph, root, &args);
 

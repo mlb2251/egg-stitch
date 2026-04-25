@@ -3,11 +3,12 @@ use std::cmp::min;
 use colored::Colorize;
 
 use crate::cost::compute_pattern_size;
+use crate::lang::StitchLanguage;
 use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 
 /// Sets the log weight of particles that don't match the follow pattern to -inf.
-pub fn apply_follow_constraint(states: &[SearchState], log_weights: &mut [f64], follow: &crate::revexpr::RevExpr<egg::ENodeOrVar<crate::lang::StitchLang>>, shared: &SharedSearchData, original_size: usize, costs: &[usize], verbose: bool) {
+pub fn apply_follow_constraint<L: StitchLanguage>(states: &[SearchState<L>], log_weights: &mut [f64], follow: &crate::revexpr::RevExpr<egg::ENodeOrVar<L>>, shared: &SharedSearchData<L>, original_size: usize, costs: &[usize], verbose: bool) {
     let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
 
     if verbose {
@@ -55,7 +56,7 @@ pub fn apply_follow_constraint(states: &[SearchState], log_weights: &mut [f64], 
 }
 
 /// Prints summary info for the top particles (up to 5).
-pub fn print_top_particles(states: &[SearchState], weights: &[f64], shared: &SharedSearchData, original_size: usize, get_cost: impl Fn(usize) -> usize) {
+pub fn print_top_particles<L: StitchLanguage>(states: &[SearchState<L>], weights: &[f64], shared: &SharedSearchData<L>, original_size: usize, get_cost: impl Fn(usize) -> usize) {
     for i in 0..min(5, states.len()) {
         let usage_matches: usize = states[i].matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
         let pat_size = compute_pattern_size(&states[i].pattern);
