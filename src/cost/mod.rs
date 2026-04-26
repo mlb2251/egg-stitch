@@ -7,13 +7,13 @@ use std::collections::BinaryHeap;
 mod cost_only_extractor;
 mod lower_bound;
 mod rewrite_analysis;
-mod upper_bound;
+mod compute;
 
 pub use cost_only_extractor::CostOnlyExtractor;
 pub use lower_bound::{compute_lower_bound, LowerBoundAnalysis};
 pub use rewrite_analysis::{build_eclass_to_substs, EclassToSubsts, RewriteAnalysis};
-pub use upper_bound::{compute_cost, compute_pattern_size, extract_rewritten_programs};
-pub(crate) use upper_bound::compute_size;
+pub use compute::{compute_cost, compute_pattern_size, extract_rewritten_programs};
+pub(crate) use compute::compute_size;
 
 /// Precomputed egraph topology for fast cost computation.
 /// Built once from the egraph and reused across all `compute_cost` calls.
