@@ -38,6 +38,11 @@ pub trait LanguageFamily: Clone + 'static {
     /// For families with binary `App` this builds a curried application chain.
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
 
+    /// Structural cost (sum of `intrinsic_size` over all enodes added by
+    /// `add_stub_application`) of an `arity`-arg stub application — the
+    /// head plus any spine nodes (e.g. curried `App`s) the family inserts.
+    fn stub_application_size<O: StitchOp>(name: &str, arity: usize) -> u32;
+
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
 }
@@ -60,6 +65,10 @@ impl LanguageFamily for OpChildren {
 
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
         egraph.add(Self::make(O::from_name(name), children))
+    }
+
+    fn stub_application_size<O: StitchOp>(name: &str, _arity: usize) -> u32 {
+        O::from_name(name).intrinsic_size()
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
@@ -100,6 +109,11 @@ impl LanguageFamily for LambdaCalc {
             current = egraph.add(LambdaCalcLanguage::App([current, child]));
         }
         current
+    }
+
+    fn stub_application_size<O: StitchOp>(name: &str, arity: usize) -> u32 {
+        // Leaf head + one App per argument (each App has intrinsic_size 1).
+        O::from_name(name).intrinsic_size() + arity as u32
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {

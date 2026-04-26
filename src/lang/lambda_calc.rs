@@ -46,12 +46,12 @@ impl<O: Display> Display for LambdaCalcDisc<O> {
 }
 
 impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
-    /// `App` and `Lam` are zero-cost structural wrappers so an appified
-    /// `(@ (@ (@ f a) b) c)` has the same AST size as the flat `(f a b c)`.
+    /// Each variant counts as size 1, matching babble's `egg::AstSize` cost
+    /// (where every enode contributes 1). This means an appified
+    /// `(@ (@ (@ f a) b) c)` costs more than the flat `(f a b c)`.
     fn intrinsic_size(&self) -> u32 {
         match self {
-            Self::App | Self::Lam => 0,
-            Self::Programs => 1,
+            Self::App | Self::Lam | Self::Programs => 1,
             Self::Leaf(o) => o.intrinsic_size(),
         }
     }

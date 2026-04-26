@@ -87,7 +87,6 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
     }
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64) };
-    let inv_op_size = O::from_name("inv_0").intrinsic_size() as i64;
 
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
@@ -102,7 +101,8 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         let mut best = size_current;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
-                let size_new: i64 = inv_op_size + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
+                let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len()) as i64;
+                let size_new: i64 = stub_size + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
                 if size_new < best {
                     best = size_new;
                 }
