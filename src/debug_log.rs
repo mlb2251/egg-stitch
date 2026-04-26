@@ -61,7 +61,7 @@ pub struct ParticleLog {
 }
 
 /// Builds a ParticleLog for each particle (pre-resample snapshot).
-pub fn build_particle_logs<L: StitchLanguage>(states: &[SearchState<L>], costs: &[usize], weights: &[f64]) -> Vec<ParticleLog> {
+pub fn build_particle_logs<L: StitchLanguage, P: crate::pattern::PatternStorage<L>>(states: &[SearchState<L, P>], costs: &[usize], weights: &[f64]) -> Vec<ParticleLog> {
     states
         .iter()
         .enumerate()
@@ -77,7 +77,7 @@ pub fn build_particle_logs<L: StitchLanguage>(states: &[SearchState<L>], costs: 
 
 /// Appends a debug step log if debug mode is on.
 #[allow(clippy::too_many_arguments)]
-pub fn log_debug_step<L: StitchLanguage>(debug: bool, steps: &mut Vec<StepLog>, step: usize, states: &[SearchState<L>], costs: &[usize], weights: &[f64], best: &Option<(usize, SearchState<L>)>, resample_indices: &[usize]) {
+pub fn log_debug_step<L: StitchLanguage, P: crate::pattern::PatternStorage<L>>(debug: bool, steps: &mut Vec<StepLog>, step: usize, states: &[SearchState<L, P>], costs: &[usize], weights: &[f64], best: &Option<(usize, SearchState<L, P>)>, resample_indices: &[usize]) {
     if !debug {
         return;
     }

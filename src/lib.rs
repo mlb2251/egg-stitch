@@ -19,6 +19,7 @@ use egg::Id;
 pub use best_first::SearchPriority;
 
 use crate::lang::{StitchEgraph, StitchLanguage};
+use crate::pattern::PatternStorage;
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -114,7 +115,7 @@ pub struct Args {
 /// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
 /// serialising programs to strings and re-parsing. The eclass arguments already carry
 /// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+pub fn multiple_step_search<L: StitchLanguage, P: PatternStorage<L>>(egraph: StitchEgraph<L>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
     let mut egraph = egraph;
     let mut root = root;
     let mut library = Vec::new();
@@ -124,11 +125,11 @@ pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id
     for abstraction_idx in 0..args.num_abstractions {
         let (best, iter_original_size, best_found_at, num_steps_run, result_egraph) = match args.search {
             SearchKind::Smc => {
-                let r = smc::smc(egraph, root, args);
+                let r = smc::smc::<L, P>(egraph, root, args);
                 (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
             }
             SearchKind::BestFirst => {
-                let r = best_first::best_first(egraph, root, args);
+                let r = best_first::best_first::<L, P>(egraph, root, args);
                 (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph)
             }
         };
@@ -140,7 +141,7 @@ pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let pat_size = cost::compute_pattern_size(&state.pattern);
+                let pat_size = cost::compute_pattern_size::<L, P>(&state.pattern);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
@@ -182,7 +183,7 @@ pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, state: &search::SearchState<L>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<L>, Id, Vec<String>) {
+fn apply_abstraction<L: StitchLanguage, P: PatternStorage<L>>(egraph: StitchEgraph<L>, root: Id, state: &search::SearchState<L, P>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<L>, Id, Vec<String>) {
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {

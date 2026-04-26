@@ -7,6 +7,7 @@ use std::collections::BinaryHeap;
 use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{StitchEgraph, StitchLanguage};
+use crate::pattern::PatternStorage;
 use crate::search::{Action, SearchState, setup_search};
 
 /// How to order the best-first search heap.
@@ -58,8 +59,8 @@ fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: us
 }
 
 /// Output of a completed best-first enumerative search.
-pub struct BestFirstResult<L: StitchLanguage> {
-    pub best: Option<(usize, SearchState<L>)>,
+pub struct BestFirstResult<L: StitchLanguage, P: PatternStorage<L>> {
+    pub best: Option<(usize, SearchState<L, P>)>,
     pub original_size: usize,
     /// Expansion index (pop count) at which the current best was first discovered.
     pub best_found_at: Option<usize>,
@@ -71,10 +72,10 @@ pub struct BestFirstResult<L: StitchLanguage> {
 
 /// One node in the in-memory search tree. Retained for parent-pointer lookups
 /// and for the optional serialized debug log.
-struct Node<L: StitchLanguage> {
+struct Node<L: StitchLanguage, P: PatternStorage<L>> {
     parent: Option<usize>,
     action: Option<Action<L>>,
-    state: SearchState<L>,
+    state: SearchState<L, P>,
     cost: usize,
     depth: usize,
     expanded: bool,
@@ -88,7 +89,7 @@ struct Node<L: StitchLanguage> {
 /// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
 /// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
 /// improvement" just means we're grinding through a less promising branch.)
-pub fn best_first<L: StitchLanguage>(egraph: StitchEgraph<L>, root: egg::Id, args: &crate::Args) -> BestFirstResult<L> {
+pub fn best_first<L: StitchLanguage, P: PatternStorage<L>>(egraph: StitchEgraph<L>, root: egg::Id, args: &crate::Args) -> BestFirstResult<L, P> {
     let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
@@ -101,7 +102,7 @@ pub fn best_first<L: StitchLanguage>(egraph: StitchEgraph<L>, root: egg::Id, arg
     let initial_cost = compute_cost(&shared.egraph, root, &cost_cache, &initial_state, shared.check_slow);
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
 
-    let mut nodes: Vec<Node<L>> = Vec::new();
+    let mut nodes: Vec<Node<L, P>> = Vec::new();
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
     let mut seen: FxHashSet<String> = FxHashSet::default();
 
