@@ -104,6 +104,24 @@ impl StitchAnalysis for RewriteAnalysis {
     }
 }
 
+/// Optimistic lower-bound analysis: if any subst applies at this eclass, assume the
+/// rewrite collapses it to a single node (size 1); otherwise fall back to the minimum
+/// enode size. Useful as a cheap upper bound on achievable compression.
+pub struct UpperBoundAnalysis;
+impl StitchAnalysis for UpperBoundAnalysis {
+    fn init(sizes: &StitchAnalysisRunner<Self>) -> Vec<Id> {
+        sizes.eclass_to_substs.keys().copied().collect()
+    }
+    fn best(sizes: &StitchAnalysisRunner<Self>, eclass: Id) -> i64 {
+        if let Some(substs) = sizes.eclass_to_substs.get(&eclass) {
+            debug_assert!(!substs.is_empty());
+            1
+        } else {
+            sizes.min_enode_size(eclass)
+        }
+    }
+}
+
 /// Sparse per-eclass size map with a fallback to the unrewritten AstSize (`egraph[id].data`).
 /// Entries represent eclasses whose rewritten size is strictly smaller than the default.
 /// `eclass_to_substs` is shared state available to every analysis.
