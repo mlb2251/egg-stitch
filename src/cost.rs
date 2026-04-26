@@ -71,32 +71,71 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
     1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
 }
 
+/// Pluggable per-eclass relaxation rule. The analysis decides which eclasses seed the
+/// work queue and how to compute a candidate size for an eclass given the current
+/// `StitchAnalysisRunner` state. Implemented as associated functions (no `&self`) so the solver can
+/// pass `&StitchAnalysisRunner<Self>` without conflicting borrows; analysis-owned data is reached
+/// via `sizes.analysis`, while shared match info lives on `sizes.eclass_to_substs`.
+pub trait StitchAnalysis: Sized {
+    /// Eclasses to push onto the work queue when the solver starts.
+    fn init(sizes: &StitchAnalysisRunner<Self>) -> Vec<Id>;
+    /// Candidate size for `eclass` given currently known sizes.
+    fn best(sizes: &StitchAnalysisRunner<Self>, eclass: Id) -> i64;
+}
+
+/// Default analysis: at each match root, rewriting via `inv_0(args...)` is allowed,
+/// otherwise we fall back to the minimum enode size.
+pub struct RewriteAnalysis;
+impl StitchAnalysis for RewriteAnalysis {
+    fn init(sizes: &StitchAnalysisRunner<Self>) -> Vec<Id> {
+        sizes.eclass_to_substs.keys().copied().collect()
+    }
+    fn best(sizes: &StitchAnalysisRunner<Self>, eclass: Id) -> i64 {
+        // Try not rewriting self but YES allowing rewrites of descendants
+        // (technically we could just use sizes.original_size if we knew we weren't enqueued by a child)
+        let mut best = sizes.min_enode_size(eclass);
+        // For every way we match at this eclass (if any), try all ways of rewriting it
+        if let Some(substs) = sizes.eclass_to_substs.get(&eclass) {
+            if let Some(rewrite_size) = substs.iter().map(|subst| 1 + sizes.sum(&subst.vars)).min() {
+                best = best.min(rewrite_size);
+            }
+        }
+        best
+    }
+}
+
 /// Sparse per-eclass size map with a fallback to the unrewritten AstSize (`egraph[id].data`).
 /// Entries represent eclasses whose rewritten size is strictly smaller than the default.
-struct Sizes<'a> {
+/// `eclass_to_substs` is shared state available to every analysis.
+pub struct StitchAnalysisRunner<'a, A: StitchAnalysis> {
     egraph: &'a StitchEgraph,
     cache: &'a CostCache,
     overrides: FxHashMap<Id, i64>,
     work_queue: BinaryHeap<Reverse<(u32, Id)>>,
-    eclass_to_substs: FxHashMap<Id, &'a Vec<Subst>>,
+    pub eclass_to_substs: FxHashMap<Id, &'a Vec<Subst>>,
+    pub analysis: A,
 }
-impl<'a> Sizes<'a> {
-    /// Builds an empty size table seeded with the match roots from `search_state`.
-    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, search_state: &'a SearchState) -> Self {
-        let mut sizes = Sizes {
+impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
+    /// Builds an empty size table seeded with the analysis's chosen eclasses.
+    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, search_state: &'a SearchState, analysis: A) -> Self {
+        let mut eclass_to_substs = FxHashMap::default();
+        for m in &search_state.matches {
+            eclass_to_substs.insert(m.root_eclass, &m.substs);
+        }
+        let mut sizes = StitchAnalysisRunner {
             egraph,
             cache,
             overrides: FxHashMap::default(),
             work_queue: BinaryHeap::new(),
-            eclass_to_substs: FxHashMap::default(),
+            eclass_to_substs,
+            analysis,
         };
-        for m in &search_state.matches {
-            sizes.eclass_to_substs.insert(m.root_eclass, &m.substs);
-            sizes.work_queue.push(Reverse((sizes.cache.postorder[usize::from(m.root_eclass)].unwrap(), m.root_eclass)));
+        for id in A::init(&sizes) {
+            sizes.work_queue.push(Reverse((cache.postorder[usize::from(id)].unwrap(), id)));
         }
         sizes
     }
-    fn get(&self, id: Id) -> i64 {
+    pub fn get(&self, id: Id) -> i64 {
         self.overrides.get(&id).copied().unwrap_or(self.original_size(id))
     }
     fn set(&mut self, id: Id, v: i64) {
@@ -106,19 +145,15 @@ impl<'a> Sizes<'a> {
         self.overrides.contains_key(&id)
     }
     /// Sum of `get` over a list of eclass ids.
-    fn sum(&self, ids: &[Id]) -> i64 {
+    pub fn sum(&self, ids: &[Id]) -> i64 {
         ids.iter().map(|&id| self.get(id)).sum()
     }
-    fn original_size(&self, id: Id) -> i64 {
+    pub fn original_size(&self, id: Id) -> i64 {
         self.egraph[id].data as i64
     }
-    /// Minimum size over the enodes of `eclass`, or `None` if the eclass has no enodes.
-    fn min_enode_size(&self, eclass: Id) -> i64 {
+    /// Minimum size over the enodes of `eclass`. Panics if the eclass has no enodes.
+    pub fn min_enode_size(&self, eclass: Id) -> i64 {
         self.egraph[eclass].nodes.iter().map(|enode| 1 + self.sum(&enode.children)).min().unwrap()
-    }
-    /// Minimum size over the rewrites (substs) applicable at `eclass`, or `None` if no match applies here.
-    fn min_rewrite_size(&self, eclass: Id) -> Option<i64> {
-        self.eclass_to_substs.get(&eclass).and_then(|substs| substs.iter().map(|subst| 1 + self.sum(&subst.vars)).min())
     }
     /// If `new` improves on the current size of `eclass`, record it and enqueue parents for re-relaxation.
     fn update(&mut self, eclass: Id, new: i64) {
@@ -133,18 +168,7 @@ impl<'a> Sizes<'a> {
             if self.contains(eclass) {
                 continue;
             }
-
-            // Try not rewriting self but YES allowing rewrites of descendants
-            // (technically we could just use self.original_size if we knew we weren't enqueued by a child)
-            let mut best = self.min_enode_size(eclass);
-
-            // For every way we match at this eclass (if any), try all ways of rewriting it
-            if let Some(rewrite_size) = self.min_rewrite_size(eclass) {
-                best = best.min(rewrite_size);
-            }
-
-
-            // If `best` improves on what we have, record it and re-enqueue parents.
+            let best = A::best(self, eclass);
             self.update(eclass, best);
         }
     }
@@ -166,7 +190,7 @@ impl<'a> Sizes<'a> {
 /// match-root eclasses; when an eclass's size strictly improves we write it into
 /// `sizes` and push its parents so they can reconsider with the new child value.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
-    let mut sizes = Sizes::new(egraph, cache, search_state);
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, search_state, RewriteAnalysis);
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {
