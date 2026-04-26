@@ -227,7 +227,7 @@ def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=100, max_arity=2, re
         for domain in stackpathiter(domains):
             rewrites_file = rewrites_path(domain) if rewrites else None
             res, _ = run_ours(domain, "best-first", num_steps=num_steps, max_arity=max_arity, rewrites=rewrites_file, **kwargs)
-            results.append(dict(domain=domain, elapsed_secs=res.elapsed_secs, compression_ratio=res.compression_ratio))
+            results.append(dict(domain=domain, elapsed_secs=res.elapsed_secs, compression_ratio=res.compression_ratio, best_history=res.extra.get("best_history") or []))
     
     for domain in domains:
         domain_results = [r for r in results if r["domain"] == domain]
@@ -237,6 +237,10 @@ def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=100, max_arity=2, re
         for res in domain_results:
             print(f"{res["elapsed_secs"]:.2f}", end=" ")
         print()
+        for i, res in enumerate(domain_results):
+            print(f"  trajectory rep{i}:")
+            for h in res["best_history"]:
+                print(f"    t={h['elapsed_secs']:7.3f}s  exp={h['expansion']:>6}  cost={h['cost']:>6}  {h['pattern']}")
 
 def no_bound():
     quick_eval(no_opt_lower_bound=True)

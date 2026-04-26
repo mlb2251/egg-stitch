@@ -85,6 +85,7 @@ def run_ours(domain: str, search: str, *, num_steps: int, rewrites=_UNSET, max_a
             "arity": data.get("arity"),
             "num_matches": data.get("num_matches"),
             "output_file": str(output),
+            "best_history": data.get("best_history"),
         },
     )
     config = {"domain": domain, "search": search, "num_steps": num_steps, "rewrites": rewrites, "max_arity": max_arity, **extra}
