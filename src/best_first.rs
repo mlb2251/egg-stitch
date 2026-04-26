@@ -4,7 +4,7 @@ use rustc_hash::FxHashSet;
 use serde::Serialize;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::cost::{compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
@@ -143,6 +143,10 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let mut best_history: Vec<BestHistoryEntry> = Vec::new();
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
+    let mut seen_hits: usize = 0;
+    let mut seen_time: Duration = Duration::ZERO;
+    let mut lower_bound_hits: usize = 0;
+    let mut lower_bound_time: Duration = Duration::ZERO;
     let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
@@ -172,18 +176,27 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                 continue;
             }
             if !args.no_seen {
-                if seen.contains(&child_state.pattern) {
+                let t = Instant::now();
+                let hit = seen.contains(&child_state.pattern);
+                if hit {
+                    seen_time += t.elapsed();
+                    seen_hits += 1;
                     continue;
                 }
                 seen.insert(child_state.pattern.clone());
+                seen_time += t.elapsed();
             }
 
             // lower bound on the cost: any descendant of this will have at least this much cost
             if args.opt_lower_bound {
+                let t = Instant::now();
                 let child_match_eclasses: FxHashSet<egg::Id> = child_state.matches.iter().map(|m| m.root_eclass).collect();
                 let child_lower_bound = compute_lower_bound(&shared.egraph, root, &cost_cache, &child_match_eclasses)
                     + compute_pattern_size(&child_state.pattern);
-                if best.as_ref().is_some_and(|(c, _)| child_lower_bound >= *c) {
+                let pruned = best.as_ref().is_some_and(|(c, _)| child_lower_bound >= *c);
+                lower_bound_time += t.elapsed();
+                if pruned {
+                    lower_bound_hits += 1;
                     continue;
                 }
             }
@@ -219,6 +232,16 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
 
         num_expansions += 1;
     }
+
+    let total_elapsed = search_start.elapsed();
+    println!("\n{}", "═══ STATS ═══".blue().bold());
+    println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
+    println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
+    println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
+    println!("{} {}", "seen-set size:".dimmed(), seen.len().to_string().bold());
+    println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_time.as_secs_f64()).dimmed());
+    println!("{} {} {}", "lower-bound hits:".dimmed(), lower_bound_hits.to_string().bold(), format!("(time: {:.3}s)", lower_bound_time.as_secs_f64()).dimmed());
+    println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, best_id))) = (best_found_at, best) {

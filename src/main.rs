@@ -6,7 +6,9 @@ fn main() {
     let start = std::time::Instant::now();
 
     let rules = args.rules.as_deref();
+    let load_start = std::time::Instant::now();
     let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
+    println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
 
     // Dispatch to the requested search algorithm, flattening each driver's result
     // into a common tuple so the downstream RunResult wiring stays shared.
