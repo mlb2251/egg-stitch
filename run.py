@@ -221,7 +221,7 @@ def sweep_num_steps_smc(num_runs = 3):
 
 
 
-def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=500, max_arity=2, rewrites=True, **kwargs):
+def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=500, max_arity=1000, rewrites=True, **kwargs):
     results = []
     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
         for domain in stackpathiter(domains):
@@ -250,7 +250,10 @@ def quick_single(domain="nuts-bolts", **kwargs):
     quick_eval(domains=[domain], num_runs=1, num_steps=5000, **kwargs)
 
 def quick_samply(domain="nuts-bolts", **kwargs):
-    quick_eval(domains=[domain], num_runs=1, num_steps=5000, samply=True, **kwargs)
+    quick_eval(domains=[domain], num_runs=1, num_steps=1000000, samply=True, **kwargs)
+
+def quick_samply_norewrite(domain="nuts-bolts", **kwargs):
+    quick_samply(rewrites=False, **kwargs)
 
 
 
