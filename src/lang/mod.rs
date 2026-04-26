@@ -4,10 +4,12 @@ use std::fmt::{Debug, Display};
 mod lambda_calc;
 mod op;
 mod op_children;
+mod op_with_var;
 
 pub use lambda_calc::LambdaCalcLanguage;
 pub use op::{Op, StitchOp};
 pub use op_children::OpChildrenLanguage;
+pub use op_with_var::OpWithVar;
 
 use crate::pattern::Pattern;
 

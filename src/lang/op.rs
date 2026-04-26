@@ -14,6 +14,11 @@ pub trait StitchOp: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 's
     fn intrinsic_size(&self) -> u32 {
         1
     }
+    /// If this op represents a pattern variable, returns it. Default: not a var.
+    /// Var-aware op types (`OpWithVar` and wrappers around it) override.
+    fn as_var(&self) -> Option<egg::Var> {
+        None
+    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]

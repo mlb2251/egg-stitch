@@ -2,7 +2,7 @@ use egg::{ENodeOrVar, FromOp, Id, Language, RecExpr};
 use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
-use super::{Op, OpChildrenLanguage, StitchLanguage, StitchOp};
+use super::{Op, OpChildrenLanguage, OpWithVar, StitchLanguage, StitchOp};
 use crate::pattern::Pattern;
 
 /// A lambda-calculus shaped language: every node is either a `Leaf` symbol
@@ -141,8 +141,8 @@ impl StitchLanguage for LambdaCalcLanguage {
     }
 
     fn display_pattern(pat: &Pattern<Self>) -> String {
-        let ast: RecExpr<ENodeOrVar<Self>> = pat.pattern.clone().into();
-        unappify_pattern_ast(&ast).to_string()
+        let ast: RecExpr<OpChildrenLanguage<OpWithVar<LambdaCalcOp>>> = pat.pattern.clone().into();
+        unappify_search_pattern(&ast).to_string()
     }
 
     fn add_stub_application(name: &str, children: Vec<Id>, egraph: &mut super::StitchEgraph<Self>) -> Id {
@@ -279,4 +279,47 @@ fn unappify_pattern_walk(out: &mut RecExpr<ENodeOrVar<OpChildrenLanguage>>, src:
         }
         ENodeOrVar::ENode(LambdaCalcLanguage::App(_)) => unreachable!("loop above consumes all App nodes"),
     }
+}
+
+/// Unappify a search pattern (whose storage is `OpChildrenLanguage<OpWithVar<LambdaCalcOp>>`)
+/// into the flat-form pattern AST `OpChildrenLanguage<OpWithVar<Op>>`. Used by
+/// `display_pattern` so found abstractions are reported as `(f a b c)` rather than
+/// `(@ (@ (@ f a) b) c)`.
+fn unappify_search_pattern(src: &RecExpr<OpChildrenLanguage<OpWithVar<LambdaCalcOp>>>) -> RecExpr<OpChildrenLanguage<OpWithVar<Op>>> {
+    let mut out = RecExpr::default();
+    unappify_search_pattern_walk(&mut out, src, src.as_ref().len() - 1);
+    out
+}
+
+fn unappify_search_pattern_walk(out: &mut RecExpr<OpChildrenLanguage<OpWithVar<Op>>>, src: &RecExpr<OpChildrenLanguage<OpWithVar<LambdaCalcOp>>>, mut ptr: usize) -> Id {
+    let nodes = src.as_ref();
+    let mut tail_rev = vec![];
+    while let OpWithVar::Node(LambdaCalcOp::App) = &nodes[ptr].op {
+        let kids = &nodes[ptr].children;
+        debug_assert_eq!(kids.len(), 2, "App must be binary");
+        tail_rev.push(unappify_search_pattern_walk(out, src, kids[1].into()));
+        ptr = kids[0].into();
+    }
+    let head = &nodes[ptr];
+    let kids: Vec<Id> = tail_rev.into_iter().rev().collect();
+    let (op, children) = match &head.op {
+        OpWithVar::Var(v) => (OpWithVar::Var(*v), kids),
+        OpWithVar::Node(LambdaCalcOp::Leaf(o)) => {
+            assert!(head.children.is_empty(), "leaf inside app spine must be 0-arity");
+            (OpWithVar::Node(*o), kids)
+        }
+        OpWithVar::Node(LambdaCalcOp::Programs) => {
+            assert!(kids.is_empty(), "programs cannot be applied to extra args");
+            let new_kids: Vec<Id> = head.children.iter().map(|&c| unappify_search_pattern_walk(out, src, c.into())).collect();
+            (OpWithVar::Node(Op::from_name("programs")), new_kids)
+        }
+        OpWithVar::Node(LambdaCalcOp::Lam) => {
+            assert!(kids.is_empty(), "lam in app head not supported");
+            assert_eq!(head.children.len(), 1);
+            let body_id = unappify_search_pattern_walk(out, src, head.children[0].into());
+            (OpWithVar::Node(Op::from_name("lam")), vec![body_id])
+        }
+        OpWithVar::Node(LambdaCalcOp::App) => unreachable!("loop above consumes all App nodes"),
+    };
+    out.add(OpChildrenLanguage { op, children })
 }

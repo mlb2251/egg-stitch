@@ -3,12 +3,12 @@ use std::cmp::min;
 use colored::Colorize;
 
 use crate::cost::compute_pattern_size;
-use crate::lang::StitchLanguage;
+use crate::lang::{OpChildrenLanguage, OpWithVar, StitchLanguage};
 use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 
 /// Sets the log weight of particles that don't match the follow pattern to -inf.
-pub fn apply_follow_constraint<L: StitchLanguage>(states: &[SearchState<L>], log_weights: &mut [f64], follow: &crate::revexpr::RevExpr<egg::ENodeOrVar<L>>, shared: &SharedSearchData<L>, original_size: usize, costs: &[usize], verbose: bool) {
+pub fn apply_follow_constraint<L: StitchLanguage>(states: &[SearchState<L>], log_weights: &mut [f64], follow: &crate::revexpr::RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>, shared: &SharedSearchData<L>, original_size: usize, costs: &[usize], verbose: bool) {
     let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
 
     if verbose {
