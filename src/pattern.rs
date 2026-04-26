@@ -15,9 +15,13 @@ use egg::{Id, Language};
 /// var names match their DFS first-appearance order. `expand` and `reuse`
 /// preserve this by rewriting affected var leaves, so `pattern.to_string()`
 /// is canonical: alpha-equivalent patterns render identically.
+/// The storage type backing a `Pattern<F, O>`: the program language
+/// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
+pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
+
 #[derive(Debug, Clone)]
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
-    pub pattern: RevExpr<F::Apply<OpWithVar<O>>>,
+    pub pattern: PatternRecExpr<F, O>,
     pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
 }
 

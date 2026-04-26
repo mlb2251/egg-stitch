@@ -32,11 +32,4 @@ impl<O: StitchOp> StitchOp for OpWithVar<O> {
             Self::Var(_) => 1,
         }
     }
-
-    fn as_var(&self) -> Option<egg::Var> {
-        match self {
-            Self::Var(v) => Some(*v),
-            Self::Node(o) => o.as_var(),
-        }
-    }
 }

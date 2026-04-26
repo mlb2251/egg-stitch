@@ -1,7 +1,8 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{Op, OpChildren, OpChildrenLanguage, OpWithVar},
+    lang::{Op, OpChildren},
+    pattern::PatternRecExpr,
     smc,
 };
 
@@ -18,7 +19,7 @@ fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
 }
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
-    let follow: egg_stitch::revexpr::RevExpr<OpChildrenLanguage<OpWithVar<Op>>> = follow_str.parse().expect("parse follow");
+    let follow: PatternRecExpr<OpChildren, Op> = follow_str.parse().expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
     assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
 }
