@@ -82,6 +82,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub check_slow: bool,
 
+    /// Disable lower-bound pruning of best-first children (on by default).
+    #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
+    pub opt_lower_bound: bool,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,

@@ -221,21 +221,25 @@ def sweep_num_steps_smc(num_runs = 3):
 
 
 
-def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=500, max_arity=2, rewrites=True, **kwargs):
+def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=100, max_arity=2, rewrites=True, **kwargs):
     results = []
     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
         for domain in stackpathiter(domains):
             rewrites_file = rewrites_path(domain) if rewrites else None
             res, _ = run_ours(domain, "best-first", num_steps=num_steps, max_arity=max_arity, rewrites=rewrites_file, **kwargs)
-            results.append(dict(domain=domain, elapsed_secs=res.elapsed_secs))
+            results.append(dict(domain=domain, elapsed_secs=res.elapsed_secs, compression_ratio=res.compression_ratio))
     
     for domain in domains:
         domain_results = [r for r in results if r["domain"] == domain]
         mean = sum(r["elapsed_secs"] for r in domain_results) / len(domain_results)
-        print(f"{domain} [{mean:.2f}]: ", end=" ")
+        compression_ratio = domain_results[0]["compression_ratio"] 
+        print(f"{domain} [{mean:.2f}] ({compression_ratio:0.2f}): ", end=" ")
         for res in domain_results:
             print(f"{res["elapsed_secs"]:.2f}", end=" ")
         print()
+
+def no_bound():
+    quick_eval(no_opt_lower_bound=True)
 
 
 def quick_check():
