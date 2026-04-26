@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchOp};
 use crate::revexpr::RevExpr;
 use egg::{Id, Language};
 
@@ -26,7 +26,7 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
-    F::make(OpWithVar::Var(egg::Var::from(idx)), vec![])
+    F::make_var(egg::Var::from(idx))
 }
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
@@ -44,7 +44,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// match their new position, so the canonical-form invariant is preserved.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         let var_positions = self.vars.remove(var_idx);
-        assert!(matches!(self.pattern[var_positions[0]].discriminant(), OpWithVar::Var(_)), "Attempting to expand a non-var");
+        assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
 
         // Shift names of trailing vars: a var currently at post-removal index p
@@ -67,7 +67,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             new_children.push(new_id);
             self.vars.insert(var_idx + j, vec![new_id]);
         }
-        let new_node = F::make(OpWithVar::Node(target.discriminant()), new_children);
+        let new_node = F::make(F::map_discriminant(target.discriminant(), OpWithVar::Node), new_children);
 
         // Replace each position of the expanded var with the new enode. If the var
         // had multiple positions (from a prior reuse), all parents share the same
@@ -104,8 +104,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 }
 
 impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for Pattern<F, O> {
+    /// Routes through `StitchLanguage::display_recexpr` so language-specific
+    /// pretty-printers (e.g. unappify) take effect on Pattern displays.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.pattern)
+        let recexpr: egg::RecExpr<F::Apply<OpWithVar<O>>> = self.pattern.clone().into();
+        write!(f, "{}", <F::Apply<OpWithVar<O>> as crate::lang::StitchLanguage>::display_recexpr(&recexpr))
     }
 }
 
@@ -131,9 +134,9 @@ mod tests {
         for (k, ids) in p.vars.iter().enumerate() {
             let expected = egg::Var::from(k as u32);
             for id in ids {
-                match p.pattern[*id].discriminant() {
-                    OpWithVar::Var(v) => assert_eq!(v, expected, "vars[{}] = {:?}: expected {:?}, got {:?}", k, ids, expected, v),
-                    other => panic!("vars[{}] contains non-Var: {:?}", k, other),
+                match p.pattern[*id].discriminant().as_var() {
+                    Some(v) => assert_eq!(v, expected, "vars[{}] = {:?}: expected {:?}, got {:?}", k, ids, expected, v),
+                    None => panic!("vars[{}] contains non-Var: {:?}", k, p.pattern[*id].discriminant()),
                 }
             }
         }

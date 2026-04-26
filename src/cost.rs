@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp};
+use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -139,8 +139,7 @@ pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &St
     let mut egraph = egraph.clone();
     for m in &search_state.matches {
         for subst in &m.substs {
-            let node = F::make(O::from_name("inv_0"), subst.vars.clone());
-            let x = egraph.add(node);
+            let x = F::add_stub_application::<O>("inv_0", subst.vars.clone(), &mut egraph);
             egraph.union(x, m.root_eclass);
         }
     }
@@ -152,5 +151,5 @@ pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &St
 pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
     let rewritten = build_rewritten_egraph(egraph, search_state);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0].children().iter().map(|&child| extractor.find_best(child).1.to_string()).collect()
+    rewritten[root].nodes[0].children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect()
 }

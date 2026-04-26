@@ -1,4 +1,4 @@
-use egg::{Analysis, FromOp, Id, Language};
+use egg::{Analysis, ENodeOrVar, FromOp, Id, Language, RecExpr};
 use std::fmt::{Debug, Display};
 
 mod family;
@@ -7,14 +7,36 @@ mod op_children;
 mod op_with_var;
 
 pub use family::{LanguageFamily, OpChildren};
-pub use op::{Op, StitchOp};
+pub use op::{Op, StitchDisc, StitchOp};
 pub use op_children::OpChildrenLanguage;
 pub use op_with_var::OpWithVar;
 
 /// Trait covering every language usable with the search machinery.
-pub trait StitchLanguage: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {
+///
+/// The default implementations are written for "flat" languages whose `from_op`
+/// can build any-arity applications in a single enode (e.g. `OpChildrenLanguage`).
+/// Languages with more constrained shapes can override the parse/display hooks
+/// to bridge between the user-facing flat syntax and their internal representation.
+pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {
     /// Returns true if this operator represents a `programs` node, which is used as the root of the egraph and has special handling in `apply_abstraction`.
     fn is_programs_node(&self) -> bool;
+
+    /// Parses a program s-expression in user-facing flat form.
+    fn parse_program(s: &str) -> anyhow::Result<RecExpr<Self>> {
+        s.parse().map_err(|e| anyhow::anyhow!("parse {s:?}: {e:?}"))
+    }
+
+    /// Parses a pattern s-expression (with `?x` variables) in user-facing flat form.
+    fn parse_pattern_ast(s: &str) -> anyhow::Result<RecExpr<ENodeOrVar<Self>>> {
+        let pat: egg::Pattern<Self> = s.parse().map_err(|e| anyhow::anyhow!("parse pattern {s:?}: {e:?}"))?;
+        Ok(pat.ast)
+    }
+
+    /// Renders a `RecExpr` back to user-facing flat form. Used both for programs
+    /// and (via `Pattern: Display`) for patterns.
+    fn display_recexpr(expr: &RecExpr<Self>) -> String {
+        expr.to_string()
+    }
 }
 
 /// Egg analysis that tracks the minimum AST size of each e-class.
