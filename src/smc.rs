@@ -59,7 +59,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
     let mut particles: Vec<(SearchState, usize)> = vec![(SearchState::new(&shared), num_particles)];
-    let mut scratch = CostScratch::default();
+    let mut scratch = CostScratch::new(&shared.egraph);
 
     for step in 0..num_steps {
         // Expand each (state, mult) group into `mult` independent random expansions,

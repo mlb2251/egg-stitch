@@ -120,7 +120,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let strategy = args.priority;
 
     let initial_state = SearchState::new(&shared);
-    let mut scratch = CostScratch::default();
+    let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, &initial_state, shared.check_slow);
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
 

@@ -238,6 +238,7 @@ def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=500, max_arity=2, re
             h = res["best_history"][-1]
             print(f"{res["elapsed_secs"]:.2f} (t={h['elapsed_secs']:7.3f}s  exp={h['expansion']:>6}  cost={h['cost']:>6}  {h['pattern']}")
         print()
+
 def no_bound():
     quick_eval(no_opt_lower_bound=True)
 

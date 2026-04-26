@@ -28,9 +28,6 @@ pub struct RewriteAnalysis<'a> {
     pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
 }
 impl<'a> StitchAnalysis for RewriteAnalysis<'a> {
-    fn init(&self, out: &mut Vec<Id>) {
-        out.extend(self.eclass_to_match_idx.keys().copied());
-    }
     fn best(sizes: &StitchAnalysisRunner<Self>, eclass: Id) -> i64 {
         // Try not rewriting self but YES allowing rewrites of descendants
         // (technically we could just use sizes.original_size if we knew we weren't enqueued by a child)
