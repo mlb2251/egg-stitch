@@ -147,6 +147,8 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let mut seen_time: Duration = Duration::ZERO;
     let mut lower_bound_hits: usize = 0;
     let mut lower_bound_time: Duration = Duration::ZERO;
+    let mut cost_calls: usize = 0;
+    let mut cost_time: Duration = Duration::ZERO;
     let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
@@ -201,7 +203,10 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                 }
             }
 
+            let cost_t = Instant::now();
             let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow);
+            cost_time += cost_t.elapsed();
+            cost_calls += 1;
             let child_depth = parent_depth + 1;
             let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
             let child_id = nodes.len();
@@ -241,6 +246,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     println!("{} {}", "seen-set size:".dimmed(), seen.len().to_string().bold());
     println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_time.as_secs_f64()).dimmed());
     println!("{} {} {}", "lower-bound hits:".dimmed(), lower_bound_hits.to_string().bold(), format!("(time: {:.3}s)", lower_bound_time.as_secs_f64()).dimmed());
+    println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
