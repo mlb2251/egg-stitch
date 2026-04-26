@@ -12,7 +12,7 @@ pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>) -
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
     println!("Loaded {} programs", exprs.len());
 
-    let (egraph_before_rules, root) = programs_to_egraph::<L>(&exprs);
+    let (egraph_before_rules, root) = programs_to_egraph(&exprs);
     println!("Egraph size: {}", egraph_before_rules.classes().len());
 
     let cost_before_rewrites = extract_root_size(&egraph_before_rules, root);
@@ -37,7 +37,7 @@ pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>) -
 /// Used when `--rebuild-egraph` is set: after each abstraction the rewritten programs are
 /// extracted as strings and fed into a clean egraph, discarding all prior equivalences.
 pub fn egraph_from_programs<L: StitchLanguage>(programs: &[String], rule_file: Option<&str>) -> (StitchEgraph<L>, egg::Id) {
-    let (egraph, root) = programs_to_egraph::<L>(programs);
+    let (egraph, root) = programs_to_egraph(programs);
     let rules: Vec<egg::Rewrite<L, StitchAnalysis>> = match rule_file {
         Some(f) => from_file(f).expect("Failed to parse rules file"),
         None => vec![],

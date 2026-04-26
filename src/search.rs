@@ -235,7 +235,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
     let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&egraph, root);
-    let shared = SharedSearchData::<F, O> {
+    let shared = SharedSearchData {
         egraph,
         root,
         follow: follow_expr,
@@ -245,7 +245,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Appl
         check_slow: args.check_slow,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
-    let initial = SearchState::<F, O>::new(&shared);
+    let initial = SearchState::new(&shared);
     let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &initial, shared.check_slow);
     (shared, cache, original_size)
 }

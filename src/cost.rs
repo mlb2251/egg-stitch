@@ -68,12 +68,12 @@ pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 
 pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>) -> usize {
     let rec_expr: RecExpr<F::Apply<crate::lang::OpWithVar<O>>> = pattern.pattern.clone().into();
-    compute_recexpr_size::<F::Apply<crate::lang::OpWithVar<O>>>(&rec_expr, (rec_expr.len() - 1).into())
+    compute_recexpr_size(&rec_expr, (rec_expr.len() - 1).into())
 }
 
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id) -> usize {
     let node = &rec_expr[ptr];
-    node.discriminant().intrinsic_size() as usize + node.children().iter().map(|&child| compute_recexpr_size::<L>(rec_expr, child)).sum::<usize>()
+    node.discriminant().intrinsic_size() as usize + node.children().iter().map(|&child| compute_recexpr_size(rec_expr, child)).sum::<usize>()
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.

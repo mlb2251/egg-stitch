@@ -13,8 +13,8 @@ fn fixtures_present() -> bool {
 }
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
-    let (egraph, root, _) = io::load_egraph::<OpChildrenLanguage>(&args.input, args.rules.as_deref());
-    smc::smc::<OpChildren, Op>(egraph, root, args)
+    let (egraph, root, _) = io::load_egraph(&args.input, args.rules.as_deref());
+    smc::smc(egraph, root, args)
 }
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {

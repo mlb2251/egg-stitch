@@ -128,7 +128,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
             }
             SearchKind::BestFirst => {
-                let r = best_first::best_first::<F, O>(egraph, root, args);
+                let r = best_first::best_first(egraph, root, args);
                 (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph)
             }
         };
@@ -140,7 +140,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let pat_size = cost::compute_pattern_size::<F, O>(&state.pattern);
+                let pat_size = cost::compute_pattern_size(&state.pattern);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
@@ -197,7 +197,7 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let programs: Vec<String> = programs_node.children().iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
 
     if rebuild {
-        let (fresh_egraph, fresh_root) = io::egraph_from_programs::<F::Apply<O>>(&programs, rule_file);
+        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file);
         (fresh_egraph, fresh_root, programs)
     } else {
         (egraph, root, programs)
