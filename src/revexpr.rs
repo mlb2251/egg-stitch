@@ -12,6 +12,23 @@ impl<L: egg::Language> RevExpr<L> {
     pub fn new(nodes: Vec<L>) -> Self {
         Self { nodes }
     }
+
+    /// The root id (always 0 for `RevExpr`).
+    pub fn root(&self) -> egg::Id {
+        egg::Id::from(0)
+    }
+
+    /// AST size of the whole expression, counted top-down from the root.
+    /// Shared subtrees are counted once per occurrence.
+    pub fn size(&self) -> usize {
+        self.subexpr_size(self.root())
+    }
+
+    /// AST size of the subtree rooted at `id`, counted top-down.
+    /// Shared subtrees are counted once per occurrence.
+    pub fn subexpr_size(&self, id: egg::Id) -> usize {
+        1 + self[id].children().iter().map(|&c| self.subexpr_size(c)).sum::<usize>()
+    }
 }
 
 /// Reverses the nodes in the vector of nodes and updates the children ids to point to the correct nodes

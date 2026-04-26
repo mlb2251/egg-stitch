@@ -66,9 +66,9 @@ pub fn compute_cost(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, sea
     cost + pattern_size
 }
 
-/// Returns the AST size of the pattern (counting each node and edge once).
+/// Returns the AST size of the pattern
 pub fn compute_pattern_size(pattern: &Pattern) -> usize {
-    1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
+    pattern.pattern.size()
 }
 
 /// Pluggable per-eclass relaxation rule. The analysis decides which eclasses seed the
