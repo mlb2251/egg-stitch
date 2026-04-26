@@ -11,7 +11,7 @@ use std::collections::HashMap;
 /// with a specific enode shape, or unifying two existing variables.
 #[derive(Debug, Clone)]
 pub enum Action<F: LanguageFamily, O: StitchOp> {
-    Expand { var_idx: usize, op: F::Op<O>, arity: usize },
+    Expand { var_idx: usize, op: F::Discriminant<O>, arity: usize },
     Reuse { keep: usize, drop: usize },
 }
 
@@ -183,7 +183,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let mut out = Vec::new();
 
         for var_idx in 0..self.pattern.vars.len() {
-            let mut seen: FxHashSet<(F::Op<O>, usize)> = FxHashSet::default();
+            let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {

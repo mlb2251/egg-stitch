@@ -11,27 +11,27 @@ use super::{LambdaCalcLanguage, LambdaCalcOp, OpChildrenLanguage, OpWithVar, Sti
 /// `F::Apply<OpWithVar<O>>`. Both share the same `F` (the language constructor),
 /// and only the leaf-Op type differs.
 ///
-/// `Op<O>` is the discriminant of `Apply<O>`. Often it's just `O`
+/// `Discriminant<O>` is the discriminant of `Apply<O>`. Often it's just `O`
 /// (`OpChildrenLanguage`), but languages with structural variants beyond a single
 /// leaf-op slot (like `LambdaCalcLanguage` with `App`/`Lam`/`Programs`) wrap `O`
 /// in a sum so the discriminant carries the variant tag.
 pub trait LanguageFamily: Clone + 'static {
     /// Discriminant type for `Apply<O>`.
-    type Op<O: StitchOp>: StitchOp;
+    type Discriminant<O: StitchOp>: StitchOp;
 
     /// The Language obtained by instantiating this family with leaf-Op `O`.
-    type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Op<O>>;
+    type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Discriminant<O>>;
 
     /// Construct an enode from a discriminant op and a list of children. For
     /// families with fixed-arity structural variants, this dispatches on the
     /// variant + arity.
-    fn make<P: StitchOp>(op: Self::Op<P>, kids: Vec<Id>) -> Self::Apply<P>;
+    fn make<P: StitchOp>(op: Self::Discriminant<P>, kids: Vec<Id>) -> Self::Apply<P>;
 
     /// Functor map over the leaf-Op slot of the discriminant. Structural
     /// variants pass through unchanged; embedded leaves go through `f`.
     /// Lifting a program-side discriminant into the pattern-side one is just
-    /// `map_op(op, OpWithVar::Node)`; no extra family method needed.
-    fn map_op<A: StitchOp, B: StitchOp>(op: Self::Op<A>, f: impl FnMut(A) -> B) -> Self::Op<B>;
+    /// `map_discriminant(op, OpWithVar::Node)`; no extra family method needed.
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: Self::Discriminant<A>, f: impl FnMut(A) -> B) -> Self::Discriminant<B>;
 
     /// Add a `name(children...)` application to the egraph and return its Id.
     /// For families with binary `App` this builds a curried application chain.
@@ -40,7 +40,7 @@ pub trait LanguageFamily: Clone + 'static {
     /// Build a pattern leaf containing the given pattern variable. Defaulted via
     /// `Op::from_name` since `OpWithVar::from_name` round-trips var syntax.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>> {
-        Self::make(<Self::Op<OpWithVar<O>> as StitchOp>::from_name(&v.to_string()), vec![])
+        Self::make(<Self::Discriminant<OpWithVar<O>> as StitchOp>::from_name(&v.to_string()), vec![])
     }
 }
 
@@ -49,14 +49,14 @@ pub trait LanguageFamily: Clone + 'static {
 pub struct OpChildren;
 
 impl LanguageFamily for OpChildren {
-    type Op<O: StitchOp> = O;
+    type Discriminant<O: StitchOp> = O;
     type Apply<O: StitchOp> = OpChildrenLanguage<O>;
 
     fn make<P: StitchOp>(op: P, kids: Vec<Id>) -> OpChildrenLanguage<P> {
         OpChildrenLanguage { op, children: kids }
     }
 
-    fn map_op<A: StitchOp, B: StitchOp>(op: A, mut f: impl FnMut(A) -> B) -> B {
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: A, mut f: impl FnMut(A) -> B) -> B {
         f(op)
     }
 
@@ -70,7 +70,7 @@ impl LanguageFamily for OpChildren {
 pub struct LambdaCalc;
 
 impl LanguageFamily for LambdaCalc {
-    type Op<O: StitchOp> = LambdaCalcOp<O>;
+    type Discriminant<O: StitchOp> = LambdaCalcOp<O>;
     type Apply<O: StitchOp> = LambdaCalcLanguage<O>;
 
     fn make<P: StitchOp>(op: LambdaCalcOp<P>, kids: Vec<Id>) -> LambdaCalcLanguage<P> {
@@ -83,7 +83,7 @@ impl LanguageFamily for LambdaCalc {
         }
     }
 
-    fn map_op<A: StitchOp, B: StitchOp>(op: LambdaCalcOp<A>, mut f: impl FnMut(A) -> B) -> LambdaCalcOp<B> {
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: LambdaCalcOp<A>, mut f: impl FnMut(A) -> B) -> LambdaCalcOp<B> {
         match op {
             LambdaCalcOp::Leaf(a) => LambdaCalcOp::Leaf(f(a)),
             LambdaCalcOp::App => LambdaCalcOp::App,

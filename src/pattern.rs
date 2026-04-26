@@ -67,7 +67,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             new_children.push(new_id);
             self.vars.insert(var_idx + j, vec![new_id]);
         }
-        let new_node = F::make(F::map_op(target.discriminant(), OpWithVar::Node), new_children);
+        let new_node = F::make(F::map_discriminant(target.discriminant(), OpWithVar::Node), new_children);
 
         // Replace each position of the expanded var with the new enode. If the var
         // had multiple positions (from a prior reuse), all parents share the same
