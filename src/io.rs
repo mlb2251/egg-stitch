@@ -19,7 +19,7 @@ pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>) -
     println!("Weight of root node before rules: {}", cost_before_rewrites);
 
     let rules: Vec<egg::Rewrite<L, StitchAnalysis>> = match rule_file {
-        Some(rule_file) => from_file::<L, _, _>(rule_file).expect("Failed to parse rules file"),
+        Some(rule_file) => from_file(rule_file).expect("Failed to parse rules file"),
         None => vec![],
     };
     println!("loaded {} rules", rules.len());
@@ -39,7 +39,7 @@ pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>) -
 pub fn egraph_from_programs<L: StitchLanguage>(programs: &[String], rule_file: Option<&str>) -> (StitchEgraph<L>, egg::Id) {
     let (egraph, root) = programs_to_egraph(programs);
     let rules: Vec<egg::Rewrite<L, StitchAnalysis>> = match rule_file {
-        Some(f) => from_file::<L, _, _>(f).expect("Failed to parse rules file"),
+        Some(f) => from_file(f).expect("Failed to parse rules file"),
         None => vec![],
     };
     let mut runner: egg::Runner<L, StitchAnalysis> = egg::Runner::default();
