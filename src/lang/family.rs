@@ -22,19 +22,13 @@ pub trait LanguageFamily: Clone + 'static {
     /// The Language obtained by instantiating this family with leaf-Op `O`.
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Discriminant<O>>;
 
-    /// Construct an enode from a discriminant op and a list of children. For
-    /// families with fixed-arity structural variants, this dispatches on the
-    /// variant + arity.
-    fn make<P: StitchOp>(op: Self::Discriminant<P>, kids: Vec<Id>) -> Self::Apply<P>;
+    /// Construct an enode from a discriminant op and a list of children.
+    fn make<O: StitchOp>(op: Self::Discriminant<O>, kids: Vec<Id>) -> Self::Apply<O>;
 
-    /// Functor map over the leaf-Op slot of the discriminant. Structural
-    /// variants pass through unchanged; embedded leaves go through `f`.
-    /// Lifting a program-side discriminant into the pattern-side one is just
-    /// `map_discriminant(op, OpWithVar::Node)`; no extra family method needed.
+    /// Functor map over the leaf-Op slot of the discriminant.
     fn map_discriminant<A: StitchOp, B: StitchOp>(op: Self::Discriminant<A>, f: impl FnMut(A) -> B) -> Self::Discriminant<B>;
 
-    /// Add a `name(children...)` application to the egraph and return its Id.
-    /// For families with binary `App` this builds a curried application chain.
+    /// Add e.g., (fn_0 X Y Z) to the graph, and return its id.
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
 
     /// Build a pattern leaf containing the given pattern variable.
