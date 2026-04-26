@@ -27,6 +27,9 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
     scratch.rewrite.fill(search_state);
     let analysis = RewriteAnalysis { search_state, eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
+    for m in &search_state.matches {
+        sizes.mark_dirty(m.root_eclass);
+    }
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {

@@ -98,24 +98,31 @@ impl CostScratch {
 pub struct RunnerScratch {
     original: Vec<i64>,
     overrides: Vec<i64>,
+    /// Per-eclass dirty flag indexed by `usize::from(Id)`. `solve` only re-evaluates
+    /// dirty eclasses; visiting clears the flag, and an improvement re-dirties the
+    /// eclass's parents so they reconsider next time around.
+    dirty: Vec<bool>,
 }
 
 impl RunnerScratch {
-    /// Captures `original` from the egraph; `overrides` is left empty and filled by
-    /// `reset` at the start of each solve.
+    /// Captures `original` from the egraph; `overrides` and `dirty` are left empty
+    /// and filled by `reset` at the start of each solve.
     fn new(egraph: &StitchEgraph) -> Self {
         let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
         let mut original = vec![0i64; max_id + 1];
         for class in egraph.classes() {
             original[usize::from(class.id)] = class.data as i64;
         }
-        Self { original, overrides: Vec::new() }
+        Self { original, overrides: Vec::new(), dirty: Vec::new() }
     }
-    /// Resets `overrides` to a copy of `original` so the next solve starts from
-    /// un-rewritten sizes. `original` is preserved across calls.
+    /// Resets `overrides` to a copy of `original` and marks every eclass clean.
+    /// Callers (or the analysis) seed dirty bits via `set` / `mark_dirty` before
+    /// `solve` runs; nothing else needs revisiting. `original` is preserved.
     fn reset(&mut self) {
         self.overrides.clear();
         self.overrides.extend_from_slice(&self.original);
+        self.dirty.clear();
+        self.dirty.resize(self.original.len(), false);
     }
 }
 
@@ -144,8 +151,28 @@ impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
     pub fn get(&self, id: Id) -> i64 {
         self.scratch.overrides[usize::from(id)]
     }
+    /// Writes a new size for `id` and marks every parent dirty so they reconsider.
+    /// `id` itself is left clean — re-evaluating won't beat the value we just wrote.
     fn set(&mut self, id: Id, v: i64) {
         self.scratch.overrides[usize::from(id)] = v;
+        let parents = self.cache.parents_of.get(&id).map(|v| v.as_slice()).unwrap_or(&[]);
+        for &p in parents {
+            self.mark_dirty(p);
+        }
+    }
+    /// Marks `id` dirty so `solve` will (re)evaluate it.
+    fn mark_dirty(&mut self, id: Id) {
+        self.scratch.dirty[usize::from(id)] = true;
+    }
+    /// Marks `id` clean (will be skipped by `solve` until something re-dirties it).
+    fn mark_clean(&mut self, id: Id) {
+        self.scratch.dirty[usize::from(id)] = false;
+    }
+    fn is_dirty(&self, id: Id) -> bool {
+        self.scratch.dirty[usize::from(id)]
+    }
+    fn any_dirty(&self) -> bool {
+        self.scratch.dirty.iter().any(|&d| d)
     }
     /// Sum of `get` over a list of eclass ids.
     pub fn sum(&self, ids: &[Id]) -> i64 {
@@ -159,18 +186,19 @@ impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
         self.egraph[eclass].nodes.iter().map(|enode| 1 + self.sum(&enode.children)).min().unwrap()
     }
     /// Iterates eclasses reachable from the root in postorder (children first),
-    /// recording any improvements, and repeats until a full pass finds nothing
-    /// better. Postorder makes child improvements available the same pass their
-    /// parents are visited, so most runs converge in one or two passes.
+    /// re-evaluating only those marked dirty. Visiting clears the flag, and `set`
+    /// re-marks parents on any improvement. Repeats until a full pass finds nothing
+    /// better. Initial dirty bits are seeded by callers/analyses before `solve`.
     fn solve(&mut self) {
-        let mut changed = true;
-        while changed {
-            changed = false;
+        while self.any_dirty() {
             for &id in &self.cache.visit_order {
+                if !self.is_dirty(id) {
+                    continue;
+                }
+                self.mark_clean(id);
                 let new = A::best(self, id);
                 if new < self.get(id) {
                     self.set(id, new);
-                    changed = true;
                 }
             }
         }
