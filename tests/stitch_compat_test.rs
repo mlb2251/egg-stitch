@@ -33,7 +33,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{LambdaCalc, LanguageFamily, Op, OpChildren},
+    lang::{LambdaCalcAst, LanguageFamily, Op, OpChildren},
     multiple_step_search,
     results::AbstractionResult,
 };
@@ -91,7 +91,7 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Expected {
     }
     argv.extend(extra_args);
     let args = Args::parse_from(argv);
-    if args.appify { run_with::<LambdaCalc>(&args, input) } else { run_with::<OpChildren>(&args, input) }
+    if args.appify { run_with::<LambdaCalcAst>(&args, input) } else { run_with::<OpChildren>(&args, input) }
 }
 
 fn run_with<F: LanguageFamily>(args: &Args, input: &str) -> Expected {

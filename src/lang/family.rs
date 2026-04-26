@@ -1,5 +1,10 @@
 use egg::Id;
 
+use std::marker::PhantomData;
+
+use crate::lang::lambda_calc::StitchWeights;
+
+use super::lambda_calc::{AstWeights, LambdaCalcWeights, UnitWeights};
 use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
 
 /// A type-level type constructor `L<_>` for a language family.
@@ -76,17 +81,28 @@ impl LanguageFamily for OpChildren {
     }
 }
 
-/// Marker for the `LambdaCalcLanguage<_>` family.
+/// Generic LambdaCalc family parameterized by a weight profile. Two named
+/// markers select the two profiles we ship: `LambdaCalcAst` (babble-parity)
+/// and `LambdaCalcUnit` (curried wrappers free).
 #[derive(Clone, Copy, Debug)]
-pub struct LambdaCalc;
+pub struct LambdaCalcWith<W: LambdaCalcWeights>(PhantomData<W>);
 
-impl LanguageFamily for LambdaCalc {
-    type Discriminant<O: StitchOp> = LambdaCalcDisc<O>;
-    type Apply<O: StitchOp> = LambdaCalcLanguage<O>;
+/// LambdaCalc with `App`/`Lam` cost = 1 (babble's `egg::AstSize` parity).
+pub type LambdaCalcAst = LambdaCalcWith<AstWeights>;
 
-    fn make<P: StitchOp>(op: LambdaCalcDisc<P>, kids: Vec<Id>) -> LambdaCalcLanguage<P> {
+/// LambdaCalc with `App`/`Lam` cost = 0 (curried wrappers contribute nothing).
+pub type LambdaCalcUnit = LambdaCalcWith<UnitWeights>;
+
+/// LambdaCalc that matches stitch.
+pub type LambdaCalcStitch = LambdaCalcWith<StitchWeights>;
+
+impl<W: LambdaCalcWeights> LanguageFamily for LambdaCalcWith<W> {
+    type Discriminant<O: StitchOp> = LambdaCalcDisc<O, W>;
+    type Apply<O: StitchOp> = LambdaCalcLanguage<O, W>;
+
+    fn make<P: StitchOp>(op: LambdaCalcDisc<P, W>, kids: Vec<Id>) -> LambdaCalcLanguage<P, W> {
         match (op, kids.as_slice()) {
-            (LambdaCalcDisc::Leaf(o), &[]) => LambdaCalcLanguage::Leaf(o),
+            (LambdaCalcDisc::Leaf(o, _), &[]) => LambdaCalcLanguage::Leaf(o, PhantomData),
             (LambdaCalcDisc::App, &[f, a]) => LambdaCalcLanguage::App([f, a]),
             (LambdaCalcDisc::Lam, &[b]) => LambdaCalcLanguage::Lam([b]),
             (LambdaCalcDisc::Programs, _) => LambdaCalcLanguage::Programs(kids),
@@ -94,17 +110,17 @@ impl LanguageFamily for LambdaCalc {
         }
     }
 
-    fn map_discriminant<A: StitchOp, B: StitchOp>(op: LambdaCalcDisc<A>, mut f: impl FnMut(A) -> B) -> LambdaCalcDisc<B> {
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: LambdaCalcDisc<A, W>, mut f: impl FnMut(A) -> B) -> LambdaCalcDisc<B, W> {
         match op {
-            LambdaCalcDisc::Leaf(a) => LambdaCalcDisc::Leaf(f(a)),
+            LambdaCalcDisc::Leaf(a, _) => LambdaCalcDisc::Leaf(f(a), PhantomData),
             LambdaCalcDisc::App => LambdaCalcDisc::App,
             LambdaCalcDisc::Lam => LambdaCalcDisc::Lam,
             LambdaCalcDisc::Programs => LambdaCalcDisc::Programs,
         }
     }
 
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<LambdaCalcLanguage<O>>) -> Id {
-        let mut current = egraph.add(LambdaCalcLanguage::Leaf(O::from_name(name)));
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<LambdaCalcLanguage<O, W>>) -> Id {
+        let mut current = egraph.add(LambdaCalcLanguage::Leaf(O::from_name(name), PhantomData));
         for child in children {
             current = egraph.add(LambdaCalcLanguage::App([current, child]));
         }
@@ -112,11 +128,10 @@ impl LanguageFamily for LambdaCalc {
     }
 
     fn stub_application_size<O: StitchOp>(name: &str, arity: usize) -> u32 {
-        // Leaf head + one App per argument (each App has intrinsic_size 1).
-        O::from_name(name).intrinsic_size() + arity as u32
+        O::from_name(name).intrinsic_size() + arity as u32 * W::APP_COST
     }
 
-    fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
-        Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v)), vec![])
+    fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>, W> {
+        Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v), PhantomData), vec![])
     }
 }

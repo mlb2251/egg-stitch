@@ -1,7 +1,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, SearchKind, io,
-    lang::{LambdaCalc, Op, OpChildren},
+    lang::{LambdaCalcAst, Op, OpChildren},
     multiple_step_search, results,
 };
 
@@ -10,7 +10,7 @@ fn main() {
     let start = std::time::Instant::now();
 
     // Pick the language at the boundary; the rest of the pipeline is generic.
-    let (library, original_size, final_cost, cost_before_rewrites) = if args.appify { run::<LambdaCalc>(&args) } else { run::<OpChildren>(&args) };
+    let (library, original_size, final_cost, cost_before_rewrites) = if args.appify { run::<LambdaCalcAst>(&args) } else { run::<OpChildren>(&args) };
 
     let elapsed_secs = start.elapsed().as_secs_f64();
     let compression_ratio = final_cost.map(|fc| original_size as f64 / fc as f64);
