@@ -33,7 +33,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{Op, OpChildren},
+    lang::{LambdaCalc, LanguageFamily, Op, OpChildren},
     multiple_step_search,
     results::AbstractionResult,
 };
@@ -46,7 +46,7 @@ struct Expected {
     rewritten: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 struct ExpectedAbstraction {
     body: String,
     num_matches: usize,
@@ -91,8 +91,12 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Expected {
     }
     argv.extend(extra_args);
     let args = Args::parse_from(argv);
-    let (egraph, root, _) = io::load_egraph(&args.input, args.rules.as_deref());
-    let (library, _, _) = multiple_step_search::<OpChildren, Op>(egraph, root, &args);
+    if args.appify { run_with::<LambdaCalc>(&args, input) } else { run_with::<OpChildren>(&args, input) }
+}
+
+fn run_with<F: LanguageFamily>(args: &Args, input: &str) -> Expected {
+    let (egraph, root, _) = io::load_egraph::<F::Apply<Op>>(&args.input, args.rules.as_deref());
+    let (library, _, _) = multiple_step_search::<F, Op>(egraph, root, args);
     build_expected(library, input)
 }
 
@@ -184,4 +188,56 @@ fn arithmetic_aplusbplusc() {
 #[test]
 fn arithmetic_aplusbplus1234() {
     check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES]);
+}
+
+#[test]
+fn common_start() {
+    check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--appify"]);
+}
+
+fn all_symbols_hack(x: String) -> Vec<String> {
+    let x = x.replace("(", " ").replace(")", " ");
+    let mut symbols: Vec<_> = x.split_whitespace().map(|s| s.to_string()).collect();
+    symbols.sort();
+    symbols
+}
+
+#[test]
+fn arith_rewrites() {
+    let input = "data/domains/basic-apps/multi-arg-assoc.json";
+    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--appify", "--max-arity", "0"];
+    let bf = run_backend("best-first", input, extra_args);
+    let smc = run_backend("smc", input, extra_args);
+    let results = &[bf, smc];
+    for r in results {
+        assert!(r.abstractions.len() == 1, "expected exactly one abstraction");
+        let abstr = all_symbols_hack(r.abstractions[0].body.clone());
+        if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
+            panic!("bad abstr: {:?}", abstr);
+        }
+        // assert_eq!(abstr, ["+", "+", "a", "b", "c", "d"], "expected abstraction to contain all variables and the + operator");
+        let rewr = r.rewritten.iter().map(|x| all_symbols_hack(x.clone())).collect::<Vec<_>>();
+        let rewr = rewr.iter().map(|x| x.iter().filter(|x| **x != <&str as Into<String>>::into("+")).collect::<Vec<_>>()).collect::<Vec<_>>();
+        assert_eq!(
+            rewr,
+            vec![
+                // these 3 can be rewritten
+                vec!["fn_0", "g"],
+                vec!["f", "fn_0"],
+                vec!["e", "fn_0"],
+                // this one can't be
+                vec!["*", "a", "b", "c", "d", "e"]
+            ]
+        )
+    }
+}
+
+#[test]
+fn varying_head() {
+    check_fixture("data/domains/basic-apps/varying-head.json", &["--appify"]);
+}
+
+#[test]
+fn multiple_with_apps() {
+    check_fixture("data/domains/basic-apps/multiple-with-apps.json", &["--appify"]);
 }

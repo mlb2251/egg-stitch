@@ -1,6 +1,6 @@
 use egg::Id;
 
-use super::{OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
+use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
 
 /// A type-level type constructor `L<_>` for a language family.
 ///
@@ -64,5 +64,45 @@ impl LanguageFamily for OpChildren {
 
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
         Self::make(OpWithVar::Var(v), vec![])
+    }
+}
+
+/// Marker for the `LambdaCalcLanguage<_>` family.
+#[derive(Clone, Copy, Debug)]
+pub struct LambdaCalc;
+
+impl LanguageFamily for LambdaCalc {
+    type Discriminant<O: StitchOp> = LambdaCalcDisc<O>;
+    type Apply<O: StitchOp> = LambdaCalcLanguage<O>;
+
+    fn make<P: StitchOp>(op: LambdaCalcDisc<P>, kids: Vec<Id>) -> LambdaCalcLanguage<P> {
+        match (op, kids.as_slice()) {
+            (LambdaCalcDisc::Leaf(o), &[]) => LambdaCalcLanguage::Leaf(o),
+            (LambdaCalcDisc::App, &[f, a]) => LambdaCalcLanguage::App([f, a]),
+            (LambdaCalcDisc::Lam, &[b]) => LambdaCalcLanguage::Lam([b]),
+            (LambdaCalcDisc::Programs, _) => LambdaCalcLanguage::Programs(kids),
+            (op, _) => panic!("LambdaCalc::make: {op} got wrong arity ({} children)", kids.len()),
+        }
+    }
+
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: LambdaCalcDisc<A>, mut f: impl FnMut(A) -> B) -> LambdaCalcDisc<B> {
+        match op {
+            LambdaCalcDisc::Leaf(a) => LambdaCalcDisc::Leaf(f(a)),
+            LambdaCalcDisc::App => LambdaCalcDisc::App,
+            LambdaCalcDisc::Lam => LambdaCalcDisc::Lam,
+            LambdaCalcDisc::Programs => LambdaCalcDisc::Programs,
+        }
+    }
+
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<LambdaCalcLanguage<O>>) -> Id {
+        let mut current = egraph.add(LambdaCalcLanguage::Leaf(O::from_name(name)));
+        for child in children {
+            current = egraph.add(LambdaCalcLanguage::App([current, child]));
+        }
+        current
+    }
+
+    fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
+        Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v)), vec![])
     }
 }

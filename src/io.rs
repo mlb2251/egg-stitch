@@ -1,7 +1,7 @@
 use crate::lang::{StitchAnalysis, StitchEgraph, StitchLanguage};
 use anyhow::anyhow;
-use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
-use std::{error::Error, fs, path::Path};
+use egg::{Analysis, Pattern, Rewrite};
+use std::{fs, path::Path};
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
 /// All programs are combined into a single term (programs A B C ...).
@@ -54,7 +54,7 @@ fn programs_to_egraph<L: StitchLanguage>(programs: &[String]) -> (StitchEgraph<L
     let expr_ids: Vec<egg::Id> = programs
         .iter()
         .map(|s| {
-            let expr: egg::RecExpr<L> = s.parse().unwrap_or_else(|_| panic!("Failed to parse expression: {s}"));
+            let expr = L::parse_program(s).unwrap_or_else(|e| panic!("Failed to parse expression: {s}: {e}"));
             egraph.add_expr(&expr)
         })
         .collect();
@@ -108,10 +108,9 @@ fn print_expr<L: StitchLanguage>(term: &egg::RecExpr<L>, id: usize) {
 /// Loads rewrite rules from a file in `name: lhs => rhs` format.
 pub fn from_file<L, A, P>(path: P) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
-    L: Language + FromOp + Sync + Send + 'static,
+    L: StitchLanguage,
     A: Analysis<L>,
     P: AsRef<Path>,
-    L::Error: Send + Sync + Error,
 {
     let contents = fs::read_to_string(path)?;
     parse(&contents)
@@ -120,9 +119,8 @@ where
 /// Parses rewrite rules from a string in `name: lhs => rhs` format.
 pub fn parse<L, A>(file: &str) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
-    L: Language + FromOp + Sync + Send + 'static,
+    L: StitchLanguage,
     A: Analysis<L>,
-    L::Error: Send + Sync + Error,
 {
     let mut rewrites = Vec::new();
     for line in file
@@ -138,8 +136,8 @@ where
         let name = name.trim();
         let lhs = lhs.trim();
         let rhs = rhs.trim();
-        let lhs: Pattern<L> = lhs.parse()?;
-        let rhs: Pattern<L> = rhs.parse()?;
+        let lhs: Pattern<L> = L::parse_pattern_ast(lhs)?.into();
+        let rhs: Pattern<L> = L::parse_pattern_ast(rhs)?.into();
         rewrites.push(Rewrite::new(name, lhs, rhs).map_err(|e| anyhow!("{}", e))?);
     }
     Ok(rewrites)

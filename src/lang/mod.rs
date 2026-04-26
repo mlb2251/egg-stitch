@@ -2,11 +2,13 @@ use egg::{Analysis, ENodeOrVar, FromOp, Id, Language, RecExpr};
 use std::fmt::{Debug, Display};
 
 mod family;
+mod lambda_calc;
 mod op;
 mod op_children;
 mod op_with_var;
 
-pub use family::{LanguageFamily, OpChildren};
+pub use family::{LambdaCalc, LanguageFamily, OpChildren};
+pub use lambda_calc::{LambdaCalcDisc, LambdaCalcLanguage};
 pub use op::{Op, StitchDisc, StitchOp};
 pub use op_children::OpChildrenLanguage;
 pub use op_with_var::OpWithVar;

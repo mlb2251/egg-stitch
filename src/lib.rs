@@ -105,6 +105,12 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+
+    /// Use `LambdaCalcLanguage` (curried `(@ ...)` applications) instead of the
+    /// flat `OpChildrenLanguage`. Patterns/programs/rules continue to be written
+    /// in flat form; the language layer handles conversion at the boundary.
+    #[arg(long, default_value_t = false)]
+    pub appify: bool,
 }
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,

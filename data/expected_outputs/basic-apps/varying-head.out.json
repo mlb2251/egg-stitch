@@ -1,0 +1,14 @@
+{
+  "abstractions": [
+    {
+      "body": "(#0 a b c)",
+      "num_matches": 4
+    }
+  ],
+  "rewritten": [
+    "(fn_0 +)",
+    "(fn_0 *)",
+    "(fn_0 /)",
+    "(fn_0 -)"
+  ]
+}
