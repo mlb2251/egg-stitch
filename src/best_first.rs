@@ -1,6 +1,5 @@
 use clap::ValueEnum;
 use colored::Colorize;
-use rustc_hash::FxHashSet;
 use serde::Serialize;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -9,8 +8,7 @@ use std::time::{Duration, Instant};
 use crate::cost::{CostScratch, compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::StitchEgraph;
-use crate::pattern::Pattern;
-use crate::search::{Action, SearchState, setup_search};
+use crate::search::{Action, SearchState, SeenTracker, setup_search};
 
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -126,7 +124,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
 
     let mut nodes: Vec<Node> = Vec::new();
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
-    let mut seen: FxHashSet<Pattern> = FxHashSet::default();
+    let mut seen: Option<SeenTracker> = (!args.no_seen).then(SeenTracker::new);
 
     nodes.push(Node {
         parent: None,
@@ -138,8 +136,8 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         lower_bound: None,
     });
     heap.push(Reverse((initial_prio, 0)));
-    if !args.no_seen {
-        seen.insert(initial_state.pattern.clone());
+    if let Some(s) = seen.as_mut() {
+        s.check_and_insert(&initial_state.pattern);
     }
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
@@ -147,8 +145,6 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let mut best_history: Vec<BestHistoryEntry> = Vec::new();
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
-    let mut seen_hits: usize = 0;
-    let mut seen_time: Duration = Duration::ZERO;
     let mut lower_bound_hits: usize = 0;
     let mut lower_bound_time: Duration = Duration::ZERO;
     let mut cost_calls: usize = 0;
@@ -180,7 +176,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
-        let successors = nodes[node_id].state.enumerate_successors(&shared);
+        let successors = nodes[node_id].state.enumerate_successors(&shared, seen.as_mut());
         let parent_depth = nodes[node_id].depth;
 
         for (action, child_state) in successors {
@@ -188,17 +184,6 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                 && !child_state.matches_follow(follow)
             {
                 continue;
-            }
-            if !args.no_seen {
-                let t = Instant::now();
-                let hit = seen.contains(&child_state.pattern);
-                if hit {
-                    seen_time += t.elapsed();
-                    seen_hits += 1;
-                    continue;
-                }
-                seen.insert(child_state.pattern.clone());
-                seen_time += t.elapsed();
             }
 
             // lower bound on the cost: any descendant of this will have at least this much cost
@@ -258,8 +243,9 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
     println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
     println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
-    println!("{} {}", "seen-set size:".dimmed(), seen.len().to_string().bold());
-    println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_time.as_secs_f64()).dimmed());
+    let (seen_len, seen_hits, seen_secs) = seen.as_ref().map_or((0, 0, 0.0), |s| (s.len(), s.hits, s.time.as_secs_f64()));
+    println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
+    println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
     println!("{} {} {}", "lower-bound hits:".dimmed(), lower_bound_hits.to_string().bold(), format!("(time: {:.3}s)", lower_bound_time.as_secs_f64()).dimmed());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());

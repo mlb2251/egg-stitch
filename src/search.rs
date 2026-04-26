@@ -6,6 +6,39 @@ use egg::{ENodeOrVar, Id, Language, Symbol};
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
+
+/// Tracks already-explored canonical patterns to dedupe successors during
+/// enumeration. Also accumulates hit count and time spent so the host search
+/// loop can report stats. Pass as `Option<&mut SeenTracker>` — `None` disables
+/// the check entirely.
+#[derive(Default)]
+pub struct SeenTracker {
+    set: FxHashSet<Pattern>,
+    pub hits: usize,
+    pub time: Duration,
+}
+
+impl SeenTracker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Number of distinct patterns recorded.
+    pub fn len(&self) -> usize {
+        self.set.len()
+    }
+    /// Records `pattern` if new; returns `true` if it was already present
+    /// (caller should skip this successor).
+    pub fn check_and_insert(&mut self, pattern: &Pattern) -> bool {
+        let t = Instant::now();
+        let already_present = !self.set.insert(pattern.clone());
+        self.time += t.elapsed();
+        if already_present {
+            self.hits += 1;
+        }
+        already_present
+    }
+}
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
 /// with a specific enode shape, or unifying two existing variables.
@@ -166,7 +199,7 @@ impl SearchState {
     /// one child per shape. Reuse candidates: for every pair `(i, j)` with `i < j`,
     /// emit a child if some match has `subst.vars[i] == subst.vars[j]`. Children whose
     /// match set becomes empty after filtering are dropped.
-    pub fn enumerate_successors(&self, shared: &SharedSearchData) -> Vec<(Action, SearchState)> {
+    pub fn enumerate_successors(&self, shared: &SharedSearchData, mut seen: Option<&mut SeenTracker>) -> Vec<(Action, SearchState)> {
         let mut out = Vec::new();
 
         // check for variable reuse
@@ -177,6 +210,11 @@ impl SearchState {
                 if unifiable {
                     let mut child = self.clone();
                     child.pattern.reuse(i, j);
+                    if let Some(s) = seen.as_deref_mut()
+                        && s.check_and_insert(&child.pattern)
+                    {
+                        continue;
+                    }
                     child.subset_matches_reuse(i, j);
                     if !child.matches.is_empty() {
                         out.push((Action::Reuse { keep: i, drop: j }, child));
@@ -186,14 +224,14 @@ impl SearchState {
         }
 
         for var_idx in 0..self.pattern.vars.len() {
-            let mut seen: FxHashSet<(Symbol, usize)> = FxHashSet::default();
+            let mut seen_shapes: FxHashSet<(Symbol, usize)> = FxHashSet::default();
             let mut shapes: Vec<StitchLang> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
                         let key = (node.op, node.children.len());
-                        if seen.insert(key) {
+                        if seen_shapes.insert(key) {
                             shapes.push(node.clone());
                         }
                     }
@@ -202,6 +240,11 @@ impl SearchState {
             for shape in shapes {
                 let mut child = self.clone();
                 child.pattern.expand(var_idx, &shape);
+                if let Some(s) = seen.as_deref_mut()
+                    && s.check_and_insert(&child.pattern)
+                {
+                    continue;
+                }
                 child.subset_matches(var_idx, &shape, shared);
                 if !child.matches.is_empty() {
                     out.push((Action::Expand { var_idx, op: shape.op, arity: shape.children.len() }, child));
