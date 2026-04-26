@@ -9,6 +9,7 @@ pub mod matching;
 pub mod math;
 pub mod pattern;
 pub mod results;
+pub mod rewrite;
 pub mod revexpr;
 pub mod search;
 pub mod smc;

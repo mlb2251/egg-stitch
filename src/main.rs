@@ -1,5 +1,5 @@
 use clap::Parser;
-use egg_stitch::{Args, SearchKind, best_first, cost, io, lang, results, search, smc};
+use egg_stitch::{Args, SearchKind, best_first, cost, io, lang, results, rewrite, search, smc};
 
 fn main() {
     let args = Args::parse();
@@ -43,7 +43,7 @@ fn main() {
                 Some(state.matches.len()),
                 Some(um),
                 Some(appx),
-                Some(cost::extract_rewritten_programs(&result_egraph, root, state)),
+                Some(rewrite::extract_rewritten_programs(&result_egraph, root, state)),
             )
         }
         None => (None, None, None, None, None, None, None, None, None),

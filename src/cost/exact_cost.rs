@@ -1,8 +1,9 @@
 use super::cost_only_extractor::CostOnlyExtractor;
 use super::rewrite_analysis::{build_eclass_to_substs, RewriteAnalysis};
 use super::{CostCache, StitchAnalysisRunner};
-use crate::lang::{StitchEgraph, StitchLang};
+use crate::lang::StitchEgraph;
 use crate::pattern::Pattern;
+use crate::rewrite::build_rewritten_egraph;
 use crate::search::SearchState;
 
 /// Returns the total cost: compressed corpus size plus the pattern's own size.
@@ -36,26 +37,4 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         assert_eq!(final_size, cost_only_size, "Fast rewrite size {} != CostOnlyExtractor size {}", final_size, cost_only_size);
     }
     final_size as usize
-}
-
-/// Clones the egraph and unions each match root with an `inv_0(args...)` node, then rebuilds.
-/// Used for validating `compute_size` and for extracting rewritten programs.
-pub(crate) fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &SearchState) -> StitchEgraph {
-    let mut egraph = egraph.clone();
-    for m in &search_state.matches {
-        for subst in &m.substs {
-            let node = StitchLang { op: "inv_0".into(), children: subst.vars.clone() };
-            let x = egraph.add(node);
-            egraph.union(x, m.root_eclass);
-        }
-    }
-    egraph.rebuild();
-    egraph
-}
-
-/// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
-pub fn extract_rewritten_programs(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> Vec<String> {
-    let rewritten = build_rewritten_egraph(egraph, search_state);
-    let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0].children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect()
 }
