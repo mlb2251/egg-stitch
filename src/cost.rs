@@ -112,13 +112,14 @@ impl<'a> StitchAnalysis for RewriteAnalysis<'a> {
     }
 }
 
-/// Optimistic lower-bound analysis: if any subst applies at this eclass, assume the
-/// rewrite collapses it to a single node (size 1); otherwise fall back to the minimum
-/// enode size. Only needs the *set* of match-root eclasses, not the substs themselves.
-pub struct UpperBoundAnalysis<'a> {
+/// Optimistic analysis producing a lower bound on achievable size: if any subst
+/// applies at this eclass, assume the rewrite collapses it to a single node (size 1);
+/// otherwise fall back to the minimum enode size. Only needs the *set* of match-root
+/// eclasses, not the substs themselves.
+pub struct LowerBoundAnalysis<'a> {
     pub match_eclasses: &'a FxHashSet<Id>,
 }
-impl<'a> StitchAnalysis for UpperBoundAnalysis<'a> {
+impl<'a> StitchAnalysis for LowerBoundAnalysis<'a> {
     fn init(sizes: &StitchAnalysisRunner<Self>) -> Vec<Id> {
         sizes.analysis.match_eclasses.iter().copied().collect()
     }
@@ -239,10 +240,9 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
 }
 
 /// Computes an optimistic lower bound on corpus size by assuming every match collapses
-/// to a single node. Useful as an upper bound on achievable compression (i.e. lower
-/// bound on size).
-pub fn compute_upper_bound(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, match_eclasses: &FxHashSet<Id>) -> usize {
-    let mut sizes = StitchAnalysisRunner::new(egraph, cache, UpperBoundAnalysis { match_eclasses });
+/// to a single node.
+pub fn compute_lower_bound(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, match_eclasses: &FxHashSet<Id>) -> usize {
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, LowerBoundAnalysis { match_eclasses });
     sizes.solve();
     sizes.get(root) as usize
 }
