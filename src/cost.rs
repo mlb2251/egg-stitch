@@ -122,24 +122,33 @@ impl StitchAnalysis for UpperBoundAnalysis {
     }
 }
 
+/// Map from match-root eclass to the substitutions that apply there. Build once
+/// (via `build_eclass_to_substs`) and pass by reference to every analysis run.
+pub type EclassToSubsts<'a> = FxHashMap<Id, &'a Vec<Subst>>;
+
+/// Builds the eclass→substs map from a `SearchState`. Reuse across analyses.
+pub fn build_eclass_to_substs(search_state: &SearchState) -> EclassToSubsts<'_> {
+    let mut m = FxHashMap::default();
+    for match_ in &search_state.matches {
+        m.insert(match_.root_eclass, &match_.substs);
+    }
+    m
+}
+
 /// Sparse per-eclass size map with a fallback to the unrewritten AstSize (`egraph[id].data`).
 /// Entries represent eclasses whose rewritten size is strictly smaller than the default.
-/// `eclass_to_substs` is shared state available to every analysis.
+/// `eclass_to_substs` is shared state available to every analysis, borrowed from the caller.
 pub struct StitchAnalysisRunner<'a, A: StitchAnalysis> {
     egraph: &'a StitchEgraph,
     cache: &'a CostCache,
     overrides: FxHashMap<Id, i64>,
     work_queue: BinaryHeap<Reverse<(u32, Id)>>,
-    pub eclass_to_substs: FxHashMap<Id, &'a Vec<Subst>>,
+    pub eclass_to_substs: &'a EclassToSubsts<'a>,
     pub analysis: A,
 }
 impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
     /// Builds an empty size table seeded with the analysis's chosen eclasses.
-    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, search_state: &'a SearchState, analysis: A) -> Self {
-        let mut eclass_to_substs = FxHashMap::default();
-        for m in &search_state.matches {
-            eclass_to_substs.insert(m.root_eclass, &m.substs);
-        }
+    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, eclass_to_substs: &'a EclassToSubsts<'a>, analysis: A) -> Self {
         let mut sizes = StitchAnalysisRunner {
             egraph,
             cache,
@@ -208,7 +217,8 @@ impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
 /// match-root eclasses; when an eclass's size strictly improves we write it into
 /// `sizes` and push its parents so they can reconsider with the new child value.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
-    let mut sizes = StitchAnalysisRunner::new(egraph, cache, search_state, RewriteAnalysis);
+    let eclass_to_substs = build_eclass_to_substs(search_state);
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &eclass_to_substs, RewriteAnalysis);
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {
