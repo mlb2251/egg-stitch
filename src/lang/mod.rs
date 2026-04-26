@@ -1,10 +1,12 @@
 use egg::{Analysis, FromOp, Id, Language};
 use std::fmt::{Debug, Display};
 
+mod family;
 mod op;
 mod op_children;
 mod op_with_var;
 
+pub use family::{LanguageFamily, OpChildren};
 pub use op::{Op, StitchOp};
 pub use op_children::OpChildrenLanguage;
 pub use op_with_var::OpWithVar;

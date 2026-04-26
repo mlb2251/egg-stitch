@@ -1,71 +1,49 @@
-use crate::lang::{OpChildrenLanguage, OpWithVar, StitchLanguage, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
 use crate::revexpr::RevExpr;
-use egg::{FromOp, Id, Language};
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
+use egg::{Id, Language};
 use std::marker::PhantomData;
 
-/// Pattern AST node type — captures the small set of var-related operations
-/// `Pattern` needs from its storage. Implemented by us for the canonical
-/// `OpChildrenLanguage<OpWithVar<L::Discriminant>>`; downstream consumers can
-/// supply alternative storage shapes by implementing this trait themselves.
-pub trait PatternStorage<L: Language>: Language<Discriminant: StitchOp> + FromOp + Display + Clone + Debug + Eq + Hash + Ord + Send + Sync + 'static {
-    /// A leaf node holding the pattern variable `?#idx`.
-    fn make_var(idx: u32) -> Self;
-    /// A node whose op is the program-discriminant `disc` lifted into pattern form.
-    fn make_lifted(disc: L::Discriminant, kids: Vec<Id>) -> Self;
-    /// `Some(v)` if this node is a pattern variable.
-    fn as_var(&self) -> Option<egg::Var>;
+/// A partially-built pattern, parameterized by a language family `F` (the
+/// type-level constructor `L<_>`) and a leaf-Op `O` for the program side.
+///
+/// Storage is `RecExpr<F::Apply<OpWithVar<O>>>` — i.e. exactly the program
+/// language `F::Apply<O>` reinstantiated with `OpWithVar<O>` as its leaf-Op,
+/// so a pattern is just "the same Language as programs, with pattern variables
+/// added to the Op slot."
+///
+/// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds a
+/// node whose op is `OpWithVar::Var(egg::Var::from(k as u32))` — so the tree's
+/// var names match their DFS first-appearance order. `expand` and `reuse`
+/// preserve this by rewriting affected var leaves, so `pattern.to_string()`
+/// is canonical: alpha-equivalent patterns render identically.
+#[derive(Debug)]
+pub struct Pattern<F: LanguageFamily, O: StitchOp> {
+    pub pattern: RevExpr<F::Apply<OpWithVar<O>>>,
+    pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
+    _marker: PhantomData<O>,
 }
 
-impl<L> PatternStorage<L> for OpChildrenLanguage<OpWithVar<L::Discriminant>>
-where
-    L: StitchLanguage,
-{
-    fn make_var(idx: u32) -> Self {
-        OpChildrenLanguage {
-            op: OpWithVar::Var(egg::Var::from(idx)),
-            children: vec![],
+// Hand-written Clone so we don't pick up an `F: Clone` bound from the auto-derive
+// (the marker types `OpChildren` etc. don't need to be cloneable).
+impl<F: LanguageFamily, O: StitchOp> Clone for Pattern<F, O> {
+    fn clone(&self) -> Self {
+        Pattern {
+            pattern: self.pattern.clone(),
+            vars: self.vars.clone(),
+            _marker: PhantomData,
         }
     }
-    fn make_lifted(disc: L::Discriminant, kids: Vec<Id>) -> Self {
-        OpChildrenLanguage { op: OpWithVar::Node(disc), children: kids }
-    }
-    fn as_var(&self) -> Option<egg::Var> {
-        if let OpWithVar::Var(v) = &self.op { Some(*v) } else { None }
-    }
 }
 
-/// A partially-built pattern, parameterized by the program language `L` and the
-/// pattern-storage node type `P`. The default `P` for every `L` is
-/// `OpChildrenLanguage<OpWithVar<L::Discriminant>>`; callers wire whatever `P`
-/// they like by supplying their own `PatternStorage<L>` impl.
-///
-/// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds a node
-/// whose `as_var()` returns `egg::Var::from(k as u32)` — so the tree's var names
-/// match their DFS first-appearance order. `expand` and `reuse` preserve this by
-/// rewriting affected var leaves, so `pattern.to_string()` is canonical: alpha-
-/// equivalent patterns render identically.
-#[derive(Debug, Clone)]
-pub struct Pattern<L, P>
-where
-    L: StitchLanguage,
-    P: PatternStorage<L>,
-{
-    pub pattern: RevExpr<P>,
-    pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
-    _marker: PhantomData<L>,
+fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
+    F::make(OpWithVar::Var(egg::Var::from(idx)), vec![])
 }
 
-impl<L, P> Pattern<L, P>
-where
-    L: StitchLanguage,
-    P: PatternStorage<L>,
-{
+impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Creates the initial `?#0` pattern: a single variable.
     pub fn single_var() -> Self {
         Pattern {
-            pattern: RevExpr::new(vec![P::make_var(0)]),
+            pattern: RevExpr::new(vec![var_node::<F, O>(0)]),
             vars: vec![vec![0.into()]],
             _marker: PhantomData,
         }
@@ -75,9 +53,9 @@ where
     /// at list positions `var_idx..var_idx+k`; any vars that previously followed
     /// `var_idx` shift right and get their in-tree `Var(n)` leaves rewritten to
     /// match their new position, so the canonical-form invariant is preserved.
-    pub fn expand(&mut self, var_idx: usize, target: &L) {
+    pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         let var_positions = self.vars.remove(var_idx);
-        assert!(self.pattern[var_positions[0]].as_var().is_some(), "Attempting to expand a non-var");
+        assert!(matches!(self.pattern[var_positions[0]].discriminant(), OpWithVar::Var(_)), "Attempting to expand a non-var");
         let num_children = target.len();
 
         // Shift names of trailing vars: a var currently at post-removal index p
@@ -85,7 +63,7 @@ where
         // (Skip the no-op case num_children == 1 where indices don't move.)
         if num_children != 1 {
             for p in var_idx..self.vars.len() {
-                let shifted = P::make_var((p + num_children) as u32);
+                let shifted = var_node::<F, O>((p + num_children) as u32);
                 for &id in &self.vars[p] {
                     self.pattern[id] = shifted.clone();
                 }
@@ -95,12 +73,12 @@ where
         // Build the new enode with freshly-named Var children at positions var_idx..var_idx+k.
         let mut new_children = Vec::with_capacity(num_children);
         for j in 0..num_children {
-            self.pattern.nodes.push(P::make_var((var_idx + j) as u32));
+            self.pattern.nodes.push(var_node::<F, O>((var_idx + j) as u32));
             let new_id = Id::from(self.pattern.nodes.len() - 1);
             new_children.push(new_id);
             self.vars.insert(var_idx + j, vec![new_id]);
         }
-        let new_node = P::make_lifted(target.discriminant(), new_children);
+        let new_node = F::make(OpWithVar::Node(target.discriminant()), new_children);
 
         // Replace each position of the expanded var with the new enode. If the var
         // had multiple positions (from a prior reuse), all parents share the same
@@ -118,7 +96,7 @@ where
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
-        let keep_name = P::make_var(keep_idx as u32);
+        let keep_name = var_node::<F, O>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
             self.pattern[*var_id] = keep_name.clone();
         }
@@ -128,7 +106,7 @@ where
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
-            let shifted = P::make_var(p as u32);
+            let shifted = var_node::<F, O>(p as u32);
             for &id in &self.vars[p] {
                 self.pattern[id] = shifted.clone();
             }
@@ -136,11 +114,7 @@ where
     }
 }
 
-impl<L, P> std::fmt::Display for Pattern<L, P>
-where
-    L: StitchLanguage,
-    P: PatternStorage<L>,
-{
+impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for Pattern<F, O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.pattern)
     }
@@ -148,12 +122,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::{Op, OpChildrenLanguage};
+    use crate::lang::{Op, OpChildren, OpChildrenLanguage};
 
     use super::*;
     use egg::Symbol;
-
-    type Storage = OpChildrenLanguage<OpWithVar<Op>>;
 
     /// Build an enode with `arity` placeholder children. `expand` overwrites the
     /// children, so the dummy Ids here are never read.
@@ -166,13 +138,13 @@ mod tests {
 
     /// Asserts the canonical-form invariant: every id in `vars[k]` holds `Var(k)`,
     /// and nothing in `vars` is non-Var.
-    fn assert_vars_canonical(p: &Pattern<OpChildrenLanguage, Storage>) {
+    fn assert_vars_canonical(p: &Pattern<OpChildren, Op>) {
         for (k, ids) in p.vars.iter().enumerate() {
             let expected = egg::Var::from(k as u32);
             for id in ids {
-                match <Storage as PatternStorage<OpChildrenLanguage>>::as_var(&p.pattern[*id]) {
-                    Some(v) => assert_eq!(v, expected, "vars[{}] = {:?}: expected {:?}, got {:?}", k, ids, expected, v),
-                    None => panic!("vars[{}] contains non-Var: {:?}", k, &p.pattern[*id]),
+                match p.pattern[*id].discriminant() {
+                    OpWithVar::Var(v) => assert_eq!(v, expected, "vars[{}] = {:?}: expected {:?}, got {:?}", k, ids, expected, v),
+                    other => panic!("vars[{}] contains non-Var: {:?}", k, other),
                 }
             }
         }
@@ -180,7 +152,7 @@ mod tests {
 
     #[test]
     fn single_var_is_canonical() {
-        let p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let p: Pattern<OpChildren, Op> = Pattern::single_var();
         assert_eq!(p.vars.len(), 1);
         assert_eq!(p.to_string(), "?#0");
         assert_vars_canonical(&p);
@@ -188,7 +160,7 @@ mod tests {
 
     #[test]
     fn expand_fresh_var_binary() {
-        let mut p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2));
         assert_eq!(p.vars.len(), 2);
         assert_eq!(p.to_string(), "(+ ?#0 ?#1)");
@@ -197,7 +169,7 @@ mod tests {
 
     #[test]
     fn expand_nested_left_first() {
-        let mut p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
         assert_eq!(p.to_string(), "(+ (- ?#0 ?#1) ?#2)");
@@ -207,7 +179,7 @@ mod tests {
 
     #[test]
     fn expand_right_keeps_earlier_vars_first() {
-        let mut p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
         assert_eq!(p.to_string(), "(+ ?#0 (* ?#1 ?#2))");
@@ -217,7 +189,7 @@ mod tests {
 
     #[test]
     fn expand_ternary() {
-        let mut p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("f", 3));
         assert_eq!(p.to_string(), "(f ?#0 ?#1 ?#2)");
         assert_eq!(p.vars.len(), 3);
@@ -226,7 +198,7 @@ mod tests {
 
     #[test]
     fn reuse_adjacent() {
-        let mut p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.reuse(0, 1); // (+ ?#0 ?#0)
         assert_eq!(p.to_string(), "(+ ?#0 ?#0)");
@@ -236,12 +208,12 @@ mod tests {
 
     #[test]
     fn reuse_normalizes_reversed_args() {
-        let mut p1: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p1: Pattern<OpChildren, Op> = Pattern::single_var();
         p1.expand(0, &op("+", 2));
         p1.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
         p1.reuse(0, 2);
 
-        let mut p2: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p2: Pattern<OpChildren, Op> = Pattern::single_var();
         p2.expand(0, &op("+", 2));
         p2.expand(1, &op("*", 2));
         p2.reuse(2, 0); // reversed
@@ -262,7 +234,7 @@ mod tests {
 
     #[test]
     fn reuse_with_intervening_var() {
-        let mut p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("f", 3)); // (f ?#0 ?#1 ?#2)
         p.reuse(0, 2); // (f ?#0 ?#1 ?#0)
         assert_eq!(p.to_string(), "(f ?#0 ?#1 ?#0)");
@@ -272,7 +244,7 @@ mod tests {
 
     #[test]
     fn expand_reused_var_preserves_dag_sharing() {
-        let mut p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.reuse(0, 1); // (+ ?#0 ?#0)
         assert_eq!(p.vars.len(), 1);
@@ -289,7 +261,7 @@ mod tests {
 
     #[test]
     fn expand_then_reuse_across_structure() {
-        let mut p: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
         p.reuse(1, 2); // (+ ?#0 (* ?#1 ?#1))
@@ -300,12 +272,12 @@ mod tests {
 
     #[test]
     fn to_string_distinguishes_non_equivalent_shapes() {
-        let mut a: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut a: Pattern<OpChildren, Op> = Pattern::single_var();
         a.expand(0, &op("+", 2));
         a.reuse(0, 1); // (+ ?#0 ?#0)
         a.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
 
-        let mut b: Pattern<OpChildrenLanguage, Storage> = Pattern::single_var();
+        let mut b: Pattern<OpChildren, Op> = Pattern::single_var();
         b.expand(0, &op("+", 2));
         b.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) ?#2)
         b.expand(2, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#2 ?#3))

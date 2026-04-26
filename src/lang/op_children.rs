@@ -2,13 +2,13 @@ use egg::{FromOp, Id, Language};
 use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
-use super::{Op, StitchLanguage, StitchOp};
+use super::{StitchLanguage, StitchOp};
 
 /// Language where each enode is an operator plus a list of child Ids.
 /// This language does not have currying-by-default but is more efficient
 /// due to a smaller graph.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
-pub struct OpChildrenLanguage<O = Op> {
+pub struct OpChildrenLanguage<O = super::Op> {
     /// The operator for an enode.
     pub op: O,
     /// The enode's children `Id`s.
@@ -53,7 +53,7 @@ impl<O: StitchOp> FromOp for OpChildrenLanguage<O> {
     }
 }
 
-impl StitchLanguage for OpChildrenLanguage<Op> {
+impl<O: StitchOp> StitchLanguage for OpChildrenLanguage<O> {
     fn is_programs_node(&self) -> bool {
         self.op.to_string() == "programs"
     }

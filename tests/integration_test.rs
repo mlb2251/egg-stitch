@@ -1,11 +1,9 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{Op, OpChildrenLanguage, OpWithVar},
+    lang::{Op, OpChildren, OpChildrenLanguage, OpWithVar},
     smc,
 };
-
-type Storage = OpChildrenLanguage<OpWithVar<Op>>;
 
 const INPUT: &str = "data/domains/cogsci/dials.json";
 const RULES: &str = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
@@ -14,13 +12,13 @@ fn fixtures_present() -> bool {
     std::path::Path::new(INPUT).exists() && std::path::Path::new(RULES).exists()
 }
 
-fn run(args: &Args) -> smc::SmcResult<OpChildrenLanguage, Storage> {
+fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
     let (egraph, root, _) = io::load_egraph::<OpChildrenLanguage>(&args.input, args.rules.as_deref());
-    smc::smc(egraph, root, args)
+    smc::smc::<OpChildren, Op>(egraph, root, args)
 }
 
-fn assert_best_matches_follow(result: &smc::SmcResult<OpChildrenLanguage, Storage>, follow_str: &str) {
-    let follow: egg_stitch::revexpr::RevExpr<Storage> = follow_str.parse().expect("parse follow");
+fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
+    let follow: egg_stitch::revexpr::RevExpr<OpChildrenLanguage<OpWithVar<Op>>> = follow_str.parse().expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
     assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
 }

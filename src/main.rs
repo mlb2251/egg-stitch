@@ -1,7 +1,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, SearchKind, io,
-    lang::{Op, OpChildrenLanguage, OpWithVar},
+    lang::{Op, OpChildren, OpChildrenLanguage},
     multiple_step_search, results,
 };
 
@@ -12,7 +12,7 @@ fn main() {
     let rules = args.rules.as_deref();
     let (egraph, root, cost_before_rewrites) = io::load_egraph::<OpChildrenLanguage>(&args.input, rules);
 
-    let (library, original_size, final_cost) = multiple_step_search::<OpChildrenLanguage, OpChildrenLanguage<OpWithVar<Op>>>(egraph, root, &args);
+    let (library, original_size, final_cost) = multiple_step_search::<OpChildren, Op>(egraph, root, &args);
 
     let elapsed_secs = start.elapsed().as_secs_f64();
     let compression_ratio = final_cost.map(|fc| original_size as f64 / fc as f64);
