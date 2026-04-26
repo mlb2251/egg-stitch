@@ -22,17 +22,26 @@ pub trait LanguageFamily: Clone + 'static {
     /// The Language obtained by instantiating this family with leaf-Op `O`.
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Op<O>>;
 
-    /// Build a pattern leaf containing the given pattern variable.
-    fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
+    /// Construct an enode from a discriminant op and a list of children. For
+    /// families with fixed-arity structural variants, this dispatches on the
+    /// variant + arity.
+    fn make<P: StitchOp>(op: Self::Op<P>, kids: Vec<Id>) -> Self::Apply<P>;
 
-    /// Lift a program enode into the matching pattern enode shape, with the
-    /// supplied new children. The pattern enode mirrors the program enode's
-    /// structural variant; any leaf op gets wrapped in `OpWithVar::Node`.
-    fn lift_to_pattern<O: StitchOp>(target: &Self::Apply<O>, new_children: Vec<Id>) -> Self::Apply<OpWithVar<O>>;
+    /// Functor map over the leaf-Op slot of the discriminant. Structural
+    /// variants pass through unchanged; embedded leaves go through `f`.
+    /// Lifting a program-side discriminant into the pattern-side one is just
+    /// `map_op(op, OpWithVar::Node)`; no extra family method needed.
+    fn map_op<A: StitchOp, B: StitchOp>(op: Self::Op<A>, f: impl FnMut(A) -> B) -> Self::Op<B>;
 
     /// Add a `name(children...)` application to the egraph and return its Id.
     /// For families with binary `App` this builds a curried application chain.
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
+
+    /// Build a pattern leaf containing the given pattern variable. Defaulted via
+    /// `Op::from_name` since `OpWithVar::from_name` round-trips var syntax.
+    fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>> {
+        Self::make(<Self::Op<OpWithVar<O>> as StitchOp>::from_name(&v.to_string()), vec![])
+    }
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -43,19 +52,16 @@ impl LanguageFamily for OpChildren {
     type Op<O: StitchOp> = O;
     type Apply<O: StitchOp> = OpChildrenLanguage<O>;
 
-    fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
-        OpChildrenLanguage { op: OpWithVar::Var(v), children: vec![] }
+    fn make<P: StitchOp>(op: P, kids: Vec<Id>) -> OpChildrenLanguage<P> {
+        OpChildrenLanguage { op, children: kids }
     }
 
-    fn lift_to_pattern<O: StitchOp>(target: &OpChildrenLanguage<O>, new_children: Vec<Id>) -> OpChildrenLanguage<OpWithVar<O>> {
-        OpChildrenLanguage {
-            op: OpWithVar::Node(target.op.clone()),
-            children: new_children,
-        }
+    fn map_op<A: StitchOp, B: StitchOp>(op: A, mut f: impl FnMut(A) -> B) -> B {
+        f(op)
     }
 
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
-        egraph.add(OpChildrenLanguage { op: O::from_name(name), children })
+        egraph.add(Self::make(O::from_name(name), children))
     }
 }
 
@@ -67,25 +73,22 @@ impl LanguageFamily for LambdaCalc {
     type Op<O: StitchOp> = LambdaCalcOp<O>;
     type Apply<O: StitchOp> = LambdaCalcLanguage<O>;
 
-    fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
-        LambdaCalcLanguage::Leaf(OpWithVar::Var(v))
+    fn make<P: StitchOp>(op: LambdaCalcOp<P>, kids: Vec<Id>) -> LambdaCalcLanguage<P> {
+        match (op, kids.as_slice()) {
+            (LambdaCalcOp::Leaf(o), &[]) => LambdaCalcLanguage::Leaf(o),
+            (LambdaCalcOp::App, &[f, a]) => LambdaCalcLanguage::App([f, a]),
+            (LambdaCalcOp::Lam, &[b]) => LambdaCalcLanguage::Lam([b]),
+            (LambdaCalcOp::Programs, _) => LambdaCalcLanguage::Programs(kids),
+            (op, _) => panic!("LambdaCalc::make: {op} got wrong arity ({} children)", kids.len()),
+        }
     }
 
-    fn lift_to_pattern<O: StitchOp>(target: &LambdaCalcLanguage<O>, new_children: Vec<Id>) -> LambdaCalcLanguage<OpWithVar<O>> {
-        match target {
-            LambdaCalcLanguage::Leaf(o) => {
-                debug_assert!(new_children.is_empty(), "leaf has no children");
-                LambdaCalcLanguage::Leaf(OpWithVar::Node(o.clone()))
-            }
-            LambdaCalcLanguage::App(_) => {
-                debug_assert_eq!(new_children.len(), 2, "App is binary");
-                LambdaCalcLanguage::App([new_children[0], new_children[1]])
-            }
-            LambdaCalcLanguage::Lam(_) => {
-                debug_assert_eq!(new_children.len(), 1, "Lam is unary");
-                LambdaCalcLanguage::Lam([new_children[0]])
-            }
-            LambdaCalcLanguage::Programs(_) => LambdaCalcLanguage::Programs(new_children),
+    fn map_op<A: StitchOp, B: StitchOp>(op: LambdaCalcOp<A>, mut f: impl FnMut(A) -> B) -> LambdaCalcOp<B> {
+        match op {
+            LambdaCalcOp::Leaf(a) => LambdaCalcOp::Leaf(f(a)),
+            LambdaCalcOp::App => LambdaCalcOp::App,
+            LambdaCalcOp::Lam => LambdaCalcOp::Lam,
+            LambdaCalcOp::Programs => LambdaCalcOp::Programs,
         }
     }
 
