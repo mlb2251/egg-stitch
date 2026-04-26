@@ -14,7 +14,7 @@ pub mod search;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
-use egg::{FromOp, Id, Language};
+use egg::{Id, Language};
 
 pub use best_first::SearchPriority;
 
@@ -149,7 +149,10 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 
                 final_cost = Some(best_cost);
                 library.push(results::AbstractionResult {
-                    pattern: format!("{fn_name}: {}", state.pattern),
+                    pattern: {
+                        let pat_recexpr: egg::RecExpr<F::Apply<crate::lang::OpWithVar<O>>> = state.pattern.pattern.clone().into();
+                        format!("{fn_name}: {}", <F::Apply<crate::lang::OpWithVar<O>> as StitchLanguage>::display_recexpr(&pat_recexpr))
+                    },
                     arity: state.pattern.vars.len(),
                     pattern_size: pat_size,
                     num_matches: state.matches.len(),
@@ -186,15 +189,14 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {
-            let node = F::Apply::<O>::from_op(fn_name, subst.vars.clone()).expect("from_op should be infallible for stitch languages");
-            let x = egraph.add(node);
+            let x = F::add_stub_application::<O>(fn_name, subst.vars.clone(), &mut egraph);
             egraph.union(x, m.root_eclass);
         }
     }
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
     let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
-    let programs: Vec<String> = programs_node.children().iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
+    let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
     if rebuild {
         let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file);

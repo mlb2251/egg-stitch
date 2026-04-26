@@ -73,7 +73,7 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
 /// and for the optional serialized debug log.
 struct Node<F: LanguageFamily, O: StitchOp> {
     parent: Option<usize>,
-    action: Option<Action<O>>,
+    action: Option<Action<F, O>>,
     state: SearchState<F, O>,
     cost: usize,
     depth: usize,

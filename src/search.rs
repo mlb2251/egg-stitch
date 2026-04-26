@@ -10,12 +10,12 @@ use std::collections::HashMap;
 /// A deterministic move taken at a search node: either expanding a pattern variable
 /// with a specific enode shape, or unifying two existing variables.
 #[derive(Debug, Clone)]
-pub enum Action<O: StitchOp> {
-    Expand { var_idx: usize, op: O, arity: usize },
+pub enum Action<F: LanguageFamily, O: StitchOp> {
+    Expand { var_idx: usize, op: F::Discriminant<O>, arity: usize },
     Reuse { keep: usize, drop: usize },
 }
 
-impl<O: StitchOp> std::fmt::Display for Action<O> {
+impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for Action<F, O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Action::Expand { var_idx, op, arity } => write!(f, "expand #{} := {}/{}", var_idx, op, arity),
@@ -179,11 +179,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// one child per shape. Reuse candidates: for every pair `(i, j)` with `i < j`,
     /// emit a child if some match has `subst.vars[i] == subst.vars[j]`. Children whose
     /// match set becomes empty after filtering are dropped.
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>) -> Vec<(Action<O>, SearchState<F, O>)> {
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>) -> Vec<(Action<F, O>, SearchState<F, O>)> {
         let mut out = Vec::new();
 
         for var_idx in 0..self.pattern.vars.len() {
-            let mut seen: FxHashSet<(O, usize)> = FxHashSet::default();
+            let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
