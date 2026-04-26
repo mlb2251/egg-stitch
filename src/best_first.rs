@@ -134,7 +134,9 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         expanded: false,
     });
     heap.push(Reverse((initial_prio, 0)));
-    seen.insert(initial_state.pattern.clone());
+    if !args.no_seen {
+        seen.insert(initial_state.pattern.clone());
+    }
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
     let mut best_found_at: Option<usize> = None;
@@ -169,10 +171,12 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             {
                 continue;
             }
-            if seen.contains(&child_state.pattern) {
-                continue;
+            if !args.no_seen {
+                if seen.contains(&child_state.pattern) {
+                    continue;
+                }
+                seen.insert(child_state.pattern.clone());
             }
-            seen.insert(child_state.pattern.clone());
 
             // lower bound on the cost: any descendant of this will have at least this much cost
             if args.opt_lower_bound {
