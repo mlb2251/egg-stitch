@@ -1,6 +1,6 @@
 use egg::Id;
 
-use super::{LambdaCalcLanguage, LambdaCalcDisc, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
+use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
 
 /// A type-level type constructor `L<_>` for a language family.
 ///
