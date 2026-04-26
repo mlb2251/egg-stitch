@@ -79,6 +79,13 @@ pub struct SearchState {
     pub pattern: Pattern,
     // each match represents a different eclass at which `pattern` can be rooted
     pub matches: Vec<MatchAtEClass>,
+    /// Cached `sum(m.substs.len() for m in matches)`.
+    pub num_substs: usize,
+}
+
+/// Computes the total number of substitutions across all matches.
+fn total_substs(matches: &[MatchAtEClass]) -> usize {
+    matches.iter().map(|m| m.substs.len()).sum()
 }
 
 impl SearchState {
@@ -147,6 +154,7 @@ impl SearchState {
             m.substs = new_substs;
         }
         self.matches.retain(|m| !m.substs.is_empty());
+        self.num_substs = total_substs(&self.matches);
     }
 
     /// Filters matches to those where `var_idx` can be expanded with `target`, updating substitutions.
@@ -186,10 +194,9 @@ impl SearchState {
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
     pub fn new(shared: &SharedSearchData) -> Self {
-        Self {
-            pattern: Pattern::single_var(),
-            matches: identity_matches(&shared.egraph),
-        }
+        let matches = identity_matches(&shared.egraph);
+        let num_substs = total_substs(&matches);
+        Self { pattern: Pattern::single_var(), matches, num_substs }
     }
 
     /// Enumerates every successor state reachable in one `expand` or `reuse` step.
@@ -199,7 +206,7 @@ impl SearchState {
     /// one child per shape. Reuse candidates: for every pair `(i, j)` with `i < j`,
     /// emit a child if some match has `subst.vars[i] == subst.vars[j]`. Children whose
     /// match set becomes empty after filtering are dropped.
-    pub fn enumerate_successors(&self, shared: &SharedSearchData, mut seen: Option<&mut SeenTracker>) -> Vec<(Action, SearchState)> {
+    pub fn enumerate_successors(&self, shared: &SharedSearchData, mut seen: Option<&mut SeenTracker>, opt_dominance: bool, dominance_hits: &mut usize) -> Vec<(Action, SearchState)> {
         let mut out = Vec::new();
 
         // check for variable reuse
@@ -215,11 +222,15 @@ impl SearchState {
                     {
                         continue;
                     }
-                    let mut child = SearchState { pattern: new_pattern, matches: self.matches.clone() };
+                    let mut child = SearchState { pattern: new_pattern, matches: self.matches.clone(), num_substs: self.num_substs };
                     child.subset_matches_reuse(i, j);
-                    if !child.matches.is_empty() {
-                        out.push((Action::Reuse { keep: i, drop: j }, child));
+                    assert!(!child.matches.is_empty());
+                    let action = Action::Reuse { keep: i, drop: j };
+                    if opt_dominance && child.num_substs == self.num_substs {
+                        *dominance_hits += 1;
+                        return vec![(action, child)];
                     }
+                    out.push((action, child));
                 }
             }
         }
@@ -247,11 +258,15 @@ impl SearchState {
                 {
                     continue;
                 }
-                let mut child = SearchState { pattern: new_pattern, matches: self.matches.clone() };
+                let mut child = SearchState { pattern: new_pattern, matches: self.matches.clone(), num_substs: self.num_substs };
                 child.subset_matches(var_idx, &shape, shared);
-                if !child.matches.is_empty() {
-                    out.push((Action::Expand { var_idx, op: shape.op, arity: shape.children.len() }, child));
+                assert!(!child.matches.is_empty());
+                let action = Action::Expand { var_idx, op: shape.op, arity: shape.children.len() };
+                if opt_dominance && child.num_substs == self.num_substs {
+                    *dominance_hits += 1;
+                    return vec![(action, child)];
                 }
+                out.push((action, child));
             }
         }
 

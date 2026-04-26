@@ -97,6 +97,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub no_seen: bool,
 
+    /// Disable dominance pruning of best-first children (on by default).
+    #[arg(long = "no-opt-dominance", action = clap::ArgAction::SetFalse)]
+    pub opt_dominance: bool,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,

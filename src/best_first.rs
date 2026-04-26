@@ -146,6 +146,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
     let mut lower_bound_hits: usize = 0;
+    let mut dominance_hits: usize = 0;
     let mut lower_bound_time: Duration = Duration::ZERO;
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
@@ -176,7 +177,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
-        let successors = nodes[node_id].state.enumerate_successors(&shared, seen.as_mut());
+        let successors = nodes[node_id].state.enumerate_successors(&shared, seen.as_mut(), args.opt_dominance, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
 
         for (action, child_state) in successors {
@@ -247,6 +248,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
     println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
     println!("{} {} {}", "lower-bound hits:".dimmed(), lower_bound_hits.to_string().bold(), format!("(time: {:.3}s)", lower_bound_time.as_secs_f64()).dimmed());
+    println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
