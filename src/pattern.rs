@@ -1,7 +1,6 @@
 use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
 use crate::revexpr::RevExpr;
 use egg::{Id, Language};
-use std::marker::PhantomData;
 
 /// A partially-built pattern, parameterized by a language family `F` (the
 /// type-level constructor `L<_>`) and a leaf-Op `O` for the program side.
@@ -20,7 +19,6 @@ use std::marker::PhantomData;
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: RevExpr<F::Apply<OpWithVar<O>>>,
     pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
-    _marker: PhantomData<O>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -33,7 +31,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         Pattern {
             pattern: RevExpr::new(vec![var_node::<F, O>(0)]),
             vars: vec![vec![0.into()]],
-            _marker: PhantomData,
         }
     }
 
