@@ -29,9 +29,9 @@ impl SeenTracker {
     }
     /// Records `pattern` if new; returns `true` if it was already present
     /// (caller should skip this successor).
-    pub fn check_and_insert(&mut self, pattern: &Pattern) -> bool {
+    pub fn check_and_insert(&mut self, pattern: Pattern) -> bool {
         let t = Instant::now();
-        let already_present = !self.set.insert(pattern.clone());
+        let already_present = !self.set.insert(pattern);
         self.time += t.elapsed();
         if already_present {
             self.hits += 1;
@@ -208,13 +208,14 @@ impl SearchState {
             for j in (i + 1)..n {
                 let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
                 if unifiable {
-                    let mut child = self.clone();
-                    child.pattern.reuse(i, j);
+                    let mut new_pattern = self.pattern.clone();
+                    new_pattern.reuse(i, j);
                     if let Some(s) = seen.as_deref_mut()
-                        && s.check_and_insert(&child.pattern)
+                        && s.check_and_insert(new_pattern.clone())
                     {
                         continue;
                     }
+                    let mut child = SearchState { pattern: new_pattern, matches: self.matches.clone() };
                     child.subset_matches_reuse(i, j);
                     if !child.matches.is_empty() {
                         out.push((Action::Reuse { keep: i, drop: j }, child));
@@ -238,13 +239,14 @@ impl SearchState {
                 }
             }
             for shape in shapes {
-                let mut child = self.clone();
-                child.pattern.expand(var_idx, &shape);
+                let mut new_pattern = self.pattern.clone();
+                new_pattern.expand(var_idx, &shape);
                 if let Some(s) = seen.as_deref_mut()
-                    && s.check_and_insert(&child.pattern)
+                    && s.check_and_insert(new_pattern.clone())
                 {
                     continue;
                 }
+                let mut child = SearchState { pattern: new_pattern, matches: self.matches.clone() };
                 child.subset_matches(var_idx, &shape, shared);
                 if !child.matches.is_empty() {
                     out.push((Action::Expand { var_idx, op: shape.op, arity: shape.children.len() }, child));

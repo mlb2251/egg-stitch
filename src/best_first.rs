@@ -137,7 +137,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
-        s.check_and_insert(&initial_state.pattern);
+        s.check_and_insert(initial_state.pattern.clone());
     }
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
