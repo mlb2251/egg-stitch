@@ -84,18 +84,26 @@ pub trait StitchAnalysis: Sized {
 }
 
 /// Default analysis: at each match root, rewriting via `inv_0(args...)` is allowed,
-/// otherwise we fall back to the minimum enode size.
-pub struct RewriteAnalysis;
-impl StitchAnalysis for RewriteAnalysis {
+/// otherwise we fall back to the minimum enode size. Holds the full subst map
+/// because it needs the per-subst arg lists to size the rewrite.
+pub struct RewriteAnalysis<'a> {
+    pub eclass_to_substs: &'a EclassToSubsts<'a>,
+}
+impl<'a> RewriteAnalysis<'a> {
+    pub fn new(eclass_to_substs: &'a EclassToSubsts<'a>) -> Self {
+        Self { eclass_to_substs }
+    }
+}
+impl<'a> StitchAnalysis for RewriteAnalysis<'a> {
     fn init(sizes: &StitchAnalysisRunner<Self>) -> Vec<Id> {
-        sizes.eclass_to_substs.keys().copied().collect()
+        sizes.analysis.eclass_to_substs.keys().copied().collect()
     }
     fn best(sizes: &StitchAnalysisRunner<Self>, eclass: Id) -> i64 {
         // Try not rewriting self but YES allowing rewrites of descendants
         // (technically we could just use sizes.original_size if we knew we weren't enqueued by a child)
         let mut best = sizes.min_enode_size(eclass);
         // For every way we match at this eclass (if any), try all ways of rewriting it
-        if let Some(substs) = sizes.eclass_to_substs.get(&eclass) {
+        if let Some(substs) = sizes.analysis.eclass_to_substs.get(&eclass) {
             if let Some(rewrite_size) = substs.iter().map(|subst| 1 + sizes.sum(&subst.vars)).min() {
                 best = best.min(rewrite_size);
             }
@@ -106,15 +114,16 @@ impl StitchAnalysis for RewriteAnalysis {
 
 /// Optimistic lower-bound analysis: if any subst applies at this eclass, assume the
 /// rewrite collapses it to a single node (size 1); otherwise fall back to the minimum
-/// enode size. Useful as a cheap upper bound on achievable compression.
-pub struct UpperBoundAnalysis;
-impl StitchAnalysis for UpperBoundAnalysis {
+/// enode size. Only needs the *set* of match-root eclasses, not the substs themselves.
+pub struct UpperBoundAnalysis<'a> {
+    pub match_eclasses: &'a FxHashSet<Id>,
+}
+impl<'a> StitchAnalysis for UpperBoundAnalysis<'a> {
     fn init(sizes: &StitchAnalysisRunner<Self>) -> Vec<Id> {
-        sizes.eclass_to_substs.keys().copied().collect()
+        sizes.analysis.match_eclasses.iter().copied().collect()
     }
     fn best(sizes: &StitchAnalysisRunner<Self>, eclass: Id) -> i64 {
-        if let Some(substs) = sizes.eclass_to_substs.get(&eclass) {
-            debug_assert!(!substs.is_empty());
+        if sizes.analysis.match_eclasses.contains(&eclass) {
             1
         } else {
             sizes.min_enode_size(eclass)
@@ -137,24 +146,21 @@ pub fn build_eclass_to_substs(search_state: &SearchState) -> EclassToSubsts<'_> 
 
 /// Sparse per-eclass size map with a fallback to the unrewritten AstSize (`egraph[id].data`).
 /// Entries represent eclasses whose rewritten size is strictly smaller than the default.
-/// `eclass_to_substs` is shared state available to every analysis, borrowed from the caller.
 pub struct StitchAnalysisRunner<'a, A: StitchAnalysis> {
     egraph: &'a StitchEgraph,
     cache: &'a CostCache,
     overrides: FxHashMap<Id, i64>,
     work_queue: BinaryHeap<Reverse<(u32, Id)>>,
-    pub eclass_to_substs: &'a EclassToSubsts<'a>,
     pub analysis: A,
 }
 impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
     /// Builds an empty size table seeded with the analysis's chosen eclasses.
-    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, eclass_to_substs: &'a EclassToSubsts<'a>, analysis: A) -> Self {
+    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, analysis: A) -> Self {
         let mut sizes = StitchAnalysisRunner {
             egraph,
             cache,
             overrides: FxHashMap::default(),
             work_queue: BinaryHeap::new(),
-            eclass_to_substs,
             analysis,
         };
         for id in A::init(&sizes) {
@@ -218,7 +224,7 @@ impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
 /// `sizes` and push its parents so they can reconsider with the new child value.
 pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
     let eclass_to_substs = build_eclass_to_substs(search_state);
-    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &eclass_to_substs, RewriteAnalysis);
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, RewriteAnalysis::new(&eclass_to_substs));
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {
@@ -230,6 +236,15 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
         assert_eq!(final_size, cost_only_size, "Fast rewrite size {} != CostOnlyExtractor size {}", final_size, cost_only_size);
     }
     final_size as usize
+}
+
+/// Computes an optimistic lower bound on corpus size by assuming every match collapses
+/// to a single node. Useful as an upper bound on achievable compression (i.e. lower
+/// bound on size).
+pub fn compute_upper_bound(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, match_eclasses: &FxHashSet<Id>) -> usize {
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, UpperBoundAnalysis { match_eclasses });
+    sizes.solve();
+    sizes.get(root) as usize
 }
 
 /// Clones the egraph and unions each match root with an `inv_0(args...)` node, then rebuilds.
