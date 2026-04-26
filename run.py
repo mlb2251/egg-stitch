@@ -221,7 +221,7 @@ def sweep_num_steps_smc(num_runs = 3):
 
 
 
-def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=100, max_arity=2, rewrites=True, **kwargs):
+def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=500, max_arity=2, rewrites=True, **kwargs):
     results = []
     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
         for domain in stackpathiter(domains):
@@ -231,17 +231,13 @@ def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=100, max_arity=2, re
     
     for domain in domains:
         domain_results = [r for r in results if r["domain"] == domain]
-        mean = sum(r["elapsed_secs"] for r in domain_results) / len(domain_results)
-        compression_ratio = domain_results[0]["compression_ratio"] 
-        print(f"{domain} [{mean:.2f}] ({compression_ratio:0.2f}): ", end=" ")
+        mean_time = sum(r["elapsed_secs"] for r in domain_results) / len(domain_results)
+        mean_compression_ratio = sum(r["compression_ratio"] for r in domain_results) / len(domain_results)
+        print(f"{domain} [{mean_time:.2f}] ({mean_compression_ratio:0.2f}): ")
         for res in domain_results:
-            print(f"{res["elapsed_secs"]:.2f}", end=" ")
+            h = res["best_history"][-1]
+            print(f"{res["elapsed_secs"]:.2f} (t={h['elapsed_secs']:7.3f}s  exp={h['expansion']:>6}  cost={h['cost']:>6}  {h['pattern']}")
         print()
-        for i, res in enumerate(domain_results):
-            print(f"  trajectory rep{i}:")
-            for h in res["best_history"]:
-                print(f"    t={h['elapsed_secs']:7.3f}s  exp={h['expansion']:>6}  cost={h['cost']:>6}  {h['pattern']}")
-
 def no_bound():
     quick_eval(no_opt_lower_bound=True)
 
