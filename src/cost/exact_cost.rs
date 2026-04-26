@@ -1,14 +1,14 @@
 use super::cost_only_extractor::CostOnlyExtractor;
-use super::rewrite_analysis::{build_eclass_to_substs, RewriteAnalysis};
-use super::{CostCache, StitchAnalysisRunner};
+use super::rewrite_analysis::RewriteAnalysis;
+use super::{CostCache, CostScratch, StitchAnalysisRunner};
 use crate::lang::StitchEgraph;
 use crate::pattern::Pattern;
 use crate::rewrite::build_rewritten_egraph;
 use crate::search::SearchState;
 
 /// Returns the total cost: compressed corpus size plus the pattern's own size.
-pub fn compute_cost(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
-    let cost = compute_size(egraph, root, cache, search_state, check_slow);
+pub fn compute_cost(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState, check_slow: bool) -> usize {
+    let cost = compute_size(egraph, root, cache, scratch, search_state, check_slow);
     let pattern_size = compute_pattern_size(&search_state.pattern);
     cost + pattern_size
 }
@@ -23,9 +23,10 @@ pub fn compute_pattern_size(pattern: &Pattern) -> usize {
 /// Uses a postorder min-heap so children pop before parents. Initial entries are the
 /// match-root eclasses; when an eclass's size strictly improves we write it into
 /// `sizes` and push its parents so they can reconsider with the new child value.
-pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, search_state: &SearchState, check_slow: bool) -> usize {
-    let eclass_to_substs = build_eclass_to_substs(search_state);
-    let mut sizes = StitchAnalysisRunner::new(egraph, cache, RewriteAnalysis::new(&eclass_to_substs));
+pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState, check_slow: bool) -> usize {
+    scratch.rewrite.fill(search_state);
+    let analysis = RewriteAnalysis { search_state, eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx };
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {

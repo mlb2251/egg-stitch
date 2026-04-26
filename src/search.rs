@@ -235,7 +235,8 @@ pub fn setup_search(egraph: StitchEgraph, root: Id, args: &crate::Args) -> (Shar
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared);
-    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &initial, shared.check_slow);
+    let mut scratch = crate::cost::CostScratch::default();
+    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &mut scratch, &initial, shared.check_slow);
     (shared, cache, original_size)
 }
 

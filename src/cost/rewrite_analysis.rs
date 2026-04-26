@@ -1,43 +1,43 @@
 use super::{StitchAnalysis, StitchAnalysisRunner};
-use crate::matching::Subst;
 use crate::search::SearchState;
 use egg::Id;
 use rustc_hash::FxHashMap;
 
-/// Map from match-root eclass to the substitutions that apply there. Build once
-/// (via `build_eclass_to_substs`) and pass by reference to every analysis run.
-pub type EclassToSubsts<'a> = FxHashMap<Id, &'a Vec<Subst>>;
+/// Reusable index map: match-root eclass → index into `search_state.matches`.
+/// We store an index (not a `&Vec<Subst>`) so the map is `'static`-friendly and can
+/// be reused across calls bound to different `SearchState`s.
+#[derive(Default)]
+pub struct RewriteScratch {
+    pub eclass_to_match_idx: FxHashMap<Id, usize>,
+}
 
-/// Builds the eclass→substs map from a `SearchState`. Reuse across analyses.
-pub fn build_eclass_to_substs(search_state: &SearchState) -> EclassToSubsts<'_> {
-    let mut m = FxHashMap::default();
-    for match_ in &search_state.matches {
-        m.insert(match_.root_eclass, &match_.substs);
+impl RewriteScratch {
+    /// Refills the index map from `search_state`. Clears first; retains capacity.
+    pub fn fill(&mut self, search_state: &SearchState) {
+        self.eclass_to_match_idx.clear();
+        for (i, m) in search_state.matches.iter().enumerate() {
+            self.eclass_to_match_idx.insert(m.root_eclass, i);
+        }
     }
-    m
 }
 
 /// Default analysis: at each match root, rewriting via `inv_0(args...)` is allowed,
-/// otherwise we fall back to the minimum enode size. Holds the full subst map
-/// because it needs the per-subst arg lists to size the rewrite.
+/// otherwise we fall back to the minimum enode size.
 pub struct RewriteAnalysis<'a> {
-    pub eclass_to_substs: &'a EclassToSubsts<'a>,
-}
-impl<'a> RewriteAnalysis<'a> {
-    pub fn new(eclass_to_substs: &'a EclassToSubsts<'a>) -> Self {
-        Self { eclass_to_substs }
-    }
+    pub search_state: &'a SearchState,
+    pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
 }
 impl<'a> StitchAnalysis for RewriteAnalysis<'a> {
-    fn init(sizes: &StitchAnalysisRunner<Self>) -> Vec<Id> {
-        sizes.analysis.eclass_to_substs.keys().copied().collect()
+    fn init(&self, out: &mut Vec<Id>) {
+        out.extend(self.eclass_to_match_idx.keys().copied());
     }
     fn best(sizes: &StitchAnalysisRunner<Self>, eclass: Id) -> i64 {
         // Try not rewriting self but YES allowing rewrites of descendants
         // (technically we could just use sizes.original_size if we knew we weren't enqueued by a child)
         let mut best = sizes.min_enode_size(eclass);
         // For every way we match at this eclass (if any), try all ways of rewriting it
-        if let Some(substs) = sizes.analysis.eclass_to_substs.get(&eclass) {
+        if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
+            let substs = &sizes.analysis.search_state.matches[i].substs;
             if let Some(rewrite_size) = substs.iter().map(|subst| 1 + sizes.sum(&subst.vars)).min() {
                 best = best.min(rewrite_size);
             }

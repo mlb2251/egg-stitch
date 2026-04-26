@@ -6,7 +6,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::{Duration, Instant};
 
-use crate::cost::{compute_cost, compute_lower_bound, compute_pattern_size};
+use crate::cost::{CostScratch, compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::StitchEgraph;
 use crate::pattern::Pattern;
@@ -120,7 +120,8 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     let strategy = args.priority;
 
     let initial_state = SearchState::new(&shared);
-    let initial_cost = compute_cost(&shared.egraph, root, &cost_cache, &initial_state, shared.check_slow);
+    let mut scratch = CostScratch::default();
+    let initial_cost = compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, &initial_state, shared.check_slow);
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
 
     let mut nodes: Vec<Node> = Vec::new();
@@ -203,8 +204,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             // lower bound on the cost: any descendant of this will have at least this much cost
             let child_lower_bound = if args.opt_lower_bound {
                 let t = Instant::now();
-                let child_match_eclasses: FxHashSet<egg::Id> = child_state.matches.iter().map(|m| m.root_eclass).collect();
-                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &child_match_eclasses)
+                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &mut scratch, &child_state)
                     + compute_pattern_size(&child_state.pattern);
                 let pruned = best.as_ref().is_some_and(|(c, _)| lb >= *c);
                 lower_bound_time += t.elapsed();
@@ -218,7 +218,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             };
 
             let cost_t = Instant::now();
-            let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow);
+            let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, &child_state, shared.check_slow);
             cost_time += cost_t.elapsed();
             cost_calls += 1;
             let child_depth = parent_depth + 1;

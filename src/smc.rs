@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use crate::cost::compute_cost;
+use crate::cost::{CostScratch, compute_cost};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::{StitchEgraph, StitchLang};
 use crate::logging::{apply_follow_constraint, print_top_particles};
@@ -59,6 +59,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
     let mut particles: Vec<(SearchState, usize)> = vec![(SearchState::new(&shared), num_particles)];
+    let mut scratch = CostScratch::default();
 
     for step in 0..num_steps {
         // Expand each (state, mult) group into `mult` independent random expansions,
@@ -78,7 +79,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> SmcResult
         }
         drop(dedup);
 
-        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, &cost_cache, s, shared.check_slow)).collect();
+        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
 
         for (i, cost) in costs.iter().enumerate() {
             if expanded[i].pattern.vars.len() <= max_arity && best_so_far.as_ref().is_none_or(|best| *cost < best.0) {

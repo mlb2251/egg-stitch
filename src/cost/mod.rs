@@ -12,8 +12,8 @@ mod rewrite_analysis;
 pub use cost_only_extractor::CostOnlyExtractor;
 pub use exact_cost::{compute_cost, compute_pattern_size};
 pub(crate) use exact_cost::compute_size;
-pub use lower_bound_cost::{compute_lower_bound, LowerBoundAnalysis};
-pub use rewrite_analysis::{build_eclass_to_substs, EclassToSubsts, RewriteAnalysis};
+pub use lower_bound_cost::{LowerBoundAnalysis, LowerScratch, compute_lower_bound};
+pub use rewrite_analysis::{RewriteAnalysis, RewriteScratch};
 
 /// Precomputed egraph topology for fast cost computation.
 /// Built once from the egraph and reused across all `compute_cost` calls.
@@ -67,14 +67,41 @@ impl CostCache {
     }
 }
 
+/// Reusable allocations for repeated cost computations. Default-construct once and pass
+/// `&mut` to `compute_cost`, `compute_size`, or `compute_lower_bound` to avoid reallocating
+/// the runner's maps/heap and the per-analysis index buffers across calls.
+#[derive(Default)]
+pub struct CostScratch {
+    pub runner: RunnerScratch,
+    pub rewrite: RewriteScratch,
+    pub lower: LowerScratch,
+}
+
+/// Allocations owned by `StitchAnalysisRunner` itself (independent of the analysis).
+#[derive(Default)]
+pub struct RunnerScratch {
+    overrides: FxHashMap<Id, i64>,
+    work_queue: BinaryHeap<Reverse<(u32, Id)>>,
+    init_buf: Vec<Id>,
+}
+
+impl RunnerScratch {
+    /// Drops all entries while retaining capacity.
+    fn clear(&mut self) {
+        self.overrides.clear();
+        self.work_queue.clear();
+        self.init_buf.clear();
+    }
+}
+
 /// Pluggable per-eclass relaxation rule. The analysis decides which eclasses seed the
 /// work queue and how to compute a candidate size for an eclass given the current
-/// `StitchAnalysisRunner` state. Implemented as associated functions (no `&self`) so the solver can
-/// pass `&StitchAnalysisRunner<Self>` without conflicting borrows; analysis-owned data is reached
-/// via `sizes.analysis`, while shared match info lives on `sizes.eclass_to_substs`.
+/// `StitchAnalysisRunner` state. `best` is an associated function (no `&self`) so the
+/// solver can pass `&StitchAnalysisRunner<Self>` without conflicting borrows;
+/// analysis-owned data is reached via `sizes.analysis`.
 pub trait StitchAnalysis: Sized {
-    /// Eclasses to push onto the work queue when the solver starts.
-    fn init(sizes: &StitchAnalysisRunner<Self>) -> Vec<Id>;
+    /// Pushes the eclasses that should seed the work queue into `out`.
+    fn init(&self, out: &mut Vec<Id>);
     /// Candidate size for `eclass` given currently known sizes.
     fn best(sizes: &StitchAnalysisRunner<Self>, eclass: Id) -> i64;
 }
@@ -84,33 +111,28 @@ pub trait StitchAnalysis: Sized {
 pub struct StitchAnalysisRunner<'a, A: StitchAnalysis> {
     egraph: &'a StitchEgraph,
     cache: &'a CostCache,
-    overrides: FxHashMap<Id, i64>,
-    work_queue: BinaryHeap<Reverse<(u32, Id)>>,
+    scratch: &'a mut RunnerScratch,
     pub analysis: A,
 }
 impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
-    /// Builds an empty size table seeded with the analysis's chosen eclasses.
-    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, analysis: A) -> Self {
-        let mut sizes = StitchAnalysisRunner {
-            egraph,
-            cache,
-            overrides: FxHashMap::default(),
-            work_queue: BinaryHeap::new(),
-            analysis,
-        };
-        for id in A::init(&sizes) {
-            sizes.work_queue.push(Reverse((cache.postorder[usize::from(id)].unwrap(), id)));
+    /// Builds an empty size table seeded with the analysis's chosen eclasses, reusing
+    /// the buffers in `scratch` (cleared up front).
+    fn new(egraph: &'a StitchEgraph, cache: &'a CostCache, scratch: &'a mut RunnerScratch, analysis: A) -> Self {
+        scratch.clear();
+        analysis.init(&mut scratch.init_buf);
+        for id in scratch.init_buf.drain(..) {
+            scratch.work_queue.push(Reverse((cache.postorder[usize::from(id)].unwrap(), id)));
         }
-        sizes
+        StitchAnalysisRunner { egraph, cache, scratch, analysis }
     }
     pub fn get(&self, id: Id) -> i64 {
-        self.overrides.get(&id).copied().unwrap_or(self.original_size(id))
+        self.scratch.overrides.get(&id).copied().unwrap_or(self.original_size(id))
     }
     fn set(&mut self, id: Id, v: i64) {
-        self.overrides.insert(id, v);
+        self.scratch.overrides.insert(id, v);
     }
     fn contains(&self, id: Id) -> bool {
-        self.overrides.contains_key(&id)
+        self.scratch.overrides.contains_key(&id)
     }
     /// Sum of `get` over a list of eclass ids.
     pub fn sum(&self, ids: &[Id]) -> i64 {
@@ -132,7 +154,7 @@ impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
     }
     /// Runs the postorder relaxation until the work queue drains.
     fn solve(&mut self) {
-        while let Some(Reverse((_, eclass))) = self.work_queue.pop() {
+        while let Some(Reverse((_, eclass))) = self.scratch.work_queue.pop() {
             if self.contains(eclass) {
                 continue;
             }
@@ -145,7 +167,7 @@ impl<'a, A: StitchAnalysis> StitchAnalysisRunner<'a, A> {
         if let Some(parents) = self.cache.parents_of.get(&eclass) {
             for &parent in parents {
                 if let Some(po) = self.cache.postorder[usize::from(parent)] {
-                    self.work_queue.push(Reverse((po, parent)));
+                    self.scratch.work_queue.push(Reverse((po, parent)));
                 }
             }
         }
