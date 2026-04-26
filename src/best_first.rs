@@ -1,8 +1,10 @@
 use clap::ValueEnum;
 use colored::Colorize;
 use rustc_hash::FxHashSet;
+use serde::Serialize;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::time::Instant;
 
 use crate::cost::{compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
@@ -58,12 +60,25 @@ fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: us
     }
 }
 
+/// One "new best" event recorded during search.
+#[derive(Serialize, Clone)]
+pub struct BestHistoryEntry {
+    /// Expansion index (pop count) at which this best was discovered.
+    pub expansion: usize,
+    /// Wall-clock seconds since search start when this best was discovered.
+    pub elapsed_secs: f64,
+    pub cost: usize,
+    pub pattern: String,
+}
+
 /// Output of a completed best-first enumerative search.
 pub struct BestFirstResult {
     pub best: Option<(usize, SearchState)>,
     pub original_size: usize,
     /// Expansion index (pop count) at which the current best was first discovered.
     pub best_found_at: Option<usize>,
+    /// Every successive "new best" event, in discovery order.
+    pub best_history: Vec<BestHistoryEntry>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
     pub egraph: StitchEgraph,
@@ -94,6 +109,10 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let budget = args.num_steps;
+    let time_limit = args.time_limit.map(std::time::Duration::from_secs_f64);
+    if budget.is_none() && time_limit.is_none() {
+        panic!("best-first search requires at least one of --num-steps or --time-limit");
+    }
     let max_arity = args.max_arity;
     let debug = args.debug_log;
     let strategy = args.priority;
@@ -119,12 +138,22 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
     let mut best_found_at: Option<usize> = None;
+    let mut best_history: Vec<BestHistoryEntry> = Vec::new();
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
+    let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
-        if num_expansions >= budget {
-            println!("{}", format!("reached expansion budget {}", budget).yellow());
+        if let Some(b) = budget
+            && num_expansions >= b
+        {
+            println!("{}", format!("reached expansion budget {}", b).yellow());
+            break;
+        }
+        if let Some(limit) = time_limit
+            && search_start.elapsed() >= limit
+        {
+            println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
         }
 
@@ -161,9 +190,16 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             let child_id = nodes.len();
 
             if child_state.pattern.vars.len() <= max_arity && best.as_ref().is_none_or(|(c, _)| child_cost < *c) {
-                println!("{} {} {}", format!("[expansion {}]", num_expansions).yellow().bold(), format!("new best: {}", child_cost).green().bold(), child_state.pattern.to_string().cyan());
+                let elapsed = search_start.elapsed().as_secs_f64();
+                println!("{} {} {} {}", format!("[expansion {}]", num_expansions).yellow().bold(), format!("new best: {}", child_cost).green().bold(), child_state.pattern.to_string().cyan(), format!("(t={:.3}s)", elapsed).dimmed());
                 best = Some((child_cost, child_id));
                 best_found_at = Some(num_expansions);
+                best_history.push(BestHistoryEntry {
+                    expansion: num_expansions,
+                    elapsed_secs: elapsed,
+                    cost: child_cost,
+                    pattern: child_state.pattern.to_string(),
+                });
             }
 
             nodes.push(Node {
@@ -220,6 +256,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         best: best_pair,
         original_size,
         best_found_at,
+        best_history,
         num_expansions,
         egraph: shared.egraph,
         tree_log,

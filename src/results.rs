@@ -25,6 +25,9 @@ pub struct RunResult {
     /// Approximate cost estimate: `cost_after_rewrites - pattern_size * (usage_matches - 1)`.
     pub approx_cost: Option<i64>,
     pub best_iteration: Option<usize>,
+    /// Successive "new best" events recorded during best-first search.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub best_history: Option<Vec<crate::best_first::BestHistoryEntry>>,
     pub num_steps_run: usize,
     pub rewritten_programs: Option<Vec<String>>,
     /// Filename of the debug log (in the same directory), if debug logging was enabled.
