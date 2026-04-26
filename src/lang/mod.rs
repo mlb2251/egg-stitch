@@ -3,9 +3,11 @@ use std::fmt::{Debug, Display};
 
 mod op;
 mod op_children;
+mod op_with_var;
 
 pub use op::{Op, StitchOp};
 pub use op_children::OpChildrenLanguage;
+pub use op_with_var::OpWithVar;
 
 /// Trait covering every language usable with the search machinery.
 pub trait StitchLanguage: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {

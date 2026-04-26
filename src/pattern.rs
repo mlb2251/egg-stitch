@@ -1,25 +1,40 @@
-use crate::lang::StitchLanguage;
+use crate::lang::{OpChildrenLanguage, OpWithVar, StitchLanguage};
 use crate::revexpr::RevExpr;
-use egg::{ENodeOrVar, Id};
+use egg::{Id, Language as _};
 
 /// A partially-built pattern over a `StitchLanguage`, tracking which nodes are open variables.
 ///
-/// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds
-/// `ENodeOrVar::Var(egg::Var::from(k as u32))` in the tree — i.e. the tree's var names
-/// match their DFS first-appearance order exactly. `expand` and `reuse` preserve this
-/// by actively rewriting affected `Var(n)` leaves, so `pattern.to_string()` is itself
-/// canonical: two alpha-equivalent patterns render identically.
+/// Storage is hardcoded as `OpChildrenLanguage<OpWithVar<L::Discriminant>>` — i.e., a
+/// flat AST whose op is "either a program-op-discriminant or a pattern var". This
+/// lets `single_var`/`expand`/`reuse` build var nodes via `OpWithVar::Var(_)` and
+/// lift program enodes into the pattern via `OpWithVar::Node(_)` directly, with no
+/// helper trait or round-trip.
+///
+/// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds an
+/// `OpWithVar::Var(egg::Var::from(k as u32))` op in the tree — so the tree's var
+/// names match their DFS first-appearance order exactly. `expand` and `reuse`
+/// preserve this by rewriting affected `Var(n)` leaves, so `pattern.to_string()`
+/// itself is canonical: alpha-equivalent patterns render identically.
 #[derive(Debug, Clone)]
 pub struct Pattern<L: StitchLanguage> {
-    pub pattern: RevExpr<ENodeOrVar<L>>,
+    pub pattern: RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>,
     pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
+}
+
+fn var_node<L: StitchLanguage>(idx: u32) -> OpChildrenLanguage<OpWithVar<L::Discriminant>> {
+    OpChildrenLanguage {
+        op: OpWithVar::Var(egg::Var::from(idx)),
+        children: vec![],
+    }
 }
 
 impl<L: StitchLanguage> Pattern<L> {
     /// Creates the initial `?#0` pattern: a single variable.
     pub fn single_var() -> Self {
-        let e: RevExpr<ENodeOrVar<L>> = RevExpr::new(vec![ENodeOrVar::Var(egg::Var::from(0))]);
-        Pattern { pattern: e, vars: vec![vec![0.into()]] }
+        Pattern {
+            pattern: RevExpr::new(vec![var_node::<L>(0)]),
+            vars: vec![vec![0.into()]],
+        }
     }
 
     /// Expands the variable at `var_idx` with `target`. New children are inserted
@@ -28,7 +43,7 @@ impl<L: StitchLanguage> Pattern<L> {
     /// match their new position, so the canonical-form invariant is preserved.
     pub fn expand(&mut self, var_idx: usize, target: &L) {
         let var_positions = self.vars.remove(var_idx);
-        assert!(matches!(self.pattern[var_positions[0]], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
+        assert!(matches!(self.pattern[var_positions[0]].op, OpWithVar::Var(_)), "Attempting to expand a non-var");
         let num_children = target.len();
 
         // Shift names of trailing vars: a var currently at post-removal index p
@@ -36,7 +51,7 @@ impl<L: StitchLanguage> Pattern<L> {
         // (Skip the no-op case num_children == 1 where indices don't move.)
         if num_children != 1 {
             for p in var_idx..self.vars.len() {
-                let shifted = ENodeOrVar::Var(egg::Var::from((p + num_children) as u32));
+                let shifted = var_node::<L>((p + num_children) as u32);
                 for &id in &self.vars[p] {
                     self.pattern[id] = shifted.clone();
                 }
@@ -44,20 +59,23 @@ impl<L: StitchLanguage> Pattern<L> {
         }
 
         // Build the new enode with freshly-named Var children at positions var_idx..var_idx+k.
-        let mut new_node = target.clone();
+        let mut new_children = Vec::with_capacity(num_children);
         for j in 0..num_children {
-            let new_var = ENodeOrVar::Var(egg::Var::from((var_idx + j) as u32));
-            self.pattern.nodes.push(new_var);
+            self.pattern.nodes.push(var_node::<L>((var_idx + j) as u32));
             let new_id = Id::from(self.pattern.nodes.len() - 1);
-            new_node.children_mut()[j] = new_id;
+            new_children.push(new_id);
             self.vars.insert(var_idx + j, vec![new_id]);
         }
+        let new_node = OpChildrenLanguage {
+            op: OpWithVar::Node(target.discriminant()),
+            children: new_children,
+        };
 
         // Replace each position of the expanded var with the new enode. If the var
         // had multiple positions (from a prior reuse), all parents share the same
         // children via the RecExpr DAG.
         for var_id in var_positions {
-            self.pattern[var_id] = ENodeOrVar::ENode(new_node.clone());
+            self.pattern[var_id] = new_node.clone();
         }
     }
 
@@ -69,7 +87,7 @@ impl<L: StitchLanguage> Pattern<L> {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
-        let keep_name = ENodeOrVar::Var(egg::Var::from(keep_idx as u32));
+        let keep_name = var_node::<L>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
             self.pattern[*var_id] = keep_name.clone();
         }
@@ -79,7 +97,7 @@ impl<L: StitchLanguage> Pattern<L> {
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
-            let shifted = ENodeOrVar::Var(egg::Var::from(p as u32));
+            let shifted = var_node::<L>(p as u32);
             for &id in &self.vars[p] {
                 self.pattern[id] = shifted.clone();
             }
@@ -100,8 +118,8 @@ mod tests {
     use super::*;
     use egg::Symbol;
 
-    /// Build a StitchLang enode with `arity` placeholder children. `expand` overwrites
-    /// the children, so the dummy Ids here are never read.
+    /// Build an enode with `arity` placeholder children. `expand` overwrites the
+    /// children, so the dummy Ids here are never read.
     fn op(name: &str, arity: usize) -> OpChildrenLanguage {
         OpChildrenLanguage {
             op: Op::Sym(Symbol::from(name)),
@@ -115,8 +133,8 @@ mod tests {
         for (k, ids) in p.vars.iter().enumerate() {
             let expected = egg::Var::from(k as u32);
             for id in ids {
-                match &p.pattern[*id] {
-                    ENodeOrVar::Var(v) => assert_eq!(*v, expected, "vars[{}] = {:?}: expected {:?}, got {:?}", k, ids, expected, v),
+                match &p.pattern[*id].op {
+                    OpWithVar::Var(v) => assert_eq!(*v, expected, "vars[{}] = {:?}: expected {:?}, got {:?}", k, ids, expected, v),
                     other => panic!("vars[{}] contains non-Var: {:?}", k, other),
                 }
             }

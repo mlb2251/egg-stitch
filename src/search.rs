@@ -1,8 +1,8 @@
-use crate::lang::{StitchEgraph, StitchLanguage};
+use crate::lang::{OpChildrenLanguage, OpWithVar, StitchEgraph, StitchLanguage};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
-use egg::{ENodeOrVar, Id};
+use egg::Id;
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
@@ -33,7 +33,7 @@ pub struct SharedSearchData<L: StitchLanguage> {
     pub root: Id,
     /// Follow pattern: particles whose pattern isn't a valid prefix get zero
     /// weight at the resample step.
-    pub follow: Option<RevExpr<ENodeOrVar<L>>>,
+    pub follow: Option<RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>>,
     /// Probability of attempting variable reuse during expansion.
     pub p_reuse: f64,
     /// Enable slow rewrite check (assert fast == slow computation).
@@ -98,9 +98,9 @@ impl<L: StitchLanguage> SearchState<L> {
     }
 
     /// Check if this particle's pattern is a valid prefix of the follow target.
-    pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<L>>) -> bool {
+    pub fn matches_follow(&self, follow: &RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>) -> bool {
         let mut var_bindings = HashMap::new();
-        crate::follow::check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        crate::follow::check_follow::<L>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
@@ -233,7 +233,7 @@ impl<L: StitchLanguage> SearchState<L> {
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, args: &crate::Args) -> (SharedSearchData<L>, crate::cost::CostCache, usize) {
-    let follow_expr: Option<RevExpr<ENodeOrVar<L>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+    let follow_expr: Option<RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
         egraph,

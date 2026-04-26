@@ -14,7 +14,7 @@ fn run(args: &Args) -> smc::SmcResult<OpChildrenLanguage> {
 }
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildrenLanguage>, follow_str: &str) {
-    let follow: egg_stitch::revexpr::RevExpr<egg::ENodeOrVar<egg_stitch::lang::OpChildrenLanguage>> = follow_str.parse().expect("parse follow");
+    let follow: egg_stitch::revexpr::RevExpr<egg_stitch::lang::OpChildrenLanguage<egg_stitch::lang::OpWithVar<egg_stitch::lang::Op>>> = follow_str.parse().expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
     assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
 }

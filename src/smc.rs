@@ -2,18 +2,17 @@ use colored::Colorize;
 
 use crate::cost::compute_cost;
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::lang::{StitchEgraph, StitchLanguage};
+use crate::lang::{OpChildrenLanguage, OpWithVar, StitchEgraph, StitchLanguage};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
 use crate::search::{SearchState, setup_search};
-use egg::ENodeOrVar;
 use rand::Rng;
 use rustc_hash::FxHashMap;
 
 /// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
 /// buffer, either bumping the multiplicity of an existing group or pushing a new one.
-fn dedup_insert<L: StitchLanguage>(s: SearchState<L>, states: &mut Vec<SearchState<L>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<ENodeOrVar<L>>, usize>) {
+fn dedup_insert<L: StitchLanguage>(s: SearchState<L>, states: &mut Vec<SearchState<L>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>, usize>) {
     match dedup.get(&s.pattern.pattern) {
         Some(&idx) => mults[idx] += 1,
         None => {
@@ -65,7 +64,7 @@ pub fn smc<L: StitchLanguage>(egraph: StitchEgraph<L>, root: egg::Id, args: &cra
         // deduplicating identical resulting patterns.
         let mut expanded: Vec<SearchState<L>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
-        let mut dedup: FxHashMap<RevExpr<ENodeOrVar<L>>, usize> = FxHashMap::default();
+        let mut dedup: FxHashMap<RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             for _ in 1..mult {
                 let mut s = state.clone();

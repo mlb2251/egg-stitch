@@ -1,8 +1,8 @@
-use crate::lang::{StitchEgraph, StitchLanguage, StitchOp};
+use crate::lang::{OpChildrenLanguage, OpWithVar, StitchEgraph, StitchLanguage, StitchOp};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
-use egg::{ENodeOrVar, Id, RecExpr};
+use egg::{Id, Language, RecExpr};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -67,15 +67,13 @@ pub fn compute_cost<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id, 
 }
 
 pub fn compute_pattern_size<L: StitchLanguage>(pattern: &Pattern<L>) -> usize {
-    let rec_expr: RecExpr<ENodeOrVar<L>> = pattern.pattern.clone().into();
-    compute_recexpr_size(&rec_expr, (rec_expr.len() - 1).into())
+    let rec_expr: RecExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>> = pattern.pattern.clone().into();
+    compute_recexpr_size::<L>(&rec_expr, (rec_expr.len() - 1).into())
 }
 
-pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<ENodeOrVar<L>>, ptr: Id) -> usize {
-    match &rec_expr[ptr] {
-        ENodeOrVar::Var(_) => 1,
-        ENodeOrVar::ENode(enode) => enode.discriminant().intrinsic_size() as usize + enode.children().iter().map(|&child| compute_recexpr_size(rec_expr, child)).sum::<usize>(),
-    }
+pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>, ptr: Id) -> usize {
+    let node = &rec_expr[ptr];
+    node.op.intrinsic_size() as usize + node.children().iter().map(|&child| compute_recexpr_size::<L>(rec_expr, child)).sum::<usize>()
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
