@@ -16,23 +16,11 @@ use std::marker::PhantomData;
 /// var names match their DFS first-appearance order. `expand` and `reuse`
 /// preserve this by rewriting affected var leaves, so `pattern.to_string()`
 /// is canonical: alpha-equivalent patterns render identically.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: RevExpr<F::Apply<OpWithVar<O>>>,
     pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
     _marker: PhantomData<O>,
-}
-
-// Hand-written Clone so we don't pick up an `F: Clone` bound from the auto-derive
-// (the marker types `OpChildren` etc. don't need to be cloneable).
-impl<F: LanguageFamily, O: StitchOp> Clone for Pattern<F, O> {
-    fn clone(&self) -> Self {
-        Pattern {
-            pattern: self.pattern.clone(),
-            vars: self.vars.clone(),
-            _marker: PhantomData,
-        }
-    }
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {

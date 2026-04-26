@@ -10,7 +10,7 @@ use super::{OpChildrenLanguage, StitchLanguage, StitchOp};
 /// `F::Apply<O>`; the corresponding pattern AST is built over
 /// `F::Apply<OpWithVar<O>>`. Both share the same `F` (the language constructor),
 /// and only the leaf-Op type differs.
-pub trait LanguageFamily: 'static {
+pub trait LanguageFamily: Clone + 'static {
     /// The Language obtained by instantiating this family with leaf-Op `O`.
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = O>;
 
@@ -20,6 +20,7 @@ pub trait LanguageFamily: 'static {
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
+#[derive(Clone, Copy, Debug)]
 pub struct OpChildren;
 
 impl LanguageFamily for OpChildren {

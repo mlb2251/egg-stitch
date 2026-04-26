@@ -44,20 +44,11 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub usage_counts: FxHashMap<Id, usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     pub pattern: Pattern<F, O>,
     // each match represents a different eclass at which `pattern` can be rooted
     pub matches: Vec<MatchAtEClass>,
-}
-
-impl<F: LanguageFamily, O: StitchOp> Clone for SearchState<F, O> {
-    fn clone(&self) -> Self {
-        SearchState {
-            pattern: self.pattern.clone(),
-            matches: self.matches.clone(),
-        }
-    }
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
