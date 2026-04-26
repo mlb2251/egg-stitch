@@ -94,6 +94,8 @@ struct Node {
     cost: usize,
     depth: usize,
     expanded: bool,
+    /// Lower bound on cost of any descendant; only set when `opt_lower_bound` is on.
+    lower_bound: Option<usize>,
 }
 
 /// Runs best-first enumerative search to find a pattern that minimizes cost.
@@ -132,6 +134,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
         cost: initial_cost,
         depth: 0,
         expanded: false,
+        lower_bound: None,
     });
     heap.push(Reverse((initial_prio, 0)));
     if !args.no_seen {
@@ -165,6 +168,14 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             break;
         }
 
+        // Re-check the cached lower bound: best may have improved since this node was pushed.
+        if let Some(lb) = nodes[node_id].lower_bound
+            && best.as_ref().is_some_and(|(c, _)| lb >= *c)
+        {
+            lower_bound_hits += 1;
+            continue;
+        }
+
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
@@ -190,18 +201,21 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
             }
 
             // lower bound on the cost: any descendant of this will have at least this much cost
-            if args.opt_lower_bound {
+            let child_lower_bound = if args.opt_lower_bound {
                 let t = Instant::now();
                 let child_match_eclasses: FxHashSet<egg::Id> = child_state.matches.iter().map(|m| m.root_eclass).collect();
-                let child_lower_bound = compute_lower_bound(&shared.egraph, root, &cost_cache, &child_match_eclasses)
+                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &child_match_eclasses)
                     + compute_pattern_size(&child_state.pattern);
-                let pruned = best.as_ref().is_some_and(|(c, _)| child_lower_bound >= *c);
+                let pruned = best.as_ref().is_some_and(|(c, _)| lb >= *c);
                 lower_bound_time += t.elapsed();
                 if pruned {
                     lower_bound_hits += 1;
                     continue;
                 }
-            }
+                Some(lb)
+            } else {
+                None
+            };
 
             let cost_t = Instant::now();
             let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow);
@@ -231,6 +245,7 @@ pub fn best_first(egraph: StitchEgraph, root: egg::Id, args: &crate::Args) -> Be
                 cost: child_cost,
                 depth: child_depth,
                 expanded: false,
+                lower_bound: child_lower_bound,
             });
             heap.push(Reverse((child_prio, child_id)));
         }
