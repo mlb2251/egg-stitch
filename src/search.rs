@@ -224,6 +224,7 @@ impl SearchState {
             }
         }
 
+        // check for literal expansion
         for var_idx in 0..self.pattern.vars.len() {
             let mut seen_shapes: FxHashSet<(Symbol, usize)> = FxHashSet::default();
             let mut shapes: Vec<StitchLang> = Vec::new();
