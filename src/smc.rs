@@ -2,7 +2,7 @@ use colored::Colorize;
 
 use crate::cost::compute_cost;
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::lang::{OpChildrenLanguage, OpWithVar, StitchEgraph, StitchLanguage};
+use crate::lang::{LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
@@ -12,7 +12,7 @@ use rustc_hash::FxHashMap;
 
 /// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
 /// buffer, either bumping the multiplicity of an existing group or pushing a new one.
-fn dedup_insert<L: StitchLanguage>(s: SearchState<L>, states: &mut Vec<SearchState<L>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>, usize>) {
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize>) {
     match dedup.get(&s.pattern.pattern) {
         Some(&idx) => mults[idx] += 1,
         None => {
@@ -25,12 +25,12 @@ fn dedup_insert<L: StitchLanguage>(s: SearchState<L>, states: &mut Vec<SearchSta
 }
 
 /// Output of a completed SMC run.
-pub struct SmcResult<L: StitchLanguage> {
-    pub best: Option<(usize, SearchState<L>)>,
+pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
+    pub best: Option<(usize, SearchState<F, O>)>,
     pub original_size: usize,
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
-    pub egraph: StitchEgraph<L>,
+    pub egraph: StitchEgraph<F::Apply<O>>,
     pub debug_log: Option<DebugLog>,
 }
 
@@ -40,7 +40,7 @@ pub struct SmcResult<L: StitchLanguage> {
 /// expansion step, identical patterns are deduplicated and their counts merged,
 /// so cost computation runs once per unique pattern instead of once per particle.
 #[allow(clippy::needless_range_loop)]
-pub fn smc<L: StitchLanguage>(egraph: StitchEgraph<L>, root: egg::Id, args: &crate::Args) -> SmcResult<L> {
+pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, args: &crate::Args) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
@@ -51,20 +51,20 @@ pub fn smc<L: StitchLanguage>(egraph: StitchEgraph<L>, root: egg::Id, args: &cra
     let max_arity = args.max_arity;
     let verbose = args.verbose;
 
-    let mut best_so_far: Option<(usize, SearchState<L>)> = None;
+    let mut best_so_far: Option<(usize, SearchState<F, O>)> = None;
     let mut best_found_at = None;
     let mut steps_run = 0;
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
-    let mut particles: Vec<(SearchState<L>, usize)> = vec![(SearchState::new(&shared), num_particles)];
+    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared), num_particles)];
 
     for step in 0..num_steps {
         // Expand each (state, mult) group into `mult` independent random expansions,
         // deduplicating identical resulting patterns.
-        let mut expanded: Vec<SearchState<L>> = Vec::new();
+        let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
-        let mut dedup: FxHashMap<RevExpr<OpChildrenLanguage<OpWithVar<L::Discriminant>>>, usize> = FxHashMap::default();
+        let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             for _ in 1..mult {
                 let mut s = state.clone();

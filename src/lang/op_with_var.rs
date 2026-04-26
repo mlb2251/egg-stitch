@@ -6,10 +6,7 @@ use super::StitchOp;
 ///
 /// Used to lift any program-side op into a pattern-side op: programs of language
 /// `L<O>` correspond to patterns of language `L<OpWithVar<O>>` (same Language
-/// shape, leaf-Op extended with `Var`). `Pattern` storage hardcodes that its op
-/// is `OpWithVar<O>` for some program-op `O`, so Var construction and lifting
-/// program ops into the pattern op are direct constructor calls — no helper trait
-/// or string round-trip needed.
+/// shape, leaf-Op extended with `Var`).
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub enum OpWithVar<O> {
     Node(O),

@@ -33,7 +33,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{LambdaCalcLanguage, OpChildrenLanguage, StitchLanguage},
+    lang::{LambdaCalc, LanguageFamily, Op, OpChildren},
     multiple_step_search,
     results::AbstractionResult,
 };
@@ -91,12 +91,12 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Expected {
     }
     argv.extend(extra_args);
     let args = Args::parse_from(argv);
-    if args.appify { run_with::<LambdaCalcLanguage>(&args, input) } else { run_with::<OpChildrenLanguage>(&args, input) }
+    if args.appify { run_with::<LambdaCalc>(&args, input) } else { run_with::<OpChildren>(&args, input) }
 }
 
-fn run_with<L: StitchLanguage>(args: &Args, input: &str) -> Expected {
-    let (egraph, root, _) = io::load_egraph::<L>(&args.input, args.rules.as_deref());
-    let (library, _, _) = multiple_step_search(egraph, root, args);
+fn run_with<F: LanguageFamily>(args: &Args, input: &str) -> Expected {
+    let (egraph, root, _) = io::load_egraph::<F::Apply<Op>>(&args.input, args.rules.as_deref());
+    let (library, _, _) = multiple_step_search::<F, Op>(egraph, root, args);
     build_expected(library, input)
 }
 

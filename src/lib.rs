@@ -14,11 +14,11 @@ pub mod search;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
-use egg::Id;
+use egg::{Id, Language};
 
 pub use best_first::SearchPriority;
 
-use crate::lang::{StitchEgraph, StitchLanguage};
+use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -120,7 +120,7 @@ pub struct Args {
 /// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
 /// serialising programs to strings and re-parsing. The eclass arguments already carry
 /// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
     let mut egraph = egraph;
     let mut root = root;
     let mut library = Vec::new();
@@ -130,7 +130,7 @@ pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id
     for abstraction_idx in 0..args.num_abstractions {
         let (best, iter_original_size, best_found_at, num_steps_run, result_egraph) = match args.search {
             SearchKind::Smc => {
-                let r = smc::smc(egraph, root, args);
+                let r = smc::smc::<F, O>(egraph, root, args);
                 (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
             }
             SearchKind::BestFirst => {
@@ -154,8 +154,10 @@ pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id
                 let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref());
 
                 final_cost = Some(best_cost);
+                let pat_recexpr: egg::RecExpr<F::Apply<crate::lang::OpWithVar<O>>> = state.pattern.pattern.clone().into();
+                let pat_str = <F::Apply<crate::lang::OpWithVar<O>> as StitchLanguage>::display_recexpr(&pat_recexpr);
                 library.push(results::AbstractionResult {
-                    pattern: format!("{fn_name}: {}", L::display_pattern(&state.pattern)),
+                    pattern: format!("{fn_name}: {pat_str}"),
                     arity: state.pattern.vars.len(),
                     pattern_size: pat_size,
                     num_matches: state.matches.len(),
@@ -188,21 +190,21 @@ pub fn multiple_step_search<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction<L: StitchLanguage>(egraph: StitchEgraph<L>, root: Id, state: &search::SearchState<L>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<L>, Id, Vec<String>) {
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {
-            let x = L::add_stub_application(fn_name, subst.vars.clone(), &mut egraph);
+            let x = F::add_stub_application::<O>(fn_name, subst.vars.clone(), &mut egraph);
             egraph.union(x, m.root_eclass);
         }
     }
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
     let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
-    let programs: Vec<String> = programs_node.children().iter().map(|&child| L::display_program(&extractor.find_best(child).1)).collect();
+    let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
     if rebuild {
-        let (fresh_egraph, fresh_root) = io::egraph_from_programs::<L>(&programs, rule_file);
+        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file);
         (fresh_egraph, fresh_root, programs)
     } else {
         (egraph, root, programs)

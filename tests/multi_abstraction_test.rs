@@ -10,7 +10,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args,
-    lang::{OpChildrenLanguage, StitchEgraph, StitchLanguage},
+    lang::{Op, OpChildren, OpChildrenLanguage, StitchEgraph, StitchLanguage},
     multiple_step_search,
 };
 
@@ -40,7 +40,7 @@ const FIRST_REWRITTEN: &[&str] = &["(+ (fn_0 (h a) (h b)) 2 2 2)", "(+ (fn_0 (a 
 #[test]
 fn zero_abstractions() {
     let (eg, root) = load::<OpChildrenLanguage>();
-    let (library, _original_size, final_cost) = multiple_step_search(eg, root, &args(100, 0));
+    let (library, _original_size, final_cost) = multiple_step_search::<OpChildren, Op>(eg, root, &args(100, 0));
     assert!(library.is_empty());
     assert!(final_cost.is_none());
 }
@@ -51,7 +51,7 @@ fn zero_abstractions() {
 #[test]
 fn two_abstractions() {
     let (eg, root) = load::<OpChildrenLanguage>();
-    let (library, original_size, final_cost) = multiple_step_search(eg, root, &args(500, 2));
+    let (library, original_size, final_cost) = multiple_step_search::<OpChildren, Op>(eg, root, &args(500, 2));
 
     println!("Abstractions found:");
     for abs in &library {
