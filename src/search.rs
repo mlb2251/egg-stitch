@@ -82,7 +82,8 @@ impl SearchState {
             if !reuse_candidates.is_empty() {
                 let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx].0;
-                self.reuse(var_idx, candidate_var_idx);
+                self.pattern.reuse(var_idx, candidate_var_idx);
+                self.subset_matches_reuse(var_idx, candidate_var_idx);
                 return;
             }
         }
@@ -91,25 +92,14 @@ impl SearchState {
         let node_idx = rand::rng().random_range(0..target_eclass.len());
         let target_node = &target_eclass.nodes[node_idx];
 
-        self.expand(var_idx, target_node, shared);
+        self.pattern.expand(var_idx, target_node);
+        self.subset_matches(var_idx, target_node, shared);
     }
 
     /// Check if this particle's pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<ENodeOrVar<StitchLang>>) -> bool {
         let mut var_bindings = HashMap::new();
         crate::follow::check_follow(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
-    }
-
-    /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
-    pub fn expand(&mut self, var_idx: usize, target: &StitchLang, shared: &SharedSearchData) {
-        self.pattern.expand(var_idx, target);
-        self.subset_matches(var_idx, target, shared);
-    }
-
-    /// Merges two pattern variables and filters matches to those where both point to the same e-class.
-    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
-        self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx);
     }
 
     /// Updates all matches by transforming each substitution via the given closure,
@@ -186,7 +176,8 @@ impl SearchState {
                 let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
                 if unifiable {
                     let mut child = self.clone();
-                    child.reuse(i, j);
+                    child.pattern.reuse(i, j);
+                    child.subset_matches_reuse(i, j);
                     if !child.matches.is_empty() {
                         out.push((Action::Reuse { keep: i, drop: j }, child));
                     }
@@ -210,7 +201,8 @@ impl SearchState {
             }
             for shape in shapes {
                 let mut child = self.clone();
-                child.expand(var_idx, &shape, shared);
+                child.pattern.expand(var_idx, &shape);
+                child.subset_matches(var_idx, &shape, shared);
                 if !child.matches.is_empty() {
                     out.push((Action::Expand { var_idx, op: shape.op, arity: shape.children.len() }, child));
                 }
