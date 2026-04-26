@@ -245,8 +245,11 @@ def no_bound():
 def quick_check():
     quick_eval(num_runs=1, check_slow=True)
 
-def quick_samply(domain="nuts-bolts"):
-    quick_eval(domains=[domain], num_runs=1, num_steps=5000, samply=True)
+def quick_single(domain="nuts-bolts", **kwargs):
+    quick_eval(domains=[domain], num_runs=1, num_steps=5000, **kwargs)
+
+def quick_samply(domain="nuts-bolts", **kwargs):
+    quick_eval(domains=[domain], num_runs=1, num_steps=5000, samply=True, **kwargs)
 
 
 
