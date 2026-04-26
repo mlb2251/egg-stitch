@@ -2,14 +2,11 @@ use egg::Symbol;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::Hash;
 
-/// Trait for the operator stored inside a language node.
-///
-/// Anything that names enodes works: a single `Symbol`, an enum of typed
-/// constants, etc. The `from_name` constructor must be infallible because
-/// `OpChildrenLanguage::from_op` parses arbitrary strings via egg's RecExpr parser.
-pub trait StitchOp: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 'static {
-    /// Builds an op from its display name. Must succeed for every input string.
-    fn from_name(s: &str) -> Self;
+/// Trait for any "thing that names an enode shape" — what egg calls a
+/// `Discriminant`. Used for hash-consing, equality, cost analysis, and
+/// pattern-var detection. Doesn't require parsing from a string, so structural
+/// discriminants (e.g. `LambdaCalcDisc::App`) and leaf ops both fit.
+pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 'static {
     /// The intrinsic size of this operator, used for AST size analysis.
     fn intrinsic_size(&self) -> u32 {
         1
@@ -19,6 +16,14 @@ pub trait StitchOp: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 's
     fn as_var(&self) -> Option<egg::Var> {
         None
     }
+}
+
+/// A leaf-op slot: a `StitchDisc` that can additionally be parsed from a name.
+/// Used wherever we need to construct an op from an arbitrary input string
+/// (egg's RecExpr parser, `add_stub_application`, etc.).
+pub trait StitchOp: StitchDisc {
+    /// Builds an op from its display name. Must succeed for every input string.
+    fn from_name(s: &str) -> Self;
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
@@ -40,6 +45,8 @@ impl Op {
         format!("{}", self)
     }
 }
+
+impl StitchDisc for Op {}
 
 impl StitchOp for Op {
     fn from_name(s: &str) -> Self {

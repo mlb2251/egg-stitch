@@ -2,7 +2,7 @@ use egg::{ENodeOrVar, FromOp, Id, Language, RecExpr};
 use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
-use super::{Op, OpChildrenLanguage, StitchLanguage, StitchOp};
+use super::{Op, OpChildrenLanguage, StitchDisc, StitchLanguage, StitchOp};
 
 /// A lambda-calculus shaped language: every node is either a `Leaf` symbol
 /// (zero arity), a binary `App`, a unary `Lam`, or the corpus-root `Programs`.
@@ -27,14 +27,14 @@ pub enum LambdaCalcLanguage<O = Op> {
 /// Discriminant for `LambdaCalcLanguage<O>`. Carries the structural variant tag
 /// alongside the leaf op when applicable, so the discriminant differs from `O`.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
-pub enum LambdaCalcOp<O = Op> {
+pub enum LambdaCalcDisc<O = Op> {
     Leaf(O),
     App,
     Lam,
     Programs,
 }
 
-impl<O: Display> Display for LambdaCalcOp<O> {
+impl<O: Display> Display for LambdaCalcDisc<O> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Leaf(o) => Display::fmt(o, f),
@@ -45,15 +45,7 @@ impl<O: Display> Display for LambdaCalcOp<O> {
     }
 }
 
-impl<O: StitchOp> StitchOp for LambdaCalcOp<O> {
-    fn from_name(s: &str) -> Self {
-        match s {
-            "@" => Self::App,
-            "lam" => Self::Lam,
-            "programs" => Self::Programs,
-            _ => Self::Leaf(O::from_name(s)),
-        }
-    }
+impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
     /// `App` and `Lam` are zero-cost structural wrappers so an appified
     /// `(@ (@ (@ f a) b) c)` has the same AST size as the flat `(f a b c)`.
     fn intrinsic_size(&self) -> u32 {
@@ -72,15 +64,26 @@ impl<O: StitchOp> StitchOp for LambdaCalcOp<O> {
     }
 }
 
+impl<O: StitchOp> StitchOp for LambdaCalcDisc<O> {
+    fn from_name(s: &str) -> Self {
+        match s {
+            "@" => Self::App,
+            "lam" => Self::Lam,
+            "programs" => Self::Programs,
+            _ => Self::Leaf(O::from_name(s)),
+        }
+    }
+}
+
 impl<O: StitchOp> Language for LambdaCalcLanguage<O> {
-    type Discriminant = LambdaCalcOp<O>;
+    type Discriminant = LambdaCalcDisc<O>;
 
     fn discriminant(&self) -> Self::Discriminant {
         match self {
-            Self::Leaf(o) => LambdaCalcOp::Leaf(o.clone()),
-            Self::App(_) => LambdaCalcOp::App,
-            Self::Lam(_) => LambdaCalcOp::Lam,
-            Self::Programs(_) => LambdaCalcOp::Programs,
+            Self::Leaf(o) => LambdaCalcDisc::Leaf(o.clone()),
+            Self::App(_) => LambdaCalcDisc::App,
+            Self::Lam(_) => LambdaCalcDisc::Lam,
+            Self::Programs(_) => LambdaCalcDisc::Programs,
         }
     }
 
@@ -119,15 +122,15 @@ impl<O: StitchOp> FromOp for LambdaCalcLanguage<O> {
     /// Multi-arity applications are not representable as a single enode in this
     /// language; callers must appify before constructing or use `add_stub_application`.
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        Ok(match (LambdaCalcOp::<O>::from_name(op), children.as_slice()) {
-            (LambdaCalcOp::App, &[f, a]) => Self::App([f, a]),
-            (LambdaCalcOp::Lam, &[b]) => Self::Lam([b]),
-            (LambdaCalcOp::Programs, _) => Self::Programs(children),
-            (LambdaCalcOp::Leaf(o), &[]) => Self::Leaf(o),
+        Ok(match (LambdaCalcDisc::<O>::from_name(op), children.as_slice()) {
+            (LambdaCalcDisc::App, &[f, a]) => Self::App([f, a]),
+            (LambdaCalcDisc::Lam, &[b]) => Self::Lam([b]),
+            (LambdaCalcDisc::Programs, _) => Self::Programs(children),
+            (LambdaCalcDisc::Leaf(o), &[]) => Self::Leaf(o),
             // Multi-arity leaves get curried automatically so RecExpr/Pattern parsers
             // (which call `from_op` once per node) yield the appified shape directly.
-            (LambdaCalcOp::Leaf(_), _) => panic!("multi-arity application of {op:?} can't be a single LambdaCalcLanguage node; appify first"),
-            (LambdaCalcOp::App, _) | (LambdaCalcOp::Lam, _) => panic!("{op:?} expects fixed arity, got {} children", children.len()),
+            (LambdaCalcDisc::Leaf(_), _) => panic!("multi-arity application of {op:?} can't be a single LambdaCalcLanguage node; appify first"),
+            (LambdaCalcDisc::App, _) | (LambdaCalcDisc::Lam, _) => panic!("{op:?} expects fixed arity, got {} children", children.len()),
         })
     }
 }
@@ -176,11 +179,11 @@ where
     N: egg::Language,
     O: StitchOp,
 {
-    match (LambdaCalcOp::<O>::from_name(&op.to_string()), kids.len()) {
-        (LambdaCalcOp::App, 2) => wrap(out, LambdaCalcLanguage::App([kids[0], kids[1]])),
-        (LambdaCalcOp::Lam, 1) => wrap(out, LambdaCalcLanguage::Lam([kids[0]])),
-        (LambdaCalcOp::Programs, _) => wrap(out, LambdaCalcLanguage::Programs(kids)),
-        (LambdaCalcOp::Leaf(o), _) => {
+    match (LambdaCalcDisc::<O>::from_name(&op.to_string()), kids.len()) {
+        (LambdaCalcDisc::App, 2) => wrap(out, LambdaCalcLanguage::App([kids[0], kids[1]])),
+        (LambdaCalcDisc::Lam, 1) => wrap(out, LambdaCalcLanguage::Lam([kids[0]])),
+        (LambdaCalcDisc::Programs, _) => wrap(out, LambdaCalcLanguage::Programs(kids)),
+        (LambdaCalcDisc::Leaf(o), _) => {
             let mut current = wrap(out, LambdaCalcLanguage::Leaf(o));
             for c in kids {
                 current = wrap(out, LambdaCalcLanguage::App([current, c]));

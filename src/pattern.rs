@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchOp};
 use crate::revexpr::RevExpr;
 use egg::{Id, Language};
 

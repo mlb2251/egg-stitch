@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
-use super::StitchOp;
+use super::{StitchDisc, StitchOp};
 
 /// An op-type wrapper that adds a pattern-variable variant.
 ///
@@ -26,7 +26,9 @@ impl<O: StitchOp> StitchOp for OpWithVar<O> {
     fn from_name(s: &str) -> Self {
         if let Ok(v) = s.parse::<egg::Var>() { Self::Var(v) } else { Self::Node(O::from_name(s)) }
     }
+}
 
+impl<O: StitchDisc> StitchDisc for OpWithVar<O> {
     fn intrinsic_size(&self) -> u32 {
         match self {
             Self::Node(o) => o.intrinsic_size(),
