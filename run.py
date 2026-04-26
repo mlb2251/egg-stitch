@@ -233,7 +233,7 @@ def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=500, max_arity=2, re
         domain_results = [r for r in results if r["domain"] == domain]
         mean_time = sum(r["elapsed_secs"] for r in domain_results) / len(domain_results)
         mean_compression_ratio = sum(r["compression_ratio"] for r in domain_results) / len(domain_results)
-        print(f"{domain} [{mean_time:.2f}] ({mean_compression_ratio:0.2f}): ")
+        print(f"{domain} [{mean_time:.2f}s] ({mean_compression_ratio:0.2f}x): ")
         for res in domain_results:
             h = res["best_history"][-1]
             print(f"{res["elapsed_secs"]:.2f} (t={h['elapsed_secs']:7.3f}s  exp={h['expansion']:>6}  cost={h['cost']:>6}  {h['pattern']}")

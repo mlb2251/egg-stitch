@@ -179,6 +179,21 @@ impl SearchState {
     pub fn enumerate_successors(&self, shared: &SharedSearchData) -> Vec<(Action, SearchState)> {
         let mut out = Vec::new();
 
+        // check for variable reuse
+        let n = self.pattern.vars.len();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
+                if unifiable {
+                    let mut child = self.clone();
+                    child.reuse(i, j);
+                    if !child.matches.is_empty() {
+                        out.push((Action::Reuse { keep: i, drop: j }, child));
+                    }
+                }
+            }
+        }
+
         for var_idx in 0..self.pattern.vars.len() {
             let mut seen: FxHashSet<(Symbol, usize)> = FxHashSet::default();
             let mut shapes: Vec<StitchLang> = Vec::new();
@@ -198,20 +213,6 @@ impl SearchState {
                 child.expand(var_idx, &shape, shared);
                 if !child.matches.is_empty() {
                     out.push((Action::Expand { var_idx, op: shape.op, arity: shape.children.len() }, child));
-                }
-            }
-        }
-
-        let n = self.pattern.vars.len();
-        for i in 0..n {
-            for j in (i + 1)..n {
-                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
-                if unifiable {
-                    let mut child = self.clone();
-                    child.reuse(i, j);
-                    if !child.matches.is_empty() {
-                        out.push((Action::Reuse { keep: i, drop: j }, child));
-                    }
                 }
             }
         }
