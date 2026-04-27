@@ -194,7 +194,7 @@ fn arithmetic_aplusbplus1234() {
 
 #[test]
 fn common_start() {
-    check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--appify"], true);
+    check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc-ast"], true);
 }
 
 /// Collapse an s-expression to a sorted multiset of its atoms, discarding
@@ -243,7 +243,7 @@ fn rewritten_corpus(run: &Value, original: &[String]) -> Vec<String> {
 #[test]
 fn arith_rewrites() {
     let input = "data/domains/basic-apps/multi-arg-assoc.json";
-    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--appify", "--max-arity", "0"];
+    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--language", "lambda-calc-ast", "--max-arity", "0"];
     let bf = run_backend("best-first", input, extra_args);
     let smc = run_backend("smc", input, extra_args);
     let original: Vec<String> = serde_json::from_str(&fs::read_to_string(input).unwrap_or_else(|e| panic!("read {input}: {e}"))).unwrap_or_else(|e| panic!("parse {input}: {e}"));
@@ -272,10 +272,10 @@ fn arith_rewrites() {
 
 #[test]
 fn varying_head() {
-    check_fixture("data/domains/basic-apps/varying-head.json", &["--appify"], true);
+    check_fixture("data/domains/basic-apps/varying-head.json", &["--language", "lambda-calc-ast"], true);
 }
 
 #[test]
 fn multiple_with_apps() {
-    check_fixture("data/domains/basic-apps/multiple-with-apps.json", &["--appify"], true);
+    check_fixture("data/domains/basic-apps/multiple-with-apps.json", &["--language", "lambda-calc-ast"], true);
 }

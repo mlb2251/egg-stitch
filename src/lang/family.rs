@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::lang::lambda_calc::StitchWeights;
 
 use super::lambda_calc::{AstWeights, LambdaCalcWeights, UnitWeights};
-use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
+use super::{DefaultWeights, LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
 /// A type-level type constructor `L<_>` for a language family.
 ///
@@ -19,6 +19,10 @@ use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, S
 /// `Discriminant<O>` is the discriminant of `Apply<O>`. Often it's just `O`
 /// (`OpChildrenLanguage`), but languages with structural variants beyond a single
 /// leaf-op slot can use a wrapper sum so the discriminant carries the variant tag.
+///
+/// `Weights<O>` chooses the cost model the egraph analysis runs under for this
+/// family. Plain `OpChildren` uses `DefaultWeights` (size = `intrinsic_size`); the
+/// lambda-calc families pick a `LambdaCalcWeights` profile.
 pub trait LanguageFamily: Clone + 'static {
     /// Discriminant type for `Apply<O>`. Only needs `StitchDisc` (hash/eq/size/var
     /// detection) — `from_name` is not required since the family knows how to
@@ -27,6 +31,9 @@ pub trait LanguageFamily: Clone + 'static {
 
     /// The Language obtained by instantiating this family with leaf-Op `O`.
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Discriminant<O>>;
+
+    /// Cost model used by `StitchAnalysis` for this family's egraphs.
+    type Weights<O: StitchOp>: Weights<Self::Apply<O>>;
 
     /// Construct an enode from a discriminant op and a list of children. For
     /// families with fixed-arity structural variants, this dispatches on the
@@ -41,9 +48,9 @@ pub trait LanguageFamily: Clone + 'static {
 
     /// Add a `name(children...)` application to the egraph and return its Id.
     /// For families with binary `App` this builds a curried application chain.
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>, Self::Weights<O>>) -> Id;
 
-    /// Structural cost (sum of `intrinsic_size` over all enodes added by
+    /// Structural cost (sum of `Weights::size` over all enodes added by
     /// `add_stub_application`) of an `arity`-arg stub application — the
     /// head plus any spine nodes (e.g. curried `App`s) the family inserts.
     fn stub_application_size<O: StitchOp>(name: &str, arity: usize) -> u32;
@@ -59,6 +66,7 @@ pub struct OpChildren;
 impl LanguageFamily for OpChildren {
     type Discriminant<O: StitchOp> = O;
     type Apply<O: StitchOp> = OpChildrenLanguage<O>;
+    type Weights<O: StitchOp> = DefaultWeights;
 
     fn make<P: StitchOp>(op: P, kids: Vec<Id>) -> OpChildrenLanguage<P> {
         OpChildrenLanguage { op, children: kids }
@@ -68,7 +76,7 @@ impl LanguageFamily for OpChildren {
         f(op)
     }
 
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>, DefaultWeights>) -> Id {
         egraph.add(Self::make(O::from_name(name), children))
     }
 
@@ -81,9 +89,10 @@ impl LanguageFamily for OpChildren {
     }
 }
 
-/// Generic LambdaCalc family parameterized by a weight profile. Two named
-/// markers select the two profiles we ship: `LambdaCalcAst` (babble-parity)
-/// and `LambdaCalcUnit` (curried wrappers free).
+/// Generic LambdaCalc family parameterized by a weight profile. Three named
+/// markers select the profiles we ship: `LambdaCalcAst` (babble-parity),
+/// `LambdaCalcUnit` (curried wrappers free), and `LambdaCalcStitch` (stitch
+/// literal/app weights).
 #[derive(Clone, Copy, Debug)]
 pub struct LambdaCalcWith<W: LambdaCalcWeights>(PhantomData<W>);
 
@@ -97,12 +106,13 @@ pub type LambdaCalcUnit = LambdaCalcWith<UnitWeights>;
 pub type LambdaCalcStitch = LambdaCalcWith<StitchWeights>;
 
 impl<W: LambdaCalcWeights> LanguageFamily for LambdaCalcWith<W> {
-    type Discriminant<O: StitchOp> = LambdaCalcDisc<O, W>;
-    type Apply<O: StitchOp> = LambdaCalcLanguage<O, W>;
+    type Discriminant<O: StitchOp> = LambdaCalcDisc<O>;
+    type Apply<O: StitchOp> = LambdaCalcLanguage<O>;
+    type Weights<O: StitchOp> = W;
 
-    fn make<P: StitchOp>(op: LambdaCalcDisc<P, W>, kids: Vec<Id>) -> LambdaCalcLanguage<P, W> {
+    fn make<P: StitchOp>(op: LambdaCalcDisc<P>, kids: Vec<Id>) -> LambdaCalcLanguage<P> {
         match (op, kids.as_slice()) {
-            (LambdaCalcDisc::Leaf(o, _), &[]) => LambdaCalcLanguage::Leaf(o, PhantomData),
+            (LambdaCalcDisc::Leaf(o), &[]) => LambdaCalcLanguage::Leaf(o),
             (LambdaCalcDisc::App, &[f, a]) => LambdaCalcLanguage::App([f, a]),
             (LambdaCalcDisc::Lam, &[b]) => LambdaCalcLanguage::Lam([b]),
             (LambdaCalcDisc::Programs, _) => LambdaCalcLanguage::Programs(kids),
@@ -110,17 +120,17 @@ impl<W: LambdaCalcWeights> LanguageFamily for LambdaCalcWith<W> {
         }
     }
 
-    fn map_discriminant<A: StitchOp, B: StitchOp>(op: LambdaCalcDisc<A, W>, mut f: impl FnMut(A) -> B) -> LambdaCalcDisc<B, W> {
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: LambdaCalcDisc<A>, mut f: impl FnMut(A) -> B) -> LambdaCalcDisc<B> {
         match op {
-            LambdaCalcDisc::Leaf(a, _) => LambdaCalcDisc::Leaf(f(a), PhantomData),
+            LambdaCalcDisc::Leaf(a) => LambdaCalcDisc::Leaf(f(a)),
             LambdaCalcDisc::App => LambdaCalcDisc::App,
             LambdaCalcDisc::Lam => LambdaCalcDisc::Lam,
             LambdaCalcDisc::Programs => LambdaCalcDisc::Programs,
         }
     }
 
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<LambdaCalcLanguage<O, W>>) -> Id {
-        let mut current = egraph.add(LambdaCalcLanguage::Leaf(O::from_name(name), PhantomData));
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<LambdaCalcLanguage<O>, W>) -> Id {
+        let mut current = egraph.add(LambdaCalcLanguage::Leaf(O::from_name(name)));
         for child in children {
             current = egraph.add(LambdaCalcLanguage::App([current, child]));
         }
@@ -128,10 +138,10 @@ impl<W: LambdaCalcWeights> LanguageFamily for LambdaCalcWith<W> {
     }
 
     fn stub_application_size<O: StitchOp>(name: &str, arity: usize) -> u32 {
-        LambdaCalcDisc::<O, W>::Leaf(O::from_name(name), PhantomData).intrinsic_size() + arity as u32 * W::APP_COST
+        <W as Weights<LambdaCalcLanguage<O>>>::size(&LambdaCalcDisc::Leaf(O::from_name(name))) + arity as u32 * W::APP_COST
     }
 
-    fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>, W> {
-        Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v), PhantomData), vec![])
+    fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
+        Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v)), vec![])
     }
 }

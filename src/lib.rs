@@ -106,11 +106,28 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
 
-    /// Use `LambdaCalcLanguage` (curried `(@ ...)` applications) instead of the
-    /// flat `OpChildrenLanguage`. Patterns/programs/rules continue to be written
-    /// in flat form; the language layer handles conversion at the boundary.
-    #[arg(long, default_value_t = false)]
-    pub appify: bool,
+    /// Selects the language family the pipeline runs over. Patterns/programs/rules
+    /// are always written in user-facing flat form; the language layer handles any
+    /// conversion (e.g. currying for the `lambda-calc-*` families) at the boundary.
+    #[arg(long, value_enum, default_value_t = LanguageChoice::OpChildren)]
+    pub language: LanguageChoice,
+}
+
+/// Which language family `multiple_step_search` runs over.
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum LanguageChoice {
+    /// Flat n-ary nodes (`(f a b c)` is a single enode). Default.
+    #[value(name = "op-children")]
+    OpChildren,
+    /// Lambda-calculus shape with babble-parity weights (every enode costs 1).
+    #[value(name = "lambda-calc-ast")]
+    LambdaCalcAst,
+    /// Lambda-calculus shape with zero-cost `App`/`Lam` wrappers.
+    #[value(name = "lambda-calc-unit")]
+    LambdaCalcUnit,
+    /// Lambda-calculus shape with stitch-compatible weights (literals cost 100).
+    #[value(name = "lambda-calc-stitch")]
+    LambdaCalcStitch,
 }
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
@@ -120,7 +137,7 @@ pub struct Args {
 /// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
 /// serialising programs to strings and re-parsing. The eclass arguments already carry
 /// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>, F::Weights<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
     let mut egraph = egraph;
     let mut root = root;
     let mut library = Vec::new();
@@ -188,7 +205,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>, F::Weights<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>, F::Weights<O>>, Id, Vec<String>) {
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {
