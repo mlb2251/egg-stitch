@@ -1,12 +1,17 @@
 //! Tests ported from `../Stitch.jl/tests/` and `../stitch/tests/`
 //! (the `data/basic/` folders in both repos).
 //!
-//! Each test runs both best-first (10 000 expansions) and SMC (1 000 particles
-//! × 1 000 steps, temperature 1 000) with `--check-slow` enabled and compares
-//! against a frozen fixture living next to the input JSON (`foo.json` →
-//! `foo.out.json`). The fixture records the single found abstraction (or no
-//! abstractions), its match count, and the rewritten corpus. Both backends
-//! must agree, and both must match the fixture.
+//! Each test invokes the `egg-stitch` binary twice — once with best-first
+//! (10 000 expansions) and once with SMC (1 000 particles × 1 000 steps,
+//! temperature 1 000), both with `--check-slow` enabled — pipes each run's
+//! `--output` JSON to a temp file, and compares the two results against a
+//! frozen fixture (`foo.json` → `foo.out.json`). When both backends agree the
+//! fixture is just the shared `RunResult`; when they diverge the fixture is
+//! `{"best-first": <RunResult>, "smc": <RunResult>}`. Non-deterministic and
+//! input-dependent fields (`timestamp`, `elapsed_secs`, `input_file`,
+//! `rules_file`) and per-algorithm bookkeeping (`search`, plus
+//! `num_steps_run` / `num_expansions` / `best_iteration` on each library
+//! entry) are stripped before comparison.
 //!
 //! Only the smallest, most deterministic cases are included — egg-stitch's SMC
 //! is stochastic, so we pick corpora where both backends reliably converge.
@@ -30,37 +35,10 @@
 //! BLESS=1 cargo test --release --test stitch_compat_test -- --test-threads=1
 //! ```
 
-use clap::Parser;
-use egg_stitch::{
-    Args, io,
-    lang::{Op, OpChildren},
-    multiple_step_search,
-    results::AbstractionResult,
-};
-use serde::{Deserialize, Serialize};
-use std::fs;
+use serde_json::{Value, json};
+use std::{fs, path::Path, process::Command};
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-struct Expected {
-    abstractions: Vec<ExpectedAbstraction>,
-    rewritten: Vec<String>,
-}
-
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-struct ExpectedAbstraction {
-    body: String,
-    num_matches: usize,
-}
-
-/// egg prints metavars as `?#0`; store the cleaner `#0` form in fixtures.
-fn egg_to_stitch(s: &str) -> String {
-    s.replace("?#", "#")
-}
-
-fn input_programs(input: &str) -> Vec<String> {
-    let text = fs::read_to_string(input).unwrap_or_else(|e| panic!("read {input}: {e}"));
-    serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {input}: {e}"))
-}
+const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
 fn expected_path(input: &str) -> String {
     // Mirror the `data/domains/<...>/foo.json` layout under `data/expected_outputs/`.
@@ -69,63 +47,101 @@ fn expected_path(input: &str) -> String {
     format!("data/expected_outputs/{stem}.out.json")
 }
 
-fn build_expected(library: Vec<AbstractionResult>, input: &str) -> Expected {
-    let abstractions: Vec<ExpectedAbstraction> = library
-        .iter()
-        .map(|r| ExpectedAbstraction {
-            body: egg_to_stitch(r.pattern.split_once(": ").expect("pattern prefixed with fn_N:").1),
-            num_matches: r.num_matches,
-        })
-        .collect();
-    let rewritten = library.last().map(|r| r.rewritten_programs.clone()).unwrap_or_else(|| input_programs(input));
-    Expected { abstractions, rewritten }
+/// Path for the temporary `--output` JSON of a single backend run. Includes
+/// pid + input stem + search to stay unique across parallel tests.
+fn temp_output_path(input: &str, search: &str) -> std::path::PathBuf {
+    let stem = Path::new(input).file_stem().and_then(|s| s.to_str()).unwrap_or("input");
+    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}.json", std::process::id(), stem, search))
 }
 
-/// Runs the backend with the given search, input, and extra CLI args.
-fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Expected {
-    let mut argv: Vec<&str> = vec!["egg-stitch", "--search", search, "--input", input, "--check-slow", "--num-abstractions", "1"];
+/// Invokes the cargo-built binary, writes its `--output` JSON to a temp file,
+/// reads it back, and strips non-deterministic fields.
+fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
+    let out = temp_output_path(input, search);
+    let out_str = out.to_str().expect("utf-8 temp path");
+    let mut cmd = Command::new(BIN);
+    cmd.args([
+        "--search",
+        search,
+        "--input",
+        input,
+        "--check-slow",
+        "--num-abstractions",
+        "1",
+        "--output",
+        out_str,
+    ]);
     if search == "best-first" {
-        argv.extend(["--num-steps", "10000"]);
+        cmd.args(["--num-steps", "10000"]);
     } else {
-        argv.extend(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
+        cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
     }
-    argv.extend(extra_args);
-    let args = Args::parse_from(argv);
-    let (egraph, root, _) = io::load_egraph(&args.input, args.rules.as_deref());
-    let (library, _, _) = multiple_step_search::<OpChildren, Op>(egraph, root, &args);
-    build_expected(library, input)
+    cmd.args(extra_args);
+    let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
+    assert!(status.success(), "{search} run failed for {input}");
+
+    let text = fs::read_to_string(&out).unwrap_or_else(|e| panic!("read {}: {e}", out.display()));
+    let _ = fs::remove_file(&out);
+    let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
+    if let Some(obj) = v.as_object_mut() {
+        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search"] {
+            obj.remove(k);
+        }
+    }
+    if let Some(library) = v.get_mut("library").and_then(|l| l.as_array_mut()) {
+        for entry in library {
+            if let Some(obj) = entry.as_object_mut() {
+                for k in ["num_steps_run", "num_expansions", "best_iteration"] {
+                    obj.remove(k);
+                }
+            }
+        }
+    }
+    v
 }
 
-/// Checks the fixture for the given input and extra CLI args (e.g., ["-r", path]).
-fn check_fixture(input: &str, extra_args: &[&str]) {
-    let bf = run_backend("best-first", input, extra_args);
-    let smc = run_backend("smc", input, extra_args);
+/// Strips the `pattern` field from every entry in `library` (in place). Used
+/// when SMC's chosen e-class representative is non-deterministic (e.g. once
+/// commutativity rewrites unify multiple equivalent pattern strings).
+fn strip_library_patterns(v: &mut Value) {
+    let Some(library) = v.get_mut("library").and_then(|l| l.as_array_mut()) else { return };
+    for entry in library {
+        if let Some(obj) = entry.as_object_mut() {
+            obj.remove("pattern");
+        }
+    }
+}
 
-    // Best-first is deterministic and is the canonical fixture. SMC is stochastic
-    // and — once rewrite rules introduce non-trivial e-class equivalences like
-    // commutativity — can pick a different representative of the same semantic
-    // abstraction (e.g. `(+ a (+ b #0))` vs `(+ #0 (+ a b))`). We still require
-    // the number of matches and the rewritten corpus to match, since those are
-    // determined by the equivalence class, not the chosen representative.
-    let num_matches_of = |e: &Expected| e.abstractions.iter().map(|a| a.num_matches).collect::<Vec<_>>();
-    assert_eq!(num_matches_of(&bf), num_matches_of(&smc), "best-first and smc disagree on num_matches for {input}");
-    assert_eq!(bf.rewritten, smc.rewritten, "best-first and smc disagree on rewritten corpus for {input}");
+/// Runs both backends, combines their outputs side-by-side, and checks the
+/// result against the frozen fixture (or writes it under `BLESS=1`). When
+/// `check_pattern` is false, the per-abstraction `pattern` string is stripped
+/// from both backends' libraries before comparing.
+fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
+    let mut bf = run_backend("best-first", input, extra_args);
+    let mut smc = run_backend("smc", input, extra_args);
+    if !check_pattern {
+        strip_library_patterns(&mut bf);
+        strip_library_patterns(&mut smc);
+    }
+    // Collapse to a single entry when both backends agree; otherwise record
+    // both side-by-side so the divergence is visible in the fixture.
+    let combined = if bf == smc { bf } else { json!({"best-first": bf, "smc": smc}) };
 
     let path = expected_path(input);
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(&bf).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(&combined).expect("serialize expected");
         text.push('\n');
         fs::write(&path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
         let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
-        let expected: Expected = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(bf, expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
+        let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+        assert_eq!(combined, expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
     }
 }
 
 #[test]
 fn identical() {
-    check_fixture("data/domains/stitch/identical.json", &[]);
+    check_fixture("data/domains/stitch/identical.json", &[], true);
 }
 
 /// Diverges from Stitch.jl: Stitch.jl finds the arity-0 body
@@ -134,22 +150,22 @@ fn identical() {
 /// `(a b c d e f g h #0 #0 #0 #0)` instead.
 #[test]
 fn cex() {
-    check_fixture("data/domains/stitch/cex.json", &[]);
+    check_fixture("data/domains/stitch/cex.json", &[], true);
 }
 
 #[test]
 fn minimum_matches() {
-    check_fixture("data/domains/stitch/minimum-matches.json", &[]);
+    check_fixture("data/domains/stitch/minimum-matches.json", &[], true);
 }
 
 #[test]
 fn simple1() {
-    check_fixture("data/domains/stitch/simple1.json", &[]);
+    check_fixture("data/domains/stitch/simple1.json", &[], true);
 }
 
 #[test]
 fn simple2() {
-    check_fixture("data/domains/stitch/simple2.json", &[]);
+    check_fixture("data/domains/stitch/simple2.json", &[], true);
 }
 
 /// From `../stitch/data/basic/`. Rust stitch finds `(#0 (lam_1 (#0 #0)))` under
@@ -157,12 +173,12 @@ fn simple2() {
 /// compression doesn't pay, so no abstraction is returned.
 #[test]
 fn simple3() {
-    check_fixture("data/domains/stitch/simple3.json", &[]);
+    check_fixture("data/domains/stitch/simple3.json", &[], true);
 }
 
 #[test]
 fn tmp_minimal() {
-    check_fixture("data/domains/stitch/tmp_minimal.json", &[]);
+    check_fixture("data/domains/stitch/tmp_minimal.json", &[], true);
 }
 
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
@@ -171,17 +187,17 @@ fn tmp_minimal() {
 /// e-class so the inner `(* (- v) (- v))` becomes a match too).
 #[test]
 fn nested() {
-    check_fixture("data/domains/stitch/nested.json", &["-r", "data/domains/stitch/nested.rewrites"]);
+    check_fixture("data/domains/stitch/nested.json", &["-r", "data/domains/stitch/nested.rewrites"], true);
 }
 
 const ARITH_RULES: &str = "data/domains/simple-arithmetic/arithmetic.rewrites";
 
 #[test]
 fn arithmetic_aplusbplusc() {
-    check_fixture("data/domains/simple-arithmetic/aplusbplusc.json", &["-r", ARITH_RULES]);
+    check_fixture("data/domains/simple-arithmetic/aplusbplusc.json", &["-r", ARITH_RULES], false);
 }
 
 #[test]
 fn arithmetic_aplusbplus1234() {
-    check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES]);
+    check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES], false);
 }
