@@ -7,7 +7,7 @@ mod op;
 mod op_children;
 mod op_with_var;
 
-pub use family::{LambdaCalcAst, LambdaCalcUnit, LambdaCalcStitch, LambdaCalcWith, LanguageFamily, OpChildren};
+pub use family::{LambdaCalcAst, LambdaCalcStitch, LambdaCalcUnit, LambdaCalcWith, LanguageFamily, OpChildren};
 pub use lambda_calc::{AstWeights, LambdaCalcDisc, LambdaCalcLanguage, LambdaCalcWeights, UnitWeights};
 pub use op::{Op, StitchDisc, StitchOp};
 pub use op_children::OpChildrenLanguage;

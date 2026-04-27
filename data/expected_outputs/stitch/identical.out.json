@@ -1,12 +1,20 @@
 {
-  "abstractions": [
+  "compression_ratio": 1.375,
+  "cost_after_rewrites": 11,
+  "final_cost": 8,
+  "initial_cost": 11,
+  "library": [
     {
-      "body": "(a b c d e)",
-      "num_matches": 1
+      "approx_cost": 6,
+      "arity": 0,
+      "num_matches": 1,
+      "pattern": "fn_0: (a b c d e)",
+      "pattern_size": 5,
+      "rewritten_programs": [
+        "fn_0",
+        "fn_0"
+      ],
+      "usage_matches": 2
     }
-  ],
-  "rewritten": [
-    "fn_0",
-    "fn_0"
   ]
 }
