@@ -1,7 +1,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, LanguageChoice, SearchKind, io,
-    lang::{LambdaCalc, Op, OpChildren, Weights},
+    lang::{LambdaCalc, Op, OpChildren},
     multiple_step_search, results,
 };
 
@@ -11,10 +11,8 @@ fn main() {
 
     // Pick the language at the boundary; the rest of the pipeline is generic.
     let (library, original_size, final_cost, cost_before_rewrites) = match args.language {
-        LanguageChoice::OpChildren => run::<OpChildren>(&args, Weights::default()),
-        LanguageChoice::LambdaCalcAst => run::<LambdaCalc>(&args, Weights::ast()),
-        LanguageChoice::LambdaCalcUnit => run::<LambdaCalc>(&args, Weights::unit()),
-        LanguageChoice::LambdaCalcStitch => run::<LambdaCalc>(&args, Weights::stitch()),
+        LanguageChoice::OpChildren => run::<OpChildren>(&args),
+        LanguageChoice::LambdaCalc => run::<LambdaCalc>(&args),
     };
 
     let elapsed_secs = start.elapsed().as_secs_f64();
@@ -49,8 +47,8 @@ fn main() {
 }
 
 /// Loads the egraph and runs the multi-abstraction search loop, parameterized by the language family.
-fn run<F: egg_stitch::lang::LanguageFamily>(args: &Args, weights: Weights) -> (Vec<results::AbstractionResult>, usize, Option<usize>, usize) {
-    let (egraph, root, cost_before_rewrites) = io::load_egraph::<F::Apply<Op>>(&args.input, args.rules.as_deref(), weights);
+fn run<F: egg_stitch::lang::LanguageFamily>(args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, usize) {
+    let (egraph, root, cost_before_rewrites) = io::load_egraph::<F::Apply<Op>>(&args.input, args.rules.as_deref(), args.weights);
     let (library, original_size, final_cost) = multiple_step_search::<F, Op>(egraph, root, args);
     (library, original_size, final_cost, cost_before_rewrites)
 }

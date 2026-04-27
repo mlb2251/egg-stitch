@@ -18,7 +18,7 @@ use egg::{Id, Language};
 
 pub use best_first::SearchPriority;
 
-use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp};
+use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -108,9 +108,13 @@ pub struct Args {
 
     /// Selects the language family the pipeline runs over. Patterns/programs/rules
     /// are always written in user-facing flat form; the language layer handles any
-    /// conversion (e.g. currying for the `lambda-calc-*` families) at the boundary.
+    /// conversion (e.g. currying for `lambda-calc`) at the boundary.
     #[arg(long, value_enum, default_value_t = LanguageChoice::OpChildren)]
     pub language: LanguageChoice,
+
+    /// Cost weights applied per enode kind.
+    #[command(flatten)]
+    pub weights: Weights,
 }
 
 /// Which language family `multiple_step_search` runs over.
@@ -119,15 +123,10 @@ pub enum LanguageChoice {
     /// Flat n-ary nodes (`(f a b c)` is a single enode). Default.
     #[value(name = "op-children")]
     OpChildren,
-    /// Lambda-calculus shape with babble-parity weights (every enode costs 1).
-    #[value(name = "lambda-calc-ast")]
-    LambdaCalcAst,
-    /// Lambda-calculus shape with zero-cost `App`/`Lam` wrappers.
-    #[value(name = "lambda-calc-unit")]
-    LambdaCalcUnit,
-    /// Lambda-calculus shape with stitch-compatible weights (literals cost 100).
-    #[value(name = "lambda-calc-stitch")]
-    LambdaCalcStitch,
+    /// Lambda-calculus shape: curried binary `App`, unary `Lam`, multi-child
+    /// `Programs` root.
+    #[value(name = "lambda-calc")]
+    LambdaCalc,
 }
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,

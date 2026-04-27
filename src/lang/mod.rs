@@ -44,41 +44,28 @@ pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Deb
 /// Runtime cost configuration. Every enode size is computed by
 /// `StitchDisc::size(&disc, weights)` against this struct.
 ///
-/// The default profile (`{1, 1, 1}`) reproduces the behavior of the previous
-/// `DefaultWeights` for the leaf-only `OpChildrenLanguage` (where the lambda
-/// fields are unused), and matches babble's `egg::AstSize` for `LambdaCalc`.
-/// Construct other profiles via the named constructors.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// Defaults to `{1, 1, 1}`, which matches babble's `egg::AstSize` for
+/// `LambdaCalc` (and is the only meaningful setting for `OpChildren`, where
+/// the lambda fields are unused). Override via the CLI flags below for
+/// alternative profiles, e.g. zero-cost wrappers (`--app-cost 0 --lam-cost 0`)
+/// or stitch compatibility (`--sym-cost 100`).
+#[derive(clap::Args, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Weights {
     /// Multiplier applied to a leaf's `intrinsic_size`. Also used for the
     /// `programs` root node in `LambdaCalc`.
+    #[arg(long, default_value_t = 1)]
     pub sym_cost: u32,
     /// Cost of an `App` enode in `LambdaCalc`. Unused for `OpChildren`.
+    #[arg(long, default_value_t = 1)]
     pub app_cost: u32,
     /// Cost of a `Lam` enode in `LambdaCalc`. Unused for `OpChildren`.
+    #[arg(long, default_value_t = 1)]
     pub lam_cost: u32,
-}
-
-impl Weights {
-    /// Babble parity: every enode costs 1.
-    pub const fn ast() -> Self {
-        Self { sym_cost: 1, app_cost: 1, lam_cost: 1 }
-    }
-
-    /// Curried wrappers free: `App`/`Lam` cost 0, leaves cost 1.
-    pub const fn unit() -> Self {
-        Self { sym_cost: 1, app_cost: 0, lam_cost: 0 }
-    }
-
-    /// Stitch-compatible: literals cost 100, `App`/`Lam` cost 1.
-    pub const fn stitch() -> Self {
-        Self { sym_cost: 100, app_cost: 1, lam_cost: 1 }
-    }
 }
 
 impl Default for Weights {
     fn default() -> Self {
-        Self::ast()
+        Self { sym_cost: 1, app_cost: 1, lam_cost: 1 }
     }
 }
 

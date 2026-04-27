@@ -80,9 +80,8 @@ impl LanguageFamily for OpChildren {
 }
 
 /// LambdaCalc family. Cost behavior is selected at runtime via the `Weights`
-/// stored on `StitchAnalysis` (e.g. `Weights::ast()` for babble parity,
-/// `Weights::unit()` for zero-cost wrappers, `Weights::stitch()` for stitch
-/// compatibility).
+/// stored on `StitchAnalysis` (defaults to all-ones for babble parity; tune
+/// per-kind via the `--sym-cost`/`--app-cost`/`--lam-cost` CLI flags).
 #[derive(Clone, Copy, Debug)]
 pub struct LambdaCalc;
 
