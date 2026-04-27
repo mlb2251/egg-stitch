@@ -87,7 +87,7 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
     /// Computes the minimum AST size of a new enode as `disc.size(weights) + sum(children)`.
     fn make(egraph: &mut egg::EGraph<L, Self>, enode: &L, _id: Id) -> Self::Data {
         let weights = egraph.analysis.weights;
-        enode.discriminant().size(&weights) + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+        enode.discriminant().intrinsic_size(&weights) + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
     }
 
     /// Keeps the minimum size when two e-classes are merged.

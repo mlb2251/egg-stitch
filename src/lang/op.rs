@@ -9,17 +9,17 @@ use super::Weights;
 /// pattern-var detection. Doesn't require parsing from a string, so structural
 /// discriminants and leaf ops both fit.
 pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 'static {
-    /// If this op represents a pattern variable, returns it. Default: not a var.
-    /// Var-aware op types (`OpWithVar` and wrappers around it) override.
-    fn as_var(&self) -> Option<egg::Var> {
-        None
-    }
     /// Cost of an enode with this discriminant under the given weights. The
     /// default treats the node as a leaf and scales by `sym_cost`; structural
     /// discriminants (e.g. `LambdaCalcDisc::App`/`Lam`) override to read the
     /// matching field.
-    fn size(&self, weights: &Weights) -> u32 {
+    fn intrinsic_size(&self, weights: &Weights) -> u32 {
         weights.sym_var_cost
+    }
+    /// If this op represents a pattern variable, returns it. Default: not a var.
+    /// Var-aware op types (`OpWithVar` and wrappers around it) override.
+    fn as_var(&self) -> Option<egg::Var> {
+        None
     }
 }
 

@@ -73,7 +73,7 @@ pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F,
 
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {
     let node = &rec_expr[ptr];
-    node.discriminant().size(weights) as usize + node.children().iter().map(|&child| compute_recexpr_size::<L>(rec_expr, child, weights)).sum::<usize>()
+    node.discriminant().intrinsic_size(weights) as usize + node.children().iter().map(|&child| compute_recexpr_size::<L>(rec_expr, child, weights)).sum::<usize>()
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
@@ -110,7 +110,7 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
             }
         }
         for enode in &egraph[eclass].nodes {
-            let size_no_rewrite: i64 = enode.discriminant().size(weights) as i64 + enode.children().iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
+            let size_no_rewrite: i64 = enode.discriminant().intrinsic_size(weights) as i64 + enode.children().iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
             if size_no_rewrite < best {
                 best = size_no_rewrite;
             }

@@ -23,17 +23,17 @@ impl<O: Display> Display for OpWithVar<O> {
 }
 
 impl<O: StitchDisc> StitchDisc for OpWithVar<O> {
+    fn intrinsic_size(&self, weights: &Weights) -> u32 {
+        match self {
+            Self::Node(o) => o.intrinsic_size(weights),
+            Self::Var(_) => weights.sym_var_cost,
+        }
+    }
+
     fn as_var(&self) -> Option<egg::Var> {
         match self {
             Self::Var(v) => Some(*v),
             Self::Node(o) => o.as_var(),
-        }
-    }
-
-    fn size(&self, weights: &Weights) -> u32 {
-        match self {
-            Self::Node(o) => o.size(weights),
-            Self::Var(_) => weights.sym_var_cost,
         }
     }
 }

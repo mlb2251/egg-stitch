@@ -40,14 +40,7 @@ impl<O: Display> Display for LambdaCalcDisc<O> {
 }
 
 impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
-    fn as_var(&self) -> Option<egg::Var> {
-        match self {
-            Self::Leaf(o) => o.as_var(),
-            _ => None,
-        }
-    }
-
-    fn size(&self, weights: &Weights) -> u32 {
+    fn intrinsic_size(&self, weights: &Weights) -> u32 {
         match self {
             Self::App => weights.app_cost,
             Self::Lam => weights.lam_cost,
@@ -55,7 +48,14 @@ impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
             // root occupies one slot like any leaf, so weight profiles that
             // scale leaf cost (e.g. stitch) scale it too.
             Self::Programs => weights.sym_var_cost,
-            Self::Leaf(o) => o.size(weights),
+            Self::Leaf(o) => o.intrinsic_size(weights),
+        }
+    }
+
+    fn as_var(&self) -> Option<egg::Var> {
+        match self {
+            Self::Leaf(o) => o.as_var(),
+            _ => None,
         }
     }
 }

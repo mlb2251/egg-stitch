@@ -71,7 +71,7 @@ impl LanguageFamily for OpChildren {
     }
 
     fn stub_application_size<O: StitchOp>(name: &str, _arity: usize, weights: &Weights) -> u32 {
-        O::from_name(name).size(weights)
+        O::from_name(name).intrinsic_size(weights)
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
@@ -117,7 +117,7 @@ impl LanguageFamily for LambdaCalc {
     }
 
     fn stub_application_size<O: StitchOp>(name: &str, arity: usize, weights: &Weights) -> u32 {
-        LambdaCalcDisc::Leaf(O::from_name(name)).size(weights) + arity as u32 * weights.app_cost
+        LambdaCalcDisc::Leaf(O::from_name(name)).intrinsic_size(weights) + arity as u32 * weights.app_cost
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
