@@ -58,6 +58,18 @@ impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
             _ => None,
         }
     }
+
+    fn de_bruijn_index(&self) -> Option<u32> {
+        match self {
+            Self::Leaf(o) => o.de_bruijn_index(),
+            _ => None,
+        }
+    }
+
+    /// `Lam` binds its single body child; nothing else introduces a binder.
+    fn binds_child(&self, j: usize) -> bool {
+        matches!(self, Self::Lam) && j == 0
+    }
 }
 
 impl<O: StitchOp> StitchOp for LambdaCalcDisc<O> {
