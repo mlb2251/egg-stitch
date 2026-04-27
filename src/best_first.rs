@@ -65,7 +65,7 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     pub best_found_at: Option<usize>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
-    pub egraph: StitchEgraph<F::Apply<O>, F::Weights<O>>,
+    pub egraph: StitchEgraph<F::Apply<O>>,
     pub tree_log: Option<SearchTreeLog>,
 }
 
@@ -88,7 +88,7 @@ struct Node<F: LanguageFamily, O: StitchOp> {
 /// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
 /// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
 /// improvement" just means we're grinding through a less promising branch.)
-pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>, F::Weights<O>>, root: egg::Id, args: &crate::Args) -> BestFirstResult<F, O> {
+pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, args: &crate::Args) -> BestFirstResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
@@ -182,6 +182,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let best_pair = best.map(|(cost, id)| (cost, nodes[id].state.clone()));
 
     let tree_log = if debug {
+        let weights = shared.egraph.analysis.weights;
         Some(SearchTreeLog {
             original_size,
             nodes: nodes
@@ -193,7 +194,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
                     action: n.action.as_ref().map(|a| a.to_string()),
                     pattern: n.state.pattern.to_string(),
                     arity: n.state.pattern.vars.len(),
-                    pattern_size: compute_pattern_size(&n.state.pattern),
+                    pattern_size: compute_pattern_size(&n.state.pattern, &weights),
                     num_matches: n.state.matches.len(),
                     cost: n.cost,
                     expanded: n.expanded,

@@ -1,6 +1,5 @@
 use egg::{Analysis, ENodeOrVar, FromOp, Id, Language, RecExpr};
 use std::fmt::{Debug, Display};
-use std::marker::PhantomData;
 
 mod family;
 mod lambda_calc;
@@ -8,8 +7,8 @@ mod op;
 mod op_children;
 mod op_with_var;
 
-pub use family::{LambdaCalcAst, LambdaCalcStitch, LambdaCalcUnit, LambdaCalcWith, LanguageFamily, OpChildren};
-pub use lambda_calc::{AstWeights, LambdaCalcDisc, LambdaCalcLanguage, LambdaCalcWeights, StitchWeights, UnitWeights};
+pub use family::{LambdaCalc, LanguageFamily, OpChildren};
+pub use lambda_calc::{LambdaCalcDisc, LambdaCalcLanguage};
 pub use op::{Op, StitchDisc, StitchOp};
 pub use op_children::OpChildrenLanguage;
 pub use op_with_var::OpWithVar;
@@ -42,42 +41,67 @@ pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Deb
     }
 }
 
-/// Per-language cost model. `W: Weights<L>` decides what `size` of an enode is —
-/// cost analysis stores this on each eclass, and rewrite-cost computations call
-/// `W::size` directly on enode/recexpr discriminants.
+/// Runtime cost configuration. Every enode size is computed by
+/// `StitchDisc::size(&disc, weights)` against this struct.
 ///
-/// `DefaultWeights` is the universal fallback: it just calls
-/// `StitchDisc::intrinsic_size`. Languages that want multiple cost regimes
-/// (e.g. `LambdaCalcLanguage`) provide additional `Weights<L>` implementors.
-pub trait Weights<L: StitchLanguage>: 'static + Send + Sync + Clone + Default + Debug {
-    fn size(disc: &L::Discriminant) -> u32;
+/// The default profile (`{1, 1, 1}`) reproduces the behavior of the previous
+/// `DefaultWeights` for the leaf-only `OpChildrenLanguage` (where the lambda
+/// fields are unused), and matches babble's `egg::AstSize` for `LambdaCalc`.
+/// Construct other profiles via the named constructors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Weights {
+    /// Multiplier applied to a leaf's `intrinsic_size`. Also used for the
+    /// `programs` root node in `LambdaCalc`.
+    pub sym_cost: u32,
+    /// Cost of an `App` enode in `LambdaCalc`. Unused for `OpChildren`.
+    pub app_cost: u32,
+    /// Cost of a `Lam` enode in `LambdaCalc`. Unused for `OpChildren`.
+    pub lam_cost: u32,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct DefaultWeights;
+impl Weights {
+    /// Babble parity: every enode costs 1.
+    pub const fn ast() -> Self {
+        Self { sym_cost: 1, app_cost: 1, lam_cost: 1 }
+    }
 
-impl<L: StitchLanguage> Weights<L> for DefaultWeights {
-    fn size(disc: &L::Discriminant) -> u32 {
-        disc.intrinsic_size()
+    /// Curried wrappers free: `App`/`Lam` cost 0, leaves cost 1.
+    pub const fn unit() -> Self {
+        Self { sym_cost: 1, app_cost: 0, lam_cost: 0 }
+    }
+
+    /// Stitch-compatible: literals cost 100, `App`/`Lam` cost 1.
+    pub const fn stitch() -> Self {
+        Self { sym_cost: 100, app_cost: 1, lam_cost: 1 }
     }
 }
 
-/// Egg analysis that tracks the minimum AST size of each e-class, weighted by `W`.
-#[derive(Clone, Debug)]
-pub struct StitchAnalysis<W: 'static = DefaultWeights>(PhantomData<W>);
-
-impl<W: 'static> Default for StitchAnalysis<W> {
+impl Default for Weights {
     fn default() -> Self {
-        Self(PhantomData)
+        Self::ast()
     }
 }
 
-impl<L: StitchLanguage, W: Weights<L>> Analysis<L> for StitchAnalysis<W> {
+/// Egg analysis that tracks the minimum AST size of each e-class, weighted by
+/// the `Weights` value carried on the analysis itself.
+#[derive(Clone, Debug, Default)]
+pub struct StitchAnalysis {
+    pub weights: Weights,
+}
+
+impl StitchAnalysis {
+    pub fn new(weights: Weights) -> Self {
+        Self { weights }
+    }
+}
+
+impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
     type Data = u32;
 
-    /// Computes the minimum AST size of a new enode as `W::size(op) + sum(children)`.
+    /// Computes the minimum AST size of a new enode as `disc.size(weights) + sum(children)`.
     fn make(egraph: &mut egg::EGraph<L, Self>, enode: &L, _id: Id) -> Self::Data {
-        W::size(&enode.discriminant()) + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+        let weights = egraph.analysis.weights;
+        enode.discriminant().size(&weights) + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
     }
 
     /// Keeps the minimum size when two e-classes are merged.
@@ -93,7 +117,7 @@ impl<L: StitchLanguage, W: Weights<L>> Analysis<L> for StitchAnalysis<W> {
     }
 }
 
-/// Type alias for the e-graph used throughout this codebase. Defaulting `W` to
-/// `DefaultWeights` keeps existing call sites — which only know `L` — working
-/// unchanged. The lambda-calc families specialize `W` per profile.
-pub type StitchEgraph<L, W = DefaultWeights> = egg::EGraph<L, StitchAnalysis<W>>;
+/// Type alias for the e-graph used throughout this codebase. Cost weights are
+/// runtime state on the analysis, so the egraph type is no longer parameterized
+/// by them.
+pub type StitchEgraph<L> = egg::EGraph<L, StitchAnalysis>;

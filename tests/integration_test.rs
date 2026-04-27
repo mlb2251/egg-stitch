@@ -1,7 +1,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{Op, OpChildren},
+    lang::{Op, OpChildren, Weights},
     pattern::PatternRecExpr,
     smc,
 };
@@ -14,7 +14,7 @@ fn fixtures_present() -> bool {
 }
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
-    let (egraph, root, _) = io::load_egraph(&args.input, args.rules.as_deref());
+    let (egraph, root, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
     smc::smc(egraph, root, args)
 }
 

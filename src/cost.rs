@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -19,7 +19,7 @@ pub struct CostCache {
 
 impl CostCache {
     /// Builds the cache from the egraph rooted at `root`.
-    pub fn new<L: StitchLanguage, W: Weights<L>>(egraph: &StitchEgraph<L, W>, root: Id) -> Self {
+    pub fn new<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> Self {
         let mut parents_of = FxHashMap::<Id, Vec<Id>>::default();
         for class in egraph.classes() {
             for enode in &class.nodes {
@@ -60,29 +60,27 @@ impl CostCache {
 }
 
 /// Returns the total cost: compressed corpus size plus the pattern's own size.
-pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>, F::Weights<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
+pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
     let cost = compute_size(egraph, root, cache, search_state, check_slow);
-    let pattern_size = compute_pattern_size(&search_state.pattern);
+    let pattern_size = compute_pattern_size(&search_state.pattern, &egraph.analysis.weights);
     cost + pattern_size
 }
 
-pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>) -> usize {
+pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, weights: &Weights) -> usize {
     let rec_expr: RecExpr<F::Apply<crate::lang::OpWithVar<O>>> = pattern.pattern.clone().into();
-    // Pattern AST cost is measured under the pattern-side language's weights;
-    // those are inherited from the program-side family via the same `W`.
-    compute_recexpr_size::<F::Apply<crate::lang::OpWithVar<O>>, F::Weights<crate::lang::OpWithVar<O>>>(&rec_expr, (rec_expr.len() - 1).into())
+    compute_recexpr_size::<F::Apply<crate::lang::OpWithVar<O>>>(&rec_expr, (rec_expr.len() - 1).into(), weights)
 }
 
-pub fn compute_recexpr_size<L: StitchLanguage, W: Weights<L>>(rec_expr: &RecExpr<L>, ptr: Id) -> usize {
+pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {
     let node = &rec_expr[ptr];
-    W::size(&node.discriminant()) as usize + node.children().iter().map(|&child| compute_recexpr_size::<L, W>(rec_expr, child)).sum::<usize>()
+    node.discriminant().size(weights) as usize + node.children().iter().map(|&child| compute_recexpr_size::<L>(rec_expr, child, weights)).sum::<usize>()
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
 ///
 /// Uses a work-queue ordered by postorder (children before parents) so each
 /// eclass is visited at most once.
-pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>, F::Weights<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
+pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
     for m in &search_state.matches {
         eclass_to_matches.insert(m.root_eclass, &m.substs);
@@ -101,9 +99,10 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         }
         let size_current = get_size(eclass, &size_under_rewrite);
         let mut best = size_current;
+        let weights = &egraph.analysis.weights;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
-                let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len()) as i64;
+                let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
                 let size_new: i64 = stub_size + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
                 if size_new < best {
                     best = size_new;
@@ -111,7 +110,7 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
             }
         }
         for enode in &egraph[eclass].nodes {
-            let size_no_rewrite: i64 = <F::Weights<O> as Weights<F::Apply<O>>>::size(&enode.discriminant()) as i64 + enode.children().iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
+            let size_no_rewrite: i64 = enode.discriminant().size(weights) as i64 + enode.children().iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
             if size_no_rewrite < best {
                 best = size_no_rewrite;
             }
@@ -137,7 +136,7 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 
 /// Clones the egraph and unions each match root with an `inv_0(args...)` node, then rebuilds.
 /// Used for validating `compute_size` and for extracting rewritten programs.
-pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>, F::Weights<O>>, search_state: &SearchState<F, O>) -> StitchEgraph<F::Apply<O>, F::Weights<O>> {
+pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> StitchEgraph<F::Apply<O>> {
     let mut egraph = egraph.clone();
     for m in &search_state.matches {
         for subst in &m.substs {
@@ -150,7 +149,7 @@ pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &St
 }
 
 /// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
-pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>, F::Weights<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
+pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
     let rewritten = build_rewritten_egraph(egraph, search_state);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
     rewritten[root].nodes[0].children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect()

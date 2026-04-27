@@ -137,7 +137,7 @@ pub enum LanguageChoice {
 /// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
 /// serialising programs to strings and re-parsing. The eclass arguments already carry
 /// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>, F::Weights<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
     let mut egraph = egraph;
     let mut root = root;
     let mut library = Vec::new();
@@ -163,7 +163,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let pat_size = cost::compute_pattern_size(&state.pattern);
+                let pat_size = cost::compute_pattern_size(&state.pattern, &result_egraph.analysis.weights);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
@@ -205,7 +205,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>, F::Weights<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>, F::Weights<O>>, Id, Vec<String>) {
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {
@@ -219,7 +219,8 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
     if rebuild {
-        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file);
+        let weights = egraph.analysis.weights;
+        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file, weights);
         (fresh_egraph, fresh_root, programs)
     } else {
         (egraph, root, programs)

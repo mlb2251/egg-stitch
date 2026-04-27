@@ -1,45 +1,8 @@
 use egg::{ENodeOrVar, FromOp, Id, Language, RecExpr};
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display, Formatter};
-use std::hash::Hash;
 
 use super::{Op, OpChildrenLanguage, StitchDisc, StitchLanguage, StitchOp, Weights};
-
-/// Per-enode cost configuration for a `LambdaCalc*` family. Implementors are
-/// plugged into `StitchAnalysis<W>` via the blanket `Weights<LambdaCalcLanguage<O>>`
-/// impl below; the language type itself is weight-agnostic.
-pub trait LambdaCalcWeights: 'static + Send + Sync + Clone + Default + Eq + Ord + Hash + Debug {
-    const LITERAL_COST: u32 = 1;
-    const APP_COST: u32;
-    const LAM_COST: u32;
-}
-
-/// Babble parity: every enode costs 1, matching `egg::AstSize`.
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default, PartialOrd, Ord)]
-pub struct AstWeights;
-impl LambdaCalcWeights for AstWeights {
-    const APP_COST: u32 = 1;
-    const LAM_COST: u32 = 1;
-}
-
-/// Zero-cost structural wrappers: an appified `(@ (@ (@ f a) b) c)` has the
-/// same AST size as the flat `(f a b c)`. Useful when the search shouldn't be
-/// biased against currying.
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default, PartialOrd, Ord)]
-pub struct UnitWeights;
-impl LambdaCalcWeights for UnitWeights {
-    const APP_COST: u32 = 0;
-    const LAM_COST: u32 = 0;
-}
-
-/// Stitch-compatible weights: 1 for lam/app, 100 for literals.
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default, PartialOrd, Ord)]
-pub struct StitchWeights;
-impl LambdaCalcWeights for StitchWeights {
-    const APP_COST: u32 = 1;
-    const LAM_COST: u32 = 1;
-    const LITERAL_COST: u32 = 100;
-}
 
 /// A lambda-calculus shaped language: every node is either a `Leaf` symbol
 /// (zero arity), a binary `App`, a unary `Lam`, or the corpus-root `Programs`.
@@ -77,8 +40,8 @@ impl<O: Display> Display for LambdaCalcDisc<O> {
 }
 
 impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
-    /// Structural unit cost: every variant counts as one node. Weight profiles
-    /// override this via `Weights<LambdaCalcLanguage<O>>`.
+    /// Structural unit cost: every variant counts as one node. Cost weighting
+    /// is applied by `size`.
     fn intrinsic_size(&self) -> u32 {
         match self {
             Self::Leaf(o) => o.intrinsic_size(),
@@ -92,6 +55,18 @@ impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
             _ => None,
         }
     }
+
+    fn size(&self, weights: &Weights) -> u32 {
+        match self {
+            Self::App => weights.app_cost,
+            Self::Lam => weights.lam_cost,
+            // `Programs` and leaves are both costed as literals: the corpus
+            // root occupies one slot like any leaf, so weight profiles that
+            // scale leaf cost (e.g. stitch) scale it too.
+            Self::Programs => weights.sym_cost,
+            Self::Leaf(o) => o.size(weights),
+        }
+    }
 }
 
 impl<O: StitchOp> StitchOp for LambdaCalcDisc<O> {
@@ -101,20 +76,6 @@ impl<O: StitchOp> StitchOp for LambdaCalcDisc<O> {
             "lam" => Self::Lam,
             "programs" => Self::Programs,
             _ => Self::Leaf(O::from_name(s)),
-        }
-    }
-}
-
-impl<W: LambdaCalcWeights, O: StitchOp> Weights<LambdaCalcLanguage<O>> for W {
-    fn size(disc: &LambdaCalcDisc<O>) -> u32 {
-        match disc {
-            LambdaCalcDisc::App => W::APP_COST,
-            LambdaCalcDisc::Lam => W::LAM_COST,
-            // `Programs` is intentionally costed as a literal: it occupies one
-            // slot in the corpus AST just like any leaf, and weight profiles
-            // that scale leaf cost (e.g. `StitchWeights`) should scale it too.
-            LambdaCalcDisc::Programs => W::LITERAL_COST,
-            LambdaCalcDisc::Leaf(o) => W::LITERAL_COST * o.intrinsic_size(),
         }
     }
 }

@@ -18,7 +18,7 @@ pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchS
         println!("{}", "top 5 particles before follow constraint:".dimmed());
         for &i in sorted_idx.iter().take(5) {
             let usage_matches: usize = states[i].matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
-            let pat_size = compute_pattern_size(&states[i].pattern);
+            let pat_size = compute_pattern_size(&states[i].pattern, &shared.egraph.analysis.weights);
             let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
             println!(
                 "  {} {} cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
@@ -59,7 +59,7 @@ pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchS
 pub fn print_top_particles<F: LanguageFamily, O: StitchOp>(states: &[SearchState<F, O>], weights: &[f64], shared: &SharedSearchData<F, O>, original_size: usize, get_cost: impl Fn(usize) -> usize) {
     for i in 0..min(5, states.len()) {
         let usage_matches: usize = states[i].matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
-        let pat_size = compute_pattern_size(&states[i].pattern);
+        let pat_size = compute_pattern_size(&states[i].pattern, &shared.egraph.analysis.weights);
         let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
         let cost_i = get_cost(i);
         let ratio = original_size as f64 / cost_i as f64;
