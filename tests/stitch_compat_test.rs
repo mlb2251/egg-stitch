@@ -197,6 +197,10 @@ fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--appify"], true);
 }
 
+/// Collapse an s-expression to a sorted multiset of its atoms, discarding
+/// structure. Used by `arith_rewrites` because plus is associative+commutative,
+/// so several distinct abstraction shapes are all equally valid solutions —
+/// comparing atom multisets accepts any of them without enumerating each tree.
 fn all_symbols_hack(x: &str) -> Vec<String> {
     let x = x.replace("(", " ").replace(")", " ");
     let mut symbols: Vec<_> = x.split_whitespace().map(|s| s.to_string()).collect();
@@ -226,16 +230,14 @@ fn abstraction_bodies(run: &Value) -> Vec<String> {
 }
 
 /// Returns the rewritten corpus from the last library entry, falling back to
-/// the original input programs when no abstraction was found.
-fn rewritten_corpus(run: &Value, input: &str) -> Vec<String> {
-    let library = run.get("library").and_then(|l| l.as_array());
-    if let Some(last) = library.and_then(|l| l.last()) {
-        if let Some(arr) = last.get("rewritten_programs").and_then(|p| p.as_array()) {
-            return arr.iter().filter_map(|s| s.as_str().map(String::from)).collect();
-        }
+/// the supplied original program list when no abstraction was found.
+fn rewritten_corpus(run: &Value, original: &[String]) -> Vec<String> {
+    if let Some(last) = run.get("library").and_then(|l| l.as_array()).and_then(|l| l.last())
+        && let Some(arr) = last.get("rewritten_programs").and_then(|p| p.as_array())
+    {
+        return arr.iter().filter_map(|s| s.as_str().map(String::from)).collect();
     }
-    let text = fs::read_to_string(input).unwrap_or_else(|e| panic!("read {input}: {e}"));
-    serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {input}: {e}"))
+    original.to_vec()
 }
 
 #[test]
@@ -244,6 +246,7 @@ fn arith_rewrites() {
     let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--appify", "--max-arity", "0"];
     let bf = run_backend("best-first", input, extra_args);
     let smc = run_backend("smc", input, extra_args);
+    let original: Vec<String> = serde_json::from_str(&fs::read_to_string(input).unwrap_or_else(|e| panic!("read {input}: {e}"))).unwrap_or_else(|e| panic!("parse {input}: {e}"));
     for r in &[bf, smc] {
         let bodies = abstraction_bodies(r);
         assert!(bodies.len() == 1, "expected exactly one abstraction");
@@ -251,7 +254,7 @@ fn arith_rewrites() {
         if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
             panic!("bad abstr: {:?}", abstr);
         }
-        let rewr = rewritten_corpus(r, input).iter().map(|x| all_symbols_hack(x)).collect::<Vec<_>>();
+        let rewr = rewritten_corpus(r, &original).iter().map(|x| all_symbols_hack(x)).collect::<Vec<_>>();
         let rewr = rewr.iter().map(|x| x.iter().filter(|x| **x != <&str as Into<String>>::into("+")).collect::<Vec<_>>()).collect::<Vec<_>>();
         assert_eq!(
             rewr,

@@ -128,7 +128,7 @@ impl<W: LambdaCalcWeights> LanguageFamily for LambdaCalcWith<W> {
     }
 
     fn stub_application_size<O: StitchOp>(name: &str, arity: usize) -> u32 {
-        O::from_name(name).intrinsic_size() + arity as u32 * W::APP_COST
+        LambdaCalcDisc::<O, W>::Leaf(O::from_name(name), PhantomData).intrinsic_size() + arity as u32 * W::APP_COST
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>, W> {

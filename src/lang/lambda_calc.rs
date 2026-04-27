@@ -87,6 +87,9 @@ impl<O: StitchDisc, W: LambdaCalcWeights> StitchDisc for LambdaCalcDisc<O, W> {
         match self {
             Self::App => W::APP_COST,
             Self::Lam => W::LAM_COST,
+            // `Programs` is intentionally costed as a literal: it occupies one
+            // slot in the corpus AST just like any leaf, and weight profiles
+            // that scale leaf cost (e.g. `StitchWeights`) should scale it too.
             Self::Programs => W::LITERAL_COST,
             Self::Leaf(o, _) => W::LITERAL_COST * o.intrinsic_size(),
         }
@@ -193,7 +196,7 @@ impl<O: StitchOp, W: LambdaCalcWeights> StitchLanguage for LambdaCalcLanguage<O,
 
 /// Rewrites `(f a b c)` → `(@ (@ (@ f a) b) c)`. The corpus root `(programs ...)`
 /// is preserved as a single multi-child `Programs` node rather than curried.
-pub fn appify_recexpr<O: StitchOp, W: LambdaCalcWeights>(src: &RecExpr<OpChildrenLanguage<O>>) -> RecExpr<LambdaCalcLanguage<O, W>> {
+fn appify_recexpr<O: StitchOp, W: LambdaCalcWeights>(src: &RecExpr<OpChildrenLanguage<O>>) -> RecExpr<LambdaCalcLanguage<O, W>> {
     let mut out = RecExpr::default();
     appify_walk(&mut out, src, src.as_ref().len() - 1);
     out
@@ -229,7 +232,7 @@ where
 }
 
 /// Inverse of `appify_recexpr`: collapse `App` chains back to flat `(f a b c)` form.
-pub fn unappify_recexpr<O: StitchOp, W: LambdaCalcWeights>(src: &RecExpr<LambdaCalcLanguage<O, W>>) -> RecExpr<OpChildrenLanguage<O>> {
+fn unappify_recexpr<O: StitchOp, W: LambdaCalcWeights>(src: &RecExpr<LambdaCalcLanguage<O, W>>) -> RecExpr<OpChildrenLanguage<O>> {
     let mut out = RecExpr::default();
     unappify_walk(&mut out, src, src.as_ref().len() - 1);
     out
