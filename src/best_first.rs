@@ -6,7 +6,7 @@ use std::collections::BinaryHeap;
 
 use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
-use crate::lang::{FamilyEgraph, LanguageFamily, StitchOp};
+use crate::lang::{LanguageFamily, StitchEgraph, StitchOp};
 use crate::search::{Action, SearchState, setup_search};
 
 /// How to order the best-first search heap.
@@ -65,7 +65,7 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     pub best_found_at: Option<usize>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
-    pub egraph: FamilyEgraph<F, O>,
+    pub egraph: StitchEgraph<F, O>,
     pub tree_log: Option<SearchTreeLog>,
 }
 
@@ -88,7 +88,7 @@ struct Node<F: LanguageFamily, O: StitchOp> {
 /// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
 /// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
 /// improvement" just means we're grinding through a less promising branch.)
-pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: FamilyEgraph<F, O>, root: egg::Id, args: &crate::Args) -> BestFirstResult<F, O> {
+pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F, O>, root: egg::Id, args: &crate::Args) -> BestFirstResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 

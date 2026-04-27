@@ -2,7 +2,7 @@ use colored::Colorize;
 
 use crate::cost::compute_cost;
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::lang::{FamilyEgraph, LanguageFamily, OpWithVar, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
@@ -30,7 +30,7 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
     pub original_size: usize,
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
-    pub egraph: FamilyEgraph<F, O>,
+    pub egraph: StitchEgraph<F, O>,
     pub debug_log: Option<DebugLog>,
 }
 
@@ -40,7 +40,7 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
 /// expansion step, identical patterns are deduplicated and their counts merged,
 /// so cost computation runs once per unique pattern instead of once per particle.
 #[allow(clippy::needless_range_loop)]
-pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: FamilyEgraph<F, O>, root: egg::Id, args: &crate::Args) -> SmcResult<F, O> {
+pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F, O>, root: egg::Id, args: &crate::Args) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
