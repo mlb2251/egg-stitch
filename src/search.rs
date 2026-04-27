@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
+use crate::lang::{FamilyEgraph, LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
@@ -27,7 +27,7 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for Action<F, O> {
 /// Shared read-only context passed to all search operations.
 #[derive(Debug)]
 pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
-    pub egraph: StitchEgraph<F, O>,
+    pub egraph: FamilyEgraph<F, O>,
     /// Root e-class of the corpus (the `(programs ...)` wrapper). Excluded
     /// from the initial match set so patterns can't be rooted there.
     pub root: Id,
@@ -232,7 +232,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
-pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F, O>, root: Id, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
+pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: FamilyEgraph<F, O>, root: Id, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
     let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
@@ -258,7 +258,7 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 
 /// Computes how many times each e-class appears in the fully-expanded corpus tree.
 /// Top-down pass: root gets count 1, then propagate to children of the best (first) enode.
-pub fn compute_usage_counts<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F, O>, root: Id) -> FxHashMap<Id, usize> {
+pub fn compute_usage_counts<L: crate::lang::StitchLanguage, W: crate::lang::Weights<L>>(egraph: &StitchEgraph<L, W>, root: Id) -> FxHashMap<Id, usize> {
     let mut counts = FxHashMap::<Id, usize>::default();
     counts.insert(root, 1);
     let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);

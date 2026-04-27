@@ -40,54 +40,43 @@ pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Deb
     }
 }
 
-/// Cost model. `W: Weights<S>` assigns a `size` to a structural classifier `S`.
-/// `S` is the family's O-independent variant tag (see `LanguageFamily::Structural`),
-/// so a single `Weights` impl applies across every leaf-op instantiation of the family.
+/// Per-language cost model. `W: Weights<L>` decides what `size` an enode contributes —
+/// the cost analysis stores this on each eclass.
 ///
-/// `DefaultWeights` is the universal fallback: every variant counts as 1.
-pub trait Weights<S>: 'static {
-    fn size(s: &S) -> u32;
+/// `DefaultWeights` is the universal fallback: every enode counts as 1.
+/// Languages that want non-uniform costs provide additional `Weights<L>` implementors.
+pub trait Weights<L: StitchLanguage>: 'static + Send + Sync + Clone + Default + Debug {
+    fn size(disc: &L::Discriminant) -> u32;
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct DefaultWeights;
 
-impl<S> Weights<S> for DefaultWeights {
-    fn size(_s: &S) -> u32 {
+impl<L: StitchLanguage> Weights<L> for DefaultWeights {
+    fn size(_disc: &L::Discriminant) -> u32 {
         1
     }
 }
 
-/// Egg analysis that tracks the minimum weighted AST size of each e-class.
-/// Generic over the family `F` and leaf-op `O` so it can dispatch through
-/// `F::structural` / `F::Weights` to compute per-enode size.
-pub struct StitchAnalysis<F, O>(PhantomData<fn() -> (F, O)>);
+/// Egg analysis that tracks the minimum AST size of each e-class, weighted by `W`.
+#[derive(Clone, Debug)]
+pub struct StitchAnalysis<W: 'static = DefaultWeights>(PhantomData<W>);
 
-impl<F, O> Default for StitchAnalysis<F, O> {
+impl<W: 'static> Default for StitchAnalysis<W> {
     fn default() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<F, O> Clone for StitchAnalysis<F, O> {
-    fn clone(&self) -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<F, O> Debug for StitchAnalysis<F, O> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("StitchAnalysis")
-    }
-}
-
-impl<F: LanguageFamily, O: StitchOp> Analysis<F::Apply<O>> for StitchAnalysis<F, O> {
+impl<L: StitchLanguage, W: Weights<L>> Analysis<L> for StitchAnalysis<W> {
     type Data = u32;
 
-    fn make(egraph: &mut egg::EGraph<F::Apply<O>, Self>, enode: &F::Apply<O>, _id: Id) -> Self::Data {
-        enode_size::<F, O>(enode) + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+    /// Computes the minimum AST size of a new enode as `W::size(op) + sum(children)`.
+    fn make(egraph: &mut egg::EGraph<L, Self>, enode: &L, _id: Id) -> Self::Data {
+        W::size(&enode.discriminant()) + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
     }
 
+    /// Keeps the minimum size when two e-classes are merged.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
         if from < *to {
             *to = from;
@@ -100,11 +89,11 @@ impl<F: LanguageFamily, O: StitchOp> Analysis<F::Apply<O>> for StitchAnalysis<F,
     }
 }
 
-/// Weighted size of a single enode under the family's cost model.
-pub fn enode_size<F: LanguageFamily, O: StitchOp>(enode: &F::Apply<O>) -> u32 {
-    F::Weights::size(&F::structural::<O>(&enode.discriminant()))
-}
+/// Type alias for the e-graph used throughout this codebase. Defaulting `W` to
+/// `DefaultWeights` keeps existing call sites — which only know `L` — working
+/// unchanged. Languages with multiple cost profiles specialize `W`.
+pub type StitchEgraph<L, W = DefaultWeights> = egg::EGraph<L, StitchAnalysis<W>>;
 
-/// Type alias for the e-graph used throughout this codebase, parameterized by
-/// language family `F` and leaf-op `O`.
-pub type StitchEgraph<F, O> = egg::EGraph<<F as LanguageFamily>::Apply<O>, StitchAnalysis<F, O>>;
+/// Egraph for a `LanguageFamily` instantiated at leaf-Op `O`. Saves repeating
+/// `StitchEgraph<F::Apply<O>, F::Weights<O>>` at every signature.
+pub type FamilyEgraph<F, O> = StitchEgraph<<F as LanguageFamily>::Apply<O>, <F as LanguageFamily>::Weights<O>>;

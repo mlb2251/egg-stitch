@@ -18,7 +18,7 @@ use egg::{Id, Language};
 
 pub use best_first::SearchPriority;
 
-use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp};
+use crate::lang::{FamilyEgraph, LanguageFamily, StitchLanguage, StitchOp};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -114,7 +114,7 @@ pub struct Args {
 /// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
 /// serialising programs to strings and re-parsing. The eclass arguments already carry
 /// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F, O>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: FamilyEgraph<F, O>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
     let mut egraph = egraph;
     let mut root = root;
     let mut library = Vec::new();
@@ -182,7 +182,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F, O>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F, O>, Id, Vec<String>) {
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: FamilyEgraph<F, O>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (FamilyEgraph<F, O>, Id, Vec<String>) {
     let mut egraph = egraph;
     for m in &state.matches {
         for subst in &m.substs {

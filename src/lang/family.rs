@@ -15,7 +15,7 @@ use super::{DefaultWeights, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgr
 /// (`OpChildrenLanguage`), but languages with structural variants beyond a single
 /// leaf-op slot can use a wrapper sum so the discriminant carries the variant tag.
 pub trait LanguageFamily: Clone + 'static {
-    /// Discriminant type for `Apply<O>`. Only needs `StitchDisc` (hash/eq/var
+    /// Discriminant type for `Apply<O>`. Only needs `StitchDisc` (hash/eq/size/var
     /// detection) — `from_name` is not required since the family knows how to
     /// build var leaves directly via `make_var`.
     type Discriminant<O: StitchOp>: StitchDisc;
@@ -23,18 +23,10 @@ pub trait LanguageFamily: Clone + 'static {
     /// The Language obtained by instantiating this family with leaf-Op `O`.
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Discriminant<O>>;
 
-    /// O-independent structural classifier used for cost. A single value of
-    /// `Structural` represents a structural variant of the family (e.g. `App`,
-    /// `Lam`, `Var`, `Leaf`) without committing to a particular leaf-op type.
-    /// This lets one `Weights` impl apply across every `Apply<O>`.
-    type Structural: 'static;
-
-    /// Cost model for this family. Operates on `Self::Structural`, so it never
-    /// has to be re-instantiated per leaf-op type.
-    type Weights: Weights<Self::Structural>;
-
-    /// Project a discriminant down to its O-independent structural classifier.
-    fn structural<O: StitchOp>(disc: &Self::Discriminant<O>) -> Self::Structural;
+    /// Cost model used by `StitchAnalysis` for this family's egraphs. Defaults to
+    /// `DefaultWeights` (every enode costs 1); families that ship multiple
+    /// cost profiles select among them here.
+    type Weights<O: StitchOp>: Weights<Self::Apply<O>>;
 
     /// Construct an enode from a discriminant op and a list of children. For
     /// families with fixed-arity structural variants, this dispatches on the
@@ -49,7 +41,7 @@ pub trait LanguageFamily: Clone + 'static {
 
     /// Add a `name(children...)` application to the egraph and return its Id.
     /// For families with binary `App` this builds a curried application chain.
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self, O>) -> Id;
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>, Self::Weights<O>>) -> Id;
 
     /// Weighted cost of the structural enodes added by `add_stub_application`
     /// for an application of the given `arity`, excluding the children's own
@@ -70,10 +62,7 @@ pub struct OpChildren;
 impl LanguageFamily for OpChildren {
     type Discriminant<O: StitchOp> = O;
     type Apply<O: StitchOp> = OpChildrenLanguage<O>;
-    type Structural = ();
-    type Weights = DefaultWeights;
-
-    fn structural<O: StitchOp>(_disc: &O) -> () {}
+    type Weights<O: StitchOp> = DefaultWeights;
 
     fn make<P: StitchOp>(op: P, kids: Vec<Id>) -> OpChildrenLanguage<P> {
         OpChildrenLanguage { op, children: kids }
@@ -83,12 +72,12 @@ impl LanguageFamily for OpChildren {
         f(op)
     }
 
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self, O>) -> Id {
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>, DefaultWeights>) -> Id {
         egraph.add(Self::make(O::from_name(name), children))
     }
 
     fn stub_application_size<O: StitchOp>(_arity: usize) -> u32 {
-        <DefaultWeights as Weights<()>>::size(&())
+        <DefaultWeights as Weights<OpChildrenLanguage<O>>>::size(&O::from_name("inv_0"))
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
