@@ -43,6 +43,14 @@ pub trait LanguageFamily: Clone + 'static {
     /// For families with binary `App` this builds a curried application chain.
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>, Self::Weights<O>>) -> Id;
 
+    /// Weighted cost of the structural enodes added by `add_stub_application`
+    /// for an application of the given `arity`, excluding the children's own
+    /// costs. For `OpChildren` this is the weight of a single enode; for a
+    /// curried-`App` family it is `arity` `App` nodes plus the leaf for the
+    /// function name. Must stay in sync with `add_stub_application` so that
+    /// `compute_size` matches the size analysis on the rebuilt egraph.
+    fn stub_application_size<O: StitchOp>(arity: usize) -> u32;
+
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
 }
@@ -66,6 +74,10 @@ impl LanguageFamily for OpChildren {
 
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>, DefaultWeights>) -> Id {
         egraph.add(Self::make(O::from_name(name), children))
+    }
+
+    fn stub_application_size<O: StitchOp>(_arity: usize) -> u32 {
+        <DefaultWeights as Weights<OpChildrenLanguage<O>>>::size(&O::from_name("inv_0"))
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
