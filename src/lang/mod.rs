@@ -93,3 +93,7 @@ impl<L: StitchLanguage, W: Weights<L>> Analysis<L> for StitchAnalysis<W> {
 /// `DefaultWeights` keeps existing call sites — which only know `L` — working
 /// unchanged. Languages with multiple cost profiles specialize `W`.
 pub type StitchEgraph<L, W = DefaultWeights> = egg::EGraph<L, StitchAnalysis<W>>;
+
+/// Egraph for a `LanguageFamily` instantiated at leaf-Op `O`. Saves repeating
+/// `StitchEgraph<F::Apply<O>, F::Weights<O>>` at every signature.
+pub type FamilyEgraph<F, O> = StitchEgraph<<F as LanguageFamily>::Apply<O>, <F as LanguageFamily>::Weights<O>>;
