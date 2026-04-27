@@ -22,7 +22,7 @@ pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O
 #[derive(Debug, Clone)]
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
-    pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
+    pub vars: Vec<Vec<Id>>,  // vars[k] = all RecExpr ids holding Var(k)
     pub var_depth: Vec<u32>, // var_depth[k] = pattern-internal binders enclosing ?#k
 }
 
@@ -99,11 +99,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         // Mixing depths would mean one occurrence sits under more pattern-internal
         // binders than the other, so substitution would need a binder-shift —
         // outside the canonical-form contract.
-        assert_eq!(
-            self.var_depth[keep_idx], self.var_depth[drop_idx],
-            "reuse across differing binder depths is not allowed (depths {} vs {})",
-            self.var_depth[keep_idx], self.var_depth[drop_idx]
-        );
+        assert_eq!(self.var_depth[keep_idx], self.var_depth[drop_idx], "reuse across differing binder depths is not allowed (depths {} vs {})", self.var_depth[keep_idx], self.var_depth[drop_idx]);
 
         let keep_name = var_node::<F, O>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
