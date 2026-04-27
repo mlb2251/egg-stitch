@@ -6,6 +6,7 @@ import time
 
 from . import STITCH_BIN, STITCH_DIR
 from .result import Result, ratio
+from .stackpath import save_run
 
 from s_expression_parser import parse, ParserConfig, Pair, nil
 
@@ -44,7 +45,7 @@ def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Res
         str(STITCH_BIN),
         f"data/cogsci/{domain}.json",
         f"-i{num_abstractions}",
-        "-a2",
+        f"-a{max_arity}",
         "--out",
         outfile,
         "--no-curried-bodies",
@@ -71,7 +72,7 @@ def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Res
         f"{a.get('name', f'fn_{i}')}: {a['body']}"
         for i, a in enumerate(data.get("abstractions", []))
     ]
-    return Result(
+    result = Result(
         method="stitch",
         domain=domain,
         initial_cost=initial_cost,
@@ -84,3 +85,6 @@ def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Res
             "num_abstractions": int(data.get("num_abstractions", len(library))),
         },
     )
+    config = {"domain": domain, "num_abstractions": num_abstractions, "max_arity": max_arity}
+    save_run(result.to_dict(), config, "stitch")
+    return result

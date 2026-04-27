@@ -12,14 +12,12 @@ from pathlib import Path
 
 import numpy as np
 
-from . import *
-from .babble import *
-from .egg_stitch import *
+from . import ALL_DOMAINS, rewrites_path
+from .babble import run_babble
+from .egg_stitch import run_ours
+from .folders import current_folder_path, set_folder
+from .stackpath import stackpathpush, stackpathpop, subgroup
 
-NUM_RUNS = 10
-
-# Order matches the Table 1 screenshot.
-TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -29,8 +27,6 @@ DOMAIN_LABELS = {
 
 
 DEFAULT_TABLE1_TITLE = "Table 1: Ours (SMC and Enum) vs Babble on benchmarks with domain-specific rewrites"
-
-MAX_ARITY = 2
 
 
 def table1(
@@ -42,19 +38,22 @@ def table1(
     num_abstractions: int = 1,
     rebuild_egraph: bool = False,
     folder_prefix: str = "table1",
+    max_arity: int = 2,
+    num_runs: int = 10,
+    domains: list[str] | None = None,
     output_name: str = "table1.json",
     title: str = DEFAULT_TABLE1_TITLE,
 ) -> Path:
-    """Run Enum, SMC, and babble on the four Table 1 domains with rewrites.
+    """Run Enum, SMC, and babble on ``domains`` with rewrites.
 
-    Collects one :class:`Result` per (method, domain) pair into a single
-    JSON in the current results folder and calls :func:`print_table1`.
-    ``num_abstractions`` is forwarded to our compressor so each run stacks
-    that many abstractions sequentially.
+    Defaults to all four cogsci domains. Collects one :class:`Result` per
+    (method, domain) pair into a single JSON in the current results folder
+    and calls :func:`print_table1`. ``num_abstractions`` is forwarded to our
+    compressor so each run stacks that many abstractions sequentially.
     """
-    assert all(d in ALL_DOMAINS for d in TABLE1_DOMAINS), "domain typo"
-    # Each run gets its own subfolder under viz/results/<folder_prefix>/ so the
-    # HTML viewer can enumerate them independently of other experiments.
+    if domains is None:
+        domains = ALL_DOMAINS
+    assert all(d in ALL_DOMAINS for d in domains), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "title": title,
@@ -63,35 +62,43 @@ def table1(
             "enum": {"num_steps": enum_num_steps},
             "num_abstractions": num_abstractions,
             "rebuild_egraph": rebuild_egraph,
-            "max_arity": MAX_ARITY,
+            "max_arity": max_arity,
         },
         "domains": {},
+        "num_runs": num_runs,
     }
 
-    for domain in TABLE1_DOMAINS:
+    for domain in domains:
         print(f"\n=== {domain} ===", flush=True)
+        stackpathpush(domain)
         enum_runs, smc_runs, babble_runs = [], [], []
         egraph_min = None
-        for i in range(NUM_RUNS):
-            print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY)
-            smc_res, _ = run_ours(
-                domain, "smc",
-                num_steps=smc_num_steps,
-                num_particles=smc_num_particles,
-                temperature=smc_temperature,
-                num_abstractions=num_abstractions,
-                rebuild_egraph=rebuild_egraph,
-                max_arity=MAX_ARITY,
-            )
-            babble_res = run_babble(domain, dsr=rewrites_path(domain), num_abstractions=num_abstractions, max_arity=MAX_ARITY)
+        for i in range(num_runs):
+            print(f"  run {i+1}/{num_runs}", flush=True)
+            stackpathpush(f"rep{i}")
+            with subgroup("best-first"):
+                enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=max_arity)
+            with subgroup("smc"):
+                smc_res, _ = run_ours(
+                    domain, "smc",
+                    num_steps=smc_num_steps,
+                    num_particles=smc_num_particles,
+                    temperature=smc_temperature,
+                    num_abstractions=num_abstractions,
+                    rebuild_egraph=rebuild_egraph,
+                    max_arity=max_arity,
+                )
+            with subgroup("babble"):
+                babble_res = run_babble(domain, dsr=rewrites_path(domain), num_abstractions=num_abstractions, max_arity=max_arity)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
+            stackpathpop()
         results["domains"][domain] = {
             "egraph_min_size": egraph_min,
             "runs": {"enum": enum_runs, "smc": smc_runs, "babble": babble_runs},
         }
+        stackpathpop()
 
     out_path = current_folder_path() / output_name
     with open(out_path, "w") as f:
@@ -127,9 +134,7 @@ def print_table1(path: str | Path) -> None:
     print(header_top)
     print(header_sub)
     print("-" * len(header_sub))
-    for domain in TABLE1_DOMAINS:
-        if domain not in domains:
-            continue
+    for domain in domains:
         d = domains[domain]
         runs = d.get("runs", {})
         label = DOMAIN_LABELS.get(domain, domain)

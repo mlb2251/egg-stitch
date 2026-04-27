@@ -3,7 +3,12 @@
 
 import sys
 import json
-from expts import *
+from expts import ALL_DOMAINS, egg_stitch, table1, table2
+from expts.stackpath import subgroup, stackpathiter
+from expts.stitch import run_stitch
+from expts.egg_stitch import run_ours
+from expts.babble import run_babble
+from expts import rewrites_path
 
 
 def dials_compress():
@@ -145,6 +150,114 @@ def dev():
     #     temperature=1000,
     #     max_arity=2,
     # )
+
+
+def table2_arity_scaling(num_runs = 2):
+    for max_arity in [0, 1, 2, 3]:
+        with subgroup(f"max_arity={max_arity}"):
+            table2(max_arity=max_arity, num_runs=num_runs)
+
+# def extra_arities(num_runs = 2):
+#     for max_arity in [4]:
+#         with subgroup(f"max_arity={max_arity}"):
+#             table2(max_arity=max_arity, num_runs=num_runs)
+
+# def extra_stitch_arities(num_runs = 2):
+#     for max_arity in stackpathiter([7, 8, 9]):
+#         for domain in stackpathiter(ALL_DOMAINS):
+#             stitch_config = dict(max_library_size=1, max_arity=max_arity)
+#             run_stitch(domain, **stitch_config)
+
+# def extra_us_arities(num_runs = 2):
+#     for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+#         for max_arity in stackpathiter([5, 6, 7, 8, 9], lambda x: f"max_arity={x}"):
+#             for domain in stackpathiter(ALL_DOMAINS):
+#                 smc_config = dict(num_steps=100, max_arity=max_arity, num_particles=1000, temperature=1000., rewrites=None)
+#                 enum_config = dict(num_steps=500, max_arity=max_arity, rewrites=None)
+#                 with subgroup("best-first"):
+#                     run_ours(domain, "best-first", **enum_config)
+#                 with subgroup("smc"):
+#                     run_ours(domain, "smc", **smc_config)
+
+def sweep_num_steps_enum(num_runs = 3):
+    for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+        for num_steps in stackpathiter([64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]):
+            for domain in stackpathiter(ALL_DOMAINS):
+                enum_config = dict(num_steps=num_steps, max_arity=2, rewrites=None)
+                run_ours(domain, "best-first", **enum_config)
+
+def sweep_num_particles_smc(num_runs = 3):
+    for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+        for num_particles in stackpathiter([4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]):
+            for domain in stackpathiter(ALL_DOMAINS):
+                smc_config = dict(num_steps=100, num_particles=num_particles, max_arity=2, rewrites=None)
+                run_ours(domain, "smc", **smc_config)
+
+
+def sweep_num_steps_smc(num_runs = 3):
+    for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+        for num_steps in stackpathiter([4, 8, 16, 32, 64, 128, 256, 512, 1024]):
+            for domain in stackpathiter(ALL_DOMAINS):
+                smc_config = dict(num_steps=num_steps, num_particles=1000, max_arity=2, rewrites=None)
+                run_ours(domain, "smc", **smc_config)
+
+
+    # stitch_config = dict(max_library_size=1, max_arity=2)
+    # smc_config = dict(num_steps=100, max_arity=2, num_particles=1000, temperature=1000., rewrites=None)
+    # enum_config = dict(num_steps=500, max_arity=2, rewrites=None)
+    # babble_config = dict(max_arity=2, dsr=None)
+
+    # for domain in stackpathiter(ALL_DOMAINS):
+    #     for i in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+    #         with subgroup("best-first"):
+    #             run_ours(domain, "best-first", **enum_config)
+    #         with subgroup("smc"):
+    #             run_ours(
+    #                 domain, "smc", **smc_config)
+    #         with subgroup("babble"):
+    #             run_babble(domain, **babble_config)
+    #         with subgroup("stitch"):
+    #             run_stitch(domain, **stitch_config)
+
+
+
+def quick_eval(num_runs = 3, domains=ALL_DOMAINS, num_steps=500, max_arity=1000, rewrites=True, **kwargs):
+    results = []
+    for rep in stackpathiter(range(num_runs), lambda i: f"rep{i}"):
+        for domain in stackpathiter(domains):
+            rewrites_file = rewrites_path(domain) if rewrites else None
+            res, _ = run_ours(domain, "best-first", num_steps=num_steps, max_arity=max_arity, rewrites=rewrites_file, **kwargs)
+            results.append(dict(domain=domain, elapsed_secs=res.elapsed_secs, compression_ratio=res.compression_ratio, best_history=res.extra.get("best_history") or []))
+    
+    for domain in domains:
+        domain_results = [r for r in results if r["domain"] == domain]
+        mean_time = sum(r["elapsed_secs"] for r in domain_results) / len(domain_results)
+        mean_compression_ratio = sum(r["compression_ratio"] for r in domain_results) / len(domain_results)
+        print(f"{domain} [{mean_time:.2f}s] ({mean_compression_ratio:0.2f}x): ")
+        for res in domain_results:
+            h = res["best_history"][-1]
+            print(f"{res["elapsed_secs"]:.2f} (t={h['elapsed_secs']:7.3f}s  exp={h['expansion']:>6}  cost={h['cost']:>6}  {h['pattern']}")
+        print()
+
+def no_bound():
+    quick_eval(no_opt_lower_bound=True)
+
+
+def quick_check():
+    quick_eval(num_runs=1, check_slow=True)
+
+def quick_single(domain="nuts-bolts", **kwargs):
+    quick_eval(domains=[domain], num_runs=1, num_steps=5000, **kwargs)
+
+def quick_samply(domain="nuts-bolts", **kwargs):
+    quick_eval(domains=[domain], num_runs=1, num_steps=1000000, samply=True, **kwargs)
+
+def quick_samply_norewrite(domain="nuts-bolts", **kwargs):
+    quick_samply(rewrites=False, **kwargs)
+
+def quick_full_enum(domain="nuts-bolts"):
+    quick_eval(domains=[domain], num_runs=1, num_steps=1000000, rewrites=False)
+
 
 
 

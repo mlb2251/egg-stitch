@@ -48,7 +48,9 @@ fn main() {
 
 /// Loads the egraph and runs the multi-abstraction search loop, parameterized by the language family.
 fn run<F: egg_stitch::lang::LanguageFamily>(args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, usize) {
+    let load_start = std::time::Instant::now();
     let (egraph, root, cost_before_rewrites) = io::load_egraph::<F::Apply<Op>>(&args.input, args.rules.as_deref(), args.weights);
+    println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
     let (library, original_size, final_cost) = multiple_step_search::<F, Op>(egraph, root, args);
     (library, original_size, final_cost, cost_before_rewrites)
 }

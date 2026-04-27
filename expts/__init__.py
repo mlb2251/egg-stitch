@@ -9,7 +9,8 @@ session-wide folder helpers (``current_folder``, ``new_folder``,
 import subprocess
 from pathlib import Path
 
-from .folders import *
+from .folders import current_folder, current_folder_path, new_folder, set_folder, unique_path
+from .stackpath import current_dir, stackpathpush, stackpathpop, subgroup, stackpath, save_run
 
 
 # Project roots for the three compressors we call out to.

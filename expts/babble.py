@@ -5,6 +5,7 @@ import time
 
 from . import BABBLE_BIN, BABBLE_DIR
 from .result import Result, ratio
+from .stackpath import save_run
 
 
 def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1, max_arity: int) -> Result:
@@ -22,7 +23,7 @@ def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1
     cmd = [
         str(BABBLE_BIN),
         f"harness/data/cogsci/{domain}.bab",
-        "--beams=400", "--lps=1", f"--rounds={num_abstractions}", "--max-arity=2",
+        "--beams=400", "--lps=1", f"--rounds={num_abstractions}", f"--max-arity={max_arity}",
         f"--output={outfile}",
     ]
     if dsr is not None:
@@ -45,7 +46,7 @@ def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1
             name = l.strip().removesuffix(" =")
             body = lines[i + 1].strip() if i + 1 < len(lines) else "?"
             libs.append(f"{name}: {body}")
-    return Result(
+    result = Result(
         method="babble",
         domain=domain,
         initial_cost=initial_cost,
@@ -59,3 +60,6 @@ def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1
             "dsr": dsr,
         },
     )
+    config = {"domain": domain, "dsr": dsr, "max_arity": max_arity}
+    save_run(result.to_dict(), config, "babble")
+    return result

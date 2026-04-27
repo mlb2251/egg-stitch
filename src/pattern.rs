@@ -103,6 +103,40 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     }
 }
 
+/// Recursively compare two nodes for structural equality. Var-vs-Node distinction
+/// is folded into `discriminant()` (via `OpWithVar`), so a single discriminant
+/// equality check + recursion on children suffices.
+fn nodes_eq<F: LanguageFamily, O: StitchOp>(a: &PatternRecExpr<F, O>, b: &PatternRecExpr<F, O>, ai: Id, bi: Id) -> bool {
+    let (na, nb) = (&a[ai], &b[bi]);
+    na.discriminant() == nb.discriminant() && na.children().len() == nb.children().len() && na.children().iter().zip(nb.children()).all(|(&ca, &cb)| nodes_eq::<F, O>(a, b, ca, cb))
+}
+
+/// Recursively hash a node by tree structure.
+fn hash_node<F: LanguageFamily, O: StitchOp, H: std::hash::Hasher>(expr: &PatternRecExpr<F, O>, id: Id, state: &mut H) {
+    use std::hash::Hash;
+    let n = &expr[id];
+    n.discriminant().hash(state);
+    for &child in n.children() {
+        hash_node::<F, O, H>(expr, child, state);
+    }
+}
+
+/// The underlying vec layout depends on expansion order and is not canonical.
+/// These impls recurse from the root (Id(0)) using canonical var names instead.
+impl<F: LanguageFamily, O: StitchOp> PartialEq for Pattern<F, O> {
+    fn eq(&self, other: &Self) -> bool {
+        nodes_eq::<F, O>(&self.pattern, &other.pattern, Id::from(0), Id::from(0))
+    }
+}
+
+impl<F: LanguageFamily, O: StitchOp> Eq for Pattern<F, O> {}
+
+impl<F: LanguageFamily, O: StitchOp> std::hash::Hash for Pattern<F, O> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_node::<F, O, H>(&self.pattern, Id::from(0), state);
+    }
+}
+
 impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for Pattern<F, O> {
     /// Routes through `StitchLanguage::display_recexpr` so language-specific
     /// pretty-printers (e.g. unappify) take effect on Pattern displays.

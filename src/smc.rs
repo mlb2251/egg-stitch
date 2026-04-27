@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use crate::cost::compute_cost;
+use crate::cost::{CostScratch, compute_cost};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::{LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
@@ -45,7 +45,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = args.num_particles;
-    let num_steps = args.num_steps;
+    let num_steps = args.num_steps.expect("--num-steps is required for SMC search");
     let temperature = args.temperature;
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;
@@ -58,6 +58,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
     let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared), num_particles)];
+    let mut scratch = CostScratch::new(&shared.egraph);
 
     for step in 0..num_steps {
         // Expand each (state, mult) group into `mult` independent random expansions,
@@ -77,7 +78,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
         }
         drop(dedup);
 
-        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, &cost_cache, s, shared.check_slow)).collect();
+        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
 
         for (i, cost) in costs.iter().enumerate() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);

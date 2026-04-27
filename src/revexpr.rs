@@ -12,6 +12,11 @@ impl<L: egg::Language> RevExpr<L> {
     pub fn new(nodes: Vec<L>) -> Self {
         Self { nodes }
     }
+
+    /// The root id (always 0 for `RevExpr`).
+    pub fn root(&self) -> egg::Id {
+        egg::Id::from(0)
+    }
 }
 
 /// Reverses the nodes in the vector of nodes and updates the children ids to point to the correct nodes

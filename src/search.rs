@@ -6,6 +6,48 @@ use egg::{Id, Language};
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
+
+/// Tracks already-explored canonical patterns to dedupe successors during
+/// enumeration. Also accumulates hit count and time spent so the host search
+/// loop can report stats. Pass as `Option<&mut SeenTracker>` — `None` disables
+/// the check entirely.
+pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
+    set: FxHashSet<Pattern<F, O>>,
+    pub hits: usize,
+    pub time: Duration,
+}
+
+impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
+    fn default() -> Self {
+        Self {
+            set: FxHashSet::default(),
+            hits: 0,
+            time: Duration::ZERO,
+        }
+    }
+}
+
+impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Number of distinct patterns recorded.
+    pub fn len(&self) -> usize {
+        self.set.len()
+    }
+    /// Records `pattern` if new; returns `true` if it was already present
+    /// (caller should skip this successor).
+    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>) -> bool {
+        let t = Instant::now();
+        let already_present = !self.set.insert(pattern);
+        self.time += t.elapsed();
+        if already_present {
+            self.hits += 1;
+        }
+        already_present
+    }
+}
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
 /// with a specific enode shape, or unifying two existing variables.
@@ -49,6 +91,13 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     pub pattern: Pattern<F, O>,
     // each match represents a different eclass at which `pattern` can be rooted
     pub matches: Vec<MatchAtEClass>,
+    /// Cached `sum(m.substs.len() for m in matches)`.
+    pub num_substs: usize,
+}
+
+/// Computes the total number of substitutions across all matches.
+fn total_substs(matches: &[MatchAtEClass]) -> usize {
+    matches.iter().map(|m| m.substs.len()).sum()
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
@@ -85,7 +134,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if !reuse_candidates.is_empty() {
                 let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx].0;
-                self.reuse(var_idx, candidate_var_idx);
+                self.pattern.reuse(var_idx, candidate_var_idx);
+                self.subset_matches_reuse(var_idx, candidate_var_idx);
                 return;
             }
         }
@@ -94,25 +144,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let node_idx = rand::rng().random_range(0..target_eclass.len());
         let target_node = &target_eclass.nodes[node_idx];
 
-        self.expand(var_idx, target_node, shared);
+        self.pattern.expand(var_idx, target_node);
+        self.subset_matches(var_idx, target_node, shared);
     }
 
     /// Check if this particle's pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
         let mut var_bindings = HashMap::new();
         crate::follow::check_follow::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
-    }
-
-    /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
-    pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
-        self.pattern.expand(var_idx, target);
-        self.subset_matches(var_idx, target, shared);
-    }
-
-    /// Merges two pattern variables and filters matches to those where both point to the same e-class.
-    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
-        self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx);
     }
 
     /// Updates all matches by transforming each substitution via the given closure,
@@ -127,6 +166,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             m.substs = new_substs;
         }
         self.matches.retain(|m| !m.substs.is_empty());
+        self.num_substs = total_substs(&self.matches);
     }
 
     /// Filters matches to those where `var_idx` can be expanded with `target`, updating substitutions.
@@ -166,10 +206,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
     pub fn new(shared: &SharedSearchData<F, O>) -> Self {
-        Self {
-            pattern: Pattern::single_var(),
-            matches: identity_matches(&shared.egraph, shared.root),
-        }
+        let matches = identity_matches(&shared.egraph, shared.root);
+        let num_substs = total_substs(&matches);
+        Self { pattern: Pattern::single_var(), matches, num_substs }
     }
 
     /// Enumerates every successor state reachable in one `expand` or `reuse` step.
@@ -179,50 +218,76 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// one child per shape. Reuse candidates: for every pair `(i, j)` with `i < j`,
     /// emit a child if some match has `subst.vars[i] == subst.vars[j]`. Children whose
     /// match set becomes empty after filtering are dropped.
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>) -> Vec<(Action<F, O>, SearchState<F, O>)> {
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, mut seen: Option<&mut SeenTracker<F, O>>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F, O>, SearchState<F, O>)> {
         let mut out = Vec::new();
 
+        // check for variable reuse
+        let n = self.pattern.vars.len();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
+                if unifiable {
+                    let mut new_pattern = self.pattern.clone();
+                    new_pattern.reuse(i, j);
+                    if let Some(s) = seen.as_deref_mut()
+                        && s.check_and_insert(new_pattern.clone())
+                    {
+                        continue;
+                    }
+                    let mut child = SearchState {
+                        pattern: new_pattern,
+                        matches: self.matches.clone(),
+                        num_substs: self.num_substs,
+                    };
+                    child.subset_matches_reuse(i, j);
+                    assert!(!child.matches.is_empty());
+                    let action = Action::Reuse { keep: i, drop: j };
+                    let is_dominant = child.num_substs == self.num_substs;
+                    if opt_dominance_reuse && is_dominant {
+                        *dominance_hits += 1;
+                        return vec![(action, child)];
+                    }
+                    out.push((action, child));
+                }
+            }
+        }
+
+        // check for literal expansion
         for var_idx in 0..self.pattern.vars.len() {
-            let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
+            let mut seen_shapes: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
                         let key = (node.discriminant(), node.children().len());
-                        if seen.insert(key) {
+                        if seen_shapes.insert(key) {
                             shapes.push(node.clone());
                         }
                     }
                 }
             }
             for shape in shapes {
-                let mut child = self.clone();
-                child.expand(var_idx, &shape, shared);
-                if !child.matches.is_empty() {
-                    out.push((
-                        Action::Expand {
-                            var_idx,
-                            op: shape.discriminant(),
-                            arity: shape.children().len(),
-                        },
-                        child,
-                    ));
+                let mut new_pattern = self.pattern.clone();
+                new_pattern.expand(var_idx, &shape);
+                if let Some(s) = seen.as_deref_mut()
+                    && s.check_and_insert(new_pattern.clone())
+                {
+                    continue;
                 }
-            }
-        }
-
-        let n = self.pattern.vars.len();
-        for i in 0..n {
-            for j in (i + 1)..n {
-                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
-                if unifiable {
-                    let mut child = self.clone();
-                    child.reuse(i, j);
-                    if !child.matches.is_empty() {
-                        out.push((Action::Reuse { keep: i, drop: j }, child));
-                    }
-                }
+                let mut child = SearchState {
+                    pattern: new_pattern,
+                    matches: self.matches.clone(),
+                    num_substs: self.num_substs,
+                };
+                child.subset_matches(var_idx, &shape, shared);
+                assert!(!child.matches.is_empty());
+                let action = Action::Expand {
+                    var_idx,
+                    op: shape.discriminant(),
+                    arity: shape.children().len(),
+                };
+                out.push((action, child));
             }
         }
 
@@ -246,7 +311,8 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Appl
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared);
-    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &initial, shared.check_slow);
+    let mut scratch = crate::cost::CostScratch::new(&shared.egraph);
+    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &mut scratch, &initial, shared.check_slow);
     (shared, cache, original_size)
 }
 

@@ -12,19 +12,16 @@ from pathlib import Path
 
 import numpy as np
 
-from . import *
-from .babble import *
-from .egg_stitch import *
-from .stitch import *
-from .table1 import TABLE1_DOMAINS, DOMAIN_LABELS, NUM_RUNS
-
-# Reuse the Table 1 domain list/labels so the HTML viewer sees the same order.
-TABLE2_DOMAINS = TABLE1_DOMAINS
+from . import ALL_DOMAINS, rewrites_path
+from .babble import run_babble
+from .egg_stitch import run_ours
+from .stitch import run_stitch
+from .folders import current_folder_path, set_folder
+from .stackpath import stackpathpush, stackpathpop, subgroup
+from .table1 import DOMAIN_LABELS
 
 
 DEFAULT_TABLE2_TITLE = "Table 2: Ours (SMC and Enum) vs Babble vs Stitch on benchmarks without DSRs"
-
-MAX_ARITY = 2
 
 
 def table2(
@@ -36,15 +33,20 @@ def table2(
     num_abstractions: int = 1,
     rebuild_egraph: bool = False,
     folder_prefix: str = "table2",
+    max_arity: int = 2,
+    num_runs: int = 10,
+    domains: list[str] | None = None,
     output_name: str = "table2.json",
     title: str = DEFAULT_TABLE2_TITLE,
 ) -> Path:
-    """Run Enum, SMC, babble, and Stitch on the four domains with no DSRs.
+    """Run Enum, SMC, babble, and Stitch on ``domains`` with no DSRs.
 
     ``num_abstractions`` is forwarded to every compressor so each run
     stacks that many abstractions sequentially.
     """
-    assert all(d in ALL_DOMAINS for d in TABLE2_DOMAINS), "domain typo"
+    if domains is None:
+        domains = ALL_DOMAINS
+    assert all(d in ALL_DOMAINS for d in domains), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "title": title,
@@ -53,36 +55,45 @@ def table2(
             "enum": {"num_steps": enum_num_steps},
             "num_abstractions": num_abstractions,
             "rebuild_egraph": rebuild_egraph,
-            "max_arity": MAX_ARITY,
+            "max_arity": max_arity,
         },
         "domains": {},
+        "num_runs": num_runs,
     }
 
-    for domain in TABLE2_DOMAINS:
+    for domain in domains:
         print(f"\n=== {domain} ===", flush=True)
+        stackpathpush(domain)
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
-        for i in range(NUM_RUNS):
-            print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY)
-            smc_res, _ = run_ours(
-                domain, "smc",
-                num_steps=smc_num_steps,
-                num_particles=smc_num_particles,
-                temperature=smc_temperature,
-                rewrites=None,
-                num_abstractions=num_abstractions,
-                rebuild_egraph=rebuild_egraph,
-                max_arity=MAX_ARITY,
-            )
-            babble_res = run_babble(domain, num_abstractions=num_abstractions, max_arity=MAX_ARITY)
-            stitch_res = run_stitch(domain, num_abstractions=num_abstractions, max_arity=MAX_ARITY)
+        for i in range(num_runs):
+            print(f"  run {i+1}/{num_runs}", flush=True)
+            stackpathpush(f"rep{i}")
+            with subgroup("best-first"):
+                enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=max_arity)
+            with subgroup("smc"):
+                smc_res, _ = run_ours(
+                    domain, "smc",
+                    num_steps=smc_num_steps,
+                    num_particles=smc_num_particles,
+                    temperature=smc_temperature,
+                    rewrites=None,
+                    num_abstractions=num_abstractions,
+                    rebuild_egraph=rebuild_egraph,
+                    max_arity=max_arity,
+                )
+            with subgroup("babble"):
+                babble_res = run_babble(domain, num_abstractions=num_abstractions, max_arity=max_arity)
+            with subgroup("stitch"):
+                stitch_res = run_stitch(domain, num_abstractions=num_abstractions, max_arity=max_arity)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
             stitch_runs.append(stitch_res.to_dict())
+            stackpathpop()
         results["domains"][domain] = {
             "runs": {"enum": enum_runs, "smc": smc_runs, "babble": babble_runs, "stitch": stitch_runs},
         }
+        stackpathpop()
 
     out_path = current_folder_path() / output_name
     with open(out_path, "w") as f:
@@ -118,9 +129,7 @@ def print_table2(path: str | Path) -> None:
     print(header_top)
     print(header_sub)
     print("-" * len(header_sub))
-    for domain in TABLE2_DOMAINS:
-        if domain not in domains:
-            continue
+    for domain in domains:
         d = domains[domain]
         runs = d.get("runs", {})
         label = DOMAIN_LABELS.get(domain, domain)

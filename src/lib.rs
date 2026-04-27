@@ -10,6 +10,7 @@ pub mod math;
 pub mod pattern;
 pub mod results;
 pub mod revexpr;
+pub mod rewrite;
 pub mod search;
 pub mod smc;
 
@@ -53,9 +54,15 @@ pub struct Args {
     #[arg(long, default_value_t = 10_000)]
     pub num_particles: usize,
 
-    /// Number of SMC steps.
-    #[arg(long, default_value_t = 1000)]
-    pub num_steps: usize,
+    /// Number of search steps (SMC steps, or best-first heap pops).
+    /// Optional for best-first; if omitted you should provide --time-limit instead.
+    #[arg(long)]
+    pub num_steps: Option<usize>,
+
+    /// Wall-clock time limit in seconds for best-first search.
+    /// At least one of --num-steps or --time-limit must be provided for best-first.
+    #[arg(long)]
+    pub time_limit: Option<f64>,
 
     /// Softmax temperature for resampling weights.
     #[arg(long, default_value_t = 100.0)]
@@ -93,6 +100,20 @@ pub struct Args {
     /// rather than unioning fn_N enodes into the existing egraph.
     #[arg(long, default_value_t = false)]
     pub rebuild_egraph: bool,
+
+    /// Disable lower-bound pruning of best-first children (on by default).
+    #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
+    pub opt_lower_bound: bool,
+
+    /// Disable the `seen` set in best-first search (skip dedup check and insert).
+    #[arg(long, default_value_t = false)]
+    pub no_seen: bool,
+
+    /// Disable dominance pruning for the reuse branch (on by default).
+    /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
+    /// reuse as a singleton successor (no cost check — sound by construction).
+    #[arg(long = "no-opt-dominance-reuse", action = clap::ArgAction::SetFalse)]
+    pub opt_dominance_reuse: bool,
 
     /// Path to write JSON output.
     #[arg(short, long)]
@@ -144,14 +165,14 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     let mut final_cost = None;
 
     for abstraction_idx in 0..args.num_abstractions {
-        let (best, iter_original_size, best_found_at, num_steps_run, result_egraph) = match args.search {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_egraph, best_history) = match args.search {
             SearchKind::Smc => {
                 let r = smc::smc::<F, O>(egraph, root, args);
-                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, None)
             }
             SearchKind::BestFirst => {
                 let r = best_first::best_first(egraph, root, args);
-                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph)
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph, Some(r.best_history))
             }
         };
 
@@ -180,6 +201,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                     num_steps_run,
                     num_expansions: best_found_at.map(|n| n + 1),
                     best_iteration: best_found_at,
+                    best_history,
                     rewritten_programs,
                 });
 
