@@ -1,6 +1,6 @@
 use egg::Id;
 
-use super::{OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
+use super::{DefaultWeights, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
 /// A type-level type constructor `L<_>` for a language family.
 ///
@@ -23,6 +23,11 @@ pub trait LanguageFamily: Clone + 'static {
     /// The Language obtained by instantiating this family with leaf-Op `O`.
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Discriminant<O>>;
 
+    /// Cost model used by `StitchAnalysis` for this family's egraphs. Defaults to
+    /// `DefaultWeights` (size = `intrinsic_size`); families that ship multiple
+    /// cost profiles select among them here.
+    type Weights<O: StitchOp>: Weights<Self::Apply<O>>;
+
     /// Construct an enode from a discriminant op and a list of children. For
     /// families with fixed-arity structural variants, this dispatches on the
     /// variant + arity.
@@ -36,7 +41,7 @@ pub trait LanguageFamily: Clone + 'static {
 
     /// Add a `name(children...)` application to the egraph and return its Id.
     /// For families with binary `App` this builds a curried application chain.
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>, Self::Weights<O>>) -> Id;
 
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
@@ -49,6 +54,7 @@ pub struct OpChildren;
 impl LanguageFamily for OpChildren {
     type Discriminant<O: StitchOp> = O;
     type Apply<O: StitchOp> = OpChildrenLanguage<O>;
+    type Weights<O: StitchOp> = DefaultWeights;
 
     fn make<P: StitchOp>(op: P, kids: Vec<Id>) -> OpChildrenLanguage<P> {
         OpChildrenLanguage { op, children: kids }
@@ -58,7 +64,7 @@ impl LanguageFamily for OpChildren {
         f(op)
     }
 
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>, DefaultWeights>) -> Id {
         egraph.add(Self::make(O::from_name(name), children))
     }
 
