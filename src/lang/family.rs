@@ -24,7 +24,7 @@ pub trait LanguageFamily: Clone + 'static {
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Discriminant<O>>;
 
     /// Cost model used by `StitchAnalysis` for this family's egraphs. Defaults to
-    /// `DefaultWeights` (size = `intrinsic_size`); families that ship multiple
+    /// `DefaultWeights` (every enode costs 1); families that ship multiple
     /// cost profiles select among them here.
     type Weights<O: StitchOp>: Weights<Self::Apply<O>>;
 

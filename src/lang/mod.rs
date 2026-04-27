@@ -43,9 +43,8 @@ pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Deb
 /// Per-language cost model. `W: Weights<L>` decides what `size` an enode contributes —
 /// the cost analysis stores this on each eclass.
 ///
-/// `DefaultWeights` is the universal fallback: it just calls
-/// `StitchDisc::intrinsic_size`. Languages that want multiple cost regimes
-/// provide additional `Weights<L>` implementors.
+/// `DefaultWeights` is the universal fallback: every enode counts as 1.
+/// Languages that want non-uniform costs provide additional `Weights<L>` implementors.
 pub trait Weights<L: StitchLanguage>: 'static + Send + Sync + Clone + Default + Debug {
     fn size(disc: &L::Discriminant) -> u32;
 }
@@ -54,8 +53,8 @@ pub trait Weights<L: StitchLanguage>: 'static + Send + Sync + Clone + Default + 
 pub struct DefaultWeights;
 
 impl<L: StitchLanguage> Weights<L> for DefaultWeights {
-    fn size(disc: &L::Discriminant) -> u32 {
-        disc.intrinsic_size()
+    fn size(_disc: &L::Discriminant) -> u32 {
+        1
     }
 }
 

@@ -7,10 +7,6 @@ use std::hash::Hash;
 /// pattern-var detection. Doesn't require parsing from a string, so structural
 /// discriminants and leaf ops both fit.
 pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 'static {
-    /// The intrinsic size of this operator, used for AST size analysis.
-    fn intrinsic_size(&self) -> u32 {
-        1
-    }
     /// If this op represents a pattern variable, returns it. Default: not a var.
     /// Var-aware op types (`OpWithVar` and wrappers around it) override.
     fn as_var(&self) -> Option<egg::Var> {

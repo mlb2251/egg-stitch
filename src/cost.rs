@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp, Weights};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -68,12 +68,14 @@ pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 
 pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>) -> usize {
     let rec_expr: RecExpr<F::Apply<crate::lang::OpWithVar<O>>> = pattern.pattern.clone().into();
-    compute_recexpr_size(&rec_expr, (rec_expr.len() - 1).into())
+    // Pattern AST cost is measured under the pattern-side language's weights;
+    // those are inherited from the program-side family via the same `W`.
+    compute_recexpr_size::<F::Apply<crate::lang::OpWithVar<O>>, F::Weights<crate::lang::OpWithVar<O>>>(&rec_expr, (rec_expr.len() - 1).into())
 }
 
-pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id) -> usize {
+pub fn compute_recexpr_size<L: StitchLanguage, W: Weights<L>>(rec_expr: &RecExpr<L>, ptr: Id) -> usize {
     let node = &rec_expr[ptr];
-    node.discriminant().intrinsic_size() as usize + node.children().iter().map(|&child| compute_recexpr_size(rec_expr, child)).sum::<usize>()
+    W::size(&node.discriminant()) as usize + node.children().iter().map(|&child| compute_recexpr_size::<L, W>(rec_expr, child)).sum::<usize>()
 }
 
 /// Computes the minimum corpus size achievable by applying the pattern as a rewrite.
@@ -87,7 +89,10 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
     }
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64) };
-    let inv_op_size = O::from_name("inv_0").intrinsic_size() as i64;
+    // Cost of the synthetic `inv_0(args...)` head. Currently 1 since `OpChildren`
+    // adds a single enode; families with multi-enode stubs (e.g. curried `App`
+    // chains) will need a per-arity helper on `LanguageFamily`.
+    let inv_op_size: i64 = 1;
 
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
@@ -109,7 +114,7 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
             }
         }
         for enode in &egraph[eclass].nodes {
-            let size_no_rewrite: i64 = enode.discriminant().intrinsic_size() as i64 + enode.children().iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
+            let size_no_rewrite: i64 = <F::Weights<O> as Weights<F::Apply<O>>>::size(&enode.discriminant()) as i64 + enode.children().iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
             if size_no_rewrite < best {
                 best = size_no_rewrite;
             }
