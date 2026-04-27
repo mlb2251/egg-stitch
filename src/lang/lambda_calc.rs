@@ -40,15 +40,6 @@ impl<O: Display> Display for LambdaCalcDisc<O> {
 }
 
 impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
-    /// Structural unit cost: every variant counts as one node. Cost weighting
-    /// is applied by `size`.
-    fn intrinsic_size(&self) -> u32 {
-        match self {
-            Self::Leaf(o) => o.intrinsic_size(),
-            _ => 1,
-        }
-    }
-
     fn as_var(&self) -> Option<egg::Var> {
         match self {
             Self::Leaf(o) => o.as_var(),
@@ -63,7 +54,7 @@ impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
             // `Programs` and leaves are both costed as literals: the corpus
             // root occupies one slot like any leaf, so weight profiles that
             // scale leaf cost (e.g. stitch) scale it too.
-            Self::Programs => weights.sym_cost,
+            Self::Programs => weights.sym_var_cost,
             Self::Leaf(o) => o.size(weights),
         }
     }

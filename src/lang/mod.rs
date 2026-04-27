@@ -51,10 +51,9 @@ pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Deb
 /// or stitch compatibility (`--sym-cost 100`).
 #[derive(clap::Args, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Weights {
-    /// Multiplier applied to a leaf's `intrinsic_size`. Also used for the
-    /// `programs` root node in `LambdaCalc`.
+    /// For symbols and variables
     #[arg(long, default_value_t = 1)]
-    pub sym_cost: u32,
+    pub sym_var_cost: u32,
     /// Cost of an `App` enode in `LambdaCalc`. Unused for `OpChildren`.
     #[arg(long, default_value_t = 1)]
     pub app_cost: u32,
@@ -65,7 +64,7 @@ pub struct Weights {
 
 impl Default for Weights {
     fn default() -> Self {
-        Self { sym_cost: 1, app_cost: 1, lam_cost: 1 }
+        Self { sym_var_cost: 1, app_cost: 1, lam_cost: 1 }
     }
 }
 
