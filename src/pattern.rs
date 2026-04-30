@@ -22,7 +22,8 @@ pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O
 #[derive(Debug, Clone)]
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
-    pub vars: Vec<Vec<Id>>, // vars[k] = all RecExpr ids holding Var(k)
+    pub vars: Vec<Vec<Id>>,  // vars[k] = all RecExpr ids holding Var(k)
+    pub var_depth: Vec<u32>, // var_depth[k] = pattern-internal binders enclosing ?#k
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -30,11 +31,12 @@ fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> 
 }
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
-    /// Creates the initial `?#0` pattern: a single variable.
+    /// Creates the initial `?#0` pattern: a single variable at depth 0.
     pub fn single_var() -> Self {
         Pattern {
             pattern: RevExpr::new(vec![var_node::<F, O>(0)]),
             vars: vec![vec![0.into()]],
+            var_depth: vec![0],
         }
     }
 
@@ -42,10 +44,16 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// at list positions `var_idx..var_idx+k`; any vars that previously followed
     /// `var_idx` shift right and get their in-tree `Var(n)` leaves rewritten to
     /// match their new position, so the canonical-form invariant is preserved.
+    ///
+    /// Each new child meta-var inherits the parent's binder depth, plus one if
+    /// `target.discriminant().binds_child(j)` is true for that slot — i.e., a
+    /// `Lam` body bumps the depth of the meta-var that lands inside it.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         let var_positions = self.vars.remove(var_idx);
+        let parent_depth = self.var_depth.remove(var_idx);
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
+        let target_disc = target.discriminant();
 
         // Shift names of trailing vars: a var currently at post-removal index p
         // will end up at post-insertion index p + num_children, so rename its leaves.
@@ -66,8 +74,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             let new_id = Id::from(self.pattern.nodes.len() - 1);
             new_children.push(new_id);
             self.vars.insert(var_idx + j, vec![new_id]);
+            let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
+            self.var_depth.insert(var_idx + j, child_depth);
         }
-        let new_node = F::make(F::map_discriminant(target.discriminant(), OpWithVar::Node), new_children);
+        let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
         // Replace each position of the expanded var with the new enode. If the var
         // had multiple positions (from a prior reuse), all parents share the same
@@ -85,6 +95,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
+        // Scope invariant: only meta-vars at the same binder depth may be unified.
+        // Mixing depths would mean one occurrence sits under more pattern-internal
+        // binders than the other, so substitution would need a binder-shift —
+        // outside the canonical-form contract.
+        assert_eq!(self.var_depth[keep_idx], self.var_depth[drop_idx], "reuse across differing binder depths is not allowed (depths {} vs {})", self.var_depth[keep_idx], self.var_depth[drop_idx]);
+
         let keep_name = var_node::<F, O>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
             self.pattern[*var_id] = keep_name.clone();
@@ -92,6 +108,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let drop_ids = self.vars[drop_idx].clone();
         self.vars[keep_idx].extend(drop_ids);
         self.vars.remove(drop_idx);
+        self.var_depth.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
