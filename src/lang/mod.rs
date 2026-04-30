@@ -1,16 +1,19 @@
 use egg::{Analysis, ENodeOrVar, FromOp, Id, Language, RecExpr};
+use rustc_hash::FxHashSet;
 use std::fmt::{Debug, Display};
 
 mod family;
 mod lambda_calc;
 mod op;
 mod op_children;
+mod op_db;
 mod op_with_var;
 
 pub use family::{LambdaCalc, LanguageFamily, OpChildren};
 pub use lambda_calc::{LambdaCalcDisc, LambdaCalcLanguage};
 pub use op::{Op, StitchDisc, StitchOp};
 pub use op_children::OpChildrenLanguage;
+pub use op_db::OpDB;
 pub use op_with_var::OpWithVar;
 
 /// Trait covering every language usable with the search machinery.
@@ -68,8 +71,25 @@ impl Default for Weights {
     }
 }
 
-/// Egg analysis that tracks the minimum AST size of each e-class, weighted by
-/// the `Weights` value carried on the analysis itself.
+/// Per-e-class analysis data: minimum AST size and the union of free De Bruijn
+/// indices across the class's representatives.
+///
+/// `fv` is an over-approximation: an index `n` is in `fv` iff *some* member of
+/// the class mentions `$n` freely. This is the right semantics for downstream
+/// capture handling — extraction may pick any representative, so anything that
+/// could be free in any of them must be assumed free.
+///
+/// Languages without binders or De Bruijn leaves leave `fv` empty everywhere.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StitchData {
+    /// Minimum AST size among e-nodes in this e-class.
+    pub size: u32,
+    /// Free-variable set (union of members' free-var sets).
+    pub fv: FxHashSet<u32>,
+}
+
+/// Egg analysis that tracks size and free-variable set of each e-class,
+/// weighted by the `Weights` value carried on the analysis itself.
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis {
     pub weights: Weights,
@@ -82,24 +102,45 @@ impl StitchAnalysis {
 }
 
 impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
-    type Data = u32;
+    type Data = StitchData;
 
-    /// Computes the minimum AST size of a new enode as `disc.size(weights) + sum(children)`.
+    /// Computes per-class data for a fresh enode:
+    /// - `size` = `disc.intrinsic_size(weights) + Σ child.size`
+    /// - `fv`   = `{n | disc.de_bruijn_index() == Some(n)} ∪ ⋃_j shift(child[j].fv, disc.binds_child(j))`,
+    ///   where `shift(s, true)` decrements every index ≥ 1 by one and drops `0`.
+    ///   A bare `Var(n)` leaf has fv `{n}` because nothing above it has bound `n` yet;
+    ///   `Lam` is what removes bound indices on the way up.
     fn make(egraph: &mut egg::EGraph<L, Self>, enode: &L, _id: Id) -> Self::Data {
         let weights = egraph.analysis.weights;
-        enode.discriminant().intrinsic_size(&weights) + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+        let disc = enode.discriminant();
+        let size = disc.intrinsic_size(&weights) + enode.children().iter().map(|&c| egraph[c].data.size).sum::<u32>();
+        let mut fv: FxHashSet<u32> = FxHashSet::default();
+        if let Some(n) = disc.de_bruijn_index() {
+            fv.insert(n);
+        }
+        for (j, &c) in enode.children().iter().enumerate() {
+            let child_fv = &egraph[c].data.fv;
+            if disc.binds_child(j) {
+                fv.extend(child_fv.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }));
+            } else {
+                fv.extend(child_fv.iter().copied());
+            }
+        }
+        StitchData { size, fv }
     }
 
-    /// Keeps the minimum size when two e-classes are merged.
+    /// On merge: keep the minimum size, take the union of the two fv sets.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
-        if from < *to {
-            *to = from;
-            egg::DidMerge(true, false)
-        } else if from == *to {
-            egg::DidMerge(false, false)
-        } else {
-            egg::DidMerge(false, true)
+        let size_to_changed = from.size < to.size;
+        let size_from_changed = from.size > to.size;
+        if size_to_changed {
+            to.size = from.size;
         }
+        let fv_from_changed = from.fv.iter().any(|x| !to.fv.contains(x));
+        let before_len = to.fv.len();
+        to.fv.extend(from.fv.iter().copied());
+        let fv_to_changed = to.fv.len() != before_len;
+        egg::DidMerge(size_to_changed || fv_to_changed, size_from_changed || fv_from_changed)
     }
 }
 
