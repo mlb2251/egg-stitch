@@ -41,39 +41,35 @@ After the PR lands and `main` advances, the running-scoreboard diff naturally sh
 2. **Additive features second** (new files, new flags that are off by default).
 3. **Behavior changes last** (the actual dominance pruning semantics).
 
-## Current diff (snapshot 2026-04-29)
+## Current diff (snapshot 2026-04-30)
 
 ```
- .gitignore                      |   2 +
- expts/__init__.py               |   3 +-
- expts/babble.py                 |  10 +-
- expts/egg_stitch.py             |   4 +
- expts/stackpath.py              |  91 ++++
- expts/stitch.py                 |   8 +-
- expts/table1.py                 |  75 ++--
- expts/table2.py                 |  73 +--
- run.py                          | 115 ++++-
- src/best_first.rs               | 119 ++++-
- src/cost.rs                     | 156 -------
- src/cost/cost_only_extractor.rs |  67 +++
- src/cost/exact_cost.rs          |  57 +++
- src/cost/lower_bound_cost.rs    |  26 ++
- src/cost/mod.rs                 | 211 +++++++++
- src/cost/rewrite_analysis.rs    |  46 ++
- src/lib.rs                      |  34 +-
- src/main.rs                     |   2 +
- src/pattern.rs                  |  34 ++
- src/results.rs                  |   3 +
- src/revexpr.rs                  |   5 +
- src/rewrite.rs                  |  24 +
- src/search.rs                   | 160 +++++--
- src/smc.rs                      |   7 +-
- tests/stitch_compat_test.rs     |  12 +-
- viz/server.py                   | 143 +++++-
- viz/stackpath.html              | 281 ++++++++++++
- viz/stackpath.js                | 961 ++++++++++++++++++++++++++++++++++++++++
- 28 files changed, 2405 insertions(+), 324 deletions(-)
+ expts/stackpath.py          |  91 +++++
+ expts/stitch.py             |   8 +-
+ expts/table1.py             |  75 ++--
+ expts/table2.py             |  73 ++--
+ run.py                      | 115 +++++-
+ src/best_first.rs           | 119 +++++-
+ src/cost.rs                 | 366 +++++++++++++----
+ src/lib.rs                  |  34 +-
+ src/main.rs                 |   2 +
+ src/pattern.rs              |  34 ++
+ src/results.rs              |   3 +
+ src/revexpr.rs              |   5 +
+ src/rewrite.rs              |  24 ++
+ src/search.rs               | 160 +++++---
+ src/smc.rs                  |   7 +-
+ tests/stitch_compat_test.rs |  12 +-
+ viz/server.py               | 143 ++++++-
+ viz/stackpath.html          | 281 +++++++++++++
+ viz/stackpath.js            | 961 ++++++++++++++++++++++++++++++++++++++++++++
+ 23 files changed, 2293 insertions(+), 239 deletions(-)
 ```
+
+**Note (2026-04-30):** A cleanup commit on `dominance-rebased` collapsed the
+`src/cost/` directory back into a single `src/cost.rs`, so the diff is now a
+clean superset of main's `cost.rs` rather than a deletion + new module tree.
+This dissolves the old PR-A/PR-B split — see the candidate list below.
 
 Refresh with `git diff --stat main dominance-rebased -- ':(exclude)rebase-tooling'` whenever the table below moves.
 
@@ -85,8 +81,7 @@ Roughly grouped by ordering principle. Sizes are rough — actual slice boundari
 
 | Slice | Files | Notes |
 |---|---|---|
-| **PR-A: `cost.rs` → `cost/` pure mechanical split** | `src/cost.rs` (-156), `src/cost/{mod,exact_cost,rewrite_analysis}.rs` (new) | Take main's `cost.rs` verbatim and break it into the same module skeleton dominance-rebased uses, but **without any of the dominance additions**. No `cost_only_extractor`, no `lower_bound_cost`, no `CostCache`/`CostScratch`/`RunnerScratch`. Pure relocation of existing code. **Cannot be sourced from `dominance-rebased`** (its split bakes in semantic changes); written on a branch off main with file layout matching dominance-rebased so PR-B drops in cleanly. **Likely first PR.** |
-| **PR-B: cost/ semantic additions** | `src/cost/{cost_only_extractor,lower_bound_cost}.rs` (new), `src/cost/mod.rs` (additions: `CostCache`, `CostScratch`, `RunnerScratch`, `min_enode_size`), `src/cost/rewrite_analysis.rs` (additions: `RewriteScratch`), `src/rewrite.rs` (+24) | The dominance-side machinery on top of PR-A. Some of this is dependency-only for the behavior PRs (e.g. `LowerBoundAnalysis` is only used by `--no-opt-lower-bound`); others might split further. |
+| **PR-cost: cost.rs additions (single file)** | `src/cost.rs` (+~210 net), `src/rewrite.rs` (+24) | Now that `dominance-rebased`'s cost machinery lives in a single `cost.rs`, this PR is just: take dominance-rebased's `src/cost.rs` verbatim. It's a clean superset of main's `cost.rs` — adds `CostCache`/`CostScratch`/`RunnerScratch`, the `StitchAnalysis` trait + `StitchAnalysisRunner`, `CostOnlyExtractor`, `LowerBoundAnalysis`, `RewriteAnalysis`/`RewriteScratch`, plus `min_enode_size`. Some of this is dependency-only for later behavior PRs (e.g. `LowerBoundAnalysis` is only used by `--no-opt-lower-bound`), but it all sits behind explicit call sites so shipping it together is safe and additive. May still be worth splitting if review asks; default is one PR. **Likely first PR.** |
 
 ### Additive features
 
@@ -120,9 +115,14 @@ Roughly grouped by ordering principle. Sizes are rough — actual slice boundari
 
 | Slice | Status | PR | Notes |
 |---|---|---|---|
-| PR-A: cost.rs → cost/ pure mechanical split | queued | — | Pure refactor, written from scratch on a branch off main. |
-| PR-B: cost/ semantic additions | queued (after PR-A) | — | New files + cache/scratch machinery. |
+| PR-cost: cost.rs additions (single file) | queued | — | Take dominance-rebased's `src/cost.rs` verbatim; superset of main's. |
 | (others) | not yet picked | — | Will be slotted in as we go. |
+
+**Cleanup commits on `dominance-rebased`:**
+
+| Commit | Date | Notes |
+|---|---|---|
+| `a9c12b8` collapse cost/ module back into single src/cost.rs | 2026-04-30 | Reverted the `cost/` module split so the future cost PR is additive against main rather than a delete-and-rebuild. |
 
 ## Open decisions before we start
 
