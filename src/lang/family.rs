@@ -48,7 +48,6 @@ pub trait LanguageFamily: Clone + 'static {
 
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
-
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -124,5 +123,4 @@ impl LanguageFamily for LambdaCalc {
     fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
         Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v)), vec![])
     }
-
 }

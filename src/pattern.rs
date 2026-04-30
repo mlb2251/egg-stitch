@@ -121,7 +121,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
     }
-
 }
 
 impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for Pattern<F, O> {
