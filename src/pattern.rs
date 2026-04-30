@@ -1,6 +1,7 @@
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchOp};
 use crate::revexpr::RevExpr;
-use egg::{Id, Language};
+use egg::{Id, Language, RecExpr};
+use rustc_hash::FxHashMap;
 
 /// A partially-built pattern, parameterized by a language family `F` (the
 /// type-level constructor `L<_>`) and a leaf-Op `O` for the program side.
@@ -118,6 +119,69 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
     }
+
+    /// Build the abstraction body in stitch λ-form: every `?#k` leaf is
+    /// replaced by `(?#k $h_0 … $h_{m-1} $(d_k-1) … $0)` — `?#k` curry-applied
+    /// to each hoisted-index var (in `hoists[k]` order, smallest to largest)
+    /// followed by the pattern-internal binder vars from outermost to
+    /// innermost.
+    ///
+    /// Pattern-internal binder refs use the local depth at the leaf position
+    /// in the pattern AST, which equals `var_depth[k]` for `?#k` (every
+    /// occurrence sits under exactly that many lams). Hoisted-index refs use
+    /// post-pattern-wrap-frame indices shifted to the local frame: a hoist of
+    /// `h_post` becomes `$(h_post + var_depth[k])` at the leaf position.
+    ///
+    /// `hoists[k]` is sorted ascending. The result is a fresh `RecExpr` with
+    /// no aliasing back into `self.pattern`.
+    pub fn body_with_hoists(&self, hoists: &[Vec<u32>]) -> RecExpr<F::Apply<OpWithVar<O>>> {
+        assert_eq!(hoists.len(), self.var_depth.len(), "hoists length must match metavar count");
+        let src: RecExpr<F::Apply<OpWithVar<O>>> = self.pattern.clone().into();
+        let src_root = (src.as_ref().len() - 1).into();
+        let mut out: RecExpr<F::Apply<OpWithVar<O>>> = RecExpr::default();
+        let mut memo: FxHashMap<Id, Id> = FxHashMap::default();
+        self.walk_body_with_hoists(&src, src_root, &mut out, &mut memo, hoists);
+        out
+    }
+
+    fn walk_body_with_hoists(&self, src: &RecExpr<F::Apply<OpWithVar<O>>>, id: Id, out: &mut RecExpr<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>, hoists: &[Vec<u32>]) -> Id {
+        if let Some(&hit) = memo.get(&id) {
+            return hit;
+        }
+        let node = &src.as_ref()[usize::from(id)];
+        let new_id = if let Some(v) = node.discriminant().as_var() {
+            // Recover k from `?#k`. Pattern's canonical-form invariant: `vars[k]`
+            // contains every Id holding `Var(k)`, which is what `as_var()`
+            // returns here.
+            let k = parse_meta_var_index(&v);
+            let d_k = self.var_depth[k];
+            let head_id = out.add(F::make_var::<O>(v));
+            // Build the curry-app argument list: hoist indices first
+            // (each shifted by d_k to land in the local frame), then
+            // pattern-internal binder vars `$(d_k-1) … $0`.
+            let mut arg_indices: Vec<u32> = hoists[k].iter().map(|&h| h + d_k).collect();
+            for j in (0..d_k).rev() {
+                arg_indices.push(j);
+            }
+            F::apply_to_db_vars::<O>(out, head_id, &arg_indices)
+        } else {
+            let new_kids: Vec<Id> = node.children().iter().map(|&c| self.walk_body_with_hoists(src, c, out, memo, hoists)).collect();
+            let mut new_node = node.clone();
+            for (slot, kid) in new_node.children_mut().iter_mut().zip(new_kids.iter()) {
+                *slot = *kid;
+            }
+            out.add(new_node)
+        };
+        memo.insert(id, new_id);
+        new_id
+    }
+}
+
+/// Recover `k` from a meta-var built by `single_var` / `expand` (which use
+/// `egg::Var::from(k as u32)`, displayed as `?#k`).
+fn parse_meta_var_index(v: &egg::Var) -> usize {
+    let s = v.to_string();
+    s.strip_prefix("?#").and_then(|t| t.parse().ok()).unwrap_or_else(|| panic!("meta-var should be `?#k`, got {s:?}"))
 }
 
 impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for Pattern<F, O> {

@@ -116,16 +116,32 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
     // Collapse to a single entry when both backends agree; otherwise record
     // both side-by-side so the divergence is visible in the fixture.
     let combined = if bf == smc { bf } else { json!({"best-first": bf, "smc": smc}) };
+    bless_or_check(&expected_path(input), &combined, input);
+}
 
-    let path = expected_path(input);
+/// Like `check_fixture` but runs only the best-first backend. Use when SMC
+/// converges unreliably for the given corpus (so its output isn't worth
+/// pinning) but best-first's enumeration is still a meaningful regression
+/// signal. The fixture format is the same single `RunResult` shape that
+/// `check_fixture` writes when both backends already agree.
+fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) {
+    let mut bf = run_backend("best-first", input, extra_args);
+    if !check_pattern {
+        strip_library_patterns(&mut bf);
+    }
+    bless_or_check(&expected_path(input), &bf, input);
+}
+
+/// Shared blessing/checking step for the two `check_fixture*` helpers.
+fn bless_or_check(path: &str, value: &Value, input: &str) {
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(&combined).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(value).expect("serialize expected");
         text.push('\n');
-        fs::write(&path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
+        fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
-        let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
+        let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
         let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(combined, expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
+        assert_eq!(value, &expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
     }
 }
 
@@ -278,4 +294,49 @@ fn varying_head() {
 #[test]
 fn multiple_with_apps() {
     check_fixture("data/domains/basic-apps/multiple-with-apps.json", &["--language", "lambda-calc"], true);
+}
+
+// ---- fixtures with binders and De Bruijn variables ----
+//
+// These exercise the depth-tracking pattern search (`var_depth`) and the
+// extract→shift→wrap step in `apply_abstraction`. Programs are parsed as
+// `LambdaCalcLanguage<OpDB<Op>>` (selected by `--language lambda-calc`), so
+// `lam` becomes a real binder and `$n` a real De Bruijn leaf.
+
+/// Cost weights matching `../stitch/`'s defaults: leaves cost 100, structural
+/// nodes (`@`/`lam`) cost 1. This is what stitch's own basic/ tests run under
+/// and is what makes lambdas/apps essentially "free" relative to symbol
+/// content, so the discovered abstractions match stitch's choices.
+const STITCH_LAMBDA_ARGS: &[&str] = &["--language", "lambda-calc", "--sym-var-cost", "100"];
+
+/// Two `(lam …)` programs sharing a structural skeleton; abstraction sits
+/// under the top lambda and captures the common core around `$0`. SMC is
+/// skipped — multiple near-equivalent patterns sit close enough that 1000
+/// particles × 1000 steps don't converge reliably.
+#[test]
+fn stitch_map_minimal() {
+    check_fixture_bf_only("data/domains/stitch/map_minimal.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Context-threading test: duplicated subterms under two lambdas differ at one
+/// leaf. With `--language lambda-calc` the matcher sees `lam`/`$0` as binding
+/// nodes, so the abstraction sits inside the lambda and references `$0`.
+#[test]
+fn stitch_ctx_thread_1() {
+    check_fixture_bf_only("data/domains/stitch/ctx_thread_1.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Like `ctx_thread_1` but without the outer `A` wrapper — the two programs
+/// start with `(lam (lam …))` directly. Exercises hole matching when the
+/// pattern root sits at (or near) the program root.
+#[test]
+fn stitch_ctx_thread_2() {
+    check_fixture_bf_only("data/domains/stitch/ctx_thread_2.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Variant whose duplicated subterms reference both `$0` and `$1`. Exercises
+/// holes whose matches contain multiple distinct pattern-internal free vars.
+#[test]
+fn stitch_ctx_thread_twice() {
+    check_fixture_bf_only("data/domains/stitch/ctx_thread_twice.json", STITCH_LAMBDA_ARGS, true);
 }

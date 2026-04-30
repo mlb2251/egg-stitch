@@ -162,7 +162,10 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let pat_size = cost::compute_pattern_size(&state.pattern, &result_egraph.analysis.weights);
+                let pat_size = cost::compute_pattern_size(&result_egraph, &state, &result_egraph.analysis.weights);
+                let hoists = cost::compute_hoist_sets::<F, O>(&result_egraph, &state);
+                let body = state.pattern.body_with_hoists(&hoists.per_metavar);
+                let body_str = <F::Apply<crate::lang::OpWithVar<O>> as StitchLanguage>::display_recexpr(&body);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
@@ -171,7 +174,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 
                 final_cost = Some(best_cost);
                 library.push(results::AbstractionResult {
-                    pattern: format!("{fn_name}: {}", state.pattern),
+                    pattern: format!("{fn_name}: {body_str}"),
                     arity: state.pattern.vars.len(),
                     pattern_size: pat_size,
                     num_matches: state.matches.len(),
@@ -206,9 +209,30 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
 fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
     let mut egraph = egraph;
+    let var_depth = &state.pattern.var_depth;
+    // Hoisting: each metavar's captured free vars (those referring to
+    // pattern-external binders) become extra `fn_n` parameters. The hoist set
+    // is computed as the union across all matches; substs that don't fit it
+    // exactly are dropped — a single `fn_n` can't accept variable-arity args.
+    let hoists = cost::compute_hoist_sets::<F, O>(&egraph, state);
     for m in &state.matches {
         for subst in &m.substs {
-            let x = F::add_stub_application::<O>(fn_name, subst.vars.clone(), &mut egraph);
+            if !cost::subst_compatible_with::<F, O>(&egraph, var_depth, subst, &hoists) {
+                continue;
+            }
+            let mut all_args: Vec<Id> = Vec::new();
+            for (k, &arg_id) in subst.vars.iter().enumerate() {
+                let d_k = var_depth[k];
+                let hoist_k = &hoists.per_metavar[k];
+                all_args.push(cost::wrap_arg_for_abstraction::<F, O>(&mut egraph, arg_id, d_k, hoist_k));
+                // For each hoisted index `h_post` (post-pattern-wrap frame),
+                // pass the literal `$(h_post + d_k)` enode as an extra arg —
+                // this is the value of that index in the call-site context.
+                for &h_post in hoist_k {
+                    all_args.push(cost::add_db_var::<F::Apply<O>>(&mut egraph, h_post + d_k));
+                }
+            }
+            let x = F::add_stub_application::<O>(fn_name, all_args, &mut egraph);
             egraph.union(x, m.root_eclass);
         }
     }
