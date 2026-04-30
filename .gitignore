@@ -1,5 +1,6 @@
 /target
 /pkg
+ignored
 viz/results/
 __pycache__/
 cargo-flamegraph.trace
@@ -19,3 +20,5 @@ profile.json.gz
 *.bbl
 *.blg
 figures/**/*.pdf
+viz/stackpath/
+viz/selections

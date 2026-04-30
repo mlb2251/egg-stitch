@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Render Table 1-4 JSON result files as LaTeX tabulars (and plots).
+"""Render Table 1-4 JSON result files as LaTeX tabulars and PNG plots.
 
-By default, picks the newest timestamped run under
-``viz/results/tableN/<timestamp>/tableN.json``. Pass an explicit JSON path to
-override. Compression ratio and time are aggregated across runs with a
-geometric mean, matching ``expts.table1.print_table1``. Pass ``--plot`` to
-also emit a log-log scatter of compression ratio vs time (one dot per run;
-color = method, marker = domain).
+Picks the newest timestamped run under
+``viz/results/tableN/<timestamp>/tableN.json`` and writes
+``figures/tableN.tex`` (LaTeX tabular) plus ``figures/tableN.png`` (log-log
+scatter of compression ratio vs time; color = method, marker = domain).
+Compression ratio and time are aggregated across runs with a geometric mean,
+matching ``expts.table1.print_table1``.
 """
 
 import argparse
@@ -304,20 +304,20 @@ def plot(saved: dict, table: int, out_path: Path) -> None:
 
 
 def main() -> None:
-    """Render both tables as LaTeX (stdout) and PNG plots (``figures/``)."""
+    """Render each table as a LaTeX file and PNG plot under ``figures/``."""
     argparse.ArgumentParser(description=__doc__).parse_args()
 
     FIGURES_DIR.mkdir(exist_ok=True)
-    chunks = []
     for table in (1, 2, 3, 4):
         path = latest_json(table)
         with open(path) as f:
             saved = json.load(f)
-        chunks.append(f"% source: {path}\n" + render(saved, table))
+        tex_path = FIGURES_DIR / f"table{table}.tex"
+        tex_path.write_text(f"% source: {path}\n" + render(saved, table) + "\n")
+        print(f"wrote {tex_path}", file=sys.stderr)
         plot_path = FIGURES_DIR / f"table{table}.png"
         plot(saved, table, plot_path)
         print(f"wrote {plot_path}", file=sys.stderr)
-    print("\n\n".join(chunks))
 
 
 if __name__ == "__main__":
