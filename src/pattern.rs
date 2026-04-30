@@ -121,51 +121,48 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     }
 
     /// Build the abstraction body in stitch λ-form: every `?#k` leaf is
-    /// replaced by `(?#k $h_0 … $h_{m-1} $(d_k-1) … $0)` — `?#k` curry-applied
-    /// to each hoisted-index var (in `hoists[k]` order, smallest to largest)
-    /// followed by the pattern-internal binder vars from outermost to
-    /// innermost.
+    /// replaced by `(?#k $h_0 … $h_{n-1} $u_{m-1} … $u_0)` where
+    /// `internal[k] = [u_0, …, u_{m-1}]` (sorted ascending) lists the
+    /// pattern-internal indices some match references for `?#k`, and
+    /// `hoist[k] = [h_0, …, h_{n-1}]` (sorted ascending) lists the outer
+    /// indices to hoist as extra fn_n params.
     ///
-    /// Pattern-internal binder refs use the local depth at the leaf position
-    /// in the pattern AST, which equals `var_depth[k]` for `?#k` (every
-    /// occurrence sits under exactly that many lams). Hoisted-index refs use
-    /// post-pattern-wrap-frame indices shifted to the local frame: a hoist of
-    /// `h_post` becomes `$(h_post + var_depth[k])` at the leaf position.
+    /// Hoist args come first in the curry — outermost lam in the wrapping
+    /// binds the smallest hoist. Internal args follow in **descending** order
+    /// — outermost-of-internal binds the largest internal index, innermost
+    /// binds the smallest. This matches stitch's `(?#k $1 $0)` form for the
+    /// no-hoist case.
     ///
-    /// `hoists[k]` is sorted ascending. The result is a fresh `RecExpr` with
-    /// no aliasing back into `self.pattern`.
-    pub fn body_with_hoists(&self, hoists: &[Vec<u32>]) -> RecExpr<F::Apply<OpWithVar<O>>> {
-        assert_eq!(hoists.len(), self.var_depth.len(), "hoists length must match metavar count");
+    /// Indices in the curry-app are written in the leaf's local frame: each
+    /// reference is `$i` where `i` is the literal index, since at the `?#k`
+    /// position the pattern body's own enclosing lams bind exactly those
+    /// internal slots and the surrounding fn_n call site supplies the hoist
+    /// values via additional outer lams. (See `apply_abstraction`.)
+    pub fn body_with_hoists(&self, internal: &[Vec<u32>], hoist: &[Vec<u32>]) -> RecExpr<F::Apply<OpWithVar<O>>> {
+        assert_eq!(internal.len(), self.var_depth.len(), "internal length must match metavar count");
+        assert_eq!(hoist.len(), self.var_depth.len(), "hoist length must match metavar count");
         let src: RecExpr<F::Apply<OpWithVar<O>>> = self.pattern.clone().into();
         let src_root = (src.as_ref().len() - 1).into();
         let mut out: RecExpr<F::Apply<OpWithVar<O>>> = RecExpr::default();
         let mut memo: FxHashMap<Id, Id> = FxHashMap::default();
-        self.walk_body_with_hoists(&src, src_root, &mut out, &mut memo, hoists);
+        self.walk_body_with_hoists(&src, src_root, &mut out, &mut memo, internal, hoist);
         out
     }
 
-    fn walk_body_with_hoists(&self, src: &RecExpr<F::Apply<OpWithVar<O>>>, id: Id, out: &mut RecExpr<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>, hoists: &[Vec<u32>]) -> Id {
+    fn walk_body_with_hoists(&self, src: &RecExpr<F::Apply<OpWithVar<O>>>, id: Id, out: &mut RecExpr<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>, internal: &[Vec<u32>], hoist: &[Vec<u32>]) -> Id {
         if let Some(&hit) = memo.get(&id) {
             return hit;
         }
         let node = &src.as_ref()[usize::from(id)];
         let new_id = if let Some(v) = node.discriminant().as_var() {
-            // Recover k from `?#k`. Pattern's canonical-form invariant: `vars[k]`
-            // contains every Id holding `Var(k)`, which is what `as_var()`
-            // returns here.
             let k = parse_meta_var_index(&v);
-            let d_k = self.var_depth[k];
             let head_id = out.add(F::make_var::<O>(v));
-            // Build the curry-app argument list: hoist indices first
-            // (each shifted by d_k to land in the local frame), then
-            // pattern-internal binder vars `$(d_k-1) … $0`.
-            let mut arg_indices: Vec<u32> = hoists[k].iter().map(|&h| h + d_k).collect();
-            for j in (0..d_k).rev() {
-                arg_indices.push(j);
-            }
+            // Curry args: hoist (smallest first), then internal (largest first).
+            let mut arg_indices: Vec<u32> = hoist[k].clone();
+            arg_indices.extend(internal[k].iter().rev().copied());
             F::apply_to_db_vars::<O>(out, head_id, &arg_indices)
         } else {
-            let new_kids: Vec<Id> = node.children().iter().map(|&c| self.walk_body_with_hoists(src, c, out, memo, hoists)).collect();
+            let new_kids: Vec<Id> = node.children().iter().map(|&c| self.walk_body_with_hoists(src, c, out, memo, internal, hoist)).collect();
             let mut new_node = node.clone();
             for (slot, kid) in new_node.children_mut().iter_mut().zip(new_kids.iter()) {
                 *slot = *kid;

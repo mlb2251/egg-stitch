@@ -71,40 +71,47 @@ impl<L: egg::Language> From<egg::RecExpr<L>> for RevExpr<L> {
     }
 }
 
-/// Wrap `expr` rooted at `root` so the result is a closed function of `d_k`
-/// pattern-internal binders followed by `hoist.len()` outer hoist binders.
+/// Wrap `expr` rooted at `root` so the result is a closed function of
+/// `internal.len()` pattern-internal binders followed by `hoist.len()` outer
+/// hoist binders.
 ///
-/// `hoist` is in the **post-pattern-wrap frame** (sorted ascending): each
-/// `hoist[p]` is one of the indices that remains free after the inner `d_k`
-/// pattern-lams would have absorbed indices `0..d_k-1`. Equivalently, an
-/// original-frame free index `i >= d_k` maps to `hoist[?] == i - d_k`.
+/// Both `internal` and `hoist` are in the **original captured frame**, sorted
+/// ascending, and disjoint. Together they must cover every free index in the
+/// captured term — anything missing causes a panic (the result would be open).
+///
+/// Conventions on the wrap stack (deepest = closest to the body):
+/// - innermost-of-internal-stack binds `internal[0]` (smallest internal).
+/// - outermost-of-internal-stack binds `internal[m-1]` (largest internal).
+/// - innermost-of-hoist-stack binds `hoist[n-1]` (largest hoist).
+/// - outermost-of-hoist-stack binds `hoist[0]` (smallest hoist).
+///
+/// (These match stitch's curry-app convention: when applied as
+/// `(?#k $h_0 … $h_{n-1} $u_{m-1} … $u_0)`, the first arg consumed is the
+/// outermost lam, and that's the smallest hoist index.)
 ///
 /// Index rewriting per leaf at body-depth `d` with original index `i`:
 /// - `i < d`: bound by an internal lam in the body — left alone.
-/// - `i >= d`, with effective `e = i - d`:
-///   * `e < d_k`: bound by the `e`-th inner pattern-lam (counting from inner=0).
-///   * `e >= d_k`, `h = e - d_k` in `hoist` at position `p`: bound by the
-///     `p`-th hoist-lam from outer (the outermost binds `hoist[0]`, the
-///     smallest); at body-frame depth `n + d_k - 1 - p` from inside, so the
-///     leaf's new index is `d + (n + d_k - 1 - p)`.
-///   * `e >= d_k` and `h` not in `hoist`: panics. Callers must ensure every
-///     post-pattern-wrap free index is in `hoist` (else the result is open).
+/// - `i >= d`, `e = i - d`:
+///   * `e == internal[p]`: bound by the `p`-th internal-stack lam from
+///     inside, at body-frame depth `p`. New index = `d + p`.
+///   * `e == hoist[q]`: bound by the `q`-th hoist-stack lam from outside, at
+///     body-frame depth `m + n - 1 - q`. New index = `d + (m + n - 1 - q)`.
+///   * Otherwise: panics.
 ///
-/// The output is wrapped in `d_k + n` `lam` nodes via `L::from_op("lam", …)`.
-/// Memoised on `(Id, depth)`: the same shared subterm may be visited at
-/// different body depths and need different rewritten leaves each time.
-pub fn abstract_with_hoist<L>(expr: &egg::RecExpr<L>, root: egg::Id, d_k: u32, hoist: &[u32]) -> egg::RecExpr<L>
+/// Memoised on `(Id, depth)`.
+pub fn abstract_with_hoist<L>(expr: &egg::RecExpr<L>, root: egg::Id, internal: &[u32], hoist: &[u32]) -> egg::RecExpr<L>
 where
     L: egg::Language + egg::FromOp,
     L::Error: std::fmt::Debug,
     L::Discriminant: crate::lang::StitchDisc,
 {
+    let m = internal.len() as u32;
     let n = hoist.len() as u32;
     let mut out = egg::RecExpr::default();
     let mut memo: rustc_hash::FxHashMap<(egg::Id, u32), egg::Id> = rustc_hash::FxHashMap::default();
-    let body_id = abstract_walk(expr, root, 0, d_k, n, hoist, &mut out, &mut memo);
+    let body_id = abstract_walk(expr, root, 0, m, n, internal, hoist, &mut out, &mut memo);
     let mut id = body_id;
-    for _ in 0..(d_k + n) {
+    for _ in 0..(m + n) {
         let lam_node = L::from_op("lam", vec![id]).expect("from_op lam");
         id = out.add(lam_node);
     }
@@ -113,7 +120,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn abstract_walk<L>(expr: &egg::RecExpr<L>, id: egg::Id, depth: u32, d_k: u32, n: u32, hoist: &[u32], out: &mut egg::RecExpr<L>, memo: &mut rustc_hash::FxHashMap<(egg::Id, u32), egg::Id>) -> egg::Id
+fn abstract_walk<L>(expr: &egg::RecExpr<L>, id: egg::Id, depth: u32, m: u32, n: u32, internal: &[u32], hoist: &[u32], out: &mut egg::RecExpr<L>, memo: &mut rustc_hash::FxHashMap<(egg::Id, u32), egg::Id>) -> egg::Id
 where
     L: egg::Language + egg::FromOp,
     L::Error: std::fmt::Debug,
@@ -130,14 +137,12 @@ where
             i
         } else {
             let e = i - depth;
-            if e < d_k {
-                e + depth
+            if let Some(p) = internal.iter().position(|&x| x == e) {
+                depth + p as u32
+            } else if let Some(q) = hoist.iter().position(|&x| x == e) {
+                depth + (m + n - 1 - q as u32)
             } else {
-                let h_post = e - d_k;
-                match hoist.iter().position(|&x| x == h_post) {
-                    Some(p) => depth + (n + d_k - 1 - p as u32),
-                    None => panic!("abstract_with_hoist: free index ${e} not in hoist set {hoist:?}"),
-                }
+                panic!("abstract_with_hoist: free index ${e} not in internal {internal:?} or hoist {hoist:?}")
             }
         };
         let leaf = L::from_op(&format!("${new_i}"), vec![]).expect("from_op DB var");
@@ -149,7 +154,7 @@ where
             .enumerate()
             .map(|(j, &c)| {
                 let child_depth = depth + if disc.binds_child(j) { 1 } else { 0 };
-                abstract_walk(expr, c, child_depth, d_k, n, hoist, out, memo)
+                abstract_walk(expr, c, child_depth, m, n, internal, hoist, out, memo)
             })
             .collect();
         let mut new_node = node.clone();

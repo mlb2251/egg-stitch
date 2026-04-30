@@ -7,64 +7,84 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-/// Per-metavar hoist sets for a pattern.
+/// Per-metavar binder sets for a pattern, computed as the union across all
+/// matches' captured-subterm free-var sets.
 ///
-/// `per_metavar[k]` lists the post-pattern-wrap free indices that need to be
-/// hoisted into extra `fn_n` parameters at metavar `?#k`. These are computed
-/// as the union, across all matches, of `{i - d_k | i ∈ captured.fv, i ≥ d_k}`.
+/// `internal[k]` is the subset of pattern-internal indices `{0..d_k-1}` that
+/// some match's `?#k` actually references — only those need to be bound by
+/// inner wrap-lams. Indices in `{0..d_k-1}` that no match touches are simply
+/// omitted (no wrap-lam, no curry arg), saving cost.
+///
+/// `hoist[k]` is the set of outer-context indices (≥ `d_k`) that some match
+/// references and that therefore have to be lifted as extra fn_n params.
+///
+/// Both are sorted ascending and disjoint.
 #[derive(Debug, Clone)]
 pub struct HoistSets {
-    pub per_metavar: Vec<Vec<u32>>,
+    pub internal: Vec<Vec<u32>>,
+    pub hoist: Vec<Vec<u32>>,
 }
 
 impl HoistSets {
-    /// Sum over all metavars of `(1 + |hoist[k]|)` — the number of args
-    /// `fn_n` actually receives at each call site under hoisting.
+    /// Sum over all metavars of `(1 + |hoist[k]|)` — fn_n receives one
+    /// wrapped value per metavar plus a literal `$h` enode for each hoist
+    /// index. Internal binders are absorbed *inside* the wrapped form so
+    /// they don't count here.
     pub fn arity_after_hoist(&self) -> usize {
-        self.per_metavar.iter().map(|h| 1 + h.len()).sum()
+        self.hoist.iter().map(|h| 1 + h.len()).sum()
     }
 }
 
-/// Compute the per-metavar hoist set as the union of post-pattern-wrap free
-/// indices across every subst in the search state. Sorted ascending.
+/// Compute per-metavar `internal` and `hoist` sets as the union of
+/// pattern-internal vs outer free indices across every subst.
 pub fn compute_hoist_sets<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, state: &SearchState<F, O>) -> HoistSets {
     let var_depth = &state.pattern.var_depth;
     let num_meta = var_depth.len();
-    let mut acc: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); num_meta];
+    let mut int_acc: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); num_meta];
+    let mut hoist_acc: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); num_meta];
     for m in &state.matches {
         for subst in &m.substs {
             for (k, &arg_id) in subst.vars.iter().enumerate() {
                 let d_k = var_depth[k];
                 for &i in &egraph[arg_id].data.fv {
-                    if i >= d_k {
-                        acc[k].insert(i - d_k);
+                    if i < d_k {
+                        int_acc[k].insert(i);
+                    } else {
+                        hoist_acc[k].insert(i);
                     }
                 }
             }
         }
     }
-    let per_metavar = acc
-        .into_iter()
-        .map(|s| {
-            let mut v: Vec<u32> = s.into_iter().collect();
-            v.sort();
-            v
-        })
-        .collect();
-    HoistSets { per_metavar }
+    let sort_set = |s: FxHashSet<u32>| {
+        let mut v: Vec<u32> = s.into_iter().collect();
+        v.sort();
+        v
+    };
+    HoistSets {
+        internal: int_acc.into_iter().map(sort_set).collect(),
+        hoist: hoist_acc.into_iter().map(sort_set).collect(),
+    }
 }
 
-/// Returns true iff every metavar's post-pattern-wrap fv in `subst` matches
-/// `hoists.per_metavar[k]` exactly. Substs that disagree (smaller fv set) are
-/// rejected: a single `fn_n` signature can't accommodate variable hoist arity
-/// across call sites.
+/// Returns true iff every metavar's per-match fv exactly matches the union
+/// (`hoists.internal[k] ∪ hoists.hoist[k]`). Substs that touch a different
+/// outer index, or that fail to reference an internal binder some other
+/// match relies on, are rejected — a single fn_n signature can't accommodate
+/// inconsistent arities across call sites.
+///
+/// We don't require strict equality of the internal subset (a match that
+/// happens not to reference some pattern-internal binder is still fine — the
+/// extra wrap-lam just goes unused for that match's wrapped arg). We do
+/// require the hoist subset to match exactly: a missing hoist index would
+/// leave the fn_n call short of an arg, and an extra one isn't expressible.
 pub fn subst_compatible_with<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, var_depth: &[u32], subst: &Subst, hoists: &HoistSets) -> bool {
     for (k, &arg_id) in subst.vars.iter().enumerate() {
         let d_k = var_depth[k];
         let arg_fv = &egraph[arg_id].data.fv;
-        let mut post: Vec<u32> = arg_fv.iter().filter_map(|&i| if i >= d_k { Some(i - d_k) } else { None }).collect();
-        post.sort();
-        if post != hoists.per_metavar[k] {
+        let mut hoist_actual: Vec<u32> = arg_fv.iter().copied().filter(|&i| i >= d_k).collect();
+        hoist_actual.sort();
+        if hoist_actual != hoists.hoist[k] {
             return false;
         }
     }
@@ -84,8 +104,8 @@ pub fn subst_compatible_with<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgra
 /// `add_stub_application` along with literal `Var(h + d_k)` enodes for each
 /// hoist value, and β-reduction of `fn_n` at the call site restores equality
 /// with the original program.
-pub fn wrap_arg_for_abstraction<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, arg_id: Id, depth: u32, hoist: &[u32]) -> Id {
-    if depth == 0 && hoist.is_empty() {
+pub fn wrap_arg_for_abstraction<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, arg_id: Id, internal: &[u32], hoist: &[u32]) -> Id {
+    if internal.is_empty() && hoist.is_empty() {
         return arg_id;
     }
     let rec: RecExpr<F::Apply<O>> = {
@@ -93,7 +113,7 @@ pub fn wrap_arg_for_abstraction<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
         extractor.find_best(arg_id).1
     };
     let root = (rec.as_ref().len() - 1).into();
-    let wrapped = abstract_with_hoist(&rec, root, depth, hoist);
+    let wrapped = abstract_with_hoist(&rec, root, internal, hoist);
     egraph.add_expr(&wrapped)
 }
 
@@ -171,7 +191,7 @@ pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 /// the printed body always agree on token count.
 pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, weights: &Weights) -> usize {
     let hoists = compute_hoist_sets::<F, O>(egraph, search_state);
-    let rec_expr = search_state.pattern.body_with_hoists(&hoists.per_metavar);
+    let rec_expr = search_state.pattern.body_with_hoists(&hoists.internal, &hoists.hoist);
     compute_recexpr_size::<F::Apply<crate::lang::OpWithVar<O>>>(&rec_expr, (rec_expr.len() - 1).into(), weights)
 }
 
@@ -192,15 +212,15 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data.size as i64) };
 
-    // Hoist analysis: per metavar, the union of post-pattern-wrap fv across all
-    // matches. Substs that don't match this signature exactly get filtered —
-    // a single `fn_n` can't have variable hoist arity across call sites.
+    // Hoist analysis: per metavar, the union of pattern-internal binders that
+    // some match references and the union of outer (hoisted) free indices.
+    // Substs whose hoist set doesn't match exactly get filtered — fn_n can't
+    // have variable arity across call sites.
     //
-    // Per-match overhead: each arg `k` gets wrapped in `d_k + |hoist_k|` lam
-    // enodes (the abstract_with_hoist envelope), and the call site additionally
-    // passes |hoist_k| literal `$h` enodes as extra args. So the per-match cost
-    // beyond `Σ arg_size` is `Σ_k ((d_k + |hoist_k|) * lam_cost + |hoist_k| *
-    // sym_var_cost)`, plus `stub_application_size` over the post-hoist arity.
+    // Per-match overhead: each metavar's wrapped arg adds `(|internal_k| +
+    // |hoist_k|) * lam_cost` (the wrap-lams), and the call site additionally
+    // passes `|hoist_k|` literal `$h` enodes (sym-var cost each). Plus
+    // `stub_application_size` over the post-hoist arity.
     let var_depth = &search_state.pattern.var_depth;
     let hoists = compute_hoist_sets::<F, O>(egraph, search_state);
 
@@ -219,9 +239,9 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         let arity_after_hoist = hoists.arity_after_hoist();
         let wrap_overhead: i64 = (0..var_depth.len())
             .map(|k| {
-                let n = hoists.per_metavar[k].len() as i64;
-                let d = var_depth[k] as i64;
-                (d + n) * weights.lam_cost as i64 + n * weights.sym_var_cost as i64
+                let m = hoists.internal[k].len() as i64;
+                let n = hoists.hoist[k].len() as i64;
+                (m + n) * weights.lam_cost as i64 + n * weights.sym_var_cost as i64
             })
             .sum();
         if let Some(substs) = eclass_to_matches.get(&eclass) {
@@ -279,11 +299,11 @@ pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &St
             }
             let mut all_args: Vec<Id> = Vec::new();
             for (k, &arg_id) in subst.vars.iter().enumerate() {
-                let d_k = var_depth[k];
-                let hoist_k = &hoists.per_metavar[k];
-                all_args.push(wrap_arg_for_abstraction::<F, O>(&mut egraph, arg_id, d_k, hoist_k));
-                for &h_post in hoist_k {
-                    all_args.push(add_db_var::<F::Apply<O>>(&mut egraph, h_post + d_k));
+                let internal_k = &hoists.internal[k];
+                let hoist_k = &hoists.hoist[k];
+                all_args.push(wrap_arg_for_abstraction::<F, O>(&mut egraph, arg_id, internal_k, hoist_k));
+                for &h in hoist_k {
+                    all_args.push(add_db_var::<F::Apply<O>>(&mut egraph, h));
                 }
             }
             let x = F::add_stub_application::<O>("inv_0", all_args, &mut egraph);
