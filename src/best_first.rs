@@ -194,7 +194,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
                     action: n.action.as_ref().map(|a| a.to_string()),
                     pattern: n.state.pattern.to_string(),
                     arity: n.state.pattern.vars.len(),
-                    pattern_size: compute_pattern_size(&shared.egraph, &n.state, &weights),
+                    pattern_size: compute_pattern_size(&n.state.pattern, &weights),
                     num_matches: n.state.matches.len(),
                     cost: n.cost,
                     expanded: n.expanded,

@@ -68,7 +68,12 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Randomly selects a match and variable, then expands or reuses the variable.
+    /// Returns early if `matches` is empty (the particle has no live matches —
+    /// any further expansion would just re-encounter the empty state).
     pub fn expand_random(&mut self, shared: &SharedSearchData<F, O>, verbose: bool) {
+        if self.matches.is_empty() {
+            return;
+        }
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
@@ -100,7 +105,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if !reuse_candidates.is_empty() {
                 let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx].0;
-                self.reuse(var_idx, candidate_var_idx);
+                self.reuse(var_idx, candidate_var_idx, shared);
                 return;
             }
         }
@@ -132,9 +137,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Merges two pattern variables and filters matches to those where both point to the same e-class.
-    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData<F, O>) {
         self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx);
+        self.subset_matches_reuse(var_idx, second_var_idx, shared);
     }
 
     /// Updates all matches by transforming each substitution via the given closure,
@@ -155,19 +160,27 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Mirrors `Pattern::expand`: drops the old var from `subst.vars` and inserts the new
     /// child eclass ids at positions `var_idx..var_idx+k`, keeping substs aligned with
     /// the pattern's DFS-ordered vars list.
-    pub fn subset_matches(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
+    ///
+    /// We don't fv-prune captures here: an "unsound" intermediate capture (one
+    /// whose fv references pattern-internal binders) may refine into a sound
+    /// closed-prefix capture after further expansion. Keeping them in the
+    /// match set lets the search explore those refinement paths. Soundness is
+    /// enforced downstream — `subst_is_sound` at cost/apply time skips substs
+    /// whose captures aren't yet closed-relative-to-pattern.
+    pub fn subset_matches(&mut self, var_idx: usize, target: &F::Apply<O>, _shared: &SharedSearchData<F, O>) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
-            let var_eclass = &shared.egraph[var_id];
+            let var_eclass = &_shared.egraph[var_id];
             for node in &var_eclass.nodes {
-                if node.matches(target) {
-                    let mut new_subst = subst.clone();
-                    new_subst.vars.remove(var_idx);
-                    for (j, child_id) in node.children().iter().enumerate() {
-                        new_subst.vars.insert(var_idx + j, *child_id);
-                    }
-                    out.push(new_subst);
+                if !node.matches(target) {
+                    continue;
                 }
+                let mut new_subst = subst.clone();
+                new_subst.vars.remove(var_idx);
+                for (j, child_id) in node.children().iter().enumerate() {
+                    new_subst.vars.insert(var_idx + j, *child_id);
+                }
+                out.push(new_subst);
             }
         });
     }
@@ -175,14 +188,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Filters matches to those where `var_idx` and `second_var_idx` point to the same e-class.
     /// Mirrors `Pattern::reuse`: keeps the lower-indexed var and removes the higher one,
     /// so substs stay aligned with the pattern regardless of caller argument order.
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+    ///
+    /// After cross-depth reuse the merged metavar's depth is `max(d_keep,
+    /// d_drop)` (see `Pattern::reuse`). The kept e-class's fv must satisfy the
+    /// stitch invariant *under that stricter depth* — i.e., every fv index
+    /// must be `≥ merged_depth` — otherwise the merged metavar would have a
+    /// pattern-internal-bound capture, breaking the cross-depth-reuse safety
+    /// argument. Substs that violate this are dropped.
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData<F, O>) {
+        let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
+        let merged_depth = self.pattern.var_depth[keep_idx];
         self.update_matches(|subst, out| {
-            if subst.vars[var_idx] == subst.vars[second_var_idx] {
-                let mut new_subst = subst.clone();
-                new_subst.vars.remove(drop_idx);
-                out.push(new_subst);
+            if subst.vars[var_idx] != subst.vars[second_var_idx] {
+                return;
             }
+            let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
+            if !kept_fv.iter().all(|&i| i >= merged_depth) {
+                return;
+            }
+            let mut new_subst = subst.clone();
+            new_subst.vars.remove(drop_idx);
+            out.push(new_subst);
         });
     }
 
@@ -248,7 +275,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
                 if unifiable {
                     let mut child = self.clone();
-                    child.reuse(i, j);
+                    child.reuse(i, j, shared);
                     if !child.matches.is_empty() {
                         out.push((Action::Reuse { keep: i, drop: j }, child));
                     }

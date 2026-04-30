@@ -62,7 +62,7 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
     let mut cmd = Command::new(BIN);
     cmd.args(["--search", search, "--input", input, "--check-slow", "--num-abstractions", "1", "--output", out_str]);
     if search == "best-first" {
-        cmd.args(["--num-steps", "10000"]);
+        cmd.args(["--num-steps", "50000"]);
     } else {
         cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
     }
@@ -339,4 +339,56 @@ fn stitch_ctx_thread_2() {
 #[test]
 fn stitch_ctx_thread_twice() {
     check_fixture_bf_only("data/domains/stitch/ctx_thread_twice.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Higher-order pattern: three programs each repeat `(app f $0)` twice for
+/// some `f` ∈ {`inc`, `dec`, `(app plus $0)`}. The metavar captures the
+/// applied head (closed for `inc`/`dec`, open for `(app plus $0)`), so this
+/// exercises mixed closed/open captures across matches.
+#[test]
+fn stitch_hof() {
+    check_fixture_bf_only("data/domains/stitch/hof.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Two recursive `map`-like programs differing in the operation applied to
+/// each element. Exercises pattern enumeration through a deeply nested
+/// fixed-point combinator (`Y`) and curried applications.
+#[test]
+fn stitch_map() {
+    check_fixture_bf_only("data/domains/stitch/map.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Variant of `map` using flat n-ary `(+ ...)` / `(- ...)` instead of curried
+/// binary `+`. Exercises auto-currying at parse time.
+#[test]
+fn stitch_map2() {
+    check_fixture_bf_only("data/domains/stitch/map2.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Two short programs sharing only `(a (lam (cons (car $0) ...)))` skeletons —
+/// stitch reports "Cost Improvement: 1.00x better" (no inventions found). We
+/// pin this so a future change that *does* find an abstraction here is caught
+/// (and can be reviewed against stitch).
+#[test]
+fn stitch_tmp_crash() {
+    check_fixture_bf_only("data/domains/stitch/tmp_crash.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Exercises list-headed application `((is_nil $0) nil (cons (+ $0)))` —
+/// `is_nil` is applied to `$0` and the result is itself applied to two more
+/// args. egg's default `RecExpr` parser rejects head-as-list, but our custom
+/// `LambdaCalc::parse_program` curries naturally over arbitrary heads.
+#[test]
+fn stitch_safe_ctx_thread_bug() {
+    check_fixture_bf_only("data/domains/stitch/safe_ctx_thread_bug.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Self-application: each program has two copies of `(f $0)` for some `f`,
+/// and the abstraction is `(?#0 ?#0)` applied to those copies. Exercises
+/// metavar reuse where the captured subterm has open fv (referring to the
+/// program's own lam) — sound under stitch convention because the fv is
+/// outer-context relative to the depth-0 pattern.
+#[test]
+fn stitch_simple_hof() {
+    check_fixture_bf_only("data/domains/stitch/simple_hof.json", STITCH_LAMBDA_ARGS, true);
 }

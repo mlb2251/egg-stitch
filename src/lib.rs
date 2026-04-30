@@ -162,10 +162,8 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let pat_size = cost::compute_pattern_size(&result_egraph, &state, &result_egraph.analysis.weights);
-                let hoists = cost::compute_hoist_sets::<F, O>(&result_egraph, &state);
-                let body = state.pattern.body_with_hoists(&hoists.internal, &hoists.hoist);
-                let body_str = <F::Apply<crate::lang::OpWithVar<O>> as StitchLanguage>::display_recexpr(&body);
+                let pat_size = cost::compute_pattern_size(&state.pattern, &result_egraph.analysis.weights);
+                let body_str = state.pattern.to_string();
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
@@ -209,28 +207,17 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
 fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
     let mut egraph = egraph;
+    // Stitch convention: each metavar captures a subterm whose free vars are
+    // outer-context only (closed relative to the pattern). Search keeps
+    // unsound intermediate captures in match sets; we filter them out here
+    // so only sound substs become rewrites.
     let var_depth = &state.pattern.var_depth;
-    // Hoisting: per metavar, two binder sets (computed as the union across
-    // matches' captured fv): `internal[k]` ⊆ {0..d_k-1} of pattern-internal
-    // binders some match actually references, and `hoist[k]` ⊆ {d_k..} of
-    // outer indices that get lifted into extra fn_n params. Substs whose
-    // hoist signature differs are dropped.
-    let hoists = cost::compute_hoist_sets::<F, O>(&egraph, state);
     for m in &state.matches {
         for subst in &m.substs {
-            if !cost::subst_compatible_with::<F, O>(&egraph, var_depth, subst, &hoists) {
+            if !cost::subst_is_sound::<F, O>(&egraph, var_depth, subst) {
                 continue;
             }
-            let mut all_args: Vec<Id> = Vec::new();
-            for (k, &arg_id) in subst.vars.iter().enumerate() {
-                let internal_k = &hoists.internal[k];
-                let hoist_k = &hoists.hoist[k];
-                all_args.push(cost::wrap_arg_for_abstraction::<F, O>(&mut egraph, arg_id, internal_k, hoist_k));
-                for &h in hoist_k {
-                    all_args.push(cost::add_db_var::<F::Apply<O>>(&mut egraph, h));
-                }
-            }
-            let x = F::add_stub_application::<O>(fn_name, all_args, &mut egraph);
+            let x = F::add_stub_application::<O>(fn_name, subst.vars.clone(), &mut egraph);
             egraph.union(x, m.root_eclass);
         }
     }

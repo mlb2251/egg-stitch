@@ -49,24 +49,6 @@ pub trait LanguageFamily: Clone + 'static {
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
 
-    /// Wrap `body` in a single fresh binder enode (i.e. a lambda).
-    /// Should only be called on languages that support binders (e.g. `LambdaCalc`).
-    fn wrap_in_binder<O: StitchOp>(_egraph: &mut StitchEgraph<Self::Apply<O>>, _body: Id) -> Id {
-        panic!("language family has no binders; can't wrap an arg")
-    }
-
-    /// Apply `head_id` (already in `out`) to a sequence of De Bruijn-variable
-    /// args at indices `var_indices`. For binary-`App` families this builds a
-    /// curried `App` chain in left-to-right order. For families with no `App`
-    /// enode the implementation panics if `var_indices` is non-empty —
-    /// typically those families have `d_k = 0` and empty hoist sets, so the
-    /// caller never produces a non-trivial arg list.
-    ///
-    /// Used by `Pattern::body_with_hoists` to render each `?#k` leaf in
-    /// stitch λ-form `(?#k $h_0 … $h_{m-1} $(d_k-1) … $0)`.
-    fn apply_to_db_vars<O: StitchOp>(_out: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head_id: Id, var_indices: &[u32]) -> Id {
-        if var_indices.is_empty() { head_id } else { panic!("language family has no application form; can't apply head to {} args", var_indices.len()) }
-    }
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -143,19 +125,4 @@ impl LanguageFamily for LambdaCalc {
         Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v)), vec![])
     }
 
-    fn wrap_in_binder<O: StitchOp>(egraph: &mut StitchEgraph<LambdaCalcLanguage<O>>, body: Id) -> Id {
-        egraph.add(LambdaCalcLanguage::Lam([body]))
-    }
-
-    /// Curry `head_id` over `var_indices` left-to-right via `App` enodes,
-    /// emitting a fresh `Leaf(Var(i))` for each index.
-    fn apply_to_db_vars<O: StitchOp>(out: &mut egg::RecExpr<LambdaCalcLanguage<OpWithVar<O>>>, head_id: Id, var_indices: &[u32]) -> Id {
-        let mut current = head_id;
-        for &i in var_indices {
-            let leaf_op: OpWithVar<O> = OpWithVar::Node(O::from_name(&format!("${i}")));
-            let arg = out.add(LambdaCalcLanguage::Leaf(leaf_op));
-            current = out.add(LambdaCalcLanguage::App([current, arg]));
-        }
-        current
-    }
 }
