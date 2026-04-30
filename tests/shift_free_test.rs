@@ -103,4 +103,3 @@ fn non_var_nodes_are_untouched() {
     shift_top(&mut e, 7, 0);
     assert_eq!(show(&e), before);
 }
-
