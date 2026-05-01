@@ -116,16 +116,33 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
     // Collapse to a single entry when both backends agree; otherwise record
     // both side-by-side so the divergence is visible in the fixture.
     let combined = if bf == smc { bf } else { json!({"best-first": bf, "smc": smc}) };
+    bless_or_check(&expected_path(input), &combined, input);
+}
 
-    let path = expected_path(input);
+/// Like `check_fixture` but runs only the best-first backend. Use when SMC
+/// converges unreliably for the given corpus (so its output isn't worth
+/// pinning) but best-first's enumeration is still a meaningful regression
+/// signal. The fixture format is the same single `RunResult` shape that
+/// `check_fixture` writes when both backends already agree.
+#[allow(dead_code)]
+fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) {
+    let mut bf = run_backend("best-first", input, extra_args);
+    if !check_pattern {
+        strip_library_patterns(&mut bf);
+    }
+    bless_or_check(&expected_path(input), &bf, input);
+}
+
+/// Shared blessing/checking step for the two `check_fixture*` helpers.
+fn bless_or_check(path: &str, value: &Value, input: &str) {
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(&combined).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(value).expect("serialize expected");
         text.push('\n');
-        fs::write(&path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
+        fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
-        let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
+        let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
         let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(combined, expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
+        assert_eq!(value, &expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
     }
 }
 
