@@ -68,12 +68,7 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Randomly selects a match and variable, then expands or reuses the variable.
-    /// Returns early if `matches` is empty (the particle has no live matches —
-    /// any further expansion would just re-encounter the empty state).
     pub fn expand_random(&mut self, shared: &SharedSearchData<F, O>, verbose: bool) {
-        if self.matches.is_empty() {
-            return;
-        }
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
@@ -101,10 +96,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
 
         if rand::rng().random_bool(shared.p_reuse) {
-            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)| *idx != var_idx && **id == target_id).collect::<Vec<_>>();
+            // Pre-filter reuse candidates: the chosen subst must survive
+            // `subset_matches_reuse`, which (a) requires `subst.vars[var_idx]
+            // == subst.vars[idx]` and (b) requires the kept-eclass's fv to
+            // fit the merged depth `max(d_keep, d_drop)`. If no candidate
+            // would survive, fall through to expansion — invoking `reuse`
+            // anyway would empty the match set and panic on the next call.
+            let reuse_candidates: Vec<usize> = subst
+                .vars
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, id)| {
+                    if idx == var_idx || *id != target_id {
+                        return None;
+                    }
+                    let keep_idx = idx.min(var_idx);
+                    let merged_depth = self.pattern.var_depth[var_idx].max(self.pattern.var_depth[idx]);
+                    let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
+                    if kept_fv.iter().all(|&i| i >= merged_depth) { Some(idx) } else { None }
+                })
+                .collect();
             if !reuse_candidates.is_empty() {
-                let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
-                let candidate_var_idx = reuse_candidates[candidate_idx].0;
+                let candidate_var_idx = reuse_candidates[rand::rng().random_range(0..reuse_candidates.len())];
                 self.reuse(var_idx, candidate_var_idx, shared);
                 return;
             }
