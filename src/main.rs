@@ -1,7 +1,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, LanguageChoice, SearchKind, io,
-    lang::{LambdaCalc, Op, OpChildren},
+    lang::{LambdaCalc, Op, OpChildren, OpDB, StitchOp},
     multiple_step_search, results,
 };
 
@@ -9,10 +9,13 @@ fn main() {
     let args = Args::parse();
     let start = std::time::Instant::now();
 
-    // Pick the language at the boundary; the rest of the pipeline is generic.
+    // Pick the language family AND its leaf-Op at the boundary. LambdaCalc
+    // gets `OpDB<Op>` so `$n` parses as a real De Bruijn variable (the fv
+    // analysis and depth-aware extraction need that). OpChildren has no
+    // binders, so DB vars are meaningless there — keeps plain `Op`.
     let (library, original_size, final_cost, cost_before_rewrites) = match args.language {
-        LanguageChoice::OpChildren => run::<OpChildren>(&args),
-        LanguageChoice::LambdaCalc => run::<LambdaCalc>(&args),
+        LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
+        LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
     };
 
     let elapsed_secs = start.elapsed().as_secs_f64();
@@ -46,9 +49,10 @@ fn main() {
     }
 }
 
-/// Loads the egraph and runs the multi-abstraction search loop, parameterized by the language family.
-fn run<F: egg_stitch::lang::LanguageFamily>(args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, usize) {
-    let (egraph, root, cost_before_rewrites) = io::load_egraph::<F::Apply<Op>>(&args.input, args.rules.as_deref(), args.weights);
-    let (library, original_size, final_cost) = multiple_step_search::<F, Op>(egraph, root, args);
+/// Loads the egraph and runs the multi-abstraction search loop, parameterized
+/// by both the language family `F` and the leaf-Op `O`.
+fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, usize) {
+    let (egraph, root, cost_before_rewrites) = io::load_egraph::<F::Apply<O>>(&args.input, args.rules.as_deref(), args.weights);
+    let (library, original_size, final_cost) = multiple_step_search::<F, O>(egraph, root, args);
     (library, original_size, final_cost, cost_before_rewrites)
 }

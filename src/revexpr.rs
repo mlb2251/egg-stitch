@@ -70,3 +70,44 @@ impl<L: egg::Language> From<egg::RecExpr<L>> for RevExpr<L> {
         RevExpr::new(nodes)
     }
 }
+
+/// Shift every *free* De Bruijn index reachable from `root`. `by` can be positive or negative (but must not underflow to negative).
+/// The idea here is we can use this to take an expression like (+ $6 $7) and know that we're hoisting it through 5 levels of lambda
+/// so it should now be (+ $1 $2).
+pub fn shift_free<L>(expr: &mut RevExpr<L>, root: egg::Id, by: i32, initial_depth: u32)
+where
+    L: egg::Language + egg::FromOp,
+    L::Error: std::fmt::Debug,
+    L::Discriminant: crate::lang::StitchDisc,
+{
+    let mut seen: rustc_hash::FxHashSet<egg::Id> = rustc_hash::FxHashSet::default();
+    shift_free_rec(expr, root, by, initial_depth, &mut seen);
+}
+
+fn shift_free_rec<L>(expr: &mut RevExpr<L>, id: egg::Id, by: i32, depth: u32, seen: &mut rustc_hash::FxHashSet<egg::Id>)
+where
+    L: egg::Language + egg::FromOp,
+    L::Error: std::fmt::Debug,
+    L::Discriminant: crate::lang::StitchDisc,
+{
+    use crate::lang::StitchDisc;
+    if !seen.insert(id) {
+        return;
+    }
+    let disc = expr[id].discriminant();
+    if let Some(n) = disc.de_bruijn_index() {
+        if n >= depth {
+            let shifted = n as i32 + by;
+            assert!(shifted >= 0, "shift_free: negative index after shifting ${n} by {by}");
+            let new_node = L::from_op(&format!("${shifted}"), vec![]).expect("from_op for shifted DB var");
+            expr[id] = new_node;
+        }
+        return;
+    }
+    // clone to mutate as we go.
+    let kids: Vec<(usize, egg::Id)> = expr[id].children().iter().copied().enumerate().collect();
+    for (j, child) in kids {
+        let child_depth = depth + if disc.binds_child(j) { 1 } else { 0 };
+        shift_free_rec(expr, child, by, child_depth, seen);
+    }
+}
