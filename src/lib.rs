@@ -85,6 +85,12 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub check_slow: bool,
 
+    /// Allow higher-order capture: substs whose captured eclass references a
+    /// pattern-internal binder are kept and emitted as eta-wrapped arguments
+    /// (with apps inserted in the body), instead of being filtered as unsound.
+    #[arg(long, default_value_t = false)]
+    pub higher_order: bool,
+
     /// Number of abstractions to find sequentially (each stacks on the previous).
     #[arg(long, default_value_t = 1)]
     pub num_abstractions: usize,
@@ -162,13 +168,14 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let pat_size = cost::compute_pattern_size(&state.pattern, &result_egraph.analysis.weights);
-                let body_str = state.pattern.to_string();
+                let ho_arity = cost::compute_ho_arity::<F, O>(&result_egraph, &state, args.higher_order);
+                let pat_size = cost::compute_pattern_size(&state.pattern, &result_egraph.analysis.weights) + cost::pattern_body_ho_extra::<F, O>(&state.pattern, &ho_arity, &result_egraph.analysis.weights) as usize;
+                let body_str = state.pattern.display_with_ho(&ho_arity);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{abstraction_idx}");
-                let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref());
+                let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref(), args.higher_order);
 
                 final_cost = Some(best_cost);
                 library.push(results::AbstractionResult {
@@ -205,19 +212,34 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>, higher_order: bool) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
     let mut egraph = egraph;
-    // Stitch convention: each metavar captures a subterm whose free vars are
-    // outer-context only (closed relative to the pattern). Search keeps
-    // unsound intermediate captures in match sets; we filter them out here
-    // so only sound substs become rewrites.
+    // Mirrors `build_rewritten_egraph`: with HO off, filter unsound substs;
+    // with HO on, η-wrap captures whose fv reaches into pattern-internal
+    // binders before passing them in.
     let var_depth = &state.pattern.var_depth;
+    let ho_arity = cost::compute_ho_arity::<F, O>(&egraph, state, higher_order);
+    let mut shift_memo: rustc_hash::FxHashMap<(Id, u32), Id> = rustc_hash::FxHashMap::default();
     for m in &state.matches {
         for subst in &m.substs {
-            if !cost::subst_is_sound::<F, O>(&egraph, var_depth, subst) {
+            if !higher_order && !cost::subst_is_sound::<F, O>(&egraph, var_depth, subst) {
                 continue;
             }
-            let x = F::add_stub_application::<O>(fn_name, subst.vars.clone(), &mut egraph);
+            let wrapped: Vec<Id> = subst
+                .vars
+                .iter()
+                .enumerate()
+                .map(|(k, &arg_id)| {
+                    let h = ho_arity[k];
+                    if h == 0 {
+                        arg_id
+                    } else {
+                        let shifted = cost::shift_free_egraph::<F, O>(&mut egraph, arg_id, h, var_depth[k], &mut shift_memo);
+                        F::wrap_lams::<O>(shifted, h, &mut egraph)
+                    }
+                })
+                .collect();
+            let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
             egraph.union(x, m.root_eclass);
         }
     }

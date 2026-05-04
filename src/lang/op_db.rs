@@ -61,4 +61,8 @@ impl<O: StitchOp> StitchOp for OpDB<O> {
             Self::Node(O::from_name(s))
         }
     }
+
+    fn make_db_var(n: u32) -> Option<Self> {
+        Some(Self::Var(n))
+    }
 }

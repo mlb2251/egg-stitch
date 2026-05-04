@@ -1,0 +1,7 @@
+[
+    "(lam (foo (bar (h $0))))",
+    "(lam (foo (bar ($0 a))))",
+    "(lam (foo (bar (k $0 b))))",
+    "(lam (foo (bar (m c $0 d))))",
+    "(lam (foo (bar $0)))"
+]

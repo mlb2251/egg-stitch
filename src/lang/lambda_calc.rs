@@ -81,6 +81,10 @@ impl<O: StitchOp> StitchOp for LambdaCalcDisc<O> {
             _ => Self::Leaf(O::from_name(s)),
         }
     }
+
+    fn make_db_var(n: u32) -> Option<Self> {
+        O::make_db_var(n).map(Self::Leaf)
+    }
 }
 
 impl<O: StitchOp> Language for LambdaCalcLanguage<O> {

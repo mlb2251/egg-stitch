@@ -1,6 +1,7 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchLanguage, StitchOp};
 use crate::revexpr::RevExpr;
-use egg::{Id, Language};
+use egg::{Id, Language, RecExpr};
+use rustc_hash::FxHashMap;
 
 /// A partially-built pattern, parameterized by a language family `F` (the
 /// type-level constructor `L<_>`) and a leaf-Op `O` for the program side.
@@ -120,6 +121,42 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
                 self.pattern[id] = shifted.clone();
             }
         }
+    }
+}
+
+impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
+    /// Renders the abstraction body with HO apps spliced in: each occurrence
+    /// of `?#k` with `ho_arity[k] > 0` is wrapped as `(@ … (@ ?#k $0) … $(h-1))`.
+    /// Falls back to plain `to_string()` when `ho_arity` is all zeros.
+    pub fn display_with_ho(&self, ho_arity: &[u32]) -> String {
+        if ho_arity.iter().all(|&h| h == 0) {
+            return self.to_string();
+        }
+        // RevExpr id → which metavar k (if any) lives at this position.
+        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
+        for (k, ids) in self.vars.iter().enumerate() {
+            for &id in ids {
+                pos_to_k.insert(usize::from(id), k);
+            }
+        }
+        // Walk RevExpr from leaves (high indices) to root (index 0), copying
+        // each node into a fresh RecExpr. Children get id-mapped; var positions
+        // get HO-app-wrapped.
+        let mut out: RecExpr<F::Apply<OpWithVar<O>>> = RecExpr::default();
+        let mut id_map: Vec<Id> = vec![Id::from(0); self.pattern.nodes.len()];
+        for i in (0..self.pattern.nodes.len()).rev() {
+            let node = &self.pattern.nodes[i];
+            let new_children: Vec<Id> = node.children().iter().map(|&c| id_map[usize::from(c)]).collect();
+            let new_node = F::make(node.discriminant(), new_children);
+            let mut new_id = out.add(new_node);
+            if let Some(&k) = pos_to_k.get(&i)
+                && ho_arity[k] > 0
+            {
+                new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, ho_arity[k]);
+            }
+            id_map[i] = new_id;
+        }
+        <F::Apply<OpWithVar<O>> as StitchLanguage>::display_recexpr(&out)
     }
 }
 
