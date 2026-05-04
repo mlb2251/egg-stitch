@@ -119,3 +119,39 @@ fn merge_unions_fv() {
     got.sort();
     assert_eq!(got, vec![0, 1]);
 }
+
+// ---- Known-broken: union over-approximates fv across fv-dropping rewrites ----
+//
+// When a rewrite rule equates two terms whose syntactic fv differ — e.g.
+// the annihilator `(* 0 x) ↔ 0`, where the LHS depends on `x` and the RHS
+// doesn't — unioning the eclasses produces an fv set that's the union of
+// both sides. That's strictly larger than the *semantic* fv (which is `{}`
+// here, since the eclass denotes 0).
+//
+// The over-approximation is the conservative choice given that extraction
+// can pick any representative: a tighter (intersection-style) fv would let
+// the soundness filter capture the eclass, and extraction could then pick
+// `(* 0 $1)`, splicing `$1` into a scope where it refers to the wrong
+// binder. So this isn't unsoundness — it's lost compression.
+//
+// `#[ignore]` because the assertion below states the *correct* semantic
+// behavior, which the current union-based analysis doesn't satisfy. Remove
+// `#[ignore]` once the analysis is tightened (e.g. by constraining
+// extraction to the safe subset of each eclass, or by tracking per-member
+// fv and letting cost decide).
+#[test]
+#[ignore = "fv is unioned across merges; doesn't track that some members are fv-free"]
+fn merge_with_annihilator_should_not_inherit_dropped_fv() {
+    let mut eg: egg::EGraph<LamLang, StitchAnalysis> = egg::EGraph::default();
+    // `0` has empty fv; `(* 0 $1)` has fv {1}. With the rule `(* 0 x) ↔ 0`,
+    // these are semantically equal — the eclass denotes 0 regardless of `x`.
+    let zero = eg.add_expr(&LamLang::parse_program("0").unwrap());
+    let mul = eg.add_expr(&LamLang::parse_program("(* 0 $1)").unwrap());
+    eg.union(zero, mul);
+    eg.rebuild();
+    let merged: Id = eg.find(zero);
+    let got: Vec<u32> = eg[merged].data.fv.iter().copied().collect();
+    // Semantic fv is `{}`: every member of the eclass denotes 0. The current
+    // union-based analysis instead reports `{1}`.
+    assert_eq!(got, Vec::<u32>::new());
+}
