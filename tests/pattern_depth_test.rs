@@ -76,12 +76,16 @@ fn reuse_at_equal_depth_ok() {
 }
 
 #[test]
-#[should_panic(expected = "differing binder depths")]
-fn reuse_at_unequal_depth_panics() {
+fn reuse_at_unequal_depth_takes_max() {
+    // Cross-depth reuse is allowed: the merged metavar adopts the strictest
+    // (max) depth. The captures filter (`subset_matches_reuse`) enforces that
+    // both occurrences' kept e-class fits the new max-depth invariant; this
+    // structural test only checks the depth-bookkeeping side.
     let mut p: Pat = Pattern::single_var();
     p.expand(0, &app()); // depths [0, 0]
     p.expand(0, &lam()); // (@ (lam ?#0) ?#1), depths [1, 0]
-    p.reuse(0, 1); // different depths → reject
+    p.reuse(0, 1);
+    assert_eq!(p.var_depth, vec![1]);
 }
 
 #[test]

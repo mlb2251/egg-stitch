@@ -95,11 +95,13 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
-        // Scope invariant: only meta-vars at the same binder depth may be unified.
-        // Mixing depths would mean one occurrence sits under more pattern-internal
-        // binders than the other, so substitution would need a binder-shift —
-        // outside the canonical-form contract.
-        assert_eq!(self.var_depth[keep_idx], self.var_depth[drop_idx], "reuse across differing binder depths is not allowed (depths {} vs {})", self.var_depth[keep_idx], self.var_depth[drop_idx]);
+        // Cross-depth reuse is OK under stitch's fv pruning: every captured
+        // subterm has fv ≥ d_k for its location's depth, so its meaning is
+        // independent of which pattern-internal lams enclose it. The merged
+        // metavar adopts the *max* depth — that's the strictest constraint
+        // its captures must satisfy (the corresponding subst-filter happens
+        // in `subset_matches_reuse`).
+        let merged_depth = self.var_depth[keep_idx].max(self.var_depth[drop_idx]);
 
         let keep_name = var_node::<F, O>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
@@ -109,6 +111,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.vars[keep_idx].extend(drop_ids);
         self.vars.remove(drop_idx);
         self.var_depth.remove(drop_idx);
+        self.var_depth[keep_idx] = merged_depth;
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {

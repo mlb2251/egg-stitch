@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
@@ -6,6 +6,21 @@ use egg::{Id, Language};
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
+
+/// True iff expanding a metavar at depth `d_k` with `target` would introduce a
+/// free De Bruijn leaf into the pattern body. Used to ban literal `$i` leaves
+/// at positions where `i >= d_k` — those should be captured as metavars
+/// instead, so every leaf in the abstraction body is either a hole, a closed
+/// symbol, or a pattern-internally-bound `$i`.
+///
+/// `Var(i)` leaves with `i < d_k` are allowed (the surrounding pattern lams
+/// bind them). Non-leaf nodes and non-DB-var leaves always pass.
+fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
+where
+    L::Discriminant: StitchDisc,
+{
+    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= d_k)
+}
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
 /// with a specific enode shape, or unifying two existing variables.
@@ -81,20 +96,45 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
 
         if rand::rng().random_bool(shared.p_reuse) {
-            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)| *idx != var_idx && **id == target_id).collect::<Vec<_>>();
+            // Pre-filter reuse candidates: the chosen subst must survive
+            // `subset_matches_reuse`, which (a) requires `subst.vars[var_idx]
+            // == subst.vars[idx]` and (b) requires the kept-eclass's fv to
+            // fit the merged depth `max(d_keep, d_drop)`. If no candidate
+            // would survive, fall through to expansion — invoking `reuse`
+            // anyway would empty the match set and panic on the next call.
+            let reuse_candidates: Vec<usize> = subst
+                .vars
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, id)| {
+                    if idx == var_idx || *id != target_id {
+                        return None;
+                    }
+                    let keep_idx = idx.min(var_idx);
+                    let merged_depth = self.pattern.var_depth[var_idx].max(self.pattern.var_depth[idx]);
+                    let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
+                    if kept_fv.iter().all(|&i| i >= merged_depth) { Some(idx) } else { None }
+                })
+                .collect();
             if !reuse_candidates.is_empty() {
-                let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
-                let candidate_var_idx = reuse_candidates[candidate_idx].0;
-                self.reuse(var_idx, candidate_var_idx);
+                let candidate_var_idx = reuse_candidates[rand::rng().random_range(0..reuse_candidates.len())];
+                self.reuse(var_idx, candidate_var_idx, shared);
                 return;
             }
         }
 
         let target_eclass = &shared.egraph[target_id];
-        let node_idx = rand::rng().random_range(0..target_eclass.len());
-        let target_node = &target_eclass.nodes[node_idx];
+        let d_k = self.pattern.var_depth[var_idx];
+        // Skip free-DB-var enodes; if the chosen target is one, the particle
+        // makes no move this step (the meta-var stays put — a later expansion
+        // can cover the same e-class via a metavar capture instead).
+        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !target_is_free_db_var(*n, d_k)).collect();
+        if candidates.is_empty() {
+            return;
+        }
+        let target_node = candidates[rand::rng().random_range(0..candidates.len())].clone();
 
-        self.expand(var_idx, target_node, shared);
+        self.expand(var_idx, &target_node, shared);
     }
 
     /// Check if this particle's pattern is a valid prefix of the follow target.
@@ -110,9 +150,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Merges two pattern variables and filters matches to those where both point to the same e-class.
-    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+    pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData<F, O>) {
         self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx);
+        self.subset_matches_reuse(var_idx, second_var_idx, shared);
     }
 
     /// Updates all matches by transforming each substitution via the given closure,
@@ -153,14 +193,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Filters matches to those where `var_idx` and `second_var_idx` point to the same e-class.
     /// Mirrors `Pattern::reuse`: keeps the lower-indexed var and removes the higher one,
     /// so substs stay aligned with the pattern regardless of caller argument order.
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+    ///
+    /// After cross-depth reuse the merged metavar's depth is `max(d_keep,
+    /// d_drop)` (see `Pattern::reuse`). The kept e-class's fv must satisfy the
+    /// stitch invariant *under that stricter depth* — i.e., every fv index
+    /// must be `≥ merged_depth` — otherwise the merged metavar would have a
+    /// pattern-internal-bound capture, breaking the cross-depth-reuse safety
+    /// argument. Substs that violate this are dropped.
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData<F, O>) {
+        let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
+        let merged_depth = self.pattern.var_depth[keep_idx];
         self.update_matches(|subst, out| {
-            if subst.vars[var_idx] == subst.vars[second_var_idx] {
-                let mut new_subst = subst.clone();
-                new_subst.vars.remove(drop_idx);
-                out.push(new_subst);
+            if subst.vars[var_idx] != subst.vars[second_var_idx] {
+                return;
             }
+            let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
+            if !kept_fv.iter().all(|&i| i >= merged_depth) {
+                return;
+            }
+            let mut new_subst = subst.clone();
+            new_subst.vars.remove(drop_idx);
+            out.push(new_subst);
         });
     }
 
@@ -183,12 +237,20 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let mut out = Vec::new();
 
         for var_idx in 0..self.pattern.vars.len() {
+            let d_k = self.pattern.var_depth[var_idx];
             let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
+                        // Skip free DB-var leaves: those would land in the pattern
+                        // body unbound. The search must capture them as metavars
+                        // (i.e., leave the meta-var here for now, and let a later
+                        // step at higher arity handle it via metavar capture).
+                        if target_is_free_db_var(node, d_k) {
+                            continue;
+                        }
                         let key = (node.discriminant(), node.children().len());
                         if seen.insert(key) {
                             shapes.push(node.clone());
@@ -218,7 +280,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
                 if unifiable {
                     let mut child = self.clone();
-                    child.reuse(i, j);
+                    child.reuse(i, j, shared);
                     if !child.matches.is_empty() {
                         out.push((Action::Reuse { keep: i, drop: j }, child));
                     }
