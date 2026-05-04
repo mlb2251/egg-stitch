@@ -1,0 +1,20 @@
+{
+  "compression_ratio": 1.252892561983471,
+  "cost_after_rewrites": 1516,
+  "final_cost": 1210,
+  "initial_cost": 31,
+  "library": [
+    {
+      "approx_cost": 808,
+      "arity": 1,
+      "num_matches": 2,
+      "pattern": "fn_0: (Y (lam (lam (is_nil $0 nil (cons (?#0 $0))))))",
+      "pattern_size": 708,
+      "rewritten_programs": [
+        "(fn_0 +)",
+        "(fn_0 -)"
+      ],
+      "usage_matches": 2
+    }
+  ]
+}
