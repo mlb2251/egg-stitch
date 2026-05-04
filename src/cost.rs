@@ -7,6 +7,18 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
+/// True iff every metavar in `subst` has a captured e-class whose fv contains
+/// no pattern-internal binder index (i.e. all fv `≥ d_k`). Substs that fail
+/// this can't be soundly emitted as `(fn_n captures…)` under stitch's plain-
+/// substitution convention, but they're still *kept* in match sets during
+/// search so further expansion can refine them into closed-prefix captures.
+pub fn subst_is_sound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, var_depth: &[u32], subst: &Subst) -> bool {
+    subst.vars.iter().enumerate().all(|(k, &arg_id)| {
+        let d_k = var_depth[k];
+        egraph[arg_id].data.fv.iter().all(|&i| i >= d_k)
+    })
+}
+
 /// Precomputed egraph topology for fast cost computation.
 /// Built once from the egraph and reused across all `compute_cost` calls.
 pub struct CostCache {
@@ -88,6 +100,11 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data.size as i64) };
 
+    // Substs whose captures still have pattern-internal-bound fv aren't yet
+    // sound; we skip them here (they're kept in `state.matches` so the search
+    // can refine them, but they don't yet realize compression).
+    let var_depth = &search_state.pattern.var_depth;
+
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
     for m in &search_state.matches {
@@ -102,6 +119,9 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         let weights = &egraph.analysis.weights;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
+                if !subst_is_sound::<F, O>(egraph, var_depth, subst) {
+                    continue;
+                }
                 let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
                 let size_new: i64 = stub_size + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
                 if size_new < best {
@@ -138,8 +158,12 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 /// Used for validating `compute_size` and for extracting rewritten programs.
 pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> StitchEgraph<F::Apply<O>> {
     let mut egraph = egraph.clone();
+    let var_depth = &search_state.pattern.var_depth;
     for m in &search_state.matches {
         for subst in &m.substs {
+            if !subst_is_sound::<F, O>(&egraph, var_depth, subst) {
+                continue;
+            }
             let x = F::add_stub_application::<O>("inv_0", subst.vars.clone(), &mut egraph);
             egraph.union(x, m.root_eclass);
         }

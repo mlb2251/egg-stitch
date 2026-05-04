@@ -1,0 +1,20 @@
+{
+  "compression_ratio": 1.2698170731707317,
+  "cost_after_rewrites": 3332,
+  "final_cost": 2624,
+  "initial_cost": 65,
+  "library": [
+    {
+      "approx_cost": 1818,
+      "arity": 3,
+      "num_matches": 2,
+      "pattern": "fn_0: (app (app cons (app (app ?#0 (app car ?#1)) ?#2)) (app rec (app cdr ?#1)))",
+      "pattern_size": 1514,
+      "rewritten_programs": [
+        "(lam (fn_0 + $0 (app car $0)))",
+        "(lam (fn_0 - $0 t1))"
+      ],
+      "usage_matches": 2
+    }
+  ]
+}
