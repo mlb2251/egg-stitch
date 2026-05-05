@@ -1,23 +1,16 @@
-//! End-to-end demonstration of an abstraction missed because the
-//! free-variable analysis over-approximates across fv-dropping rewrites.
+//! End-to-end check that the intersection-based fv analysis lets all three
+//! programs rewrite under the natural arity-1 abstraction, even when the
+//! `(* 0 ?x) => 0` rule pollutes one match's capture eclass.
 //!
 //! Corpus: three programs of shape `(big (chain (of (g X (lam X)))))` with
-//! `X` ∈ {`xx`, `yy`, `(* 0 $0)`}. Rule: `(* 0 ?x) => 0`. Under the rule
-//! every program's body collapses to the same shape, and the natural
-//! arity-1 abstraction `(big (chain (of (g ?#0 (lam ?#0)))))` should match
-//! all three (?#0 = `xx`, `yy`, `0` respectively).
+//! `X` ∈ {`xx`, `yy`, `(* 0 $0)`}. Under the rule every program's body
+//! collapses to the same shape, and `(big (chain (of (g ?#0 (lam ?#0)))))`
+//! matches all three with ?#0 = `xx`, `yy`, `0`.
 //!
-//! The metavar appears at depth 0 *and* depth 1 (inside the lam), so after
-//! reuse its merged depth is 1. For the third program, ?#0 captures the
-//! eclass `{0, (* 0 $0)}`. Its semantic fv is `{}` (the eclass denotes 0),
-//! but the union-based analysis reports `{1}`, which fails the
-//! `fv ≥ d_k` soundness check and drops the subst. Result: only the first
-//! two programs get rewritten under the abstraction.
-//!
-//! `#[ignore]`d because the assertion below states the fix-tagged behavior
-//! (all three programs rewritten) which the current analysis doesn't
-//! satisfy. Run with `--ignored` to reproduce; remove `#[ignore]` once the
-//! fv analysis is tightened.
+//! For the third program, ?#0 captures the eclass `{0, (* 0 $0)}` after the
+//! rule fires. Intersection fv reports `{}` (correct semantic fv), so
+//! `subst_is_sound` accepts it; AstSize extraction picks `0` for the
+//! capture, satisfying `check_fvs_are_as_expected` post-extraction.
 
 use serde_json::Value;
 use std::{fs, path::Path, process::Command};
@@ -27,7 +20,6 @@ const INPUT: &str = "data/domains/fv-overapprox/annihilator.json";
 const RULES: &str = "data/domains/fv-overapprox/annihilator.rewrites";
 
 #[test]
-#[ignore = "fv over-approximation drops the polluted subst; abstraction misses one program"]
 fn annihilator_rule_should_unlock_all_three_matches() {
     let out_path = std::env::temp_dir().join(format!("egg-stitch-fv-overapprox-{}.json", std::process::id()));
     let out_str = out_path.to_str().expect("utf-8 temp path");

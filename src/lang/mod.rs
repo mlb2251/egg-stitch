@@ -71,20 +71,22 @@ impl Default for Weights {
     }
 }
 
-/// Per-e-class analysis data: minimum AST size and the union of free De Bruijn
-/// indices across the class's representatives.
+/// Per-e-class analysis data: minimum AST size and the De Bruijn indices that
+/// are free in *every* representative of the class.
 ///
-/// `fv` is an over-approximation: an index `n` is in `fv` iff *some* member of
-/// the class mentions `$n` freely. This is the right semantics for downstream
-/// capture handling — extraction may pick any representative, so anything that
-/// could be free in any of them must be assumed free.
+/// `fv` is the intersection across enodes: an index `n` is in `fv` iff every
+/// member of the class mentions `$n` freely. Equivalently, `n ∉ fv` means at
+/// least one representative doesn't mention `$n` freely. Downstream
+/// soundness checks that rely on this (e.g. emitting an `inv_0` capture)
+/// must pair with extraction that picks a representative consistent with
+/// the recorded fv — see `check_fvs_are_as_expected` in `cost.rs`.
 ///
 /// Languages without binders or De Bruijn leaves leave `fv` empty everywhere.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StitchData {
     /// Minimum AST size among e-nodes in this e-class.
     pub size: u32,
-    /// Free-variable set (union of members' free-var sets).
+    /// Free-variable set (intersection of members' free-var sets).
     pub fv: FxHashSet<u32>,
 }
 
@@ -129,18 +131,20 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
         StitchData { size, fv }
     }
 
-    /// On merge: keep the minimum size, take the union of the two fv sets.
+    /// On merge: keep the minimum size, take the intersection of the two fv
+    /// sets. Intersection reflects "free in every representative" — when two
+    /// classes unify, an index that wasn't free in one of them is no longer
+    /// guaranteed to be free in the merged class.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
         let size_to_changed = from.size < to.size;
         let size_from_changed = from.size > to.size;
         if size_to_changed {
             to.size = from.size;
         }
-        let fv_from_changed = from.fv.iter().any(|x| !to.fv.contains(x));
-        let before_len = to.fv.len();
-        to.fv.extend(from.fv.iter().copied());
-        let fv_to_changed = to.fv.len() != before_len;
-        egg::DidMerge(size_to_changed || fv_to_changed, size_from_changed || fv_from_changed)
+        let to_had_extra = to.fv.iter().any(|x| !from.fv.contains(x));
+        let from_had_extra = from.fv.iter().any(|x| !to.fv.contains(x));
+        to.fv.retain(|x| from.fv.contains(x));
+        egg::DidMerge(size_to_changed || to_had_extra, size_from_changed || from_had_extra)
     }
 }
 

@@ -278,5 +278,86 @@ pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
     let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
     let rewritten = build_rewritten_egraph(egraph, search_state, &ho_arity);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0].children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect()
+    let var_depth = &search_state.pattern.var_depth;
+    rewritten[root].nodes[0].children().iter().map(|&child| {
+        let (_, expr) = extractor.find_best(child);
+        check_fvs_are_as_expected(&expr, var_depth);
+        <F::Apply<O> as StitchLanguage>::display_recexpr(&expr)
+    }).collect()
+}
+
+/// Computes the exact syntactic free-variable set at every position of `expr`,
+/// indexed by `usize::from(Id)`. Mirrors the per-enode rule used in
+/// `StitchAnalysis::make`, but on a concrete tree (no over-/under-approximation).
+fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
+    let nodes: &[L] = expr.as_ref();
+    let mut fv: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); nodes.len()];
+    for (i, node) in nodes.iter().enumerate() {
+        let disc = node.discriminant();
+        let mut s = FxHashSet::default();
+        if let Some(n) = disc.de_bruijn_index() {
+            s.insert(n);
+        }
+        for (j, &c) in node.children().iter().enumerate() {
+            let child_fv = &fv[usize::from(c)];
+            if disc.binds_child(j) {
+                s.extend(child_fv.iter().filter_map(|&k| if k >= 1 { Some(k - 1) } else { None }));
+            } else {
+                s.extend(child_fv.iter().copied());
+            }
+        }
+        fv[i] = s;
+    }
+    fv
+}
+
+/// If `id` is the head of a fully-saturated `name(arg1, …, argN)` stub
+/// application in `expr`, returns `Some(args)`. Handles both flat
+/// (children-on-head, e.g. `OpChildrenLanguage`) and curried-`@` forms
+/// (e.g. `LambdaCalcLanguage`). For curried chains, only the outermost
+/// (fully-applied) node returns `Some` with the complete arg list; inner
+/// `@` nodes return `None` from this check via the arity filter at the
+/// call site.
+fn match_stub_application<L: StitchLanguage>(expr: &RecExpr<L>, id: Id, name: &str) -> Option<Vec<Id>> {
+    let node = &expr[id];
+    let disc_name = node.discriminant().to_string();
+    if disc_name == name {
+        return Some(node.children().to_vec());
+    }
+    if disc_name == "@" && node.children().len() == 2 {
+        let kids = node.children();
+        if let Some(mut args) = match_stub_application(expr, kids[0], name) {
+            args.push(kids[1]);
+            return Some(args);
+        }
+    }
+    None
+}
+
+/// Walks `expr` and, for every fully-applied `inv_0(arg1, …, argN)`,
+/// asserts that arg `k`'s actual syntactic fv is `⊆ [var_depth[k], ∞)` —
+/// i.e., none of the pattern-internal binder indices are free in the
+/// extracted representative. Catches cases where the eclass-level
+/// soundness filter (`subst_is_sound`) admitted a subst because the
+/// intersection-fv analysis allowed it, but the cost extractor then
+/// picked a representative whose actual fv violates the bound.
+pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, var_depth: &[u32]) {
+    let nodes: &[L] = expr.as_ref();
+    let fv = recexpr_fv(expr);
+    for i in 0..nodes.len() {
+        if let Some(args) = match_stub_application::<L>(expr, Id::from(i), "inv_0") {
+            if args.len() != var_depth.len() {
+                continue;
+            }
+            for (k, &arg) in args.iter().enumerate() {
+                let d_k = var_depth[k];
+                let arg_fv = &fv[usize::from(arg)];
+                assert!(
+                    arg_fv.iter().all(|&j| j >= d_k),
+                    "inv_0 arg {k} has fv {:?} containing index < d_k={d_k}; extractor picked an unsound representative",
+                    arg_fv,
+                );
+            }
+        }
+    }
 }
