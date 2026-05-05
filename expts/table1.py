@@ -77,7 +77,7 @@ def table1(
             print(f"  run {i+1}/{num_runs}", flush=True)
             stackpathpush(f"rep{i}")
             with subgroup("best-first"):
-                enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=max_arity)
+                enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=max_arity, no_zero_arity=True)
             with subgroup("smc"):
                 smc_res, _ = run_ours(
                     domain, "smc",
@@ -87,6 +87,7 @@ def table1(
                     num_abstractions=num_abstractions,
                     rebuild_egraph=rebuild_egraph,
                     max_arity=max_arity,
+                    no_zero_arity=True
                 )
             with subgroup("babble"):
                 babble_res = run_babble(domain, dsr=rewrites_path(domain), num_abstractions=num_abstractions, max_arity=max_arity)

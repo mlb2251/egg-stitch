@@ -114,6 +114,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
         panic!("best-first search requires at least one of --num-steps or --time-limit");
     }
     let max_arity = args.max_arity;
+    let no_zero_arity = args.no_zero_arity;
     let debug = args.debug_log;
     let strategy = args.priority;
 
@@ -211,7 +212,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             let child_id = nodes.len();
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _)| *c);
-            if child_state.pattern.vars.len() <= max_arity && child_cost < cost_to_beat {
+            let arity = child_state.pattern.vars.len();
+            if child_state.pattern.vars.len() <= max_arity && child_cost < cost_to_beat && !(no_zero_arity && arity == 0) {
                 let elapsed = search_start.elapsed().as_secs_f64();
                 println!(
                     "{} {} {} {}",
