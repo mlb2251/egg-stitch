@@ -50,9 +50,6 @@ pub trait LanguageFamily: Clone + 'static {
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
 
     /// Wrap an eclass in `n` lambda binders, returning the new eclass id.
-    /// Languages without lambdas should panic; HO capture is only meaningful
-    /// for binder-bearing families and `n == 0` should be handled by callers
-    /// before reaching here.
     fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
 
     /// Total node-count cost of `n` stacked lambda binders under `weights`.
@@ -62,7 +59,6 @@ pub trait LanguageFamily: Clone + 'static {
     /// fresh DB-var leaves `$0, $1, …, $(n-1)` (innermost first). Returns the
     /// id of the outermost App. Used by `Pattern::display_with_ho` to render
     /// HO body uses as `(@ … (@ ?#k $0) … $(n-1))`.
-    /// Panics for languages without apps/binders (HO is meaningless there).
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, n: u32) -> Id;
 }
 
