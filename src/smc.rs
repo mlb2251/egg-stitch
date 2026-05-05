@@ -49,6 +49,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
     let temperature = args.temperature;
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;
+    let no_zero_arity = args.no_zero_arity;
     let verbose = args.verbose;
 
     let mut best_so_far: Option<(usize, SearchState<F, O>)> = None;
@@ -81,7 +82,8 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
 
         for (i, cost) in costs.iter().enumerate() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
-            if expanded[i].pattern.vars.len() <= max_arity && *cost < cost_to_beat {
+            let arity = expanded[i].pattern.vars.len();
+            if arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, expanded[i].clone()));
                 best_found_at = Some(step);

@@ -74,7 +74,7 @@ def table1(
         egraph_min = None
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY)
+            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY, no_zero_arity=True)
             smc_res, _ = run_ours(
                 domain, "smc",
                 num_steps=smc_num_steps,
@@ -83,6 +83,7 @@ def table1(
                 num_abstractions=num_abstractions,
                 rebuild_egraph=rebuild_egraph,
                 max_arity=MAX_ARITY,
+                no_zero_arity=True,
             )
             babble_res = run_babble(domain, dsr=rewrites_path(domain), num_abstractions=num_abstractions, max_arity=MAX_ARITY)
             enum_runs.append(enum_res.to_dict())
