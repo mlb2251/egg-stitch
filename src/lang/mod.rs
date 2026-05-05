@@ -110,7 +110,7 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
 
     /// Computes per-class data for a fresh enode:
     /// - `size` = `disc.intrinsic_size(weights) + Σ child.size`
-    /// - `fv`   = `{n | disc.de_bruijn_index() == Some(n)} ∪ ⋃_j shift(child[j].fv, disc.binds_child(j))`,
+    /// - `fv`   = via `enode_fv`: `{n | disc.de_bruijn_index() == Some(n)} ∪ ⋃_j shift(child[j].fv, disc.binds_child(j))`,
     ///   where `shift(s, true)` decrements every index ≥ 1 by one and drops `0`.
     ///   A bare `Var(n)` leaf has fv `{n}` because nothing above it has bound `n` yet;
     ///   `Lam` is what removes bound indices on the way up.
@@ -118,18 +118,7 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
         let weights = egraph.analysis.weights;
         let disc = enode.discriminant();
         let size = disc.intrinsic_size(&weights) + enode.children().iter().map(|&c| egraph[c].data.size).sum::<u32>();
-        let mut fv: FxHashSet<u32> = FxHashSet::default();
-        if let Some(n) = disc.de_bruijn_index() {
-            fv.insert(n);
-        }
-        for (j, &c) in enode.children().iter().enumerate() {
-            let child_fv = &egraph[c].data.fv;
-            if disc.binds_child(j) {
-                fv.extend(child_fv.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }));
-            } else {
-                fv.extend(child_fv.iter().copied());
-            }
-        }
+        let fv = enode_fv(enode, |c| &egraph[c].data.fv);
         StitchData { size, fv }
     }
 
@@ -154,3 +143,26 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
 /// runtime state on the analysis, so the egraph type is no longer parameterized
 /// by them.
 pub type StitchEgraph<L> = egg::EGraph<L, StitchAnalysis>;
+
+/// Per-enode free-variable rule, parameterised over how to look up child fv
+/// sets. Used by both `StitchAnalysis::make` (children live in the egraph)
+/// and `cost::recexpr_fv` (children live in a `RecExpr`'s flat node array).
+///
+/// `fv(node) = {n | disc.de_bruijn_index() == Some(n)} ∪ ⋃_j shift_j(child_fv(c_j))`,
+/// where `shift_j` drops `0` and decrements ≥ 1 iff `disc.binds_child(j)`.
+pub fn enode_fv<'a, L: StitchLanguage>(node: &L, child_fv: impl Fn(Id) -> &'a FxHashSet<u32>) -> FxHashSet<u32> {
+    let disc = node.discriminant();
+    let mut fv: FxHashSet<u32> = FxHashSet::default();
+    if let Some(n) = disc.de_bruijn_index() {
+        fv.insert(n);
+    }
+    for (j, &c) in node.children().iter().enumerate() {
+        let cf = child_fv(c);
+        if disc.binds_child(j) {
+            fv.extend(cf.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }));
+        } else {
+            fv.extend(cf.iter().copied());
+        }
+    }
+    fv
+}

@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -286,26 +286,13 @@ pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
 }
 
 /// Computes the exact syntactic free-variable set at every position of `expr`,
-/// indexed by `usize::from(Id)`. Mirrors the per-enode rule used in
-/// `StitchAnalysis::make`, but on a concrete tree.
+/// indexed by `usize::from(Id)`. Shares its per-enode rule with
+/// `StitchAnalysis::make` via `enode_fv`.
 pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
     let nodes: &[L] = expr.as_ref();
     let mut fv: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); nodes.len()];
     for (i, node) in nodes.iter().enumerate() {
-        let disc = node.discriminant();
-        let mut s = FxHashSet::default();
-        if let Some(n) = disc.de_bruijn_index() {
-            s.insert(n);
-        }
-        for (j, &c) in node.children().iter().enumerate() {
-            let child_fv = &fv[usize::from(c)];
-            if disc.binds_child(j) {
-                s.extend(child_fv.iter().filter_map(|&k| if k >= 1 { Some(k - 1) } else { None }));
-            } else {
-                s.extend(child_fv.iter().copied());
-            }
-        }
-        fv[i] = s;
+        fv[i] = enode_fv(node, |c| &fv[usize::from(c)]);
     }
     fv
 }
