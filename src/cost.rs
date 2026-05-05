@@ -7,18 +7,6 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-/// True iff every metavar in `subst` has a captured e-class whose fv contains
-/// no pattern-internal binder index (i.e. all fv `≥ d_k`). Substs that fail
-/// this can't be soundly emitted as `(fn_n captures…)` under stitch's plain-
-/// substitution convention, but they're still *kept* in match sets during
-/// search so further expansion can refine them into closed-prefix captures.
-pub fn subst_is_sound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, var_depth: &[u32], subst: &Subst) -> bool {
-    subst.vars.iter().enumerate().all(|(k, &arg_id)| {
-        let d_k = var_depth[k];
-        egraph[arg_id].data.fv.iter().all(|&i| i >= d_k)
-    })
-}
-
 /// Precomputed egraph topology for fast cost computation.
 /// Built once from the egraph and reused across all `compute_cost` calls.
 pub struct CostCache {
@@ -100,11 +88,6 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data.size as i64) };
 
-    // Substs whose captures still have pattern-internal-bound fv aren't yet
-    // sound; we skip them here (they're kept in `state.matches` so the search
-    // can refine them, but they don't yet realize compression).
-    let var_depth = &search_state.pattern.var_depth;
-
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
     for m in &search_state.matches {
@@ -119,9 +102,6 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         let weights = &egraph.analysis.weights;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
-                if !subst_is_sound::<F, O>(egraph, var_depth, subst) {
-                    continue;
-                }
                 let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
                 let size_new: i64 = stub_size + subst.vars.iter().map(|&v| get_size(v, &size_under_rewrite)).sum::<i64>();
                 if size_new < best {
@@ -158,12 +138,8 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 /// Used for validating `compute_size` and for extracting rewritten programs.
 pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> StitchEgraph<F::Apply<O>> {
     let mut egraph = egraph.clone();
-    let var_depth = &search_state.pattern.var_depth;
     for m in &search_state.matches {
         for subst in &m.substs {
-            if !subst_is_sound::<F, O>(&egraph, var_depth, subst) {
-                continue;
-            }
             let x = F::add_stub_application::<O>("inv_0", subst.vars.clone(), &mut egraph);
             egraph.union(x, m.root_eclass);
         }
@@ -176,18 +152,17 @@ pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &St
 pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
     let rewritten = build_rewritten_egraph(egraph, search_state);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    let var_depth = &search_state.pattern.var_depth;
     rewritten[root].nodes[0].children().iter().map(|&child| {
         let (_, expr) = extractor.find_best(child);
-        check_fvs_are_as_expected(&expr, var_depth);
+        check_fvs_are_as_expected::<F::Apply<O>>(&expr, &rewritten[child].data.fv);
         <F::Apply<O> as StitchLanguage>::display_recexpr(&expr)
     }).collect()
 }
 
 /// Computes the exact syntactic free-variable set at every position of `expr`,
 /// indexed by `usize::from(Id)`. Mirrors the per-enode rule used in
-/// `StitchAnalysis::make`, but on a concrete tree (no over-/under-approximation).
-fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
+/// `StitchAnalysis::make`, but on a concrete tree.
+pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
     let nodes: &[L] = expr.as_ref();
     let mut fv: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); nodes.len()];
     for (i, node) in nodes.iter().enumerate() {
@@ -209,53 +184,19 @@ fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
     fv
 }
 
-/// If `id` is the head of a fully-saturated `name(arg1, …, argN)` stub
-/// application in `expr`, returns `Some(args)`. Handles both flat
-/// (children-on-head, e.g. `OpChildrenLanguage`) and curried-`@` forms
-/// (e.g. `LambdaCalcLanguage`). For curried chains, only the outermost
-/// (fully-applied) node returns `Some` with the complete arg list; inner
-/// `@` nodes return `None` from this check via the arity filter at the
-/// call site.
-fn match_stub_application<L: StitchLanguage>(expr: &RecExpr<L>, id: Id, name: &str) -> Option<Vec<Id>> {
-    let node = &expr[id];
-    let disc_name = node.discriminant().to_string();
-    if disc_name == name {
-        return Some(node.children().to_vec());
-    }
-    if disc_name == "@" && node.children().len() == 2 {
-        let kids = node.children();
-        if let Some(mut args) = match_stub_application(expr, kids[0], name) {
-            args.push(kids[1]);
-            return Some(args);
-        }
-    }
-    None
-}
-
-/// Walks `expr` and, for every fully-applied `inv_0(arg1, …, argN)`,
-/// asserts that arg `k`'s actual syntactic fv is `⊆ [var_depth[k], ∞)` —
-/// i.e., none of the pattern-internal binder indices are free in the
-/// extracted representative. Catches cases where the eclass-level
-/// soundness filter (`subst_is_sound`) admitted a subst because the
-/// intersection-fv analysis allowed it, but the cost extractor then
-/// picked a representative whose actual fv violates the bound.
-pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, var_depth: &[u32]) {
-    let nodes: &[L] = expr.as_ref();
+/// Asserts that the extracted term's actual syntactic fv matches the egraph
+/// analysis's recorded fv. Under intersection-fv semantics + AstSize
+/// extraction, the minimal-size representative is also the fv-minimal one,
+/// so its fv should equal the intersection across reps — i.e. `expected`.
+/// A mismatch in either direction means the assumption "min-size ⇒ min-fv"
+/// failed for this extraction; downstream soundness checks that read
+/// `data.fv` lose their guarantee.
+pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<u32>) {
     let fv = recexpr_fv(expr);
-    for i in 0..nodes.len() {
-        if let Some(args) = match_stub_application::<L>(expr, Id::from(i), "inv_0") {
-            if args.len() != var_depth.len() {
-                continue;
-            }
-            for (k, &arg) in args.iter().enumerate() {
-                let d_k = var_depth[k];
-                let arg_fv = &fv[usize::from(arg)];
-                assert!(
-                    arg_fv.iter().all(|&j| j >= d_k),
-                    "inv_0 arg {k} has fv {:?} containing index < d_k={d_k}; extractor picked an unsound representative",
-                    arg_fv,
-                );
-            }
-        }
-    }
+    let actual = fv.last().expect("non-empty RecExpr");
+    assert_eq!(
+        actual, expected,
+        "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated",
+        actual, expected,
+    );
 }
