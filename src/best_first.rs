@@ -94,6 +94,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
 
     let budget = args.num_steps;
     let max_arity = args.max_arity;
+    let no_zero_arity = args.no_zero_arity;
     let debug = args.debug_log;
     let strategy = args.priority;
 
@@ -150,7 +151,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             let child_id = nodes.len();
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _)| *c);
-            if child_state.pattern.vars.len() <= max_arity && child_cost < cost_to_beat {
+            let arity = child_state.pattern.vars.len();
+            if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat {
                 println!("{} {} {}", format!("[expansion {}]", num_expansions).yellow().bold(), format!("new best: {}", child_cost).green().bold(), child_state.pattern.to_string().cyan());
                 best = Some((child_cost, child_id));
                 best_found_at = Some(num_expansions);
