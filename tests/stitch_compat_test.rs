@@ -383,6 +383,30 @@ fn stitch_safe_ctx_thread_bug() {
     check_fixture_bf_only("data/domains/stitch/safe_ctx_thread_bug.json", STITCH_LAMBDA_ARGS, true);
 }
 
+/// End-to-end check that the intersection-based fv analysis lets all three
+/// programs rewrite under the natural arity-1 abstraction, even when the
+/// `(* 0 ?x) => 0` rule pollutes one match's capture eclass.
+///
+/// Corpus: three programs of shape `(big (chain (of (g X (lam X)))))` with
+/// `X` ∈ {`xx`, `yy`, `(* 0 $0)`}. Under the rule every program's body
+/// collapses to the same shape, and `(big (chain (of (g ?#0 (lam ?#0)))))`
+/// matches all three with ?#0 = `xx`, `yy`, `0`. For the third program ?#0
+/// captures the eclass `{0, (* 0 $0)}`; intersection fv reports `{}` so
+/// `subst_is_sound` accepts it and AstSize extraction picks `0`.
+#[test]
+fn fv_overapprox_annihilator() {
+    check_fixture_bf_only(
+        "data/domains/fv-overapprox/annihilator.json",
+        &[
+            "-r", "data/domains/fv-overapprox/annihilator.rewrites",
+            "--language", "lambda-calc",
+            "--sym-var-cost", "100",
+            "--max-arity", "1",
+        ],
+        true,
+    );
+}
+
 /// Self-application: each program has two copies of `(f $0)` for some `f`,
 /// and the abstraction is `(?#0 ?#0)` applied to those copies. Exercises
 /// metavar reuse where the captured subterm has open fv (referring to the
