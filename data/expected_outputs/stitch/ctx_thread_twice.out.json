@@ -5,14 +5,14 @@
   "initial_cost": 59,
   "library": [
     {
-      "approx_cost": 1515,
+      "approx_cost": 1919,
       "arity": 1,
       "num_matches": 2,
-      "pattern": "fn_0: (A (lam (lam (+ (a b ?#0 $0 $1 f) (a b ?#0 $0 $1 f)))))",
-      "pattern_size": 1415,
+      "pattern": "fn_0: (A (lam (lam (+ (?#0 $0 $1 f) (?#0 $0 $1 f)))))",
+      "pattern_size": 1011,
       "rewritten_programs": [
-        "(fn_0 c)",
-        "(fn_0 z)"
+        "(fn_0 (a b c))",
+        "(fn_0 (a b z))"
       ],
       "usage_matches": 2
     }

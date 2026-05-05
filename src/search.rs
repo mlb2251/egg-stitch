@@ -96,12 +96,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
 
         if rand::rng().random_bool(shared.p_reuse) {
-            // Pre-filter reuse candidates: the chosen subst must survive
-            // `subset_matches_reuse`, which (a) requires `subst.vars[var_idx]
-            // == subst.vars[idx]` and (b) requires the kept-eclass's fv to
-            // fit the merged depth `max(d_keep, d_drop)`. If no candidate
-            // would survive, fall through to expansion — invoking `reuse`
-            // anyway would empty the match set and panic on the next call.
+            // Pre-filter reuse candidates so we only invoke `reuse` when at
+            // least one subst will survive `subset_matches_reuse`; otherwise
+            // we'd empty the match set and panic on the next call.
+            //
+            // Cross-depth reuse soundness: the merged metavar's HO arity
+            // must fit at *every* occurrence site, so its kept-eclass fv
+            // must avoid the gap `[min(d_a, d_b), max(d_a, d_b))` — fv in
+            // that range is η-wrappable at the deep site but unbound at
+            // the shallow one. Same-depth reuse has an empty gap, so the
+            // check is a no-op.
             let reuse_candidates: Vec<usize> = subst
                 .vars
                 .iter()
@@ -111,9 +115,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         return None;
                     }
                     let keep_idx = idx.min(var_idx);
-                    let merged_depth = self.pattern.var_depth[var_idx].max(self.pattern.var_depth[idx]);
+                    let d_a = self.pattern.var_depth[var_idx];
+                    let d_b = self.pattern.var_depth[idx];
+                    let min_depth = d_a.min(d_b);
+                    let merged_depth = d_a.max(d_b);
                     let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-                    if kept_fv.iter().all(|&i| i >= merged_depth) { Some(idx) } else { None }
+                    if kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) { Some(idx) } else { None }
                 })
                 .collect();
             if !reuse_candidates.is_empty() {
@@ -151,8 +158,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Merges two pattern variables and filters matches to those where both point to the same e-class.
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData<F, O>) {
+        // Snapshot pre-merge depths: `subset_matches_reuse` needs both to
+        // bound the cross-depth gap, but `pattern.reuse` collapses them.
+        let d_a = self.pattern.var_depth[var_idx];
+        let d_b = self.pattern.var_depth[second_var_idx];
         self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx, shared);
+        self.subset_matches_reuse(var_idx, second_var_idx, d_a.min(d_b), d_a.max(d_b), shared);
     }
 
     /// Updates all matches by transforming each substitution via the given closure,
@@ -202,22 +213,22 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Mirrors `Pattern::reuse`: keeps the lower-indexed var and removes the higher one,
     /// so substs stay aligned with the pattern regardless of caller argument order.
     ///
-    /// After cross-depth reuse the merged metavar's depth is `max(d_keep,
-    /// d_drop)` (see `Pattern::reuse`). The kept e-class's fv must satisfy the
-    /// stitch invariant *under that stricter depth* — i.e., every fv index
-    /// must be `≥ merged_depth` — otherwise the merged metavar would have a
-    /// pattern-internal-bound capture, breaking the cross-depth-reuse safety
-    /// argument. Substs that violate this are dropped.
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData<F, O>) {
+    /// Cross-depth soundness: the merged metavar appears at *both* original
+    /// depths in the body. Its η-applied form `(?#k $0 … $(h-1))` requires
+    /// `h` local pattern-internal binders at every site, so `h ≤ min_depth`.
+    /// HO arity is `max{i + 1 : i ∈ kept_fv, i < merged_depth}`, so substs
+    /// whose kept-eclass fv lands in `[min_depth, merged_depth)` are
+    /// representable at the deep site but unbound at the shallow one — those
+    /// are dropped. Same-depth reuse has an empty gap.
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) {
         let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
-        let merged_depth = self.pattern.var_depth[keep_idx];
         self.update_matches(|subst, out| {
             if subst.vars[var_idx] != subst.vars[second_var_idx] {
                 return;
             }
             let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-            if !kept_fv.iter().all(|&i| i >= merged_depth) {
+            if !kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) {
                 return;
             }
             let mut new_subst = subst.clone();
