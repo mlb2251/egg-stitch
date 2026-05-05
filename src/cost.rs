@@ -278,11 +278,15 @@ pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
     let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
     let rewritten = build_rewritten_egraph(egraph, search_state, &ho_arity);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0].children().iter().map(|&child| {
-        let (_, expr) = extractor.find_best(child);
-        check_fvs_are_as_expected::<F::Apply<O>>(&expr, &rewritten[child].data.fv);
-        <F::Apply<O> as StitchLanguage>::display_recexpr(&expr)
-    }).collect()
+    rewritten[root].nodes[0]
+        .children()
+        .iter()
+        .map(|&child| {
+            let (_, expr) = extractor.find_best(child);
+            check_fvs_are_as_expected::<F::Apply<O>>(&expr, &rewritten[child].data.fv);
+            <F::Apply<O> as StitchLanguage>::display_recexpr(&expr)
+        })
+        .collect()
 }
 
 /// Computes the exact syntactic free-variable set at every position of `expr`,
@@ -307,9 +311,5 @@ pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
 pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<u32>) {
     let fv = recexpr_fv(expr);
     let actual = fv.last().expect("non-empty RecExpr");
-    assert_eq!(
-        actual, expected,
-        "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated",
-        actual, expected,
-    );
+    assert_eq!(actual, expected, "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", actual, expected,);
 }
