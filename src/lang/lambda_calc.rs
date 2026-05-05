@@ -174,6 +174,57 @@ impl<O: StitchOp> StitchLanguage for LambdaCalcLanguage<O> {
     }
 }
 
+
+/// Walk a `Sexp` and emit it as a `LambdaCalcLanguage<O>` `RecExpr` using the
+/// usual currying conventions:
+/// - `(lam body)` → `Lam([body])`.
+/// - `(@ f a)` → `App([f, a])`.
+/// - `(programs …)` → `Programs(children)` (preserves the multi-child root).
+/// - `(head a b c)` for any other shape (including list-headed `((f x) y) z`)
+///   → curried `App` chain `App(App(App(head, a), b), c)`.
+/// - Bare atoms parse as `Leaf(O::from_name(atom))`.
+fn sexp_to_lambda_calc<O: StitchOp>(sexp: &symbolic_expressions::Sexp, out: &mut RecExpr<LambdaCalcLanguage<O>>) -> anyhow::Result<Id> {
+    use symbolic_expressions::Sexp;
+    match sexp {
+        Sexp::Empty => anyhow::bail!("empty s-expression"),
+        Sexp::String(atom) => Ok(out.add(LambdaCalcLanguage::Leaf(O::from_name(atom)))),
+        Sexp::List(items) => {
+            if items.is_empty() {
+                anyhow::bail!("empty list");
+            }
+            // Inspect the head: if it's a known structural keyword, dispatch.
+            // Otherwise (including list heads) curry-apply the children onto it.
+            if let Sexp::String(head) = &items[0] {
+                match head.as_str() {
+                    "lam" => {
+                        anyhow::ensure!(items.len() == 2, "lam expects 1 arg, got {}", items.len() - 1);
+                        let body = sexp_to_lambda_calc::<O>(&items[1], out)?;
+                        return Ok(out.add(LambdaCalcLanguage::Lam([body])));
+                    }
+                    "@" => {
+                        anyhow::ensure!(items.len() == 3, "@ expects 2 args, got {}", items.len() - 1);
+                        let f = sexp_to_lambda_calc::<O>(&items[1], out)?;
+                        let a = sexp_to_lambda_calc::<O>(&items[2], out)?;
+                        return Ok(out.add(LambdaCalcLanguage::App([f, a])));
+                    }
+                    "programs" => {
+                        let kids: Result<Vec<Id>, _> = items[1..].iter().map(|c| sexp_to_lambda_calc::<O>(c, out)).collect();
+                        return Ok(out.add(LambdaCalcLanguage::Programs(kids?)));
+                    }
+                    _ => {}
+                }
+            }
+            // General application: curry-chain over all items left-to-right.
+            let mut current = sexp_to_lambda_calc::<O>(&items[0], out)?;
+            for arg in &items[1..] {
+                let arg_id = sexp_to_lambda_calc::<O>(arg, out)?;
+                current = out.add(LambdaCalcLanguage::App([current, arg_id]));
+            }
+            Ok(current)
+        }
+    }
+}
+
 /// Appify a flat `(op kids...)` head into `LambdaCalcLanguage`, inserting curried App
 /// chains for ordinary multi-arity ops.
 fn add_appified<N, O>(out: &mut RecExpr<N>, op: &O, kids: Vec<Id>, mut wrap: impl FnMut(&mut RecExpr<N>, LambdaCalcLanguage<O>) -> Id) -> Id
@@ -226,56 +277,6 @@ fn unappify_walk<O: StitchOp>(out: &mut RecExpr<OpChildrenLanguage<O>>, src: &Re
         LambdaCalcLanguage::App(_) => unreachable!("loop above consumes all App nodes"),
     };
     out.add(head_node)
-}
-
-/// Walk a `Sexp` and emit it as a `LambdaCalcLanguage<O>` `RecExpr` using the
-/// usual currying conventions:
-/// - `(lam body)` → `Lam([body])`.
-/// - `(@ f a)` → `App([f, a])`.
-/// - `(programs …)` → `Programs(children)` (preserves the multi-child root).
-/// - `(head a b c)` for any other shape (including list-headed `((f x) y) z`)
-///   → curried `App` chain `App(App(App(head, a), b), c)`.
-/// - Bare atoms parse as `Leaf(O::from_name(atom))`.
-fn sexp_to_lambda_calc<O: StitchOp>(sexp: &symbolic_expressions::Sexp, out: &mut RecExpr<LambdaCalcLanguage<O>>) -> anyhow::Result<Id> {
-    use symbolic_expressions::Sexp;
-    match sexp {
-        Sexp::Empty => anyhow::bail!("empty s-expression"),
-        Sexp::String(atom) => Ok(out.add(LambdaCalcLanguage::Leaf(O::from_name(atom)))),
-        Sexp::List(items) => {
-            if items.is_empty() {
-                anyhow::bail!("empty list");
-            }
-            // Inspect the head: if it's a known structural keyword, dispatch.
-            // Otherwise (including list heads) curry-apply the children onto it.
-            if let Sexp::String(head) = &items[0] {
-                match head.as_str() {
-                    "lam" => {
-                        anyhow::ensure!(items.len() == 2, "lam expects 1 arg, got {}", items.len() - 1);
-                        let body = sexp_to_lambda_calc::<O>(&items[1], out)?;
-                        return Ok(out.add(LambdaCalcLanguage::Lam([body])));
-                    }
-                    "@" => {
-                        anyhow::ensure!(items.len() == 3, "@ expects 2 args, got {}", items.len() - 1);
-                        let f = sexp_to_lambda_calc::<O>(&items[1], out)?;
-                        let a = sexp_to_lambda_calc::<O>(&items[2], out)?;
-                        return Ok(out.add(LambdaCalcLanguage::App([f, a])));
-                    }
-                    "programs" => {
-                        let kids: Result<Vec<Id>, _> = items[1..].iter().map(|c| sexp_to_lambda_calc::<O>(c, out)).collect();
-                        return Ok(out.add(LambdaCalcLanguage::Programs(kids?)));
-                    }
-                    _ => {}
-                }
-            }
-            // General application: curry-chain over all items left-to-right.
-            let mut current = sexp_to_lambda_calc::<O>(&items[0], out)?;
-            for arg in &items[1..] {
-                let arg_id = sexp_to_lambda_calc::<O>(arg, out)?;
-                current = out.add(LambdaCalcLanguage::App([current, arg_id]));
-            }
-            Ok(current)
-        }
-    }
 }
 
 /// Pattern-AST analogue of `appify_recexpr`. Pattern variables are carried through
