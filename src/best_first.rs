@@ -98,7 +98,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let strategy = args.priority;
 
     let initial_state = SearchState::new(&shared);
-    let initial_cost = compute_cost(&shared.egraph, root, &cost_cache, &initial_state, shared.check_slow, shared.higher_order);
+    let initial_cost = compute_cost(&shared.egraph, root, &cost_cache, &initial_state, shared.check_slow);
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
@@ -144,7 +144,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
                 continue;
             }
 
-            let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow, shared.higher_order);
+            let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow);
             let child_depth = parent_depth + 1;
             let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
             let child_id = nodes.len();

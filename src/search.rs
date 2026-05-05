@@ -53,8 +53,6 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub p_reuse: f64,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
-    /// Allow higher-order capture of substs whose args reference pattern-internal binders.
-    pub higher_order: bool,
     /// Whether to weight match selection by usage count during expansion.
     pub weight_by_usage: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
@@ -315,12 +313,11 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Appl
         usage_counts,
         p_reuse: args.p_reuse,
         check_slow: args.check_slow,
-        higher_order: args.higher_order,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared);
-    let initial_ho_arity = crate::cost::compute_ho_arity::<F, O>(&shared.egraph, &initial, shared.higher_order);
-    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &initial, shared.check_slow, shared.higher_order, &initial_ho_arity);
+    let initial_ho_arity = crate::cost::compute_ho_arity::<F, O>(&shared.egraph, &initial);
+    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &initial, shared.check_slow, &initial_ho_arity);
     (shared, cache, original_size)
 }
 

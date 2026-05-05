@@ -9,21 +9,15 @@ use std::collections::BinaryHeap;
 
 /// Per-metavar higher-order arity. `ho_arity[k]` is the number of
 /// pattern-internal binders we abstract over when emitting `?#k`'s captured
-/// argument. Zero means plain capture (current behavior).
+/// argument. Zero means plain capture (no body wrapping needed).
 ///
 /// Computed as `max over matches m of needed(m, k)`, where
 /// `needed(m, k) = max{i + 1 : i ∈ fv(arg_{m,k}), i < d_k}` (or 0 if no such i).
 /// Taking the max ensures all call sites of `inv_0` agree on the body's
 /// `(@ … (@ ?#k $0) …)` shape.
-///
-/// When the `--higher-order` flag is off, this returns all-zeros so cost and
-/// extraction behave exactly as before.
-pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, enable: bool) -> Vec<u32> {
+pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<u32> {
     let arity = search_state.pattern.var_depth.len();
     let mut out = vec![0u32; arity];
-    if !enable {
-        return out;
-    }
     let var_depth = &search_state.pattern.var_depth;
     for m in &search_state.matches {
         for subst in &m.substs {
@@ -83,18 +77,6 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     new_id
 }
 
-/// True iff every metavar in `subst` has a captured e-class whose fv contains
-/// no pattern-internal binder index (i.e. all fv `≥ d_k`). Substs that fail
-/// this can't be soundly emitted as `(fn_n captures…)` under stitch's plain-
-/// substitution convention, but they're still *kept* in match sets during
-/// search so further expansion can refine them into closed-prefix captures.
-pub fn subst_is_sound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, var_depth: &[u32], subst: &Subst) -> bool {
-    subst.vars.iter().enumerate().all(|(k, &arg_id)| {
-        let d_k = var_depth[k];
-        egraph[arg_id].data.fv.iter().all(|&i| i >= d_k)
-    })
-}
-
 /// Precomputed egraph topology for fast cost computation.
 /// Built once from the egraph and reused across all `compute_cost` calls.
 pub struct CostCache {
@@ -148,14 +130,12 @@ impl CostCache {
 }
 
 /// Returns the total cost: compressed corpus size plus the abstraction's own
-/// pattern body size. Each `?#k` is normally a 0-arity hole substituted directly
-/// at call sites, so the body is just the pattern AST as-is — but when
-/// `higher_order` is enabled and `ho_arity[k] > 0`, body uses of `?#k` are
+/// pattern body size. Each `?#k` with `ho_arity[k] > 0` has its body uses
 /// applied to the enclosing binders (`(@ … (@ ?#k $0) … $h-1)`), which adds
 /// `h * (app_cost + sym_var_cost)` per occurrence.
-pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool, higher_order: bool) -> usize {
-    let ho_arity = compute_ho_arity::<F, O>(egraph, search_state, higher_order);
-    let cost = compute_size(egraph, root, cache, search_state, check_slow, higher_order, &ho_arity);
+pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
+    let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
+    let cost = compute_size(egraph, root, cache, search_state, check_slow, &ho_arity);
     let pattern_size = compute_pattern_size(&search_state.pattern, &egraph.analysis.weights);
     let body_extra = pattern_body_ho_extra::<F, O>(&search_state.pattern, &ho_arity, &egraph.analysis.weights);
     cost + pattern_size + body_extra as usize
@@ -189,7 +169,7 @@ pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, w
 ///
 /// Uses a work-queue ordered by postorder (children before parents) so each
 /// eclass is visited at most once.
-pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool, higher_order: bool, ho_arity: &[u32]) -> usize {
+pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool, ho_arity: &[u32]) -> usize {
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
     for m in &search_state.matches {
         eclass_to_matches.insert(m.root_eclass, &m.substs);
@@ -197,12 +177,10 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data.size as i64) };
 
-    // Each match emits `inv_0(a_1, …, a_n)`. With higher-order off, substs whose
-    // captures have pattern-internal-bound fv are filtered (they can't be
-    // soundly emitted as plain captures). With higher-order on, those args are
-    // η-wrapped under `ho_arity[k]` lambdas — adds `h * lam_cost` per arg.
-    let var_depth = &search_state.pattern.var_depth;
-    let arity = var_depth.len();
+    // Each match emits `inv_0(a_1, …, a_n)`; for each k with `ho_arity[k] > 0`
+    // the captured arg is η-wrapped under `ho_arity[k]` lambdas — adds
+    // `h * lam_cost` per arg.
+    let arity = search_state.pattern.var_depth.len();
 
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
@@ -218,9 +196,6 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
         let weights = &egraph.analysis.weights;
         if let Some(substs) = eclass_to_matches.get(&eclass) {
             for subst in *substs {
-                if !higher_order && !subst_is_sound::<F, O>(egraph, var_depth, subst) {
-                    continue;
-                }
                 let stub_size = F::stub_application_size::<O>("inv_0", arity, weights) as i64;
                 let args_size: i64 = subst
                     .vars
@@ -257,7 +232,7 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     }
     let final_size = get_size(root, &size_under_rewrite);
     if check_slow {
-        let slow_size = build_rewritten_egraph(egraph, search_state, higher_order, ho_arity)[root].data.size as i64;
+        let slow_size = build_rewritten_egraph(egraph, search_state, ho_arity)[root].data.size as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
     }
     final_size as usize
@@ -267,20 +242,15 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 /// node, then rebuilds. Source of truth for the rewrite — `compute_size`'s
 /// fast path is validated against this via `check_slow`.
 ///
-/// With higher-order off: substs failing `subst_is_sound` are dropped, args
-/// pass through directly. With higher-order on: every subst is emittable; for
-/// each k with `ho_arity[k] > 0`, the captured eclass is shifted (fv `≥ d_k`
-/// up by `ho_arity[k]`) and wrapped under `ho_arity[k]` λs before being passed
-/// in.
-pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, higher_order: bool, ho_arity: &[u32]) -> StitchEgraph<F::Apply<O>> {
+/// For each k with `ho_arity[k] > 0`, the captured eclass is shifted (fv
+/// `≥ d_k` up by `ho_arity[k]`) and wrapped under `ho_arity[k]` λs before
+/// being passed in.
+pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, ho_arity: &[u32]) -> StitchEgraph<F::Apply<O>> {
     let mut egraph = egraph.clone();
     let var_depth = &search_state.pattern.var_depth;
     let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
     for m in &search_state.matches {
         for subst in &m.substs {
-            if !higher_order && !subst_is_sound::<F, O>(&egraph, var_depth, subst) {
-                continue;
-            }
             let wrapped: Vec<Id> = subst
                 .vars
                 .iter()
@@ -304,9 +274,9 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
 }
 
 /// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
-pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>, higher_order: bool) -> Vec<String> {
-    let ho_arity = compute_ho_arity::<F, O>(egraph, search_state, higher_order);
-    let rewritten = build_rewritten_egraph(egraph, search_state, higher_order, &ho_arity);
+pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
+    let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
+    let rewritten = build_rewritten_egraph(egraph, search_state, &ho_arity);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
     rewritten[root].nodes[0].children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect()
 }
