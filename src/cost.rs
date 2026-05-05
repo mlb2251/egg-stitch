@@ -152,5 +152,51 @@ pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &St
 pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
     let rewritten = build_rewritten_egraph(egraph, search_state);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0].children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect()
+    rewritten[root].nodes[0].children().iter().map(|&child| {
+        let (_, expr) = extractor.find_best(child);
+        check_fvs_are_as_expected::<F::Apply<O>>(&expr, &rewritten[child].data.fv);
+        <F::Apply<O> as StitchLanguage>::display_recexpr(&expr)
+    }).collect()
+}
+
+/// Computes the exact syntactic free-variable set at every position of `expr`,
+/// indexed by `usize::from(Id)`. Mirrors the per-enode rule used in
+/// `StitchAnalysis::make`, but on a concrete tree.
+pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
+    let nodes: &[L] = expr.as_ref();
+    let mut fv: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); nodes.len()];
+    for (i, node) in nodes.iter().enumerate() {
+        let disc = node.discriminant();
+        let mut s = FxHashSet::default();
+        if let Some(n) = disc.de_bruijn_index() {
+            s.insert(n);
+        }
+        for (j, &c) in node.children().iter().enumerate() {
+            let child_fv = &fv[usize::from(c)];
+            if disc.binds_child(j) {
+                s.extend(child_fv.iter().filter_map(|&k| if k >= 1 { Some(k - 1) } else { None }));
+            } else {
+                s.extend(child_fv.iter().copied());
+            }
+        }
+        fv[i] = s;
+    }
+    fv
+}
+
+/// Asserts that the extracted term's actual syntactic fv matches the egraph
+/// analysis's recorded fv. Under intersection-fv semantics + AstSize
+/// extraction, the minimal-size representative is also the fv-minimal one,
+/// so its fv should equal the intersection across reps — i.e. `expected`.
+/// A mismatch in either direction means the assumption "min-size ⇒ min-fv"
+/// failed for this extraction; downstream soundness checks that read
+/// `data.fv` lose their guarantee.
+pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<u32>) {
+    let fv = recexpr_fv(expr);
+    let actual = fv.last().expect("non-empty RecExpr");
+    assert_eq!(
+        actual, expected,
+        "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated",
+        actual, expected,
+    );
 }
