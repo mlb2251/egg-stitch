@@ -69,6 +69,10 @@ pub struct Args {
     #[arg(long, default_value_t = 1000)]
     pub max_arity: usize,
 
+    /// Disallow zero-arity abstractions (patterns with no metavariables).
+    #[arg(long, default_value_t = false)]
+    pub no_zero_arity: bool,
+
     /// Heap priority for best-first search (only used when --search=best-first).
     #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
