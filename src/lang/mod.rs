@@ -76,11 +76,13 @@ impl Default for Weights {
 ///
 /// `fv` is the intersection across enodes: an index `n` is in `fv` iff every
 /// member of the class mentions `$n` freely. Equivalently, `n ∉ fv` means at
-/// least one representative doesn't mention `$n` freely. Downstream
-/// soundness checks that rely on this (e.g. emitting an `inv_0` capture)
-/// must pair with extraction that picks a representative consistent with
-/// the recorded fv — see `check_fvs_are_as_expected` in `cost.rs`.
-///
+/// least one representative doesn't mention `$n` freely.
+/// 
+/// In general, the minimal term should have exactly this set of free variables,
+/// so long as the rewrites do not introduce new free variables. We will
+/// prove a theorem to this effect, but for now, we have a live assertion
+/// that checks this whenever extracting a term.
+/// 
 /// Languages without binders or De Bruijn leaves leave `fv` empty everywhere.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StitchData {
