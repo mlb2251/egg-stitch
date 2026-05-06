@@ -184,16 +184,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// child eclass ids at positions `var_idx..var_idx+k`, keeping substs aligned with
     /// the pattern's DFS-ordered vars list.
     ///
-    /// We don't fv-prune captures here: an "unsound" intermediate capture (one
-    /// whose fv references pattern-internal binders) may refine into a sound
-    /// closed-prefix capture after further expansion. Keeping them in the
-    /// match set lets the search explore those refinement paths. Soundness is
-    /// enforced downstream — `subst_is_sound` at cost/apply time skips substs
-    /// whose captures aren't yet closed-relative-to-pattern.
-    pub fn subset_matches(&mut self, var_idx: usize, target: &F::Apply<O>, _shared: &SharedSearchData<F, O>) {
+    /// We don't fv-prune captures here: captures whose fv reaches into
+    /// pattern-internal binders are handled at apply/cost time by η-wrapping
+    /// (see `compute_ho_arity` and `shift_free_egraph`), so the match set
+    /// stays permissive and search keeps exploring those branches.
+    pub fn subset_matches(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
-            let var_eclass = &_shared.egraph[var_id];
+            let var_eclass = &shared.egraph[var_id];
             for node in &var_eclass.nodes {
                 if !node.matches(target) {
                     continue;

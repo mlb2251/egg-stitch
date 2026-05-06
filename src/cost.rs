@@ -66,7 +66,7 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     // so its syntactic fv should match the eclass's analysis fv. Mirrors the
     // assertion in `check_fvs_are_as_expected` for the extracted-RecExpr path.
     let rep_fv = enode_fv(&rep, |c| &egraph[c].data.fv);
-    debug_assert_eq!(
+    assert_eq!(
         &rep_fv, &egraph[canonical].data.fv,
         "shift_free_egraph rep fv {:?} differs from eclass data.fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated",
         rep_fv, egraph[canonical].data.fv
