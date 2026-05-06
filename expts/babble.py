@@ -5,7 +5,7 @@ import math
 import subprocess as sp
 import time
 
-from . import BABBLE_BENCH_BIN, BABBLE_BIN, BABBLE_DIR, domain_type
+from . import BABBLE_BENCH_BIN, BABBLE_BIN, BABBLE_DIR, domain_type, rewrites_path
 from .result import Result, ratio
 
 
@@ -25,7 +25,7 @@ def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1
     ``num_abstractions`` maps to babble's ``--rounds`` parameter.
     """
     if domain_type(domain) == "dreamcoder":
-        return _run_babble_dreamcoder(domain, use_dsrs=dsr is not None, num_abstractions=num_abstractions, max_arity=max_arity)
+        return _run_babble_dreamcoder(domain, dsr=dsr, num_abstractions=num_abstractions, max_arity=max_arity)
     assert domain_type(domain) == "cogsci"
     outfile = f"harness/data_gen/cache/{domain}.csv"
     print(f"\033[92mRunning babble on {domain}{' (with DSRs)' if dsr else ''}\033[0m", flush=True)
@@ -71,17 +71,24 @@ def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1
     )
 
 
-def _run_babble_dreamcoder(domain: str, *, use_dsrs: bool, num_abstractions: int, max_arity: int) -> Result:
+def _run_babble_dreamcoder(domain: str, *, dsr: str | None, num_abstractions: int, max_arity: int) -> Result:
     """Run babble's ``benchmark`` binary over every file in a dreamcoder domain.
 
     The binary writes a per-file CSV with ``(name, iter, initial cost,
     final cost, compression, total time, num libs)``; we parse it,
     aggregate (sum costs/time, geomean compression ratios) and return a
-    single :class:`Result`. With ``use_dsrs=False`` the binary runs in
-    ``au`` mode which disables the bundled DSRs; ``use_dsrs=True`` runs
-    ``babble`` mode which applies them.
+    single :class:`Result``. ``dsr=None`` runs ``--mode au`` (no DSRs);
+    a non-``None`` ``dsr`` runs ``--mode babble`` and must equal the path
+    that the benchmark binary auto-loads (it has no flag for a custom
+    DSR path), otherwise we'd silently apply the wrong rewrites.
     """
-    mode = "babble" if use_dsrs else "au"
+    if dsr is not None:
+        expected = rewrites_path(domain)
+        assert dsr == expected, (
+            f"babble's benchmark binary auto-loads its own DSRs for {domain!r}; "
+            f"passed dsr={dsr!r} but only {expected!r} would actually be used"
+        )
+    mode = "babble" if dsr is not None else "au"
     out_csv = f"harness/data_gen/cache/{domain}_dreamcoder_{mode}.csv"
     print(f"\033[92mRunning babble (benchmark/{mode}) on {domain}\033[0m", flush=True)
     cmd = [
