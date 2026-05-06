@@ -24,14 +24,8 @@ impl MatchAtEClass {
 /// Returns one identity match per e-class in the egraph, skipping the root
 /// e-class. The root holds the synthetic `(programs ...)` node that wraps the
 /// whole corpus; letting the search match there produces abstractions like
-/// `(programs ?#0 ?#0)` that collapse the program list itself.
-///
-/// The initial pattern is `?#0` at depth 0, so the only fv-pruning that
-/// applies is "no pattern-internal-bound fv" — and at depth 0 there are no
-/// pattern-internal binders, so every fv index trivially satisfies it. We
-/// therefore admit every non-root e-class, including open ones; the
-/// per-expansion filter in `subset_matches` enforces the invariant at deeper
-/// positions.
+/// `(programs ?#0 ?#0)` that collapse the program list itself, which is never
+/// what we want.
 pub fn identity_matches<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id) -> Vec<MatchAtEClass> {
     let root = egraph.find(root);
     egraph.classes().filter(|c| c.id != root).map(|c| MatchAtEClass::identity_match(c.id)).collect()
