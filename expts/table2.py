@@ -16,10 +16,12 @@ from . import *
 from .babble import *
 from .egg_stitch import *
 from .stitch import *
-from .table1 import TABLE1_DOMAINS, DOMAIN_LABELS, NUM_RUNS
+from .table1 import DOMAIN_LABELS, NUM_RUNS
 
-# Reuse the Table 1 domain list/labels so the HTML viewer sees the same order.
-TABLE2_DOMAINS = TABLE1_DOMAINS
+# Table 2 is the no-DSR comparison, so it includes the dreamcoder domains
+# without rewrite files (text/logo/towers) in addition to everything in
+# Table 1.
+TABLE2_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics", "text", "logo", "towers"]
 
 
 DEFAULT_TABLE2_TITLE = "Table 2: Ours (SMC and Enum) vs Babble vs Stitch on benchmarks without DSRs"

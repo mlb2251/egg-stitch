@@ -18,9 +18,11 @@ from .egg_stitch import *
 
 NUM_RUNS = 10
 
-# Order matches the Table 1 screenshot, with the dreamcoder benchmarks
-# appended after the four cogsci drawing domains.
-TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics", "text", "logo", "towers"]
+# Order matches the Table 1 screenshot, with the dreamcoder benchmarks that
+# ship with DSRs appended after the four cogsci drawing domains. text/logo/
+# towers are excluded: babble has no equational theory for them, so a "with
+# DSRs" comparison is not defined.
+TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
