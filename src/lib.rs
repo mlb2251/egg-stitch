@@ -217,7 +217,6 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let var_depth = &state.pattern.var_depth;
     let ho_arity = cost::compute_ho_arity::<F, O>(&egraph, state);
     let mut shift_memo: rustc_hash::FxHashMap<(Id, u32), Id> = rustc_hash::FxHashMap::default();
-    let best_node = cost::best_node_map::<F, O>(&egraph);
     for m in &state.matches {
         for subst in &m.substs {
             let wrapped: Vec<Id> = subst
@@ -229,7 +228,7 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
                     if h == 0 {
                         arg_id
                     } else {
-                        let shifted = cost::shift_free_egraph::<F, O>(&mut egraph, arg_id, h, var_depth[k], &mut shift_memo, &best_node);
+                        let shifted = cost::shift_free_egraph::<F, O>(&mut egraph, arg_id, h, var_depth[k], &mut shift_memo);
                         F::wrap_lams::<O>(shifted, h, &mut egraph)
                     }
                 })
