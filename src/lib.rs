@@ -167,7 +167,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
             None => break,
             Some((best_cost, state)) => {
                 let ho_arity = cost::compute_ho_arity::<F, O>(&result_egraph, &state);
-                let pat_size = cost::compute_pattern_size(&state.pattern, &result_egraph.analysis.weights) + cost::pattern_body_ho_extra::<F, O>(&state.pattern, &ho_arity, &result_egraph.analysis.weights) as usize;
+                let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_egraph.analysis.weights);
                 let body_str = state.pattern.display_with_ho(&ho_arity);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();

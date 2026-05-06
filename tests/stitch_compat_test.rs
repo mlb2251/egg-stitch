@@ -370,6 +370,11 @@ fn stitch_map2() {
 /// pin this so a future change that *does* find an abstraction here is caught
 /// (and can be reviewed against stitch).
 #[test]
+fn stitch_no_invention_cons_car() {
+    check_fixture_bf_only("data/domains/stitch/no_invention_cons_car.json", STITCH_LAMBDA_ARGS, true);
+}
+
+#[test]
 fn stitch_tmp_crash() {
     check_fixture_bf_only("data/domains/stitch/tmp_crash.json", STITCH_LAMBDA_ARGS, true);
 }

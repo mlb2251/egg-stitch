@@ -153,28 +153,31 @@ impl CostCache {
 pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
     let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
     let cost = compute_size(egraph, root, cache, search_state, check_slow, &ho_arity);
-    let pattern_size = compute_pattern_size(&search_state.pattern, &egraph.analysis.weights);
-    let body_extra = pattern_body_ho_extra::<F, O>(&search_state.pattern, &ho_arity, &egraph.analysis.weights);
-    cost + pattern_size + body_extra as usize
+    let body_size = compute_body_size_with_ho::<F, O>(&search_state.pattern, &ho_arity, &egraph.analysis.weights);
+    cost + body_size
 }
 
 /// Size of the abstraction's pattern body — the pattern AST counted under
-/// the active weights. Each `?#k` is a 0-arity meta-var leaf. (HO body apps are
-/// counted separately via `pattern_body_ho_extra`.)
+/// the active weights. Each `?#k` is a 0-arity meta-var leaf; HO body apps
+/// are not included here (use `compute_body_size_with_ho` for the
+/// inclusive form).
 pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, weights: &Weights) -> usize {
     let rec_expr: RecExpr<F::Apply<crate::lang::OpWithVar<O>>> = pattern.pattern.clone().into();
     compute_recexpr_size::<F::Apply<crate::lang::OpWithVar<O>>>(&rec_expr, (rec_expr.len() - 1).into(), weights)
 }
 
-/// Extra body cost contributed by HO-arity > 0 metavars. For each occurrence of
-/// `?#k`, the body wraps it as `ho_arity[k]` applications, each adding one
-/// `app_cost` and one `sym_var_cost` (the bound `$i` leaf).
-pub fn pattern_body_ho_extra<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> u32 {
+/// Total body size including HO-app wrapping: `compute_pattern_size` plus,
+/// for each occurrence of `?#k` with `ho_arity[k] > 0`, the cost of the
+/// `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
+/// `sym_var_cost` per binder, per occurrence.
+pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
+    let pattern_size = compute_pattern_size::<F, O>(pattern, weights);
     if ho_arity.iter().all(|&h| h == 0) {
-        return 0;
+        return pattern_size;
     }
     let per_app = weights.app_cost + weights.sym_var_cost;
-    (0..pattern.vars.len()).map(|k| pattern.vars[k].len() as u32 * ho_arity[k] * per_app).sum()
+    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.vars[k].len() as u32 * ho_arity[k] * per_app).sum();
+    pattern_size + ho_extra as usize
 }
 
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {
