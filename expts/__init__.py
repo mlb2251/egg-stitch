@@ -28,20 +28,45 @@ def _cargo_build(project_dir: Path, bin_name: str) -> Path:
     return project_dir / "target" / "release" / bin_name
 
 
-# Build all three binaries once at import time and expose their paths as
+# Build all four binaries once at import time and expose their paths as
 # top-level constants. Cargo's incremental build makes the no-op case cheap.
+# ``BABBLE_BIN`` is the cogsci ``drawings`` runner; ``BABBLE_BENCH_BIN`` is
+# the dreamcoder benchmark driver used for the list/physics/etc. domains.
 EGG_STITCH_BIN: Path = _cargo_build(EGG_STITCH_DIR, "egg-stitch")
 BABBLE_BIN: Path = _cargo_build(BABBLE_DIR, "drawings")
+BABBLE_BENCH_BIN: Path = _cargo_build(BABBLE_DIR, "benchmark")
 STITCH_BIN: Path = _cargo_build(STITCH_DIR, "compress")
 
 # Domains that have a matching drawings.<name>.rewrites file in ../babble.
 DOMAINS_WITH_REWRITES = ["dials", "furniture", "nuts-bolts", "wheels"]
-# All cogsci domains (with and without available rewrites).
-ALL_DOMAINS = ["dials", "furniture", "nuts-bolts", "wheels"]
+# Cogsci domains (single-file inputs under data/domains/cogsci/).
+COGSCI_DOMAINS = ["dials", "furniture", "nuts-bolts", "wheels"]
+# Dreamcoder benchmark domains (multi-file directories under data/domains/<name>/,
+# generated via ``babble`` benchmark binary's ``--dump`` mode). Programs are in
+# lambda-calc form so runs need ``--language lambda-calc``.
+DREAMCODER_DOMAINS = ["list", "physics"]
+ALL_DOMAINS = COGSCI_DOMAINS + DREAMCODER_DOMAINS
+
+
+def is_dreamcoder_domain(domain: str) -> bool:
+    """True if ``domain`` is a dreamcoder-style multi-file benchmark."""
+    return domain in DREAMCODER_DOMAINS
+
+
+def dreamcoder_files(domain: str) -> list[Path]:
+    """Sorted list of the per-iteration JSON input files for a dreamcoder ``domain``."""
+    d = EGG_STITCH_DIR / "data" / "domains" / domain
+    return sorted(p for p in d.iterdir() if p.is_file() and p.suffix == ".json")
 
 
 def rewrites_path(domain: str) -> str:
-    """Path to the babble rewrite rules for ``domain``."""
+    """Path to the babble rewrite rules for ``domain``.
+
+    Cogsci domains are prefixed with ``drawings.`` in the babble repo;
+    dreamcoder domains (list, physics, ...) are at the top level.
+    """
+    if is_dreamcoder_domain(domain):
+        return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites"
     return f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites"
 
 

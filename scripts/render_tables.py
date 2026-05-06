@@ -19,12 +19,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "viz" / "results"
 FIGURES_DIR = PROJECT_ROOT / "figures"
 
-TABLE_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture"]
+TABLE_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
     "dials": "Dials",
     "wheels": "Wheels",
     "furniture": "Furniture",
+    "list": "List",
+    "physics": "Physics",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
 METHOD_LABELS = {"enum": "Enum", "smc": "SMC", "babble": "babble", "stitch": "Stitch"}
@@ -70,12 +72,14 @@ def line_color(i: int):
 
 # Plot uses a "line" variant of the pastel theme for readability on white.
 METHOD_COLORS = {m: line_color(i) for i, m in enumerate(METHODS)}
-DOMAIN_MARKERS = {"nuts-bolts": "s", "dials": "^", "wheels": "D", "furniture": "v"}
+DOMAIN_MARKERS = {"nuts-bolts": "s", "dials": "^", "wheels": "D", "furniture": "v", "list": "P", "physics": "X"}
 DOMAIN_PLOT_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
     "wheels": "Wheels",
     "furniture": "Furniture",
+    "list": "List",
+    "physics": "Physics",
 }
 
 

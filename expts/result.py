@@ -54,3 +54,33 @@ class Result:
 def ratio(initial: int, final: int) -> float:
     """Safe division for a compression ratio; returns ``inf`` when ``final == 0``."""
     return float("inf") if final == 0 else initial / final
+
+
+def aggregate_per_file(per_file: list[Result]) -> Result:
+    """Combine per-file Results into a single Result for a multi-file benchmark.
+
+    Costs and time sum across files; the compression ratio is the geometric
+    mean of per-file ratios (matching the babble paper's aggregation).
+    """
+    import math
+
+    assert per_file, "need at least one per-file result to aggregate"
+    method = per_file[0].method
+    domain = per_file[0].domain
+    initial = sum(r.initial_cost for r in per_file)
+    final = sum(r.final_cost for r in per_file)
+    geo_cr = math.exp(sum(math.log(r.compression_ratio) for r in per_file) / len(per_file))
+    elapsed = sum(r.elapsed_secs for r in per_file)
+    library: list[str] = []
+    for r in per_file:
+        library.extend(r.library)
+    return Result(
+        method=method,
+        domain=domain,
+        initial_cost=initial,
+        final_cost=final,
+        compression_ratio=geo_cr,
+        elapsed_secs=elapsed,
+        library=library,
+        extra={"num_files": len(per_file), "per_file": [r.to_dict() for r in per_file]},
+    )

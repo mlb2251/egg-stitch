@@ -99,3 +99,13 @@ fn invalid_at_arity_errors() {
     assert!(Lang::parse_program("(@ f)").is_err());
     assert!(Lang::parse_program("(@ f a b)").is_err());
 }
+
+#[test]
+fn lambda_alias_for_lam() {
+    // Babble's dreamcoder corpus and DSRs use `lambda` (and `λ`) as the binder
+    // keyword; we accept either as a synonym for `lam` so those inputs parse
+    // verbatim. Display always emits the canonical `lam`.
+    assert_eq!(round_trip("(lambda x)"), "(lam x)");
+    assert_eq!(round_trip("(λ x)"), "(lam x)");
+    assert_eq!(round_trip("(@ (@ map (lambda $0)) xs)"), "(map (lam $0) xs)");
+}

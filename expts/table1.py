@@ -18,13 +18,16 @@ from .egg_stitch import *
 
 NUM_RUNS = 10
 
-# Order matches the Table 1 screenshot.
-TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture"]
+# Order matches the Table 1 screenshot, with the dreamcoder benchmarks
+# (list, physics) appended after the four cogsci drawing domains.
+TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
     "wheels": "Wheels",
     "furniture": "Furniture",
+    "list": "List",
+    "physics": "Physics",
 }
 
 

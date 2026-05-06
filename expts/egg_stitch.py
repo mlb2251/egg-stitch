@@ -4,9 +4,9 @@ import json
 import os
 import subprocess
 
-from . import EGG_STITCH_BIN, rewrites_path
+from . import EGG_STITCH_BIN, EGG_STITCH_DIR, dreamcoder_files, is_dreamcoder_domain, rewrites_path
 from .folders import current_folder_path, unique_path
-from .result import Result, ratio
+from .result import Result, aggregate_per_file, ratio
 
 
 def egg_stitch(input, output="out.json", rewrites=None, flamegraph=False, samply=False, **kwargs):
@@ -45,20 +45,44 @@ _UNSET = object()
 def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrites=_UNSET, **extra) -> tuple[Result, int | None]:
     """Run our compressor on ``domain``.
 
+    For cogsci domains the input is the single ``data/domains/cogsci/<domain>.json``
+    file. For dreamcoder domains (``list``, ``physics``) every per-iteration
+    input under ``data/domains/<domain>/`` is processed and the per-file
+    Results are aggregated (see :func:`aggregate_per_file`); the run also
+    forces ``--language lambda-calc`` since dreamcoder corpora are in
+    curried form.
+
     ``rewrites`` defaults to the domain's standard rewrite file; pass
     ``None`` to run without any DSRs.
 
     Returns ``(Result, egraph_min_size)`` where ``egraph_min_size`` is the
     corpus min cost after the rewrite rules are applied (our tool exposes
-    this as ``cost_after_rewrites``). When no rewrites are applied the
-    second tuple element is ``None``.
+    this as ``cost_after_rewrites``); for dreamcoder domains it's the sum
+    across files. When no rewrites are applied the second tuple element is
+    ``None``.
     """
     if rewrites is _UNSET:
         rewrites = rewrites_path(domain)
-    output = egg_stitch(
+    if is_dreamcoder_domain(domain):
+        return _run_ours_dreamcoder(domain, search, num_steps=num_steps, max_arity=max_arity, rewrites=rewrites, **extra)
+    return _run_ours_single(
         f"data/domains/cogsci/{domain}.json",
+        domain,
+        search,
         rewrites=rewrites,
-        output=f"{domain}_{search.replace('-', '_')}.json",
+        num_steps=num_steps,
+        max_arity=max_arity,
+        output_name=f"{domain}_{search.replace('-', '_')}.json",
+        **extra,
+    )
+
+
+def _run_ours_single(input_path: str, domain: str, search: str, *, rewrites, num_steps: int, max_arity: int, output_name: str, **extra) -> tuple[Result, int | None]:
+    """Run egg-stitch on a single ``input_path`` and parse its output JSON into a Result."""
+    output = egg_stitch(
+        input_path,
+        rewrites=rewrites,
+        output=output_name,
         search=search,
         num_steps=num_steps,
         max_arity=max_arity,
@@ -87,3 +111,28 @@ def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrit
         },
     )
     return result, cost_after
+
+
+def _run_ours_dreamcoder(domain: str, search: str, *, num_steps: int, max_arity: int, rewrites, **extra) -> tuple[Result, int | None]:
+    """Run egg-stitch on every file under ``data/domains/<domain>/`` and aggregate."""
+    extra = {**extra, "language": "lambda-calc"}
+    per_file: list[Result] = []
+    cost_after_total: int | None = 0 if rewrites is not None else None
+    for f in dreamcoder_files(domain):
+        # egg-stitch runs from EGG_STITCH_DIR; supply the path relative to it
+        # so the stored input_file in the result is a stable relative path.
+        rel = f.relative_to(EGG_STITCH_DIR)
+        result, cost_after = _run_ours_single(
+            str(rel),
+            domain,
+            search,
+            rewrites=rewrites,
+            num_steps=num_steps,
+            max_arity=max_arity,
+            output_name=f"{domain}__{f.stem}_{search.replace('-', '_')}.json",
+            **extra,
+        )
+        per_file.append(result)
+        if cost_after is not None and cost_after_total is not None:
+            cost_after_total += cost_after
+    return aggregate_per_file(per_file), cost_after_total
