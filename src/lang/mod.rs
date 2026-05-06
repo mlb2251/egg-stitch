@@ -1,16 +1,19 @@
 use egg::{Analysis, ENodeOrVar, FromOp, Id, Language, RecExpr};
+use rustc_hash::FxHashSet;
 use std::fmt::{Debug, Display};
 
 mod family;
 mod lambda_calc;
 mod op;
 mod op_children;
+mod op_db;
 mod op_with_var;
 
 pub use family::{LambdaCalc, LanguageFamily, OpChildren};
 pub use lambda_calc::{LambdaCalcDisc, LambdaCalcLanguage};
 pub use op::{Op, StitchDisc, StitchOp};
 pub use op_children::OpChildrenLanguage;
+pub use op_db::OpDB;
 pub use op_with_var::OpWithVar;
 
 /// Trait covering every language usable with the search machinery.
@@ -68,8 +71,29 @@ impl Default for Weights {
     }
 }
 
-/// Egg analysis that tracks the minimum AST size of each e-class, weighted by
-/// the `Weights` value carried on the analysis itself.
+/// Per-e-class analysis data: minimum AST size and the De Bruijn indices that
+/// are free in *every* representative of the class.
+///
+/// `fv` is the intersection across enodes: an index `n` is in `fv` iff every
+/// member of the class mentions `$n` freely. Equivalently, `n ∉ fv` means at
+/// least one representative doesn't mention `$n` freely.
+///
+/// In general, the minimal term should have exactly this set of free variables,
+/// so long as the rewrites do not introduce new free variables. We will
+/// prove a theorem to this effect, but for now, we have a live assertion
+/// that checks this whenever extracting a term.
+///
+/// Languages without binders or De Bruijn leaves leave `fv` empty everywhere.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StitchData {
+    /// Minimum AST size among e-nodes in this e-class.
+    pub size: u32,
+    /// Free-variable set (intersection of members' free-var sets).
+    pub fv: FxHashSet<u32>,
+}
+
+/// Egg analysis that tracks size and free-variable set of each e-class,
+/// weighted by the `Weights` value carried on the analysis itself.
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis {
     pub weights: Weights,
@@ -82,24 +106,36 @@ impl StitchAnalysis {
 }
 
 impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
-    type Data = u32;
+    type Data = StitchData;
 
-    /// Computes the minimum AST size of a new enode as `disc.size(weights) + sum(children)`.
+    /// Computes per-class data for a fresh enode:
+    /// - `size` = `disc.intrinsic_size(weights) + Σ child.size`
+    /// - `fv`   = via `enode_fv`: `{n | disc.de_bruijn_index() == Some(n)} ∪ ⋃_j shift(child[j].fv, disc.binds_child(j))`,
+    ///   where `shift(s, true)` decrements every index ≥ 1 by one and drops `0`.
+    ///   A bare `Var(n)` leaf has fv `{n}` because nothing above it has bound `n` yet;
+    ///   `Lam` is what removes bound indices on the way up.
     fn make(egraph: &mut egg::EGraph<L, Self>, enode: &L, _id: Id) -> Self::Data {
         let weights = egraph.analysis.weights;
-        enode.discriminant().intrinsic_size(&weights) + enode.children().iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+        let disc = enode.discriminant();
+        let size = disc.intrinsic_size(&weights) + enode.children().iter().map(|&c| egraph[c].data.size).sum::<u32>();
+        let fv = enode_fv(enode, |c| &egraph[c].data.fv);
+        StitchData { size, fv }
     }
 
-    /// Keeps the minimum size when two e-classes are merged.
+    /// On merge: keep the minimum size, take the intersection of the two fv
+    /// sets. Intersection reflects "free in every representative" — when two
+    /// classes unify, an index that wasn't free in one of them is no longer
+    /// guaranteed to be free in the merged class.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
-        if from < *to {
-            *to = from;
-            egg::DidMerge(true, false)
-        } else if from == *to {
-            egg::DidMerge(false, false)
-        } else {
-            egg::DidMerge(false, true)
+        let size_to_changed = from.size < to.size;
+        let size_from_changed = from.size > to.size;
+        if size_to_changed {
+            to.size = from.size;
         }
+        let to_had_extra = to.fv.iter().any(|x| !from.fv.contains(x));
+        let from_had_extra = from.fv.iter().any(|x| !to.fv.contains(x));
+        to.fv.retain(|x| from.fv.contains(x));
+        egg::DidMerge(size_to_changed || to_had_extra, size_from_changed || from_had_extra)
     }
 }
 
@@ -107,3 +143,26 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
 /// runtime state on the analysis, so the egraph type is no longer parameterized
 /// by them.
 pub type StitchEgraph<L> = egg::EGraph<L, StitchAnalysis>;
+
+/// Per-enode free-variable rule, parameterised over how to look up child fv
+/// sets. Used by both `StitchAnalysis::make` (children live in the egraph)
+/// and `cost::recexpr_fv` (children live in a `RecExpr`'s flat node array).
+///
+/// `fv(node) = {n | disc.de_bruijn_index() == Some(n)} ∪ ⋃_j shift_j(child_fv(c_j))`,
+/// where `shift_j` drops `0` and decrements ≥ 1 iff `disc.binds_child(j)`.
+pub fn enode_fv<'a, L: StitchLanguage>(node: &L, child_fv: impl Fn(Id) -> &'a FxHashSet<u32>) -> FxHashSet<u32> {
+    let disc = node.discriminant();
+    let mut fv: FxHashSet<u32> = FxHashSet::default();
+    if let Some(n) = disc.de_bruijn_index() {
+        fv.insert(n);
+    }
+    for (j, &c) in node.children().iter().enumerate() {
+        let cf = child_fv(c);
+        if disc.binds_child(j) {
+            fv.extend(cf.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }));
+        } else {
+            fv.extend(cf.iter().copied());
+        }
+    }
+    fv
+}
