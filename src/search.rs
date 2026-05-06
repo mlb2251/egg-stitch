@@ -7,19 +7,21 @@ use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 
-/// True iff expanding a metavar at depth `d_k` with `target` would introduce a
-/// free De Bruijn leaf into the pattern body. Used to ban literal `$i` leaves
-/// at positions where `i >= d_k` — those should be captured as metavars
-/// instead, so every leaf in the abstraction body is either a hole, a closed
-/// symbol, or a pattern-internally-bound `$i`.
-///
-/// `Var(i)` leaves with `i < d_k` are allowed (the surrounding pattern lams
-/// bind them). Non-leaf nodes and non-DB-var leaves always pass.
+/// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
 fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
 where
     L::Discriminant: StitchDisc,
 {
     target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= d_k)
+}
+
+/// True iff `target` cannot be expanded to in a literal expansion.
+/// Currently the only such case is a free DB-var leaf.
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
+where
+    L::Discriminant: StitchDisc,
+{
+    target_is_free_db_var(target, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -132,10 +134,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
         let target_eclass = &shared.egraph[target_id];
         let d_k = self.pattern.var_depth[var_idx];
-        // Skip free-DB-var enodes; if the chosen target is one, the particle
-        // makes no move this step (the meta-var stays put — a later expansion
-        // can cover the same e-class via a metavar capture instead).
-        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !target_is_free_db_var(*n, d_k)).collect();
+        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
         if candidates.is_empty() {
             return;
         }
@@ -263,11 +262,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
-                        // Skip free DB-var leaves: those would land in the pattern
-                        // body unbound. The search must capture them as metavars
-                        // (i.e., leave the meta-var here for now, and let a later
-                        // step at higher arity handle it via metavar capture).
-                        if target_is_free_db_var(node, d_k) {
+                        if invalid_literal_expansion(node, d_k) {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());
