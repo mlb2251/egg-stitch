@@ -33,14 +33,22 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
     out
 }
 
+/// Snapshot the AstSize-minimal enode for each eclass, so callers can pick a
+/// minimal representative without holding an extractor borrow against a
+/// `&mut egraph`. Map is keyed by canonical id at snapshot time.
+pub(crate) fn best_node_map<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> FxHashMap<Id, F::Apply<O>> {
+    let extractor = egg::Extractor::new(egraph, egg::AstSize);
+    egraph.classes().map(|c| (c.id, extractor.find_best_node(c.id).clone())).collect()
+}
+
 /// Build a copy of `eclass` in `egraph` with every free DB index `≥ initial_depth`
 /// shifted by `+by`, so it can sit under `by` newly-introduced binders without
-/// changing meaning. Picks one representative enode per visited eclass; that's
-/// enough for HO capture since we only need *some* witness with the shifted fv.
+/// changing meaning. Picks the AstSize-minimal enode per visited eclass (via
+/// `best_node`) so the shifted witness is as small as possible.
 ///
 /// Memoized per `(eclass, initial_depth)` for the lifetime of `memo`. Note `by`
 /// is fixed per top-level call, so it isn't part of the key.
-pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, by: u32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32), Id>) -> Id {
+pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, by: u32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32), Id>, best_node: &FxHashMap<Id, F::Apply<O>>) -> Id {
     let canonical = egraph.find(eclass);
     if let Some(&cached) = memo.get(&(canonical, initial_depth)) {
         return cached;
@@ -51,9 +59,14 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
         memo.insert((canonical, initial_depth), canonical);
         return canonical;
     }
-    // Pick the first enode as our representative. Other reps may have different
-    // shapes; we don't shift them in tandem — acceptable for v1.
-    let rep = egraph[canonical].nodes[0].clone();
+    // Use the AstSize-minimal enode for this class (precomputed). Falls back to
+    // `nodes[0]` if a mid-loop union mapped this canonical outside the snapshot.
+    let rep = best_node.get(&canonical).cloned().unwrap_or_else(|| egraph[canonical].nodes[0].clone());
+    // Under intersection-fv semantics the AstSize-minimal rep is also fv-minimal,
+    // so its syntactic fv should match the eclass's analysis fv. Mirrors the
+    // assertion in `check_fvs_are_as_expected` for the extracted-RecExpr path.
+    let rep_fv = enode_fv(&rep, |c| &egraph[c].data.fv);
+    debug_assert_eq!(&rep_fv, &egraph[canonical].data.fv, "shift_free_egraph rep fv {:?} differs from eclass data.fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", rep_fv, egraph[canonical].data.fv);
     let disc = rep.discriminant();
     if let Some(n) = disc.de_bruijn_index() {
         // Free DB-var leaf: rebuild with shifted index. (Bound vars `< initial_depth`
@@ -69,7 +82,7 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
         .enumerate()
         .map(|(j, &c)| {
             let child_depth = initial_depth + if disc.binds_child(j) { 1 } else { 0 };
-            shift_free_egraph::<F, O>(egraph, c, by, child_depth, memo)
+            shift_free_egraph::<F, O>(egraph, c, by, child_depth, memo, best_node)
         })
         .collect();
     let new_id = egraph.add(F::make(disc, new_children));
@@ -249,6 +262,7 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
     let mut egraph = egraph.clone();
     let var_depth = &search_state.pattern.var_depth;
     let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
+    let best_node = best_node_map::<F, O>(&egraph);
     for m in &search_state.matches {
         for subst in &m.substs {
             let wrapped: Vec<Id> = subst
@@ -260,7 +274,7 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
                     if h == 0 {
                         arg_id
                     } else {
-                        let shifted = shift_free_egraph::<F, O>(&mut egraph, arg_id, h, var_depth[k], &mut shift_memo);
+                        let shifted = shift_free_egraph::<F, O>(&mut egraph, arg_id, h, var_depth[k], &mut shift_memo, &best_node);
                         F::wrap_lams::<O>(shifted, h, &mut egraph)
                     }
                 })
