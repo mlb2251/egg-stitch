@@ -1,0 +1,18 @@
+[
+  "(lam (unfold $0 (lam (char-eq? '.' (car $0))) (lam (car $0)) (lam (cdr $0))))",
+  "(lam (fold $0 $0 (lam (lam (cons $1 (if (char-eq? '.' (car $0)) empty $0))))))",
+  "(lam (lam (fn_1 (cons ',' $0) $1)))",
+  "(lam (lam (fn_1 (cons ',' $0) (map (lam $0) $1))))",
+  "(lam (cons (car $0) (cons SPACE empty)))",
+  "(lam (cons (car $0) (map (lam SPACE) (range 1))))",
+  "(lam (fn_1 $0 STRING))",
+  "(lam (fn_1 (map (lam $0) $0) STRING))",
+  "(lam (fn_1 STRING $0))",
+  "(lam (fn_1 (map (lam $0) STRING) $0))",
+  "(lam (fn_1 STRING $0))",
+  "(lam (fn_1 (map (lam $0) STRING) $0))",
+  "(lam (fn_1 $0 STRING))",
+  "(lam (fn_1 (map (lam $0) $0) STRING))",
+  "(lam (fn_1 STRING $0))",
+  "(lam (fn_1 (map (lam $0) STRING) $0))"
+]

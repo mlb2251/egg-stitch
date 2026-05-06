@@ -84,8 +84,10 @@ DOMAINS_WITH_REWRITES = ["dials", "furniture", "nuts-bolts", "wheels"]
 COGSCI_DOMAINS = ["dials", "furniture", "nuts-bolts", "wheels"]
 # Dreamcoder benchmark domains (multi-file directories under data/domains/<name>/,
 # generated via ``babble`` benchmark binary's ``--dump`` mode). Programs are in
-# lambda-calc form so runs need ``--language lambda-calc``.
-DREAMCODER_DOMAINS = ["list", "physics"]
+# lambda-calc form so runs need ``--language lambda-calc``. Only ``list`` and
+# ``physics`` ship with an equational theory in babble; ``text``/``logo``/``towers``
+# are run without DSRs (matching Fig. 12 in the babble paper).
+DREAMCODER_DOMAINS = ["list", "physics", "text", "logo", "towers"]
 ALL_DOMAINS = COGSCI_DOMAINS + DREAMCODER_DOMAINS
 
 
@@ -100,14 +102,17 @@ def dreamcoder_files(domain: str) -> list[Path]:
     return sorted(p for p in d.iterdir() if p.is_file() and p.suffix == ".json")
 
 
-def rewrites_path(domain: str) -> str:
-    """Path to the babble rewrite rules for ``domain``.
+def rewrites_path(domain: str) -> str | None:
+    """Path to the babble rewrite rules for ``domain``, or ``None`` if absent.
 
     Cogsci domains are prefixed with ``drawings.`` in the babble repo;
-    dreamcoder domains (list, physics, ...) are at the top level.
+    dreamcoder domains (list, physics, ...) are at the top level. The
+    dreamcoder ``text``/``logo``/``towers`` benchmarks have no equational
+    theory in babble, so this returns ``None`` for them.
     """
     if is_dreamcoder_domain(domain):
-        return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites"
+        path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
+        return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None
     return f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites"
 
 

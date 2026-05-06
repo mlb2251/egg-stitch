@@ -19,8 +19,8 @@ from .egg_stitch import *
 NUM_RUNS = 10
 
 # Order matches the Table 1 screenshot, with the dreamcoder benchmarks
-# (list, physics) appended after the four cogsci drawing domains.
-TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
+# appended after the four cogsci drawing domains.
+TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics", "text", "logo", "towers"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -28,6 +28,9 @@ DOMAIN_LABELS = {
     "furniture": "Furniture",
     "list": "List",
     "physics": "Physics",
+    "text": "Text",
+    "logo": "Logo",
+    "towers": "Towers",
 }
 
 
