@@ -74,6 +74,10 @@ def aggregate_per_file(per_file: list[Result]) -> Result:
     domain = per_file[0].domain
     initial = sum(r.initial_cost for r in per_file)
     final = sum(r.final_cost for r in per_file)
+    for r in per_file:
+        assert 0 < r.compression_ratio < math.inf, (
+            f"per-file compression_ratio={r.compression_ratio} on {r.domain} would make the geomean degenerate"
+        )
     geo_cr = math.exp(sum(math.log(r.compression_ratio) for r in per_file) / len(per_file))
     elapsed = sum(r.elapsed_secs for r in per_file)
     library: list[str] = []

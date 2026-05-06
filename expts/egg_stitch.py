@@ -115,7 +115,12 @@ def _run_ours_single(input_path: str, domain: str, search: str, *, rewrites, num
 
 
 def _run_ours_dreamcoder(domain: str, search: str, *, num_steps: int, max_arity: int, rewrites, **extra) -> tuple[Result, int | None]:
-    """Run egg-stitch on every file under ``data/domains/<domain>/`` and aggregate."""
+    """Run egg-stitch on every file under ``data/domains/<domain>/`` and aggregate.
+
+    Forces ``language=lambda-calc`` since dreamcoder corpora are curried;
+    the caller must not also set it.
+    """
+    assert "language" not in extra, "dreamcoder runs force language=lambda-calc; do not pass it"
     extra = {**extra, "language": "lambda-calc"}
     per_file: list[Result] = []
     egraph_min_total: int | None = 0 if rewrites is not None else None

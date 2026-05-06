@@ -118,6 +118,10 @@ def _run_babble_dreamcoder(domain: str, *, dsr: str | None, num_abstractions: in
     initial_cost = sum(int(row["initial cost"]) for row in per_file_rows)
     final_cost = sum(int(row["final cost"]) for row in per_file_rows)
     ratios = [float(row["compression"]) for row in per_file_rows]
+    for c in ratios:
+        assert 0 < c < math.inf, (
+            f"per-file compression={c} from babble on {domain} would make the geomean degenerate"
+        )
     geo_cr = math.exp(sum(math.log(c) for c in ratios) / len(ratios))
     babble_secs = sum(float(row["total time"]) for row in per_file_rows)
     return Result(
