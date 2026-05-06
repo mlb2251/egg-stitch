@@ -219,20 +219,7 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let mut shift_memo: rustc_hash::FxHashMap<(Id, u32), Id> = rustc_hash::FxHashMap::default();
     for m in &state.matches {
         for subst in &m.substs {
-            let wrapped: Vec<Id> = subst
-                .vars
-                .iter()
-                .enumerate()
-                .map(|(k, &arg_id)| {
-                    let h = ho_arity[k];
-                    if h == 0 {
-                        arg_id
-                    } else {
-                        let shifted = cost::shift_free_egraph::<F, O>(&mut egraph, arg_id, h, var_depth[k], &mut shift_memo);
-                        F::wrap_lams::<O>(shifted, h, &mut egraph)
-                    }
-                })
-                .collect();
+            let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &ho_arity, var_depth, &mut shift_memo);
             let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
             egraph.union(x, m.root_eclass);
         }

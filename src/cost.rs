@@ -194,9 +194,6 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data.size as i64) };
 
-    // Each match emits `inv_0(a_1, …, a_n)`; for each k with `ho_arity[k] > 0`
-    // the captured arg is η-wrapped under `ho_arity[k]` lambdas — adds
-    // `h * lam_cost` per arg.
     let arity = search_state.pattern.var_depth.len();
 
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
@@ -268,26 +265,33 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
     let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
     for m in &search_state.matches {
         for subst in &m.substs {
-            let wrapped: Vec<Id> = subst
-                .vars
-                .iter()
-                .enumerate()
-                .map(|(k, &arg_id)| {
-                    let h = ho_arity[k];
-                    if h == 0 {
-                        arg_id
-                    } else {
-                        let shifted = shift_free_egraph::<F, O>(&mut egraph, arg_id, h, var_depth[k], &mut shift_memo);
-                        F::wrap_lams::<O>(shifted, h, &mut egraph)
-                    }
-                })
-                .collect();
+            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, ho_arity, var_depth, &mut shift_memo);
             let x = F::add_stub_application::<O>("inv_0", wrapped, &mut egraph);
             egraph.union(x, m.root_eclass);
         }
     }
     egraph.rebuild();
     egraph
+}
+
+/// Per-subst HO wrapping: for each captured arg `arg_id` at metavar slot `k`,
+/// returns either `arg_id` unchanged (when `ho_arity[k] == 0`) or
+/// `λ^h. shift_free(arg_id, +h, var_depth[k])` (otherwise). Used by both
+/// `build_rewritten_egraph` and `lib::apply_abstraction`; `shift_memo` is
+/// shared across calls so equivalent shifts are deduplicated.
+pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], ho_arity: &[u32], var_depth: &[u32], shift_memo: &mut FxHashMap<(Id, u32), Id>) -> Vec<Id> {
+    vars.iter()
+        .enumerate()
+        .map(|(k, &arg_id)| {
+            let h = ho_arity[k];
+            if h == 0 {
+                arg_id
+            } else {
+                let shifted = shift_free_egraph::<F, O>(egraph, arg_id, h, var_depth[k], shift_memo);
+                F::wrap_lams::<O>(shifted, h, egraph)
+            }
+        })
+        .collect()
 }
 
 /// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
