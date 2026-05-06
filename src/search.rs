@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
@@ -47,6 +47,23 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         }
         already_present
     }
+}
+
+/// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
+fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
+where
+    L::Discriminant: StitchDisc,
+{
+    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= d_k)
+}
+
+/// True iff `target` cannot be expanded to in a literal expansion.
+/// Currently the only such case is a free DB-var leaf.
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
+where
+    L::Discriminant: StitchDisc,
+{
+    target_is_free_db_var(target, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -130,19 +147,49 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
 
         if rand::rng().random_bool(shared.p_reuse) {
-            let reuse_candidates = subst.vars.iter().enumerate().filter(|(idx, id)| *idx != var_idx && **id == target_id).collect::<Vec<_>>();
+            // Pre-filter reuse candidates so we only invoke `reuse` when at
+            // least one subst will survive `subset_matches_reuse`; otherwise
+            // we'd empty the match set and panic on the next call.
+            //
+            // Cross-depth reuse soundness: the merged metavar's HO arity
+            // must fit at *every* occurrence site, so its kept-eclass fv
+            // must avoid the gap `[min(d_a, d_b), max(d_a, d_b))` — fv in
+            // that range is η-wrappable at the deep site but unbound at
+            // the shallow one. Same-depth reuse has an empty gap, so the
+            // check is a no-op.
+            let reuse_candidates: Vec<usize> = subst
+                .vars
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, id)| {
+                    if idx == var_idx || *id != target_id {
+                        return None;
+                    }
+                    let keep_idx = idx.min(var_idx);
+                    let d_a = self.pattern.var_depth[var_idx];
+                    let d_b = self.pattern.var_depth[idx];
+                    let min_depth = d_a.min(d_b);
+                    let merged_depth = d_a.max(d_b);
+                    let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
+                    if kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) { Some(idx) } else { None }
+                })
+                .collect();
             if !reuse_candidates.is_empty() {
-                let candidate_idx = rand::rng().random_range(0..reuse_candidates.len());
+                let candidate_idx: usize = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx].0;
                 self.pattern.reuse(var_idx, candidate_var_idx);
-                self.subset_matches_reuse(var_idx, candidate_var_idx);
+                self.subset_matches_reuse(var_idx, candidate_var_idx, shared);
                 return;
             }
         }
 
         let target_eclass = &shared.egraph[target_id];
-        let node_idx = rand::rng().random_range(0..target_eclass.len());
-        let target_node = &target_eclass.nodes[node_idx];
+        let d_k = self.pattern.var_depth[var_idx];
+        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
+        if candidates.is_empty() {
+            return;
+        }
+        let target_node = candidates[rand::rng().random_range(0..candidates.len())].clone();
 
         self.pattern.expand(var_idx, target_node);
         self.subset_matches(var_idx, target_node, shared);
@@ -173,19 +220,25 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Mirrors `Pattern::expand`: drops the old var from `subst.vars` and inserts the new
     /// child eclass ids at positions `var_idx..var_idx+k`, keeping substs aligned with
     /// the pattern's DFS-ordered vars list.
+    ///
+    /// We don't fv-prune captures here: captures whose fv reaches into
+    /// pattern-internal binders are handled at apply/cost time by η-wrapping
+    /// (see `compute_ho_arity` and `shift_free_egraph`), so the match set
+    /// stays permissive and search keeps exploring those branches.
     pub fn subset_matches(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
             let var_eclass = &shared.egraph[var_id];
             for node in &var_eclass.nodes {
-                if node.matches(target) {
-                    let mut new_subst = subst.clone();
-                    new_subst.vars.remove(var_idx);
-                    for (j, child_id) in node.children().iter().enumerate() {
-                        new_subst.vars.insert(var_idx + j, *child_id);
-                    }
-                    out.push(new_subst);
+                if !node.matches(target) {
+                    continue;
                 }
+                let mut new_subst = subst.clone();
+                new_subst.vars.remove(var_idx);
+                for (j, child_id) in node.children().iter().enumerate() {
+                    new_subst.vars.insert(var_idx + j, *child_id);
+                }
+                out.push(new_subst);
             }
         });
     }
@@ -193,14 +246,37 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Filters matches to those where `var_idx` and `second_var_idx` point to the same e-class.
     /// Mirrors `Pattern::reuse`: keeps the lower-indexed var and removes the higher one,
     /// so substs stay aligned with the pattern regardless of caller argument order.
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize) {
+    ///
+    /// Cross-depth soundness: the merged metavar appears at *both* original
+    /// depths in the body. Its η-applied form `(?#k $0 … $(h-1))` requires
+    /// `h` local pattern-internal binders at every site, so `h ≤ min_depth`.
+    /// HO arity is `max{i + 1 : i ∈ kept_fv, i < merged_depth}`, so substs
+    /// whose kept-eclass fv lands in `[min_depth, merged_depth)` are
+    /// representable at the deep site but unbound at the shallow one — those
+    /// are dropped. Same-depth reuse has an empty gap.
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData<F, O>) {
+
+        // Snapshot pre-merge depths: `subset_matches_reuse` needs both to
+        // bound the cross-depth gap, but `pattern.reuse` collapses them.
+        let d_a = self.pattern.var_depth[var_idx];
+        let d_b = self.pattern.var_depth[second_var_idx];
+        let min_depth = d_a.min(d_b);
+        let merged_depth = d_a.max(d_b);
+
+
+        let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
         self.update_matches(|subst, out| {
-            if subst.vars[var_idx] == subst.vars[second_var_idx] {
-                let mut new_subst = subst.clone();
-                new_subst.vars.remove(drop_idx);
-                out.push(new_subst);
+            if subst.vars[var_idx] != subst.vars[second_var_idx] {
+                return;
             }
+            let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
+            if !kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) {
+                return;
+            }
+            let mut new_subst = subst.clone();
+            new_subst.vars.remove(drop_idx);
+            out.push(new_subst);
         });
     }
 
@@ -239,7 +315,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         matches: self.matches.clone(),
                         num_substs: self.num_substs,
                     };
-                    child.subset_matches_reuse(i, j);
+                    child.subset_matches_reuse(i, j, shared);
                     assert!(!child.matches.is_empty());
                     let action = Action::Reuse { keep: i, drop: j };
                     let is_dominant = child.num_substs == self.num_substs;
@@ -256,10 +332,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         for var_idx in 0..self.pattern.vars.len() {
             let mut seen_shapes: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
+            let d_k = self.pattern.var_depth[var_idx];
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
+                        if invalid_literal_expansion(node, d_k) {
+                            continue;
+                        }
                         let key = (node.discriminant(), node.children().len());
                         if seen_shapes.insert(key) {
                             shapes.push(node.clone());
@@ -312,7 +392,8 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Appl
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared);
     let mut scratch = crate::cost::CostScratch::new(&shared.egraph);
-    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &mut scratch, &initial, shared.check_slow);
+    let initial_ho_arity = crate::cost::compute_ho_arity::<F, O>(&shared.egraph, &initial);
+    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &mut scratch, &initial, shared.check_slow, &initial_ho_arity);
     (shared, cache, original_size)
 }
 

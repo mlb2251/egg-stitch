@@ -6,6 +6,93 @@ use crate::search::SearchState;
 use egg::{Analysis, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+/// Per-metavar higher-order arity. `ho_arity[k]` is the number of
+/// pattern-internal binders we abstract over when emitting `?#k`'s captured
+/// argument. Zero means plain capture (no body wrapping needed).
+///
+/// Computed as `max over matches m of needed(m, k)`, where
+/// `needed(m, k) = max{i + 1 : i ∈ fv(arg_{m,k}), i < d_k}` (or 0 if no such i).
+/// Taking the max ensures all call sites of `inv_0` agree on the body's
+/// `(@ … (@ ?#k $0) …)` shape.
+pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<u32> {
+    let arity = search_state.pattern.var_depth.len();
+    let mut out = vec![0u32; arity];
+    let var_depth = &search_state.pattern.var_depth;
+    for m in &search_state.matches {
+        for subst in &m.substs {
+            for (k, &arg_id) in subst.vars.iter().enumerate() {
+                let d_k = var_depth[k];
+                let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i < d_k).map(|&i| i + 1).max().unwrap_or(0);
+                if needed > out[k] {
+                    out[k] = needed;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Build a copy of `eclass` in `egraph` with every free DB index `≥ initial_depth`
+/// shifted by `+by`, so it can sit under `by` newly-introduced binders without
+/// changing meaning. Picks the size-minimal enode per visited eclass (using the
+/// analysis's `data.size`, which is the same quantity AstSize would minimize)
+/// so the shifted witness is as small as possible.
+///
+/// Memoized per `(eclass, initial_depth)` for the lifetime of `memo`. Note `by`
+/// is fixed per top-level call, so it isn't part of the key.
+pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, by: u32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32), Id>) -> Id {
+    let canonical = egraph.find(eclass);
+    if let Some(&cached) = memo.get(&(canonical, initial_depth)) {
+        return cached;
+    }
+    // If no fv `≥ initial_depth` is present in this class, the shift is a no-op
+    // — return the original eclass to preserve sharing.
+    if egraph[canonical].data.fv.iter().all(|&i| i < initial_depth) {
+        memo.insert((canonical, initial_depth), canonical);
+        return canonical;
+    }
+    // Pick the size-minimal enode by recomputing the analysis's `make` formula
+    // over the current class. Done inline so mid-recursion `egraph.add`s can't
+    // make the choice stale.
+    let weights = egraph.analysis.weights;
+    let rep = egraph[canonical]
+        .nodes
+        .iter()
+        .min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>())
+        .expect("non-empty eclass")
+        .clone();
+    // Under intersection-fv semantics the size-minimal rep is also fv-minimal,
+    // so its syntactic fv should match the eclass's analysis fv. Mirrors the
+    // assertion in `check_fvs_are_as_expected` for the extracted-RecExpr path.
+    let rep_fv = enode_fv(&rep, |c| &egraph[c].data.fv);
+    assert_eq!(
+        &rep_fv, &egraph[canonical].data.fv,
+        "shift_free_egraph rep fv {:?} differs from eclass data.fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated",
+        rep_fv, egraph[canonical].data.fv
+    );
+    let disc = rep.discriminant();
+    if let Some(n) = disc.de_bruijn_index() {
+        // Free DB-var leaf: rebuild with shifted index. (Bound vars `< initial_depth`
+        // were already short-circuited by the fv check above.)
+        let new_disc = F::map_discriminant(disc, |_| O::make_db_var(n + by).expect("higher-order capture requires a DB-var-bearing leaf op"));
+        let new_id = egraph.add(F::make(new_disc, vec![]));
+        memo.insert((canonical, initial_depth), new_id);
+        return new_id;
+    }
+    let new_children: Vec<Id> = rep
+        .children()
+        .iter()
+        .enumerate()
+        .map(|(j, &c)| {
+            let child_depth = initial_depth + if disc.binds_child(j) { 1 } else { 0 };
+            shift_free_egraph::<F, O>(egraph, c, by, child_depth, memo)
+        })
+        .collect();
+    let new_id = egraph.add(F::make(disc, new_children));
+    memo.insert((canonical, initial_depth), new_id);
+    new_id
+}
+
 /// Precomputed egraph topology for fast cost computation.
 /// Built once from the egraph and reused across all `compute_cost` calls.
 pub struct CostCache {
@@ -268,19 +355,38 @@ where
     }
 }
 
-/// Returns the total cost: compressed corpus size plus the pattern's own size.
-pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
-    let cost = compute_size(egraph, root, cache, scratch, search_state, check_slow);
-    let pattern_size = compute_pattern_size(&search_state.pattern, &egraph.analysis.weights);
-    cost + pattern_size
+/// Returns the total cost: compressed corpus size plus the abstraction's own
+/// pattern body size. Each `?#k` with `ho_arity[k] > 0` has its body uses
+/// applied to the enclosing binders (`(@ … (@ ?#k $0) … $h-1)`), which adds
+/// `h * (app_cost + sym_var_cost)` per occurrence.
+pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
+    let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
+    let cost = compute_size(egraph, root, cache, scratch, search_state, check_slow, &ho_arity);
+    let body_size = compute_body_size_with_ho::<F, O>(&search_state.pattern, &ho_arity, &egraph.analysis.weights);
+    cost + body_size
 }
 
-/// Returns the AST size of the pattern, respecting each operator's `intrinsic_size()`.
-/// Var nodes contribute via `OpWithVar::Var`'s `intrinsic_size = 1`, so the recursion
-/// is uniform across var and non-var slots.
+/// Size of the abstraction's pattern body — the pattern AST counted under
+/// the active weights. Each `?#k` is a 0-arity meta-var leaf; HO body apps
+/// are not included here (use `compute_body_size_with_ho` for the
+/// inclusive form).
 pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, weights: &Weights) -> usize {
     let rec_expr: RecExpr<F::Apply<OpWithVar<O>>> = PatternRecExpr::<F, O>::clone(&pattern.pattern).into();
     compute_recexpr_size::<F::Apply<OpWithVar<O>>>(&rec_expr, (rec_expr.len() - 1).into(), weights)
+}
+
+/// Total body size including HO-app wrapping: `compute_pattern_size` plus,
+/// for each occurrence of `?#k` with `ho_arity[k] > 0`, the cost of the
+/// `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
+/// `sym_var_cost` per binder, per occurrence.
+pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
+    let pattern_size = compute_pattern_size::<F, O>(pattern, weights);
+    if ho_arity.iter().all(|&h| h == 0) {
+        return pattern_size;
+    }
+    let per_app = weights.app_cost + weights.sym_var_cost;
+    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.vars[k].len() as u32 * ho_arity[k] * per_app).sum();
+    pattern_size + ho_extra as usize
 }
 
 /// Recursive AST size of a `RecExpr<L>`, respecting `intrinsic_size()`.
@@ -294,7 +400,7 @@ pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, w
 /// Uses a postorder min-heap so children pop before parents. Initial entries are the
 /// match-root eclasses; when an eclass's size strictly improves we write it into
 /// `sizes` and push its parents so they can reconsider with the new child value.
-pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
+pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, ho_arity: &[u32]) -> usize {
     scratch.rewrite.fill(search_state);
     let analysis = RewriteAnalysis {
         search_state,
@@ -372,12 +478,46 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
             let substs = &sizes.analysis.search_state.matches[i].substs;
             let weights = sizes.weights();
-            if let Some(rewrite_size) = substs.iter().map(|subst| F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64 + sizes.sum(&subst.vars)).min() {
+            if let Some(rewrite_size) = substs.iter().map(|subst| {
+                    let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
+                    let args_size: i64 = subst
+                        .vars
+                        .iter()
+                        .enumerate()
+                        .map(|(k, &v)| {
+                            let h = ho_arity[k];
+                            let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
+                            wrap + get_size(v, &size_under_rewrite)
+                        })
+                        .sum();
+                    let size_new: i64 = stub_size + args_size;
+                    size_new
+                    }).min() {
                 best = best.min(rewrite_size);
             }
         }
         best
     }
+}
+
+/// Per-subst HO wrapping: for each captured arg `arg_id` at metavar slot `k`,
+/// returns either `arg_id` unchanged (when `ho_arity[k] == 0`) or
+/// `λ^h. shift_free(arg_id, +h, var_depth[k])` (otherwise). Used by both
+/// `build_rewritten_egraph` and `lib::apply_abstraction`; `shift_memo` is
+/// shared across calls so equivalent shifts are deduplicated.
+pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], ho_arity: &[u32], var_depth: &[u32], shift_memo: &mut FxHashMap<(Id, u32), Id>) -> Vec<Id> {
+    vars.iter()
+        .enumerate()
+        .map(|(k, &arg_id)| {
+            let h = ho_arity[k];
+            if h == 0 {
+                arg_id
+            } else {
+                let shifted = shift_free_egraph::<F, O>(egraph, arg_id, h, var_depth[k], shift_memo);
+                F::wrap_lams::<O>(shifted, h, egraph)
+            }
+        })
+        .collect()
 }
 
 /// Computes the exact syntactic free-variable set at every position of `expr`,

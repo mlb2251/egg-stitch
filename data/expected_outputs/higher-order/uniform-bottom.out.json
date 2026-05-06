@@ -1,0 +1,23 @@
+{
+  "compression_ratio": 1.7083333333333333,
+  "cost_after_rewrites": 41,
+  "final_cost": 24,
+  "initial_cost": 41,
+  "library": [
+    {
+      "approx_cost": 9,
+      "arity": 1,
+      "num_matches": 5,
+      "pattern": "fn_0: (lam (foo (bar (?#0 $0))))",
+      "pattern_size": 8,
+      "rewritten_programs": [
+        "(fn_0 h)",
+        "(fn_0 k)",
+        "(fn_0 m)",
+        "(fn_0 n)",
+        "(fn_0 p)"
+      ],
+      "usage_matches": 5
+    }
+  ]
+}

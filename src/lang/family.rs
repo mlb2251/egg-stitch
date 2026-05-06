@@ -48,6 +48,18 @@ pub trait LanguageFamily: Clone + 'static {
 
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
+
+    /// Wrap an eclass in `n` lambda binders, returning the new eclass id.
+    fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
+
+    /// Total node-count cost of `n` stacked lambda binders under `weights`.
+    fn lams_cost(n: u32, weights: &Weights) -> u32;
+
+    /// In a pattern-side `RecExpr`, wrap `head` in `n` curried applications to
+    /// fresh DB-var leaves `$0, $1, …, $(n-1)` (innermost first). Returns the
+    /// id of the outermost App. Used by `Pattern::display_with_ho` to render
+    /// HO body uses as `(@ … (@ ?#k $0) … $(n-1))`.
+    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, n: u32) -> Id;
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -76,6 +88,18 @@ impl LanguageFamily for OpChildren {
 
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
         Self::make(OpWithVar::Var(v), vec![])
+    }
+
+    fn wrap_lams<O: StitchOp>(_child: Id, _n: u32, _egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
+        panic!("OpChildren has no lambda binders; higher-order capture is unreachable here");
+    }
+
+    fn lams_cost(_n: u32, _weights: &Weights) -> u32 {
+        panic!("OpChildren has no lambda binders; higher-order capture is unreachable here");
+    }
+
+    fn wrap_pattern_with_db_apps<O: StitchOp>(_recexpr: &mut egg::RecExpr<OpChildrenLanguage<OpWithVar<O>>>, _head: Id, _n: u32) -> Id {
+        panic!("OpChildren has no apps/binders; higher-order display is unreachable here");
     }
 }
 
@@ -122,5 +146,27 @@ impl LanguageFamily for LambdaCalc {
 
     fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
         Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v)), vec![])
+    }
+
+    fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<LambdaCalcLanguage<O>>) -> Id {
+        let mut current = child;
+        for _ in 0..n {
+            current = egraph.add(LambdaCalcLanguage::Lam([current]));
+        }
+        current
+    }
+
+    fn lams_cost(n: u32, weights: &Weights) -> u32 {
+        n * weights.lam_cost
+    }
+
+    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<LambdaCalcLanguage<OpWithVar<O>>>, head: Id, n: u32) -> Id {
+        let mut current = head;
+        for i in 0..n {
+            let var_op = OpWithVar::Node(O::make_db_var(i).expect("higher-order display needs a DB-var-bearing leaf op"));
+            let var_id = recexpr.add(LambdaCalcLanguage::Leaf(var_op));
+            current = recexpr.add(LambdaCalcLanguage::App([current, var_id]));
+        }
+        current
     }
 }

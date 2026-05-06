@@ -41,6 +41,11 @@ pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 
 pub trait StitchOp: StitchDisc {
     /// Builds an op from its display name. Must succeed for every input string.
     fn from_name(s: &str) -> Self;
+
+    /// If this op type has a De Bruijn-var leaf, build it.
+    fn make_db_var(_n: u32) -> Option<Self> {
+        None
+    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]

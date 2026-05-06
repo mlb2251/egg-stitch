@@ -49,4 +49,8 @@ impl<O: StitchOp> StitchOp for OpWithVar<O> {
     fn from_name(s: &str) -> Self {
         if let Ok(v) = s.parse::<egg::Var>() { Self::Var(v) } else { Self::Node(O::from_name(s)) }
     }
+
+    fn make_db_var(n: u32) -> Option<Self> {
+        O::make_db_var(n).map(Self::Node)
+    }
 }

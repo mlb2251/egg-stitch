@@ -134,7 +134,6 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
 /// pinning) but best-first's enumeration is still a meaningful regression
 /// signal. The fixture format is the same single `RunResult` shape that
 /// `check_fixture` writes when both backends already agree.
-#[allow(dead_code)]
 fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) {
     let mut bf = run_backend("best-first", input, extra_args);
     if !check_pattern {
@@ -305,4 +304,163 @@ fn varying_head() {
 #[test]
 fn multiple_with_apps() {
     check_fixture("data/domains/basic-apps/multiple-with-apps.json", &["--language", "lambda-calc"], true);
+}
+
+// ---- fixtures with binders and De Bruijn variables ----
+//
+// These exercise the depth-tracking pattern search (`var_depth`) and the
+// extract→shift→wrap step in `apply_abstraction`. Programs are parsed as
+// `LambdaCalcLanguage<OpDB<Op>>` (selected by `--language lambda-calc`), so
+// `lam` becomes a real binder and `$n` a real De Bruijn leaf.
+
+/// Cost weights matching `../stitch/`'s defaults: leaves cost 100, structural
+/// nodes (`@`/`lam`) cost 1. This is what stitch's own basic/ tests run under
+/// and is what makes lambdas/apps essentially "free" relative to symbol
+/// content, so the discovered abstractions match stitch's choices.
+const STITCH_LAMBDA_ARGS: &[&str] = &["--language", "lambda-calc", "--sym-var-cost", "100"];
+
+/// Two `(lam …)` programs sharing a structural skeleton; abstraction sits
+/// under the top lambda and captures the common core around `$0`. SMC is
+/// skipped — multiple near-equivalent patterns sit close enough that 1000
+/// particles × 1000 steps don't converge reliably.
+#[test]
+fn stitch_map_minimal() {
+    check_fixture_bf_only("data/domains/stitch/map_minimal.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Context-threading test: duplicated subterms under two lambdas differ at one
+/// leaf. With `--language lambda-calc` the matcher sees `lam`/`$0` as binding
+/// nodes, so the abstraction sits inside the lambda and references `$0`.
+#[test]
+fn stitch_ctx_thread_1() {
+    check_fixture_bf_only("data/domains/stitch/ctx_thread_1.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Like `ctx_thread_1` but without the outer `A` wrapper — the two programs
+/// start with `(lam (lam …))` directly. Exercises hole matching when the
+/// pattern root sits at (or near) the program root.
+#[test]
+fn stitch_ctx_thread_2() {
+    check_fixture_bf_only("data/domains/stitch/ctx_thread_2.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Variant whose duplicated subterms reference both `$0` and `$1`. Exercises
+/// holes whose matches contain multiple distinct pattern-internal free vars.
+#[test]
+fn stitch_ctx_thread_twice() {
+    check_fixture_bf_only("data/domains/stitch/ctx_thread_twice.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Higher-order pattern: three programs each repeat `(app f $0)` twice for
+/// some `f` ∈ {`inc`, `dec`, `(app plus $0)`}. The metavar captures the
+/// applied head (closed for `inc`/`dec`, open for `(app plus $0)`), so this
+/// exercises mixed closed/open captures across matches.
+#[test]
+fn stitch_hof() {
+    check_fixture_bf_only("data/domains/stitch/hof.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Two recursive `map`-like programs differing in the operation applied to
+/// each element. Exercises pattern enumeration through a deeply nested
+/// fixed-point combinator (`Y`) and curried applications.
+#[test]
+fn stitch_map() {
+    check_fixture_bf_only("data/domains/stitch/map.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Variant of `map` using flat n-ary `(+ ...)` / `(- ...)` instead of curried
+/// binary `+`. Exercises auto-currying at parse time.
+#[test]
+fn stitch_map2() {
+    check_fixture_bf_only("data/domains/stitch/map2.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Two short programs sharing only `(a (lam (cons (car $0) ...)))` skeletons —
+/// stitch reports "Cost Improvement: 1.00x better" (no inventions found). We
+/// pin this so a future change that *does* find an abstraction here is caught
+/// (and can be reviewed against stitch).
+#[test]
+fn stitch_no_invention_cons_car() {
+    check_fixture_bf_only("data/domains/stitch/no_invention_cons_car.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Exercises list-headed application `((is_nil $0) nil (cons (+ $0)))` —
+/// `is_nil` is applied to `$0` and the result is itself applied to two more
+/// args. egg's default `RecExpr` parser rejects head-as-list, but our custom
+/// `LambdaCalc::parse_program` curries naturally over arbitrary heads.
+#[test]
+fn stitch_safe_ctx_thread_bug() {
+    check_fixture_bf_only("data/domains/stitch/safe_ctx_thread_bug.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// End-to-end check that the intersection-based fv analysis lets all three
+/// programs rewrite under the natural arity-1 abstraction, even when the
+/// `(* 0 ?x) => 0` rule pollutes one match's capture eclass.
+///
+/// Corpus: three programs of shape `(big (chain (of (g X (lam X)))))` with
+/// `X` ∈ {`xx`, `yy`, `(* 0 $0)`}. Under the rule every program's body
+/// collapses to the same shape, and `(big (chain (of (g ?#0 (lam ?#0)))))`
+/// matches all three with ?#0 = `xx`, `yy`, `0`. For the third program ?#0
+/// captures the eclass `{0, (* 0 $0)}`; intersection fv reports `{}` so
+/// `subst_is_sound` accepts it and AstSize extraction picks `0`.
+#[test]
+fn fv_overapprox_annihilator() {
+    check_fixture_bf_only(
+        "data/domains/fv-overapprox/annihilator.json",
+        &["-r", "data/domains/fv-overapprox/annihilator.rewrites", "--language", "lambda-calc", "--sym-var-cost", "100", "--max-arity", "1"],
+        true,
+    );
+}
+
+/// Self-application: each program has two copies of `(f $0)` for some `f`,
+/// and the abstraction is `(?#0 ?#0)` applied to those copies. Exercises
+/// metavar reuse where the captured subterm has open fv (referring to the
+/// program's own lam) — sound under stitch convention because the fv is
+/// outer-context relative to the depth-0 pattern.
+#[test]
+fn stitch_simple_hof() {
+    check_fixture_bf_only("data/domains/stitch/simple_hof.json", STITCH_LAMBDA_ARGS, true);
+}
+
+// === HO capture tests (formerly tests/higher_order_test.rs) ===
+//
+// These pin best-first behavior on corpora designed to exercise HO arity > 0
+// captures (η-wrap in the body, shift-and-λ-wrap at each call site). Unlike
+// the stitch-compat suite they don't carry `--sym-var-cost 100`, since the
+// fixtures were blessed against egg-stitch's default cost model.
+
+const LAMBDA: &[&str] = &["--language", "lambda-calc"];
+
+/// Five programs sharing `(lam (foo (bar _)))` where the trailing slot is a
+/// distinct closed-head application of `$0`. Captures use HO arity 1 to lift
+/// the open `(@ X $0)` subterms under the surrounding lam.
+#[test]
+fn ho_shared_lam_uniform_bottom() {
+    check_fixture_bf_only("data/domains/higher-order/uniform-bottom.json", LAMBDA, true);
+}
+
+/// Programs whose bottom shapes vary in *how* they use `$0` (head, middle,
+/// trailing, bare). The HO pattern `(lam (foo (bar ?#0)))` covers all
+/// variants by η-wrapping each capture.
+#[test]
+fn ho_shared_lam_varying_bottom() {
+    check_fixture_bf_only("data/domains/higher-order/varying-bottom.json", LAMBDA, true);
+}
+
+/// Minimal: each program is just `(lam (h $0))` for varying head leaf. The
+/// only shared structure is `(lam _)`, so any compression must put a `lam`
+/// inside the abstraction body — pure HO at `var_depth > 0`.
+#[test]
+fn ho_minimal_lam_varying_head() {
+    check_fixture_bf_only("data/domains/higher-order/minimal-head.json", LAMBDA, true);
+}
+
+/// Same varying-bottom inner shapes as `varying-bottom.json`, but wrapped in
+/// a chunky outer `(+ a b c d e f (lam …))` so there's a lot of shared
+/// non-lam structure surrounding the variation. Tests whether outer context
+/// shifts the optimum from inside-lam to a deeper abstraction that includes
+/// the outer skeleton.
+#[test]
+fn ho_shared_lam_with_outer_context() {
+    check_fixture_bf_only("data/domains/higher-order/outer-context.json", LAMBDA, true);
 }
