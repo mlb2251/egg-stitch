@@ -183,7 +183,7 @@ def render(saved: dict, table: int) -> str:
         label = DOMAIN_LABELS.get(domain, domain)
         crs = [geomean_of(runs, m, "compression_ratio") for m in methods]
         ts = [geomean_of(runs, m, "elapsed_secs") for m in methods]
-        rows.append((label, original, d.get("egraph_min_size"), crs, ts))
+        rows.append((label, original, d.get("egraph_min_term_size"), crs, ts))
 
     def emit(label: str, size_cells: list[str],
              crs: list[float | None], ts: list[float | None]) -> str:

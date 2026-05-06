@@ -48,10 +48,11 @@ def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrit
     ``rewrites`` defaults to the domain's standard rewrite file; pass
     ``None`` to run without any DSRs.
 
-    Returns ``(Result, egraph_min_size)`` where ``egraph_min_size`` is the
-    corpus min cost after the rewrite rules are applied (our tool exposes
-    this as ``cost_after_rewrites``). When no rewrites are applied the
-    second tuple element is ``None``.
+    Returns ``(Result, egraph_min_term_size)``: the second element is the
+    minimum term size in the e-graph after the DSR rewrites have been
+    applied (our tool exposes this as ``cost_after_rewrites``). It's an
+    algorithm-independent property of the corpus + rewrites. When no
+    rewrites are applied the second tuple element is ``None``.
     """
     if rewrites is _UNSET:
         rewrites = rewrites_path(domain)
@@ -70,8 +71,7 @@ def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrit
     final_cost = int(data.get("final_cost") or initial_cost)
     abstractions = data.get("library") or []
     method = "enum" if search == "best-first" else search
-    size_abstractions = sum(a["pattern_size"] for a in abstractions)
-    cost_after = int(data["cost_after_rewrites"]) + size_abstractions if rewrites is not None else None
+    egraph_min_term_size = int(data["cost_after_rewrites"]) if rewrites is not None else None
     result = Result(
         method=method,
         domain=domain,
@@ -81,9 +81,9 @@ def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrit
         elapsed_secs=float(data["elapsed_secs"]),
         library=[a["pattern"] for a in abstractions],
         extra={
-            "cost_after_rewrites": cost_after,
+            "egraph_min_term_size": egraph_min_term_size,
             "abstractions": abstractions,
             "output_file": str(output),
         },
     )
-    return result, cost_after
+    return result, egraph_min_term_size
