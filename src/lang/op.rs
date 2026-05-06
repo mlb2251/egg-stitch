@@ -42,11 +42,7 @@ pub trait StitchOp: StitchDisc {
     /// Builds an op from its display name. Must succeed for every input string.
     fn from_name(s: &str) -> Self;
 
-    /// If this op type has a De Bruijn-var leaf, build it. Used by higher-order
-    /// capture, which needs to materialize fresh `$n` leaves when wrapping
-    /// captured args under new lambdas. Languages without DB vars return `None`
-    /// (and HO capture will panic if asked to wrap such a language — but in
-    /// practice HO-arity is always 0 there since they have no binders).
+    /// If this op type has a De Bruijn-var leaf, build it.
     fn make_db_var(_n: u32) -> Option<Self> {
         None
     }
