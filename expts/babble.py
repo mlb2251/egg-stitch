@@ -74,13 +74,18 @@ def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1
 def _run_babble_dreamcoder(domain: str, *, dsr: str | None, num_abstractions: int, max_arity: int) -> Result:
     """Run babble's ``benchmark`` binary over every file in a dreamcoder domain.
 
-    The binary writes a per-file CSV with ``(name, iter, initial cost,
-    final cost, compression, total time, num libs)``; we parse it,
-    aggregate (sum costs/time, geomean compression ratios) and return a
-    single :class:`Result``. ``dsr=None`` runs ``--mode au`` (no DSRs);
-    a non-``None`` ``dsr`` runs ``--mode babble`` and must equal the path
-    that the benchmark binary auto-loads (it has no flag for a custom
-    DSR path), otherwise we'd silently apply the wrong rewrites.
+    The binary writes a CSV with columns ``(name, iter, initial cost,
+    final cost, compression, total time, num libs)``. NB: the column
+    babble labels ``iter`` is actually the input filename (see
+    ``babble/src/bin/benchmark/main.rs`` ``plot_raw_data``, which
+    serializes ``&file`` into that slot); ``--rounds`` are collapsed
+    inside babble before serialization, so there is exactly one row
+    per ``(benchmark, file)`` pair. We parse, aggregate (sum
+    costs/time, geomean compression ratios) and return a single
+    :class:`Result`. ``dsr=None`` runs ``--mode au`` (no DSRs); a
+    non-``None`` ``dsr`` runs ``--mode babble`` and must equal the
+    path that the benchmark binary auto-loads (it has no flag for a
+    custom DSR path), otherwise we'd silently apply the wrong rewrites.
     """
     if dsr is not None:
         expected = rewrites_path(domain)
@@ -107,14 +112,14 @@ def _run_babble_dreamcoder(domain: str, *, dsr: str | None, num_abstractions: in
     sp.run(cmd, check=True, cwd=BABBLE_DIR)
     wall_secs = time.time() - start
     with open(BABBLE_DIR / out_csv) as f:
-        rows = list(csv.DictReader(f))
-    if not rows:
+        per_file_rows = list(csv.DictReader(f))
+    if not per_file_rows:
         raise RuntimeError(f"babble benchmark produced no rows for {domain}")
-    initial_cost = sum(int(r["initial cost"]) for r in rows)
-    final_cost = sum(int(r["final cost"]) for r in rows)
-    ratios = [float(r["compression"]) for r in rows]
+    initial_cost = sum(int(row["initial cost"]) for row in per_file_rows)
+    final_cost = sum(int(row["final cost"]) for row in per_file_rows)
+    ratios = [float(row["compression"]) for row in per_file_rows]
     geo_cr = math.exp(sum(math.log(c) for c in ratios) / len(ratios))
-    babble_secs = sum(float(r["total time"]) for r in rows)
+    babble_secs = sum(float(row["total time"]) for row in per_file_rows)
     return Result(
         method="babble",
         domain=domain,
@@ -125,7 +130,7 @@ def _run_babble_dreamcoder(domain: str, *, dsr: str | None, num_abstractions: in
         library=None,
         extra={
             "babble_reported_secs": babble_secs,
-            "num_files": len(rows),
+            "num_files": len(per_file_rows),
             "mode": mode,
             "geomean_compression_ratio": geo_cr,
         },
