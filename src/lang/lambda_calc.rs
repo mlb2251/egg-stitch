@@ -153,10 +153,10 @@ impl<O: StitchOp> StitchLanguage for LambdaCalcLanguage<O> {
     }
 
     /// Custom sexp parser: walks the s-expression directly and emits curried
-    /// `App` chains for any list-headed application form (e.g. `((a $0) b)`).
-    /// egg's `RecExpr::from_str` rejects lists in operator position because
-    /// `from_op` takes a string head — but in the lambda calculus a list head
-    /// is a perfectly valid application, so we handle it here.
+    /// `App` chains for any list-headed application form (e.g. `((a x) y)`).
+    /// egg's `RecExpr::from_str` rejects head-as-list because `from_op` takes
+    /// a string head — but in the lambda calculus a list head is a perfectly
+    /// valid application, so we handle it ourselves.
     fn parse_program(s: &str) -> anyhow::Result<RecExpr<Self>> {
         let sexp = symbolic_expressions::parser::parse_str(s).map_err(|e| anyhow::anyhow!("parse {s:?}: {e}"))?;
         let mut out: RecExpr<Self> = RecExpr::default();
@@ -191,8 +191,8 @@ fn sexp_to_lambda_calc<O: StitchOp>(sexp: &symbolic_expressions::Sexp, out: &mut
             if items.is_empty() {
                 anyhow::bail!("empty list");
             }
-            // Inspect the head: if it's a known structural keyword, dispatch.
-            // Otherwise (including list heads) curry-apply the children onto it.
+            // If the head is one of the structural keywords, dispatch on it.
+            // Otherwise (atom or list head) curry-apply the remaining items.
             if let Sexp::String(head) = &items[0] {
                 match head.as_str() {
                     "lam" => {
