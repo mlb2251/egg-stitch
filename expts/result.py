@@ -31,8 +31,11 @@ class Result:
     elapsed_secs: float
     """Wall-clock time for the run (subprocess duration)."""
 
-    library: list[str]
-    """Human-readable strings for each learned abstraction."""
+    library: list[str] | None
+    """Human-readable strings for each learned abstraction. ``None`` when the
+    underlying tool doesn't expose them (e.g. babble's dreamcoder benchmark
+    binary, which only emits a count); downstream code that reads this should
+    handle ``None`` explicitly rather than silently treating it as empty."""
 
     extra: dict[str, Any] = field(default_factory=dict)
     """Method-specific fields that don't fit the common schema."""
@@ -59,8 +62,10 @@ def ratio(initial: int, final: int) -> float:
 def aggregate_per_file(per_file: list[Result]) -> Result:
     """Combine per-file Results into a single Result for a multi-file benchmark.
 
-    Costs and time sum across files; the compression ratio is the geometric
-    mean of per-file ratios (matching the babble paper's aggregation).
+    Costs and time sum across files; ``compression_ratio`` stays consistent
+    with the dataclass contract (``initial_cost / final_cost``). The per-file
+    geometric mean (matching the babble paper's aggregation) is stashed in
+    ``extra["geomean_compression_ratio"]``.
     """
     import math
 
@@ -79,8 +84,12 @@ def aggregate_per_file(per_file: list[Result]) -> Result:
         domain=domain,
         initial_cost=initial,
         final_cost=final,
-        compression_ratio=geo_cr,
+        compression_ratio=ratio(initial, final),
         elapsed_secs=elapsed,
         library=library,
-        extra={"num_files": len(per_file), "per_file": [r.to_dict() for r in per_file]},
+        extra={
+            "num_files": len(per_file),
+            "geomean_compression_ratio": geo_cr,
+            "per_file": [r.to_dict() for r in per_file],
+        },
     )

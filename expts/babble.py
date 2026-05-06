@@ -113,12 +113,13 @@ def _run_babble_dreamcoder(domain: str, *, use_dsrs: bool, num_abstractions: int
         domain=domain,
         initial_cost=initial_cost,
         final_cost=final_cost,
-        compression_ratio=geo_cr,
+        compression_ratio=ratio(initial_cost, final_cost),
         elapsed_secs=wall_secs,
-        library=[],
+        library=None,
         extra={
             "babble_reported_secs": babble_secs,
             "num_files": len(rows),
             "mode": mode,
+            "geomean_compression_ratio": geo_cr,
         },
     )
