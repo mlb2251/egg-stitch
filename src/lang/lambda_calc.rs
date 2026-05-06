@@ -74,9 +74,12 @@ impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
 
 impl<O: StitchOp> StitchOp for LambdaCalcDisc<O> {
     fn from_name(s: &str) -> Self {
+        // `lambda`/`λ` are accepted as aliases for `lam` so that DSRs and
+        // programs sourced from babble (e.g. the dreamcoder list/physics
+        // benchmarks) parse without a textual rewrite step.
         match s {
             "@" => Self::App,
-            "lam" => Self::Lam,
+            "lam" | "lambda" | "λ" => Self::Lam,
             "programs" => Self::Programs,
             _ => Self::Leaf(O::from_name(s)),
         }
@@ -195,7 +198,7 @@ fn sexp_to_lambda_calc<O: StitchOp>(sexp: &symbolic_expressions::Sexp, out: &mut
             // Otherwise (atom or list head) curry-apply the remaining items.
             if let Sexp::String(head) = &items[0] {
                 match head.as_str() {
-                    "lam" => {
+                    "lam" | "lambda" | "λ" => {
                         anyhow::ensure!(items.len() == 2, "lam expects 1 arg, got {}", items.len() - 1);
                         let body = sexp_to_lambda_calc::<O>(&items[1], out)?;
                         return Ok(out.add(LambdaCalcLanguage::Lam([body])));
