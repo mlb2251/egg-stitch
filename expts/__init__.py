@@ -23,7 +23,8 @@ def _cargo_build(project_dir: Path, bin_name: str) -> Path:
     print(f"+ cargo build --release --bin={bin_name}  (in {project_dir})", flush=True)
     subprocess.run(
         ["cargo", "build", "--release", "--bin", bin_name],
-        check=True, cwd=project_dir,
+        check=True,
+        cwd=project_dir,
     )
     return project_dir / "target" / "release" / bin_name
 
@@ -32,7 +33,10 @@ def _git(repo_dir: Path, *args: str) -> str:
     """Run ``git`` in ``repo_dir`` and return stripped stdout."""
     return subprocess.run(
         ["git", *args],
-        check=True, cwd=repo_dir, capture_output=True, text=True,
+        check=True,
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
 
 
@@ -54,7 +58,9 @@ def _check_clean_main(repo_dir: Path, expected_origin: str) -> None:
         raise RuntimeError(f"{repo_dir}: expected branch 'main', got '{branch}'")
     dirty = _git(repo_dir, "status", "--porcelain")
     if dirty:
-        raise RuntimeError(f"{repo_dir}: working tree has uncommitted changes:\n{dirty}")
+        raise RuntimeError(
+            f"{repo_dir}: working tree has uncommitted changes:\n{dirty}"
+        )
     _git(repo_dir, "fetch", "origin", "main")
     local = _git(repo_dir, "rev-parse", "main")
     remote = _git(repo_dir, "rev-parse", "origin/main")
@@ -91,9 +97,12 @@ DREAMCODER_DOMAINS = ["list", "physics", "text", "logo", "towers"]
 ALL_DOMAINS = COGSCI_DOMAINS + DREAMCODER_DOMAINS
 
 
-def is_dreamcoder_domain(domain: str) -> bool:
-    """True if ``domain`` is a dreamcoder-style multi-file benchmark."""
-    return domain in DREAMCODER_DOMAINS
+def domain_type(domain: str) -> str:
+    if domain in DREAMCODER_DOMAINS:
+        return "dreamcoder"
+    if domain in COGSCI_DOMAINS:
+        return "cogsci"
+    raise ValueError(f"Unknown domain '{domain}'")
 
 
 def dreamcoder_files(domain: str) -> list[Path]:
@@ -110,9 +119,15 @@ def rewrites_path(domain: str) -> str | None:
     dreamcoder ``text``/``logo``/``towers`` benchmarks have no equational
     theory in babble, so this returns ``None`` for them.
     """
-    if is_dreamcoder_domain(domain):
+    dt = domain_type(domain)
+    if dt == "dreamcoder":
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
-        return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None
+        return (
+            f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites"
+            if path.exists()
+            else None
+        )
+    assert dt == "cogsci"
     return f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites"
 
 
@@ -125,6 +140,3 @@ from .table1 import *
 from .table2 import *
 from .table3 import *
 from .table4 import *
-
-
-

@@ -5,7 +5,7 @@ import math
 import subprocess as sp
 import time
 
-from . import BABBLE_BENCH_BIN, BABBLE_BIN, BABBLE_DIR, is_dreamcoder_domain
+from . import BABBLE_BENCH_BIN, BABBLE_BIN, BABBLE_DIR, domain_type
 from .result import Result, ratio
 
 
@@ -24,8 +24,9 @@ def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1
 
     ``num_abstractions`` maps to babble's ``--rounds`` parameter.
     """
-    if is_dreamcoder_domain(domain):
+    if domain_type(domain) == "dreamcoder":
         return _run_babble_dreamcoder(domain, use_dsrs=dsr is not None, num_abstractions=num_abstractions, max_arity=max_arity)
+    assert domain_type(domain) == "cogsci"
     outfile = f"harness/data_gen/cache/{domain}.csv"
     print(f"\033[92mRunning babble on {domain}{' (with DSRs)' if dsr else ''}\033[0m", flush=True)
     cmd = [

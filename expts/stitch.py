@@ -4,7 +4,7 @@ import json
 import subprocess as sp
 import time
 
-from . import STITCH_BIN, STITCH_DIR, dreamcoder_files, is_dreamcoder_domain
+from . import STITCH_BIN, STITCH_DIR, dreamcoder_files, domain_type
 from .result import Result, aggregate_per_file, ratio
 
 from s_expression_parser import parse, ParserConfig, Pair, nil
@@ -42,8 +42,9 @@ def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Res
 
     ``num_abstractions`` maps to stitch's ``-i`` (iterations) flag.
     """
-    if is_dreamcoder_domain(domain):
+    if domain_type(domain) == "dreamcoder":
         return _run_stitch_dreamcoder(domain, num_abstractions=num_abstractions, max_arity=max_arity)
+    assert domain_type(domain) == "cogsci"
     return _run_stitch_single(
         domain,
         f"data/cogsci/{domain}.json",

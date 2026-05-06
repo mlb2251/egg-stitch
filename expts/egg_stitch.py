@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 
-from . import EGG_STITCH_BIN, EGG_STITCH_DIR, dreamcoder_files, is_dreamcoder_domain, rewrites_path
+from . import EGG_STITCH_BIN, EGG_STITCH_DIR, dreamcoder_files, domain_type, rewrites_path
 from .folders import current_folder_path, unique_path
 from .result import Result, aggregate_per_file, ratio
 
@@ -63,8 +63,9 @@ def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrit
     """
     if rewrites is _UNSET:
         rewrites = rewrites_path(domain)
-    if is_dreamcoder_domain(domain):
+    if domain_type(domain) == "dreamcoder":
         return _run_ours_dreamcoder(domain, search, num_steps=num_steps, max_arity=max_arity, rewrites=rewrites, **extra)
+    assert domain_type(domain) == "cogsci"
     return _run_ours_single(
         f"data/domains/cogsci/{domain}.json",
         domain,
