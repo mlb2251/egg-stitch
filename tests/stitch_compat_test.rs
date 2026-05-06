@@ -411,3 +411,46 @@ fn fv_overapprox_annihilator() {
 fn stitch_simple_hof() {
     check_fixture_bf_only("data/domains/stitch/simple_hof.json", STITCH_LAMBDA_ARGS, true);
 }
+
+// === HO capture tests (formerly tests/higher_order_test.rs) ===
+//
+// These pin best-first behavior on corpora designed to exercise HO arity > 0
+// captures (η-wrap in the body, shift-and-λ-wrap at each call site). Unlike
+// the stitch-compat suite they don't carry `--sym-var-cost 100`, since the
+// fixtures were blessed against egg-stitch's default cost model.
+
+const LAMBDA: &[&str] = &["--language", "lambda-calc"];
+
+/// Five programs sharing `(lam (foo (bar _)))` where the trailing slot is a
+/// distinct closed-head application of `$0`. Captures use HO arity 1 to lift
+/// the open `(@ X $0)` subterms under the surrounding lam.
+#[test]
+fn ho_shared_lam_uniform_bottom() {
+    check_fixture_bf_only("data/domains/higher-order/uniform-bottom.json", LAMBDA, true);
+}
+
+/// Programs whose bottom shapes vary in *how* they use `$0` (head, middle,
+/// trailing, bare). The HO pattern `(lam (foo (bar ?#0)))` covers all
+/// variants by η-wrapping each capture.
+#[test]
+fn ho_shared_lam_varying_bottom() {
+    check_fixture_bf_only("data/domains/higher-order/varying-bottom.json", LAMBDA, true);
+}
+
+/// Minimal: each program is just `(lam (h $0))` for varying head leaf. The
+/// only shared structure is `(lam _)`, so any compression must put a `lam`
+/// inside the abstraction body — pure HO at `var_depth > 0`.
+#[test]
+fn ho_minimal_lam_varying_head() {
+    check_fixture_bf_only("data/domains/higher-order/minimal-head.json", LAMBDA, true);
+}
+
+/// Same varying-bottom inner shapes as `varying-bottom.json`, but wrapped in
+/// a chunky outer `(+ a b c d e f (lam …))` so there's a lot of shared
+/// non-lam structure surrounding the variation. Tests whether outer context
+/// shifts the optimum from inside-lam to a deeper abstraction that includes
+/// the outer skeleton.
+#[test]
+fn ho_shared_lam_with_outer_context() {
+    check_fixture_bf_only("data/domains/higher-order/outer-context.json", LAMBDA, true);
+}
