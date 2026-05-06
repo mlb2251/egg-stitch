@@ -22,7 +22,7 @@ def run_babble(domain: str, *, dsr: str | None = None, num_abstractions: int = 1
     cmd = [
         str(BABBLE_BIN),
         f"harness/data/cogsci/{domain}.bab",
-        "--beams=400", "--lps=1", f"--rounds={num_abstractions}", "--max-arity=2",
+        "--beams=400", "--lps=1", f"--rounds={num_abstractions}", f"--max-arity={max_arity}",
         f"--output={outfile}",
     ]
     if dsr is not None:

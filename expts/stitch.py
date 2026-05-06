@@ -44,7 +44,7 @@ def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Res
         str(STITCH_BIN),
         f"data/cogsci/{domain}.json",
         f"-i{num_abstractions}",
-        "-a2",
+        f"-a{max_arity}",
         "--out",
         outfile,
         "--no-curried-bodies",
