@@ -374,11 +374,6 @@ fn stitch_no_invention_cons_car() {
     check_fixture_bf_only("data/domains/stitch/no_invention_cons_car.json", STITCH_LAMBDA_ARGS, true);
 }
 
-#[test]
-fn stitch_tmp_crash() {
-    check_fixture_bf_only("data/domains/stitch/tmp_crash.json", STITCH_LAMBDA_ARGS, true);
-}
-
 /// Exercises list-headed application `((is_nil $0) nil (cons (+ $0)))` —
 /// `is_nil` is applied to `$0` and the result is itself applied to two more
 /// args. egg's default `RecExpr` parser rejects head-as-list, but our custom
