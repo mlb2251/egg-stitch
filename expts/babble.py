@@ -124,18 +124,21 @@ def _run_babble_dreamcoder(domain: str, *, dsr: str | None, num_abstractions: in
         )
     geo_cr = math.exp(sum(math.log(c) for c in ratios) / len(ratios))
     babble_secs = sum(float(row["total time"]) for row in per_file_rows)
+    # compression_ratio uses the geometric mean of per-file ratios to match
+    # how the babble paper (Fig. 12) aggregates dreamcoder benchmarks; the
+    # raw per-file CSV rows are preserved in extra for traceability.
     return Result(
         method="babble",
         domain=domain,
         initial_cost=initial_cost,
         final_cost=final_cost,
-        compression_ratio=ratio(initial_cost, final_cost),
+        compression_ratio=geo_cr,
         elapsed_secs=wall_secs,
         library=None,
         extra={
             "babble_reported_secs": babble_secs,
             "num_files": len(per_file_rows),
             "mode": mode,
-            "geomean_compression_ratio": geo_cr,
+            "per_file": per_file_rows,
         },
     )
