@@ -76,27 +76,41 @@ def table1(
 
     for domain in TABLE1_DOMAINS:
         print(f"\n=== {domain} ===", flush=True)
+        # The dreamcoder benchmarks are many small files run sequentially per
+        # domain, so a per-file budget at the cogsci level over-spends; cut it
+        # by 4x. Babble's per-domain budget is set inside its driver.
+        budget_div = 4 if domain_type(domain) == "dreamcoder" else 1
+        d_smc_steps = max(1, smc_num_steps // budget_div)
+        d_smc_particles = smc_num_particles
+        d_enum_steps = max(1, enum_num_steps // budget_div)
         enum_runs, smc_runs, babble_runs = [], [], []
-        egraph_min = None
+        egraph_min_term_size = None
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY, no_zero_arity=True)
-            smc_res, _ = run_ours(
+            enum_res, enum_egraph_min = run_ours(domain, "best-first", num_steps=d_enum_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY, no_zero_arity=True)
+            smc_res, smc_egraph_min = run_ours(
                 domain, "smc",
-                num_steps=smc_num_steps,
-                num_particles=smc_num_particles,
+                num_steps=d_smc_steps,
+                num_particles=d_smc_particles,
                 temperature=smc_temperature,
                 num_abstractions=num_abstractions,
                 rebuild_egraph=rebuild_egraph,
                 max_arity=MAX_ARITY,
                 no_zero_arity=True,
             )
+            # The post-rewrite e-graph minimum term size is a property of the
+            # corpus + DSRs alone, so Enum and SMC must agree on it.
+            assert enum_egraph_min == smc_egraph_min, (
+                f"{domain}: e-graph min term size disagrees between algorithms "
+                f"(enum={enum_egraph_min}, smc={smc_egraph_min})"
+            )
+            egraph_min_term_size = enum_egraph_min
             babble_res = run_babble(domain, dsr=rewrites_path(domain), num_abstractions=num_abstractions, max_arity=MAX_ARITY)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
         results["domains"][domain] = {
-            "egraph_min_size": egraph_min,
+            "egraph_min_term_size": egraph_min_term_size,
             "runs": {"enum": enum_runs, "smc": smc_runs, "babble": babble_runs},
         }
 
@@ -157,7 +171,7 @@ def print_table1(path: str | Path) -> None:
         row = (
             f"{label:<14}"
             f"{_fmt(original_size, 'd'):>14}"
-            f"{_fmt(d.get('egraph_min_size'), 'd'):>22}  "
+            f"{_fmt(d.get('egraph_min_term_size'), 'd'):>22}  "
             f"{_fmt(cr('enum'), '.2f'):>10}"
             f"{_fmt(cr('smc'), '.2f'):>10}"
             f"{_fmt(cr('babble'), '.2f'):>8}"

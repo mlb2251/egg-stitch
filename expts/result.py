@@ -50,7 +50,7 @@ class Result:
             f"{self.method}/{self.domain}: "
             f"{self.initial_cost} -> {self.final_cost} "
             f"(ratio {self.compression_ratio:.2f}, time {self.elapsed_secs:.1f}s, "
-            f"{len(self.library)} lib)"
+            f"{'?' if self.library is None else len(self.library)} lib)"
         )
 
 
