@@ -28,6 +28,47 @@ def _cargo_build(project_dir: Path, bin_name: str) -> Path:
     return project_dir / "target" / "release" / bin_name
 
 
+def _git(repo_dir: Path, *args: str) -> str:
+    """Run ``git`` in ``repo_dir`` and return stripped stdout."""
+    return subprocess.run(
+        ["git", *args],
+        check=True, cwd=repo_dir, capture_output=True, text=True,
+    ).stdout.strip()
+
+
+def _check_clean_main(repo_dir: Path, expected_origin: str) -> None:
+    """Assert ``repo_dir`` is on main, clean, and synced with ``expected_origin``.
+
+    Raises ``RuntimeError`` if ``origin``'s URL doesn't match
+    ``expected_origin``, the working tree isn't on the ``main`` branch, has
+    uncommitted/untracked changes, or has diverged from ``origin/main``
+    after a fetch.
+    """
+    origin_url = _git(repo_dir, "remote", "get-url", "origin")
+    if origin_url != expected_origin:
+        raise RuntimeError(
+            f"{repo_dir}: expected origin '{expected_origin}', got '{origin_url}'"
+        )
+    branch = _git(repo_dir, "rev-parse", "--abbrev-ref", "HEAD")
+    if branch != "main":
+        raise RuntimeError(f"{repo_dir}: expected branch 'main', got '{branch}'")
+    dirty = _git(repo_dir, "status", "--porcelain")
+    if dirty:
+        raise RuntimeError(f"{repo_dir}: working tree has uncommitted changes:\n{dirty}")
+    _git(repo_dir, "fetch", "origin", "main")
+    local = _git(repo_dir, "rev-parse", "main")
+    remote = _git(repo_dir, "rev-parse", "origin/main")
+    if local != remote:
+        raise RuntimeError(
+            f"{repo_dir}: local main ({local[:8]}) is not in sync with origin/main ({remote[:8]})"
+        )
+
+
+# Verify the external compressors are on a clean, up-to-date main before we
+# build and run them so reported numbers are reproducible from a known commit.
+_check_clean_main(BABBLE_DIR, "git@github.com:kavigupta/babble.git")
+_check_clean_main(STITCH_DIR, "git@github.com:mlb2251/stitch.git")
+
 # Build all three binaries once at import time and expose their paths as
 # top-level constants. Cargo's incremental build makes the no-op case cheap.
 EGG_STITCH_BIN: Path = _cargo_build(EGG_STITCH_DIR, "egg-stitch")
