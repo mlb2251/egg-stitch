@@ -78,13 +78,8 @@ def table1(
 
     for domain in TABLE1_DOMAINS:
         print(f"\n=== {domain} ===", flush=True)
-        # The dreamcoder benchmarks are many small files run sequentially per
-        # domain, so a per-file budget at the cogsci level over-spends; cut it
-        # by 4x. Babble's per-domain budget is set inside its driver.
-        budget_div = 4 if domain_type(domain) == "dreamcoder" else 1
-        d_smc_steps = max(1, smc_num_steps // budget_div)
-        d_smc_particles = smc_num_particles
-        d_enum_steps = max(1, enum_num_steps // budget_div)
+        d_enum_steps = scale_budget_for_domain(domain, enum_num_steps)
+        d_smc_particles = scale_budget_for_domain(domain, smc_num_particles)
         enum_runs, smc_runs, babble_runs = [], [], []
         egraph_min_term_size = None
         for i in range(NUM_RUNS):
@@ -92,7 +87,7 @@ def table1(
             enum_res, enum_egraph_min = run_ours(domain, "best-first", num_steps=d_enum_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY, no_zero_arity=True)
             smc_res, smc_egraph_min = run_ours(
                 domain, "smc",
-                num_steps=d_smc_steps,
+                num_steps=smc_num_steps,
                 num_particles=d_smc_particles,
                 temperature=smc_temperature,
                 num_abstractions=num_abstractions,

@@ -111,6 +111,26 @@ def dreamcoder_files(domain: str) -> list[Path]:
     return sorted(p for p in d.iterdir() if p.is_file() and p.suffix == ".json")
 
 
+# Dreamcoder domains are run as many independent per-file invocations within a
+# single (method, domain) call, so a search budget chosen for a single cogsci
+# corpus over-spends by roughly the file count. We divide the per-call step
+# budget by this factor for dreamcoder domains in both Table 1/3 (with DSRs)
+# and Table 2/4 (no DSRs) so the two regimes stay comparable.
+DREAMCODER_STEP_DIVISOR = 4
+
+
+def scale_budget_for_domain(domain: str, n: int) -> int:
+    """Return ``n`` reduced for dreamcoder domains, unchanged for cogsci.
+
+    Used to scale enum's ``num_steps`` and SMC's ``num_particles`` (the
+    parameters that actually trade compute against quality in each search).
+    Floors at 1 so callers passing already-small budgets still get a valid run.
+    """
+    if domain_type(domain) == "dreamcoder":
+        return max(1, n // DREAMCODER_STEP_DIVISOR)
+    return n
+
+
 def rewrites_path(domain: str) -> str | None:
     """Path to the babble rewrite rules for ``domain``, or ``None`` if absent.
 

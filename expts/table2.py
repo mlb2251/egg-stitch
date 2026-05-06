@@ -62,14 +62,16 @@ def table2(
 
     for domain in TABLE2_DOMAINS:
         print(f"\n=== {domain} ===", flush=True)
+        d_enum_steps = scale_budget_for_domain(domain, enum_num_steps)
+        d_smc_particles = scale_budget_for_domain(domain, smc_num_particles)
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY, no_zero_arity=True)
+            enum_res, _ = run_ours(domain, "best-first", num_steps=d_enum_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY, no_zero_arity=True)
             smc_res, _ = run_ours(
                 domain, "smc",
                 num_steps=smc_num_steps,
-                num_particles=smc_num_particles,
+                num_particles=d_smc_particles,
                 temperature=smc_temperature,
                 rewrites=None,
                 num_abstractions=num_abstractions,
