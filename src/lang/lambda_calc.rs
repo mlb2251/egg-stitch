@@ -174,7 +174,6 @@ impl<O: StitchOp> StitchLanguage for LambdaCalcLanguage<O> {
     }
 }
 
-
 /// Walk a `Sexp` and emit it as a `LambdaCalcLanguage<O>` `RecExpr` using the
 /// usual currying conventions:
 /// - `(lam body)` → `Lam([body])`.

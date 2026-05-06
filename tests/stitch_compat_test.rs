@@ -397,12 +397,7 @@ fn stitch_safe_ctx_thread_bug() {
 fn fv_overapprox_annihilator() {
     check_fixture_bf_only(
         "data/domains/fv-overapprox/annihilator.json",
-        &[
-            "-r", "data/domains/fv-overapprox/annihilator.rewrites",
-            "--language", "lambda-calc",
-            "--sym-var-cost", "100",
-            "--max-arity", "1",
-        ],
+        &["-r", "data/domains/fv-overapprox/annihilator.rewrites", "--language", "lambda-calc", "--sym-var-cost", "100", "--max-arity", "1"],
         true,
     );
 }
