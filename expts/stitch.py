@@ -50,11 +50,18 @@ def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Res
         f"out/for-egg-stitch/{domain}.json",
         num_abstractions=num_abstractions,
         max_arity=max_arity,
+        cost=COST_MULTIPLIER,
     )
 
 
-def _run_stitch_single(domain: str, input_path: str, outfile: str, *, num_abstractions: int, max_arity: int) -> Result:
-    """Run the stitch binary on a single corpus file and parse its JSON output."""
+def _run_stitch_single(domain: str, input_path: str, outfile: str, *, num_abstractions: int, max_arity: int, cost: str) -> Result:
+    """Run the stitch binary on a single corpus file and parse its JSON output.
+
+    All non-app costs are set to ``cost``; ``--cost-app`` is left at stitch's
+    default of 1. For cogsci ``cost`` is large (``COST_MULTIPLIER``) so the
+    fixed App=1 is negligible vs our AstSize (which counts App=0). For
+    dreamcoder ``cost=1``, matching babble's all-nodes-cost-1 metric.
+    """
     print(f"\033[92mRunning stitch on {domain} ({input_path})\033[0m", flush=True)
     cmd = [
         str(STITCH_BIN),
@@ -68,13 +75,13 @@ def _run_stitch_single(domain: str, input_path: str, outfile: str, *, num_abstra
         "--silent",
         "--allow-single-task",
         "--cost-var",
-        COST_MULTIPLIER,
+        cost,
         "--cost-ivar",
-        COST_MULTIPLIER,
+        cost,
         "--cost-prim-default",
-        COST_MULTIPLIER,
+        cost,
         "--cost-lam",
-        COST_MULTIPLIER,
+        cost,
     ]
     start = time.time()
     sp.run(cmd, check=True, cwd=STITCH_DIR)
@@ -103,7 +110,13 @@ def _run_stitch_single(domain: str, input_path: str, outfile: str, *, num_abstra
 
 
 def _run_stitch_dreamcoder(domain: str, *, num_abstractions: int, max_arity: int) -> Result:
-    """Iterate stitch over every file in ``data/domains/<domain>/`` and aggregate."""
+    """Iterate stitch over every file in ``data/domains/<domain>/`` and aggregate.
+
+    Dreamcoder runs use cost 1 for app/lam/var/ivar/prim to match babble's
+    ``Expr::len``-based cost (every AST node = 1) and our egg-stitch defaults
+    (``Weights {sym_var:1, app:1, lam:1}``), so all three tools score the same
+    AST identically.
+    """
     per_file: list[Result] = []
     for f in dreamcoder_files(domain):
         # stitch runs in STITCH_DIR; pass an absolute input path so it doesn't
@@ -114,6 +127,7 @@ def _run_stitch_dreamcoder(domain: str, *, num_abstractions: int, max_arity: int
             f"out/for-egg-stitch/{domain}__{f.stem}.json",
             num_abstractions=num_abstractions,
             max_arity=max_arity,
+            cost="1",
         )
         per_file.append(result)
     return aggregate_per_file(per_file)
