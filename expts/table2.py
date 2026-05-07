@@ -12,13 +12,18 @@ from pathlib import Path
 
 import numpy as np
 
-from . import ALL_DOMAINS, rewrites_path
+from . import ALL_DOMAINS, rewrites_path, scale_budget_for_domain
 from .babble import run_babble
 from .egg_stitch import run_ours
 from .stitch import run_stitch
 from .folders import current_folder_path, set_folder
 from .stackpath import stackpathpush, stackpathpop, subgroup
 from .table1 import DOMAIN_LABELS
+
+# Table 2 is the no-DSR comparison, so it includes the dreamcoder domains
+# without rewrite files (text/logo/towers) in addition to everything in
+# Table 1.
+TABLE2_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics", "text", "logo", "towers"]
 
 
 DEFAULT_TABLE2_TITLE = "Table 2: Ours (SMC and Enum) vs Babble vs Stitch on benchmarks without DSRs"
@@ -45,7 +50,7 @@ def table2(
     stacks that many abstractions sequentially.
     """
     if domains is None:
-        domains = ALL_DOMAINS
+        domains = TABLE2_DOMAINS
     assert all(d in ALL_DOMAINS for d in domains), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
@@ -64,17 +69,19 @@ def table2(
     for domain in domains:
         print(f"\n=== {domain} ===", flush=True)
         stackpathpush(domain)
+        d_enum_steps = scale_budget_for_domain(domain, enum_num_steps)
+        d_smc_particles = scale_budget_for_domain(domain, smc_num_particles)
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
         for i in range(num_runs):
             print(f"  run {i+1}/{num_runs}", flush=True)
             stackpathpush(f"rep{i}")
             with subgroup("best-first"):
-                enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=max_arity, no_zero_arity=True)
+                enum_res, _ = run_ours(domain, "best-first", num_steps=d_enum_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=max_arity, no_zero_arity=True)
             with subgroup("smc"):
                 smc_res, _ = run_ours(
                     domain, "smc",
                     num_steps=smc_num_steps,
-                    num_particles=smc_num_particles,
+                    num_particles=d_smc_particles,
                     temperature=smc_temperature,
                     rewrites=None,
                     num_abstractions=num_abstractions,

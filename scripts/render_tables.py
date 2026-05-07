@@ -19,12 +19,24 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "viz" / "results"
 FIGURES_DIR = PROJECT_ROOT / "figures"
 
-TABLE_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture"]
+# Tables 1/3 (DSR runs) only include domains that have a babble equational
+# theory; tables 2/4 (no-DSR runs) include text/logo/towers as well.
+TABLE_DOMAINS_DSR = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
+TABLE_DOMAINS_NO_DSR = TABLE_DOMAINS_DSR + ["text", "logo", "towers"]
+
+
+def domains_for_table(table: int) -> list[str]:
+    return TABLE_DOMAINS_DSR if table in TABLES_WITH_EGRAPH_MIN else TABLE_DOMAINS_NO_DSR
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
     "dials": "Dials",
     "wheels": "Wheels",
     "furniture": "Furniture",
+    "list": "List",
+    "physics": "Physics",
+    "text": "Text",
+    "logo": "Logo",
+    "towers": "Towers",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
 METHOD_LABELS = {"enum": "Enum", "smc": "SMC", "babble": "babble", "stitch": "Stitch"}
@@ -70,12 +82,17 @@ def line_color(i: int):
 
 # Plot uses a "line" variant of the pastel theme for readability on white.
 METHOD_COLORS = {m: line_color(i) for i, m in enumerate(METHODS)}
-DOMAIN_MARKERS = {"nuts-bolts": "s", "dials": "^", "wheels": "D", "furniture": "v"}
+DOMAIN_MARKERS = {"nuts-bolts": "s", "dials": "^", "wheels": "D", "furniture": "v", "list": "P", "physics": "X", "text": "*", "logo": "o", "towers": "p"}
 DOMAIN_PLOT_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
     "wheels": "Wheels",
     "furniture": "Furniture",
+    "list": "List",
+    "physics": "Physics",
+    "text": "Text",
+    "logo": "Logo",
+    "towers": "Towers",
 }
 
 
@@ -173,7 +190,7 @@ def render(saved: dict, table: int) -> str:
     # Collect per-domain aggregates so we can bold the best cell in each row
     # and compute a geometric-mean summary row across benchmarks.
     rows: list[tuple[str, int, int | None, list[float | None], list[float | None]]] = []
-    for domain in TABLE_DOMAINS:
+    for domain in domains_for_table(table):
         if domain not in domains:
             continue
         d = domains[domain]
@@ -225,7 +242,7 @@ def plot(saved: dict, table: int, out_path: Path) -> None:
     # Collect per-method per-domain geomeans so we can also plot a
     # cross-benchmark geomean for each method.
     by_method: dict[str, list[tuple[float, float]]] = {m: [] for m in METHODS}
-    for domain in TABLE_DOMAINS:
+    for domain in domains_for_table(table):
         if domain not in domains:
             continue
         marker = DOMAIN_MARKERS.get(domain, "x")
@@ -283,7 +300,7 @@ def plot(saved: dict, table: int, out_path: Path) -> None:
     domain_handles = [
         Line2D([], [], linestyle="none", marker=DOMAIN_MARKERS[d],
                color="gray", label=DOMAIN_PLOT_LABELS[d])
-        for d in TABLE_DOMAINS
+        for d in domains_for_table(table)
     ]
     domain_handles.append(
         Line2D([], [], linestyle="none", marker="o", color="gray",

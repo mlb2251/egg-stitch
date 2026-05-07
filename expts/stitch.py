@@ -4,8 +4,8 @@ import json
 import subprocess as sp
 import time
 
-from . import STITCH_BIN, STITCH_DIR
-from .result import Result, ratio
+from . import STITCH_BIN, STITCH_DIR, dreamcoder_files, domain_type
+from .result import Result, aggregate_per_file, ratio
 from .stackpath import save_run
 
 from s_expression_parser import parse, ParserConfig, Pair, nil
@@ -36,14 +36,42 @@ def ast_size(programs: list[str]) -> int:
 def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Result:
     """Run stitch on ``domain``.
 
-    ``num_abstractions`` maps to stitch's ``-i`` (iterations) flag, so it
-    controls how many abstractions stitch is asked to learn.
+    For cogsci domains the corpus is the single ``data/cogsci/<domain>.json``
+    file. For dreamcoder domains stitch is invoked once per file under
+    ``data/domains/<domain>/`` (passed in via an absolute path) and the
+    per-file Results are combined via :func:`aggregate_per_file`.
+
+    ``num_abstractions`` maps to stitch's ``-i`` (iterations) flag.
     """
-    outfile = f"out/for-egg-stitch/{domain}.json"
-    print(f"\033[92mRunning stitch on {domain}\033[0m", flush=True)
+    if domain_type(domain) == "dreamcoder":
+        result = _run_stitch_dreamcoder(domain, num_abstractions=num_abstractions, max_arity=max_arity)
+    else:
+        assert domain_type(domain) == "cogsci"
+        result = _run_stitch_single(
+            domain,
+            f"data/cogsci/{domain}.json",
+            f"out/for-egg-stitch/{domain}.json",
+            num_abstractions=num_abstractions,
+            max_arity=max_arity,
+            cost=COST_MULTIPLIER,
+        )
+    config = {"domain": domain, "num_abstractions": num_abstractions, "max_arity": max_arity}
+    save_run(result.to_dict(), config, "stitch")
+    return result
+
+
+def _run_stitch_single(domain: str, input_path: str, outfile: str, *, num_abstractions: int, max_arity: int, cost: str) -> Result:
+    """Run the stitch binary on a single corpus file and parse its JSON output.
+
+    All non-app costs are set to ``cost``; ``--cost-app`` is left at stitch's
+    default of 1. For cogsci ``cost`` is large (``COST_MULTIPLIER``) so the
+    fixed App=1 is negligible vs our AstSize (which counts App=0). For
+    dreamcoder ``cost=1``, matching babble's all-nodes-cost-1 metric.
+    """
+    print(f"\033[92mRunning stitch on {domain} ({input_path})\033[0m", flush=True)
     cmd = [
         str(STITCH_BIN),
-        f"data/cogsci/{domain}.json",
+        input_path,
         f"-i{num_abstractions}",
         f"-a{max_arity}",
         "--out",
@@ -53,13 +81,13 @@ def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Res
         "--silent",
         "--allow-single-task",
         "--cost-var",
-        COST_MULTIPLIER,
+        cost,
         "--cost-ivar",
-        COST_MULTIPLIER,
+        cost,
         "--cost-prim-default",
-        COST_MULTIPLIER,
+        cost,
         "--cost-lam",
-        COST_MULTIPLIER,
+        cost,
     ]
     start = time.time()
     sp.run(cmd, check=True, cwd=STITCH_DIR)
@@ -85,6 +113,28 @@ def run_stitch(domain: str, *, num_abstractions: int = 1, max_arity: int) -> Res
             "num_abstractions": int(data.get("num_abstractions", len(library))),
         },
     )
-    config = {"domain": domain, "num_abstractions": num_abstractions, "max_arity": max_arity}
-    save_run(result.to_dict(), config, "stitch")
     return result
+
+
+def _run_stitch_dreamcoder(domain: str, *, num_abstractions: int, max_arity: int) -> Result:
+    """Iterate stitch over every file in ``data/domains/<domain>/`` and aggregate.
+
+    Dreamcoder runs use cost 1 for app/lam/var/ivar/prim to match babble's
+    ``Expr::len``-based cost (every AST node = 1) and our egg-stitch defaults
+    (``Weights {sym_var:1, app:1, lam:1}``), so all three tools score the same
+    AST identically.
+    """
+    per_file: list[Result] = []
+    for f in dreamcoder_files(domain):
+        # stitch runs in STITCH_DIR; pass an absolute input path so it doesn't
+        # need a copy of our data tree.
+        result = _run_stitch_single(
+            domain,
+            str(f),
+            f"out/for-egg-stitch/{domain}__{f.stem}.json",
+            num_abstractions=num_abstractions,
+            max_arity=max_arity,
+            cost="1",
+        )
+        per_file.append(result)
+    return aggregate_per_file(per_file)

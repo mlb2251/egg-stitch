@@ -12,17 +12,30 @@ from pathlib import Path
 
 import numpy as np
 
-from . import ALL_DOMAINS, rewrites_path
+from . import ALL_DOMAINS, rewrites_path, scale_budget_for_domain
 from .babble import run_babble
 from .egg_stitch import run_ours
 from .folders import current_folder_path, set_folder
 from .stackpath import stackpathpush, stackpathpop, subgroup
+
+NUM_RUNS = 10
+
+# Order matches the Table 1 screenshot, with the dreamcoder benchmarks that
+# ship with DSRs appended after the four cogsci drawing domains. text/logo/
+# towers are excluded: babble has no equational theory for them, so a "with
+# DSRs" comparison is not defined.
+TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
 
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
     "wheels": "Wheels",
     "furniture": "Furniture",
+    "list": "List",
+    "physics": "Physics",
+    "text": "Text",
+    "logo": "Logo",
+    "towers": "Towers",
 }
 
 
@@ -52,7 +65,7 @@ def table1(
     compressor so each run stacks that many abstractions sequentially.
     """
     if domains is None:
-        domains = ALL_DOMAINS
+        domains = TABLE1_DOMAINS
     assert all(d in ALL_DOMAINS for d in domains), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
@@ -71,18 +84,20 @@ def table1(
     for domain in domains:
         print(f"\n=== {domain} ===", flush=True)
         stackpathpush(domain)
+        d_enum_steps = scale_budget_for_domain(domain, enum_num_steps)
+        d_smc_particles = scale_budget_for_domain(domain, smc_num_particles)
         enum_runs, smc_runs, babble_runs = [], [], []
         egraph_min_term_size = None
         for i in range(num_runs):
             print(f"  run {i+1}/{num_runs}", flush=True)
             stackpathpush(f"rep{i}")
             with subgroup("best-first"):
-                enum_res, enum_egraph_min = run_ours(domain, "best-first", num_steps=enum_num_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=max_arity, no_zero_arity=True)
+                enum_res, enum_egraph_min = run_ours(domain, "best-first", num_steps=d_enum_steps, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=max_arity, no_zero_arity=True)
             with subgroup("smc"):
                 smc_res, smc_egraph_min = run_ours(
                     domain, "smc",
                     num_steps=smc_num_steps,
-                    num_particles=smc_num_particles,
+                    num_particles=d_smc_particles,
                     temperature=smc_temperature,
                     num_abstractions=num_abstractions,
                     rebuild_egraph=rebuild_egraph,

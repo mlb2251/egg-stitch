@@ -4,9 +4,9 @@ import json
 import os
 import subprocess
 
-from . import EGG_STITCH_BIN, rewrites_path
+from . import EGG_STITCH_BIN, EGG_STITCH_DIR, dreamcoder_files, domain_type, rewrites_path
 from .folders import current_folder_path, unique_path
-from .result import Result, ratio
+from .result import Result, aggregate_per_file, ratio
 from .stackpath import save_run
 
 
@@ -46,21 +46,46 @@ _UNSET = object()
 def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrites=_UNSET, **extra) -> tuple[Result, int | None]:
     """Run our compressor on ``domain``.
 
+    For cogsci domains the input is the single ``data/domains/cogsci/<domain>.json``
+    file. For dreamcoder domains (``list``, ``physics``) every per-iteration
+    input under ``data/domains/<domain>/`` is processed and the per-file
+    Results are aggregated (see :func:`aggregate_per_file`); the run also
+    forces ``--language lambda-calc`` since dreamcoder corpora are in
+    curried form.
+
     ``rewrites`` defaults to the domain's standard rewrite file; pass
     ``None`` to run without any DSRs.
 
     Returns ``(Result, egraph_min_term_size)``: the second element is the
     minimum term size in the e-graph after the DSR rewrites have been
     applied (our tool exposes this as ``cost_after_rewrites``). It's an
-    algorithm-independent property of the corpus + rewrites. When no
-    rewrites are applied the second tuple element is ``None``.
+    algorithm-independent property of the corpus + rewrites; for
+    dreamcoder domains it's the sum across files. When no rewrites are
+    applied the second tuple element is ``None``.
     """
     if rewrites is _UNSET:
         rewrites = rewrites_path(domain)
-    output = egg_stitch(
+    if domain_type(domain) == "dreamcoder":
+        return _run_ours_dreamcoder(domain, search, num_steps=num_steps, max_arity=max_arity, rewrites=rewrites, **extra)
+    assert domain_type(domain) == "cogsci"
+    return _run_ours_single(
         f"data/domains/cogsci/{domain}.json",
+        domain,
+        search,
         rewrites=rewrites,
-        output=f"{domain}_{search.replace('-', '_')}.json",
+        num_steps=num_steps,
+        max_arity=max_arity,
+        output_name=f"{domain}_{search.replace('-', '_')}.json",
+        **extra,
+    )
+
+
+def _run_ours_single(input_path: str, domain: str, search: str, *, rewrites, num_steps: int, max_arity: int, output_name: str, **extra) -> tuple[Result, int | None]:
+    """Run egg-stitch on a single ``input_path`` and parse its output JSON into a Result."""
+    output = egg_stitch(
+        input_path,
+        rewrites=rewrites,
+        output=output_name,
         search=search,
         num_steps=num_steps,
         max_arity=max_arity,
@@ -91,3 +116,33 @@ def run_ours(domain: str, search: str, *, num_steps: int, max_arity: int, rewrit
     config = {"domain": domain, "search": search, "num_steps": num_steps, "rewrites": rewrites, "max_arity": max_arity, **extra}
     save_run(result.to_dict(), config, "egg_stitch")
     return result, egraph_min_term_size
+
+
+def _run_ours_dreamcoder(domain: str, search: str, *, num_steps: int, max_arity: int, rewrites, **extra) -> tuple[Result, int | None]:
+    """Run egg-stitch on every file under ``data/domains/<domain>/`` and aggregate.
+
+    Forces ``language=lambda-calc`` since dreamcoder corpora are curried;
+    the caller must not also set it.
+    """
+    assert "language" not in extra, "dreamcoder runs force language=lambda-calc; do not pass it"
+    extra = {**extra, "language": "lambda-calc"}
+    per_file: list[Result] = []
+    egraph_min_total: int | None = 0 if rewrites is not None else None
+    for f in dreamcoder_files(domain):
+        # egg-stitch runs from EGG_STITCH_DIR; supply the path relative to it
+        # so the stored input_file in the result is a stable relative path.
+        rel = f.relative_to(EGG_STITCH_DIR)
+        result, egraph_min_term_size = _run_ours_single(
+            str(rel),
+            domain,
+            search,
+            rewrites=rewrites,
+            num_steps=num_steps,
+            max_arity=max_arity,
+            output_name=f"{domain}__{f.stem}_{search.replace('-', '_')}.json",
+            **extra,
+        )
+        per_file.append(result)
+        if egraph_min_term_size is not None and egraph_min_total is not None:
+            egraph_min_total += egraph_min_term_size
+    return aggregate_per_file(per_file), egraph_min_total
