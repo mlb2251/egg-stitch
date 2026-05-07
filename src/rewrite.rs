@@ -1,7 +1,8 @@
 use crate::lang::{LanguageFamily, StitchEgraph, StitchOp,StitchLanguage};
 use crate::search::SearchState;
-use crate::cost::check_fvs_are_as_expected;
-use egg::Language;
+use crate::cost::{check_fvs_are_as_expected, compute_ho_arity, wrap_subst_args};
+use egg::{Id, Language};
+use rustc_hash::FxHashMap;
 
 /// Clones the egraph and unions each match root with an `inv_0(args...)`
 /// node, then rebuilds. Source of truth for the rewrite — `compute_size`'s

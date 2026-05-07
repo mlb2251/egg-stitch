@@ -176,7 +176,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 .collect();
             if !reuse_candidates.is_empty() {
                 let candidate_idx: usize = rand::rng().random_range(0..reuse_candidates.len());
-                let candidate_var_idx = reuse_candidates[candidate_idx].0;
+                let candidate_var_idx = reuse_candidates[candidate_idx];
                 self.pattern.reuse(var_idx, candidate_var_idx);
                 self.subset_matches_reuse(var_idx, candidate_var_idx, shared);
                 return;
@@ -191,8 +191,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         let target_node = candidates[rand::rng().random_range(0..candidates.len())].clone();
 
-        self.pattern.expand(var_idx, target_node);
-        self.subset_matches(var_idx, target_node, shared);
+        self.pattern.expand(var_idx, &target_node);
+        self.subset_matches(var_idx, &target_node, shared);
     }
 
     /// Check if this particle's pattern is a valid prefix of the follow target.

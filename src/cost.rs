@@ -1,5 +1,4 @@
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
-use crate::matching::Subst;
 use crate::pattern::{Pattern, PatternRecExpr};
 use crate::rewrite::build_rewritten_egraph;
 use crate::search::SearchState;
@@ -405,6 +404,7 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+        ho_arity,
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for m in &search_state.matches {
@@ -413,7 +413,7 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {
-        let rewritten = build_rewritten_egraph(egraph, search_state);
+        let rewritten = build_rewritten_egraph(egraph, search_state, ho_arity);
         let slow_size = rewritten[root].data.size as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
         let cost_only = CostOnlyExtractor::new(&rewritten, egg::AstSize);
@@ -468,6 +468,7 @@ impl RewriteScratch {
 pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub search_state: &'a SearchState<F, O>,
     pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
+    pub ho_arity: &'a [u32],
 }
 impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for RewriteAnalysis<'a, F, O> {
     fn best(sizes: &StitchAnalysisRunner<F::Apply<O>, Self>, eclass: Id) -> i64 {
@@ -478,6 +479,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
             let substs = &sizes.analysis.search_state.matches[i].substs;
             let weights = sizes.weights();
+            let ho_arity = sizes.analysis.ho_arity;
             if let Some(rewrite_size) = substs.iter().map(|subst| {
                     let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
                     let args_size: i64 = subst
@@ -487,7 +489,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
                         .map(|(k, &v)| {
                             let h = ho_arity[k];
                             let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
-                            wrap + get_size(v, &size_under_rewrite)
+                            wrap + sizes.get(v)
                         })
                         .sum();
                     let size_new: i64 = stub_size + args_size;
