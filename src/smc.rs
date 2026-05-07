@@ -45,7 +45,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = args.num_particles;
-    let num_steps = args.num_steps;
+    let num_steps = args.num_steps.expect("--num-steps is required for SMC search");
     let temperature = args.temperature;
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;

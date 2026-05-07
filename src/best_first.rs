@@ -94,6 +94,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let budget = args.num_steps;
+    let time_limit = args.time_limit.map(std::time::Duration::from_secs_f64);
+    if budget.is_none() && time_limit.is_none() {
+        panic!("best-first search requires at least one of --num-steps or --time-limit");
+    }
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
     let debug = args.debug_log;
@@ -123,9 +127,18 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
 
+    let search_start = std::time::Instant::now();
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
-        if num_expansions >= budget {
-            println!("{}", format!("reached expansion budget {}", budget).yellow());
+        if let Some(b) = budget
+            && num_expansions >= b
+        {
+            println!("{}", format!("reached expansion budget {}", b).yellow());
+            break;
+        }
+        if let Some(limit) = time_limit
+            && search_start.elapsed() >= limit
+        {
+            println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
         }
 
