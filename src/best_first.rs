@@ -3,6 +3,7 @@ use colored::Colorize;
 use rustc_hash::FxHashSet;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::time::{Duration, Instant};
 
 use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
@@ -122,6 +123,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let mut best_found_at: Option<usize> = None;
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
+    let mut cost_calls: usize = 0;
+    let mut cost_time: Duration = Duration::ZERO;
+    let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
         if num_expansions >= budget {
@@ -145,7 +149,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
                 continue;
             }
 
+            let cost_t = Instant::now();
             let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow);
+            cost_time += cost_t.elapsed();
+            cost_calls += 1;
             let child_depth = parent_depth + 1;
             let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
             let child_id = nodes.len();
@@ -171,6 +178,15 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
 
         num_expansions += 1;
     }
+
+    let total_elapsed = search_start.elapsed();
+    println!("\n{}", "═══ STATS ═══".blue().bold());
+    println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
+    println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
+    println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
+    println!("{} {}", "seen-set size:".dimmed(), seen.len().to_string().bold());
+    println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
+    println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, best_id))) = (best_found_at, best) {
