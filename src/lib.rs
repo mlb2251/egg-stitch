@@ -148,14 +148,14 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     let mut final_cost = None;
 
     for abstraction_idx in 0..args.num_abstractions {
-        let (best, iter_original_size, best_found_at, num_steps_run, result_egraph) = match args.search {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_egraph, best_history) = match args.search {
             SearchKind::Smc => {
                 let r = smc::smc::<F, O>(egraph, root, args);
-                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, None)
             }
             SearchKind::BestFirst => {
                 let r = best_first::best_first(egraph, root, args);
-                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph)
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph, Some(r.best_history))
             }
         };
 
@@ -186,6 +186,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                     num_steps_run,
                     num_expansions: best_found_at.map(|n| n + 1),
                     best_iteration: best_found_at,
+                    best_history,
                     rewritten_programs,
                 });
 

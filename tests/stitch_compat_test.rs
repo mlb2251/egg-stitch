@@ -94,10 +94,15 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
 /// when SMC's chosen e-class representative is non-deterministic (e.g. once
 /// commutativity rewrites unify multiple equivalent pattern strings).
 fn strip_library_patterns(v: &mut Value) {
+    strip_library_field(v, "pattern");
+}
+
+/// Strips a named field from every entry in `library` (in place).
+fn strip_library_field(v: &mut Value, key: &str) {
     let Some(library) = v.get_mut("library").and_then(|l| l.as_array_mut()) else { return };
     for entry in library {
         if let Some(obj) = entry.as_object_mut() {
-            obj.remove("pattern");
+            obj.remove(key);
         }
     }
 }
@@ -109,6 +114,10 @@ fn strip_library_patterns(v: &mut Value) {
 fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
     let mut bf = run_backend("best-first", input, extra_args);
     let mut smc = run_backend("smc", input, extra_args);
+    // best_history is populated by best-first only; strip from both so the
+    // bf/smc equality check measures search-result agreement, not trace shape.
+    strip_library_field(&mut bf, "best_history");
+    strip_library_field(&mut smc, "best_history");
     if !check_pattern {
         strip_library_patterns(&mut bf);
         strip_library_patterns(&mut smc);
@@ -126,6 +135,7 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
 /// `check_fixture` writes when both backends already agree.
 fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) {
     let mut bf = run_backend("best-first", input, extra_args);
+    strip_library_field(&mut bf, "best_history");
     if !check_pattern {
         strip_library_patterns(&mut bf);
     }

@@ -1,8 +1,10 @@
 use clap::ValueEnum;
 use colored::Colorize;
 use rustc_hash::FxHashSet;
+use serde::Serialize;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::time::Instant;
 
 use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
@@ -58,12 +60,25 @@ fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: us
     }
 }
 
+/// One "new best" event recorded during search.
+#[derive(Serialize, Clone)]
+pub struct BestHistoryEntry {
+    /// Expansion index (pop count) at which this best was discovered.
+    pub expansion: usize,
+    /// Wall-clock seconds since search start when this best was discovered.
+    pub elapsed_secs: f64,
+    pub cost: usize,
+    pub pattern: String,
+}
+
 /// Output of a completed best-first enumerative search.
 pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     pub best: Option<(usize, SearchState<F, O>)>,
     pub original_size: usize,
     /// Expansion index (pop count) at which the current best was first discovered.
     pub best_found_at: Option<usize>,
+    /// Every successive "new best" event, in discovery order.
+    pub best_history: Vec<BestHistoryEntry>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
     pub egraph: StitchEgraph<F::Apply<O>>,
@@ -120,8 +135,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
     let mut best_found_at: Option<usize> = None;
+    let mut best_history: Vec<BestHistoryEntry> = Vec::new();
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
+    let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
         if num_expansions >= budget {
@@ -153,9 +170,22 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _)| *c);
             let arity = child_state.pattern.vars.len();
             if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat {
-                println!("{} {} {}", format!("[expansion {}]", num_expansions).yellow().bold(), format!("new best: {}", child_cost).green().bold(), child_state.pattern.to_string().cyan());
+                let elapsed = search_start.elapsed().as_secs_f64();
+                println!(
+                    "{} {} {} {}",
+                    format!("[expansion {}]", num_expansions).yellow().bold(),
+                    format!("new best: {}", child_cost).green().bold(),
+                    child_state.pattern.to_string().cyan(),
+                    format!("(t={:.3}s)", elapsed).dimmed()
+                );
                 best = Some((child_cost, child_id));
                 best_found_at = Some(num_expansions);
+                best_history.push(BestHistoryEntry {
+                    expansion: num_expansions,
+                    elapsed_secs: elapsed,
+                    cost: child_cost,
+                    pattern: child_state.pattern.to_string(),
+                });
             }
 
             nodes.push(Node {
@@ -212,6 +242,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     BestFirstResult {
         best: best_pair,
         original_size,
+        best_history,
         best_found_at,
         num_expansions,
         egraph: shared.egraph,

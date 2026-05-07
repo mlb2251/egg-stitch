@@ -14,6 +14,9 @@ pub struct AbstractionResult {
     pub num_steps_run: usize,
     pub num_expansions: Option<usize>,
     pub best_iteration: Option<usize>,
+    /// Successive "new best" events recorded during best-first search.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub best_history: Option<Vec<crate::best_first::BestHistoryEntry>>,
     pub rewritten_programs: Vec<String>,
 }
 
