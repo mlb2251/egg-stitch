@@ -53,9 +53,16 @@ pub struct Args {
     #[arg(long, default_value_t = 10_000)]
     pub num_particles: usize,
 
-    /// Number of SMC steps.
-    #[arg(long, default_value_t = 1000)]
-    pub num_steps: usize,
+    /// Number of search steps (SMC steps, or best-first heap pops).
+    /// Required for SMC. For best-first, at least one of --num-steps or
+    /// --time-limit must be provided.
+    #[arg(long)]
+    pub num_steps: Option<usize>,
+
+    /// Wall-clock time limit in seconds for best-first search.
+    /// At least one of --num-steps or --time-limit must be provided for best-first.
+    #[arg(long)]
+    pub time_limit: Option<f64>,
 
     /// Softmax temperature for resampling weights.
     #[arg(long, default_value_t = 100.0)]

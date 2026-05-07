@@ -4,7 +4,7 @@ use rustc_hash::FxHashSet;
 use serde::Serialize;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::cost::{compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
@@ -109,6 +109,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let budget = args.num_steps;
+    let time_limit = args.time_limit.map(std::time::Duration::from_secs_f64);
+    if budget.is_none() && time_limit.is_none() {
+        panic!("best-first search requires at least one of --num-steps or --time-limit");
+    }
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
     let debug = args.debug_log;
@@ -138,11 +142,21 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let mut best_history: Vec<BestHistoryEntry> = Vec::new();
     let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
+    let mut cost_calls: usize = 0;
+    let mut cost_time: Duration = Duration::ZERO;
     let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
-        if num_expansions >= budget {
-            println!("{}", format!("reached expansion budget {}", budget).yellow());
+        if let Some(b) = budget
+            && num_expansions >= b
+        {
+            println!("{}", format!("reached expansion budget {}", b).yellow());
+            break;
+        }
+        if let Some(limit) = time_limit
+            && search_start.elapsed() >= limit
+        {
+            println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
         }
 
@@ -162,7 +176,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
                 continue;
             }
 
+            let cost_t = Instant::now();
             let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &child_state, shared.check_slow);
+            cost_time += cost_t.elapsed();
+            cost_calls += 1;
             let child_depth = parent_depth + 1;
             let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
             let child_id = nodes.len();
@@ -201,6 +218,15 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
 
         num_expansions += 1;
     }
+
+    let total_elapsed = search_start.elapsed();
+    println!("\n{}", "═══ STATS ═══".blue().bold());
+    println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
+    println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
+    println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
+    println!("{} {}", "seen-set size:".dimmed(), seen.len().to_string().bold());
+    println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
+    println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, best_id))) = (best_found_at, best) {
