@@ -177,8 +177,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if !reuse_candidates.is_empty() {
                 let candidate_idx: usize = rand::rng().random_range(0..reuse_candidates.len());
                 let candidate_var_idx = reuse_candidates[candidate_idx];
+                let d_a = self.pattern.var_depth[var_idx];
+                let d_b = self.pattern.var_depth[candidate_var_idx];
                 self.pattern.reuse(var_idx, candidate_var_idx);
-                self.subset_matches_reuse(var_idx, candidate_var_idx, shared);
+                self.subset_matches_reuse(var_idx, candidate_var_idx, d_a, d_b, shared);
                 return;
             }
         }
@@ -254,12 +256,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// whose kept-eclass fv lands in `[min_depth, merged_depth)` are
     /// representable at the deep site but unbound at the shallow one — those
     /// are dropped. Same-depth reuse has an empty gap.
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shared: &SharedSearchData<F, O>) {
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, d_a: u32, d_b: u32, shared: &SharedSearchData<F, O>) {
 
-        // Snapshot pre-merge depths: `subset_matches_reuse` needs both to
-        // bound the cross-depth gap, but `pattern.reuse` collapses them.
-        let d_a = self.pattern.var_depth[var_idx];
-        let d_b = self.pattern.var_depth[second_var_idx];
+        // Pre-merge depths are passed in: callers snapshot them before
+        // running `pattern.reuse`, which collapses `var_depth`.
         let min_depth = d_a.min(d_b);
         let merged_depth = d_a.max(d_b);
 
@@ -303,6 +303,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             for j in (i + 1)..n {
                 let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
                 if unifiable {
+                    let d_a = self.pattern.var_depth[i];
+                    let d_b = self.pattern.var_depth[j];
                     let mut new_pattern = self.pattern.clone();
                     new_pattern.reuse(i, j);
                     if let Some(s) = seen.as_deref_mut()
@@ -315,7 +317,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         matches: self.matches.clone(),
                         num_substs: self.num_substs,
                     };
-                    child.subset_matches_reuse(i, j, shared);
+                    child.subset_matches_reuse(i, j, d_a, d_b, shared);
                     assert!(!child.matches.is_empty());
                     let action = Action::Reuse { keep: i, drop: j };
                     let is_dominant = child.num_substs == self.num_substs;
