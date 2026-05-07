@@ -136,6 +136,7 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
 /// `check_fixture` writes when both backends already agree.
 fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) {
     let mut bf = run_backend("best-first", input, extra_args);
+    strip_library_field(&mut bf, "best_history");
     if !check_pattern {
         strip_library_patterns(&mut bf);
     }
