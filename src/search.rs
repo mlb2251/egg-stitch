@@ -321,7 +321,8 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Appl
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared);
     let initial_ho_arity = crate::cost::compute_ho_arity::<F, O>(&shared.egraph, &initial);
-    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &initial, shared.check_slow, &initial_ho_arity);
+    let mut scratch = crate::cost::CostScratch::new(&shared.egraph);
+    let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &mut scratch, &initial, shared.check_slow, &initial_ho_arity);
     (shared, cache, original_size)
 }
 
