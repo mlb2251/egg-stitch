@@ -36,6 +36,9 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     pub fn len(&self) -> usize {
         self.set.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.set.is_empty()
+    }
     /// Records `pattern` if new; returns `true` if it was already present
     /// (caller should skip this successor).
     pub fn check_and_insert(&mut self, pattern: Pattern<F, O>) -> bool {
