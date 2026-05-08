@@ -111,6 +111,15 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     pub pattern: Pattern<F, O>,
     // each match represents a different eclass at which `pattern` can be rooted
     pub matches: Vec<MatchAtEClass>,
+    /// Cached `sum(m.substs.len() for m in matches)`. Used by the dominance
+    /// check in `enumerate_successors` to detect reuses that preserve the
+    /// match set's size (and are therefore strictly dominant successors).
+    pub num_substs: usize,
+}
+
+/// Computes the total number of substitutions across all matches.
+fn total_substs(matches: &[MatchAtEClass]) -> usize {
+    matches.iter().map(|m| m.substs.len()).sum()
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
@@ -222,6 +231,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             m.substs = new_substs;
         }
         self.matches.retain(|m| !m.substs.is_empty());
+        self.num_substs = total_substs(&self.matches);
     }
 
     /// Filters matches to those where `var_idx` can be expanded with `target`, updating substitutions.
@@ -281,22 +291,51 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
     pub fn new(shared: &SharedSearchData<F, O>) -> Self {
-        Self {
-            pattern: Pattern::single_var(),
-            matches: identity_matches(&shared.egraph, shared.root),
-        }
+        let matches = identity_matches(&shared.egraph, shared.root);
+        let num_substs = total_substs(&matches);
+        Self { pattern: Pattern::single_var(), matches, num_substs }
     }
 
     /// Enumerates every successor state reachable in one `expand` or `reuse` step.
     ///
+    /// Reuse candidates are emitted first so the dominance short-circuit can fire:
+    /// when a reuse(i, j) preserves `num_substs` (every subst already had the two
+    /// vars equal), the resulting child match set is identical to the parent's
+    /// modulo the var-merge, so any successor of the parent is reachable via this
+    /// reuse — we can return it as the *only* successor and skip enumerating the
+    /// rest. Disabled by `--no-opt-dominance-reuse`.
+    ///
     /// Expansion candidates: for each variable, collect every distinct `(op, arity)`
     /// pair appearing as an enode in any bound e-class across all matches, then produce
-    /// one child per shape. Reuse candidates: for every pair `(i, j)` with `i < j`,
-    /// emit a child if some match has `subst.vars[i] == subst.vars[j]`. Children whose
-    /// match set becomes empty after filtering are dropped.
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>) -> Vec<(Action<F, O>, SearchState<F, O>)> {
+    /// one child per shape. Children whose match set becomes empty after filtering
+    /// are dropped.
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F, O>, SearchState<F, O>)> {
         let mut out = Vec::new();
 
+        // Reuse pairs first — enables dominance short-circuit.
+        let n = self.pattern.vars.len();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
+                if !unifiable {
+                    continue;
+                }
+                let mut child = self.clone();
+                child.reuse(i, j, shared);
+                if child.matches.is_empty() {
+                    continue;
+                }
+                let action = Action::Reuse { keep: i, drop: j };
+                let is_dominant = child.num_substs == self.num_substs;
+                if opt_dominance_reuse && is_dominant {
+                    *dominance_hits += 1;
+                    return vec![(action, child)];
+                }
+                out.push((action, child));
+            }
+        }
+
+        // Literal expansions.
         for var_idx in 0..self.pattern.vars.len() {
             let d_k = self.pattern.var_depth[var_idx];
             let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
@@ -327,20 +366,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         },
                         child,
                     ));
-                }
-            }
-        }
-
-        let n = self.pattern.vars.len();
-        for i in 0..n {
-            for j in (i + 1)..n {
-                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
-                if unifiable {
-                    let mut child = self.clone();
-                    child.reuse(i, j, shared);
-                    if !child.matches.is_empty() {
-                        out.push((Action::Reuse { keep: i, drop: j }, child));
-                    }
                 }
             }
         }

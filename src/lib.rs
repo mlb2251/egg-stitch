@@ -109,6 +109,12 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub no_seen: bool,
 
+    /// Disable dominance pruning for the reuse branch (on by default).
+    /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
+    /// reuse as a singleton successor (no cost check — sound by construction).
+    #[arg(long = "no-opt-dominance-reuse", action = clap::ArgAction::SetFalse)]
+    pub opt_dominance_reuse: bool,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,

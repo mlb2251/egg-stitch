@@ -1,18 +1,18 @@
 {
-  "compression_ratio": 1.2698170731707317,
+  "compression_ratio": 1.3201267828843106,
   "cost_after_rewrites": 3332,
-  "final_cost": 2624,
+  "final_cost": 2524,
   "initial_cost": 65,
   "library": [
     {
-      "approx_cost": 1818,
-      "arity": 3,
+      "approx_cost": 1716,
+      "arity": 2,
       "num_matches": 2,
-      "pattern": "fn_0: (app (app cons (app (app ?#0 (app car ?#1)) ?#2)) (app rec (app cdr ?#1)))",
-      "pattern_size": 1514,
+      "pattern": "fn_0: (lam (app (app cons (app (app ?#0 (app car $0)) (?#1 $0))) (app rec (app cdr $0))))",
+      "pattern_size": 1616,
       "rewritten_programs": [
-        "(lam (fn_0 + $0 (app car $0)))",
-        "(lam (fn_0 - $0 t1))"
+        "(fn_0 + (lam (app car $0)))",
+        "(fn_0 - (lam t1))"
       ],
       "usage_matches": 2
     }

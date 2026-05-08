@@ -145,6 +145,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let mut num_expansions: usize = 0;
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
+    let mut dominance_hits: usize = 0;
     let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
@@ -164,7 +165,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
-        let successors = nodes[node_id].state.enumerate_successors(&shared);
+        let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
 
         for (action, child_state) in successors {
@@ -230,6 +231,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let (seen_len, seen_hits, seen_secs) = seen.as_ref().map_or((0, 0, 0.0), |s| (s.len(), s.hits, s.time.as_secs_f64()));
     println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
     println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
+    println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
