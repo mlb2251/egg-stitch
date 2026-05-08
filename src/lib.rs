@@ -115,6 +115,13 @@ pub struct Args {
     #[arg(long = "no-opt-dominance-reuse", action = clap::ArgAction::SetFalse)]
     pub opt_dominance_reuse: bool,
 
+    /// Disable lower-bound pruning of best-first children (on by default).
+    /// Each child gets a `compute_lower_bound` estimate; if it already
+    /// exceeds the current best, skip the full cost call. Bounds are also
+    /// re-checked on heap pop in case the best improved meanwhile.
+    #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
+    pub opt_lower_bound: bool,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,

@@ -5,7 +5,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::{Duration, Instant};
 
-use crate::cost::{CostScratch, compute_cost, compute_pattern_size};
+use crate::cost::{CostScratch, compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchEgraph, StitchOp};
 use crate::search::{Action, SearchState, SeenTracker, setup_search};
@@ -92,6 +92,9 @@ struct Node<F: LanguageFamily, O: StitchOp> {
     cost: usize,
     depth: usize,
     expanded: bool,
+    /// Lower bound on cost of any descendant; only set when `--opt-lower-bound` is on.
+    /// Re-checked on pop in case `best` improved between push and pop.
+    lower_bound: Option<usize>,
 }
 
 /// Runs best-first enumerative search to find a pattern that minimizes cost.
@@ -132,6 +135,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
         cost: initial_cost,
         depth: 0,
         expanded: false,
+        lower_bound: None,
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
@@ -146,6 +150,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
     let mut dominance_hits: usize = 0;
+    let mut lower_bound_hits: usize = 0;
+    let mut lower_bound_time: Duration = Duration::ZERO;
     let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
@@ -160,6 +166,14 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
         {
             println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
+        }
+
+        // Re-check the cached lower bound: best may have improved since this node was pushed.
+        if let Some(lb) = nodes[node_id].lower_bound
+            && best.as_ref().is_some_and(|(c, _)| lb >= *c)
+        {
+            lower_bound_hits += 1;
+            continue;
         }
 
         nodes[node_id].expanded = true;
@@ -179,6 +193,24 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             {
                 continue;
             }
+
+            // Optimistic lower bound on this child's descendants — every match
+            // collapses to one node. Skip the full cost call (and the descent)
+            // when the bound already exceeds the current best.
+            let child_lower_bound = if args.opt_lower_bound {
+                let t = Instant::now();
+                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &mut scratch, &child_state)
+                    + compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights);
+                let pruned = best.as_ref().is_some_and(|(c, _)| lb >= *c);
+                lower_bound_time += t.elapsed();
+                if pruned {
+                    lower_bound_hits += 1;
+                    continue;
+                }
+                Some(lb)
+            } else {
+                None
+            };
 
             let cost_t = Instant::now();
             let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, &child_state, shared.check_slow);
@@ -216,6 +248,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
                 cost: child_cost,
                 depth: child_depth,
                 expanded: false,
+                lower_bound: child_lower_bound,
             });
             heap.push(Reverse((child_prio, child_id)));
         }
@@ -232,6 +265,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
     println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
+    println!("{} {} {}", "lower-bound hits:".dimmed(), lower_bound_hits.to_string().bold(), format!("(time: {:.3}s)", lower_bound_time.as_secs_f64()).dimmed());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
