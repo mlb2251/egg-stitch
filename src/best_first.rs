@@ -199,8 +199,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             // when the bound already exceeds the current best.
             let child_lower_bound = if args.opt_lower_bound {
                 let t = Instant::now();
-                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &mut scratch, &child_state)
-                    + compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights);
+                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &mut scratch, &child_state) + compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights);
                 let pruned = best.as_ref().is_some_and(|(c, _)| lb >= *c);
                 lower_bound_time += t.elapsed();
                 if pruned {
