@@ -105,6 +105,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub rebuild_egraph: bool,
 
+    /// Disable the `seen` set in best-first search (skip dedup check and insert).
+    #[arg(long, default_value_t = false)]
+    pub no_seen: bool,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,

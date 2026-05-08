@@ -1,6 +1,5 @@
 use clap::ValueEnum;
 use colored::Colorize;
-use rustc_hash::FxHashSet;
 use serde::Serialize;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -9,8 +8,7 @@ use std::time::{Duration, Instant};
 use crate::cost::{CostScratch, compute_cost, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchEgraph, StitchOp};
-use crate::pattern::Pattern;
-use crate::search::{Action, SearchState, setup_search};
+use crate::search::{Action, SearchState, SeenTracker, setup_search};
 
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -125,7 +123,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
-    let mut seen: FxHashSet<Pattern<F, O>> = FxHashSet::default();
+    let mut seen: Option<SeenTracker<F, O>> = (!args.no_seen).then(SeenTracker::new);
 
     nodes.push(Node {
         parent: None,
@@ -136,7 +134,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
         expanded: false,
     });
     heap.push(Reverse((initial_prio, 0)));
-    seen.insert(initial_state.pattern.clone());
+    if let Some(s) = seen.as_mut() {
+        s.check_and_insert(initial_state.pattern.clone());
+    }
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
     let mut best_found_at: Option<usize> = None;
@@ -173,7 +173,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             {
                 continue;
             }
-            if !seen.insert(child_state.pattern.clone()) {
+            if let Some(s) = seen.as_mut()
+                && s.check_and_insert(child_state.pattern.clone())
+            {
                 continue;
             }
 
@@ -225,7 +227,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
     println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
     println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
-    println!("{} {}", "seen-set size:".dimmed(), seen.len().to_string().bold());
+    let (seen_len, seen_hits, seen_secs) = seen.as_ref().map_or((0, 0, 0.0), |s| (s.len(), s.hits, s.time.as_secs_f64()));
+    println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
+    println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 

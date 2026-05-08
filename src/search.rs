@@ -6,6 +6,48 @@ use egg::{Id, Language};
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
+
+/// Tracks already-explored canonical patterns to dedupe successors during
+/// search. Accumulates hit count and time spent so the host loop can report
+/// stats. Wrap in `Option<…>` at the call site — `None` disables the check
+/// entirely (useful for measuring how much pruning the seen-set buys).
+pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
+    set: FxHashSet<Pattern<F, O>>,
+    pub hits: usize,
+    pub time: Duration,
+}
+
+impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
+    fn default() -> Self {
+        Self {
+            set: FxHashSet::default(),
+            hits: 0,
+            time: Duration::ZERO,
+        }
+    }
+}
+
+impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Number of distinct patterns recorded.
+    pub fn len(&self) -> usize {
+        self.set.len()
+    }
+    /// Records `pattern` if new; returns `true` if it was already present
+    /// (caller should skip this successor).
+    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>) -> bool {
+        let t = Instant::now();
+        let already_present = !self.set.insert(pattern);
+        self.time += t.elapsed();
+        if already_present {
+            self.hits += 1;
+        }
+        already_present
+    }
+}
 
 /// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
 fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
