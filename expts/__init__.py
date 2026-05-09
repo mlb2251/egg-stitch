@@ -103,6 +103,7 @@ ALL_DOMAINS = COGSCI_DOMAINS + DREAMCODER_DOMAINS
 # defined above. ``from expts import *`` then re-exports everything.
 from .runner import *
 from .bench import *
+from .run_models import *
 from .table1 import *
 from .table2 import *
 from .table3 import *

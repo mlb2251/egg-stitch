@@ -2,14 +2,15 @@
 
 Thin wrapper around :func:`expts.table1.table1`; switches the results folder,
 output filename, and title, forwards ``num_abstractions=20`` so each run
-stacks 20 abstractions, and patches :data:`expts.bench.OURS_REBUILD_EGRAPH`
-so egg-stitch rebuilds the e-graph between successive abstractions (required
-for many-abstraction runs to stay consistent).
+stacks 20 abstractions, and patches
+:data:`expts.run_models.ours.REBUILD_EGRAPH` so egg-stitch rebuilds the
+e-graph between successive abstractions (required for many-abstraction runs
+to stay consistent).
 """
 
 from pathlib import Path
 
-from . import bench
+from .run_models import ours as _ours
 from .table1 import print_table1, table1
 
 NUM_ABSTRACTIONS = 20
@@ -26,12 +27,12 @@ def table3(**kwargs) -> Path:
     kwargs.setdefault("folder_prefix", "table3")
     kwargs.setdefault("output_name", "table3.json")
     kwargs.setdefault("title", TABLE3_TITLE)
-    saved = bench.OURS_REBUILD_EGRAPH
-    bench.OURS_REBUILD_EGRAPH = True
+    saved = _ours.REBUILD_EGRAPH
+    _ours.REBUILD_EGRAPH = True
     try:
         return table1(**kwargs)
     finally:
-        bench.OURS_REBUILD_EGRAPH = saved
+        _ours.REBUILD_EGRAPH = saved
 
 
 def print_table3(path: str | Path) -> None:

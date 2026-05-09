@@ -27,17 +27,10 @@ from . import (
     DREAMCODER_DOMAINS,
     EGG_STITCH_DIR,
 )
-from . import bench as _bench
-from .bench import (
-    Abstraction,
-    BenchResult,
-    Weighting,
-    run_babble,
-    run_ours_bf,
-    run_ours_smc,
-    run_stitch,
-)
+from .bench import Abstraction, BenchResult, Weighting
 from .result import Result
+from .run_models import run_babble, run_ours_bf, run_ours_smc, run_stitch
+from .run_models import ours as _ours
 
 
 # ─── domain helpers ────────────────────────────────────────────────────────
@@ -232,10 +225,11 @@ def run_method(
     # Dreamcoder domains run as N independent per-file invocations within one
     # (method, domain) call, so a search budget chosen for a single cogsci
     # corpus would over-spend by ~N×. Scale the budget-bearing constants in
-    # bench down for the duration of this call so total compute is comparable.
-    saved = (_bench.BF_NUM_STEPS, _bench.SMC_NUM_PARTICLES)
-    _bench.BF_NUM_STEPS = scale_budget_for_domain(domain, _bench.BF_NUM_STEPS)
-    _bench.SMC_NUM_PARTICLES = scale_budget_for_domain(domain, _bench.SMC_NUM_PARTICLES)
+    # the ``ours`` module down for the duration of this call so total compute
+    # is comparable.
+    saved = (_ours.BF_NUM_STEPS, _ours.SMC_NUM_PARTICLES)
+    _ours.BF_NUM_STEPS = scale_budget_for_domain(domain, _ours.BF_NUM_STEPS)
+    _ours.SMC_NUM_PARTICLES = scale_budget_for_domain(domain, _ours.SMC_NUM_PARTICLES)
     try:
         per_file: list[tuple[BenchResult, int, int]] = []
         for f in input_files(domain):
@@ -245,5 +239,5 @@ def run_method(
             if egraph_min_total is not None and b.cost_after_rewrites is not None:
                 egraph_min_total += b.cost_after_rewrites
     finally:
-        _bench.BF_NUM_STEPS, _bench.SMC_NUM_PARTICLES = saved
+        _ours.BF_NUM_STEPS, _ours.SMC_NUM_PARTICLES = saved
     return _aggregate(method, domain, per_file), egraph_min_total
