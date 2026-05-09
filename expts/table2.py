@@ -1,9 +1,9 @@
 """Table 2 experiment: Ours (Enum + SMC) vs babble vs Stitch, no DSRs.
 
-Same four cogsci domains as Table 1 but every method runs *without* any
-domain-specific rewrites, and Stitch is actually included (Table 1 runs
-with DSRs, which Stitch doesn't accept). Results land under
-``viz/results/table2/<timestamp>/``.
+Same cogsci domains as Table 1 plus the dreamcoder benchmarks without DSRs
+(text/logo/towers); every method runs *without* any domain-specific
+rewrites, and Stitch is included (Table 1 uses DSRs, which Stitch doesn't
+accept). Results land under ``viz/results/table2/<timestamp>/``.
 """
 
 import json
@@ -12,10 +12,9 @@ from pathlib import Path
 
 import numpy as np
 
-from . import *
-from .babble import *
-from .egg_stitch import *
-from .stitch import *
+from . import ALL_DOMAINS
+from .folders import current_folder_path, set_folder
+from .runner import run_method
 from .table1 import DOMAIN_LABELS, NUM_RUNS
 
 # Table 2 is the no-DSR comparison, so it includes the dreamcoder domains
@@ -26,61 +25,37 @@ TABLE2_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics
 
 DEFAULT_TABLE2_TITLE = "Table 2: Ours (SMC and Enum) vs Babble vs Stitch on benchmarks without DSRs"
 
-MAX_ARITY = 2
-
 
 def table2(
     *,
-    smc_num_steps: int = 100,
-    smc_num_particles: int = 1000,
-    smc_temperature: float = 1000.0,
-    enum_num_steps: int = 500,
     num_abstractions: int = 1,
-    rebuild_egraph: bool = False,
     folder_prefix: str = "table2",
     output_name: str = "table2.json",
     title: str = DEFAULT_TABLE2_TITLE,
 ) -> Path:
-    """Run Enum, SMC, babble, and Stitch on the four domains with no DSRs.
+    """Run Enum, SMC, babble, and Stitch on the Table 2 domains with no DSRs.
 
-    ``num_abstractions`` is forwarded to every compressor so each run
-    stacks that many abstractions sequentially.
+    Hyperparameters live in :mod:`expts.bench`; patch them there for one-off
+    overrides. ``num_abstractions`` is forwarded to every compressor so each
+    run stacks that many abstractions sequentially.
     """
     assert all(d in ALL_DOMAINS for d in TABLE2_DOMAINS), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "title": title,
-        "config": {
-            "smc": {"num_steps": smc_num_steps, "num_particles": smc_num_particles, "temperature": smc_temperature},
-            "enum": {"num_steps": enum_num_steps},
-            "num_abstractions": num_abstractions,
-            "rebuild_egraph": rebuild_egraph,
-            "max_arity": MAX_ARITY,
-        },
+        "config": {"num_abstractions": num_abstractions},
         "domains": {},
     }
 
     for domain in TABLE2_DOMAINS:
         print(f"\n=== {domain} ===", flush=True)
-        d_enum_steps = scale_budget_for_domain(domain, enum_num_steps)
-        d_smc_particles = scale_budget_for_domain(domain, smc_num_particles)
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, _ = run_ours(domain, "best-first", num_steps=d_enum_steps, rewrites=None, num_abstractions=num_abstractions, rebuild_egraph=rebuild_egraph, max_arity=MAX_ARITY, no_zero_arity=True)
-            smc_res, _ = run_ours(
-                domain, "smc",
-                num_steps=smc_num_steps,
-                num_particles=d_smc_particles,
-                temperature=smc_temperature,
-                rewrites=None,
-                num_abstractions=num_abstractions,
-                rebuild_egraph=rebuild_egraph,
-                max_arity=MAX_ARITY,
-                no_zero_arity=True,
-            )
-            babble_res = run_babble(domain, num_abstractions=num_abstractions, max_arity=MAX_ARITY)
-            stitch_res = run_stitch(domain, num_abstractions=num_abstractions, max_arity=MAX_ARITY)
+            enum_res, _ = run_method("enum", domain, rounds=num_abstractions, use_dsrs=False)
+            smc_res, _ = run_method("smc", domain, rounds=num_abstractions, use_dsrs=False)
+            babble_res, _ = run_method("babble", domain, rounds=num_abstractions, use_dsrs=False)
+            stitch_res, _ = run_method("stitch", domain, rounds=num_abstractions, use_dsrs=False)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
