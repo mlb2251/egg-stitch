@@ -70,14 +70,19 @@ where
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
-/// with a specific enode shape, or unifying two existing variables.
-#[derive(Debug, Clone)]
-pub enum Action<F: LanguageFamily, O: StitchOp> {
-    Expand { var_idx: usize, op: F::Discriminant<O>, arity: usize },
+/// with a specific enode shape, or unifying two existing variables. Doubles as
+/// the canonical dedup key for sampled expansions: two samples that yield the
+/// same `Action` produce identical resulting states.
+///
+/// Parameterized on the discriminant type `D` (rather than `(F, O)`) so the
+/// derived `Hash`/`Eq` bounds land on `D: StitchDisc` and don't leak onto `F`.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum Action<D> {
+    Expand { var_idx: usize, op: D, arity: usize },
     Reuse { keep: usize, drop: usize },
 }
 
-impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for Action<F, O> {
+impl<D: std::fmt::Display> std::fmt::Display for Action<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Action::Expand { var_idx, op, arity } => write!(f, "expand #{} := {}/{}", var_idx, op, arity),
@@ -123,8 +128,12 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
-    /// Randomly selects a match and variable, then expands or reuses the variable.
-    pub fn expand_random(&mut self, shared: &SharedSearchData<F, O>, verbose: bool) {
+    /// Randomly samples a single expansion or reuse step without mutating self.
+    /// Returns `None` when the chosen variable's e-class has no valid literal
+    /// expansion candidates (the caller treats this as a no-op leaving the
+    /// state unchanged). The returned `Action` is also a hashable dedup key,
+    /// so callers can collapse identical samples and apply each unique one once.
+    pub fn sample_random_expansion(&self, shared: &SharedSearchData<F, O>, verbose: bool) -> Option<Action<F::Discriminant<O>>> {
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
@@ -180,9 +189,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 })
                 .collect();
             if !reuse_candidates.is_empty() {
-                let candidate_var_idx = reuse_candidates[rand::rng().random_range(0..reuse_candidates.len())];
-                self.reuse(var_idx, candidate_var_idx, shared);
-                return;
+                let second_var_idx = reuse_candidates[rand::rng().random_range(0..reuse_candidates.len())];
+                return Some(Action::Reuse { keep: var_idx.min(second_var_idx), drop: var_idx.max(second_var_idx) });
             }
         }
 
@@ -190,11 +198,25 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let d_k = self.pattern.var_depth[var_idx];
         let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
         if candidates.is_empty() {
-            return;
+            return None;
         }
-        let target_node = candidates[rand::rng().random_range(0..candidates.len())].clone();
+        let target = candidates[rand::rng().random_range(0..candidates.len())];
+        Some(Action::Expand { var_idx, op: target.discriminant(), arity: target.children().len() })
+    }
 
-        self.expand(var_idx, &target_node, shared);
+    /// Applies a previously-sampled `Action` to this state. `expand` and
+    /// `subset_matches` only consult the target's discriminant and arity
+    /// (egg's `Language::matches` ignores child ids), so we synthesize a
+    /// placeholder node from `(op, arity)` via `F::make` instead of stashing
+    /// the original enode.
+    pub fn apply_action(&mut self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) {
+        match action {
+            Action::Expand { var_idx, op, arity } => {
+                let target = F::make(op.clone(), vec![Id::from(0); *arity]);
+                self.expand(*var_idx, &target, shared);
+            }
+            Action::Reuse { keep, drop } => self.reuse(*keep, *drop, shared),
+        }
     }
 
     /// Check if this particle's pattern is a valid prefix of the follow target.
@@ -309,7 +331,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// pair appearing as an enode in any bound e-class across all matches, then produce
     /// one child per shape. Children whose match set becomes empty after filtering
     /// are dropped.
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F, O>, SearchState<F, O>)> {
+    #[allow(clippy::type_complexity)]
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>)> {
         let mut out = Vec::new();
 
         // Reuse pairs first — enables dominance short-circuit.

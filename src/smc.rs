@@ -6,20 +6,20 @@ use crate::lang::{LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
-use crate::search::{SearchState, setup_search};
+use crate::search::{Action, SearchState, setup_search};
 use rand::Rng;
 use rustc_hash::FxHashMap;
 
 /// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
-/// buffer, either bumping the multiplicity of an existing group or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize>) {
+/// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize>) {
     match dedup.get(&s.pattern.pattern) {
-        Some(&idx) => mults[idx] += 1,
+        Some(&idx) => mults[idx] += count,
         None => {
             let idx = states.len();
             dedup.insert(s.pattern.pattern.clone(), idx);
             states.push(s);
-            mults.push(1);
+            mults.push(count);
         }
     }
 }
@@ -62,20 +62,30 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
     let mut scratch = CostScratch::new(&shared.egraph);
 
     for step in 0..num_steps {
-        // Expand each (state, mult) group into `mult` independent random expansions,
-        // deduplicating identical resulting patterns.
+        // For each (state, mult) group, sample `mult` independent random
+        // expansions, dedupe samples by `ActionKey` (the canonical "same
+        // resulting state" key), then apply each unique sample once. Resulting
+        // patterns are then deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
-            for _ in 1..mult {
-                let mut s = state.clone();
-                s.expand_random(&shared, false);
-                dedup_insert(s, &mut expanded, &mut mults, &mut dedup);
+            let mut action_counts: FxHashMap<Action<F::Discriminant<O>>, usize> = FxHashMap::default();
+            let mut noop_count: usize = 0;
+            for _ in 0..mult {
+                match state.sample_random_expansion(&shared, false) {
+                    Some(action) => *action_counts.entry(action).or_insert(0) += 1,
+                    None => noop_count += 1,
+                }
             }
-            let mut s = state;
-            s.expand_random(&shared, false);
-            dedup_insert(s, &mut expanded, &mut mults, &mut dedup);
+            for (action, count) in action_counts {
+                let mut s = state.clone();
+                s.apply_action(&action, &shared);
+                dedup_insert(s, count, &mut expanded, &mut mults, &mut dedup);
+            }
+            if noop_count > 0 {
+                dedup_insert(state, noop_count, &mut expanded, &mut mults, &mut dedup);
+            }
         }
         drop(dedup);
 
