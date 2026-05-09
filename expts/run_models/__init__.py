@@ -1,12 +1,13 @@
-"""Per-tool subprocess wrappers for the bench.
+"""Per-tool subprocess runners for the bench.
 
-Each submodule (`ours`, `stitch`, `babble`) is roughly self-contained: it
-owns the tool's CLI invocation, JSON parsing, and any tool-specific
-hyperparameter constants. They share only the
+Each submodule (``ours``, ``stitch``, ``babble``) exposes a callable
+dataclass that carries its own hyperparameters as fields. Construct the
+runner you want (with overrides as kwargs) and pass the instance to
+:func:`expts.runner.run_method`. They share only the
 :class:`~expts.bench.BenchResult` shape and the cross-tool
-:data:`~expts.bench.MAX_ARITY` dial.
+:data:`~expts.bench.MAX_ARITY` default.
 """
 
-from .babble import run_babble
-from .ours import egg_stitch, run_ours_bf, run_ours_smc
-from .stitch import run_stitch
+from .babble import Babble
+from .ours import OursBf, OursSmc, egg_stitch
+from .stitch import Stitch

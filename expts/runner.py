@@ -17,14 +17,13 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Callable
+from typing import Protocol, runtime_checkable
 
 from s_expression_parser import parse, ParserConfig, Pair, nil
 
 from . import COGSCI_DOMAINS, DREAMCODER_DOMAINS
 from .bench import Abstraction, BenchResult, Weighting
 from .result import Result
-from .run_models import run_babble, run_ours_bf, run_ours_smc, run_stitch
 from .run_models import babble as _babble
 from .run_models import ours as _ours
 
@@ -32,6 +31,23 @@ from .run_models import ours as _ours
 # them in here so domain-path resolution lives in a single place.
 EGG_STITCH_DIR = _ours.EGG_STITCH_DIR
 BABBLE_DIR = _babble.BABBLE_DIR
+
+
+@runtime_checkable
+class Runner(Protocol):
+    """The shape :func:`run_method` expects from any tool runner.
+
+    Implemented by the dataclasses in :mod:`expts.run_models`. Concrete
+    runners carry their hyperparameters as fields, expose ``method`` /
+    ``is_ours`` class constants for downstream bookkeeping, and produce a
+    domain-scaled copy of themselves via :meth:`scaled_for_domain`.
+    """
+
+    method: str
+    is_ours: bool
+
+    def scaled_for_domain(self, domain: str) -> "Runner": ...
+    def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult: ...
 
 
 # ─── domain helpers ────────────────────────────────────────────────────────
@@ -191,54 +207,36 @@ def _aggregate(method: str, domain: str, per_file: list[tuple[BenchResult, int, 
     )
 
 
-# Mapping from public method names (used by the table renderers) to wrappers.
-# ``"enum"`` is the historical name for best-first; the wrapper is named
-# ``run_ours_bf`` but the renderer column header reads "Enum".
-_METHOD_WRAPPERS: dict[str, Callable] = {
-    "enum":   run_ours_bf,
-    "smc":    run_ours_smc,
-    "babble": run_babble,
-    "stitch": run_stitch,
-}
-
-
 def run_method(
-    method: str,
+    runner: Runner,
     domain: str,
     *,
     rounds: int,
     use_dsrs: bool,
 ) -> tuple[Result, int | None]:
-    """Run ``method`` on every input file of ``domain`` and aggregate.
+    """Run ``runner`` on every input file of ``domain`` and aggregate.
+
+    Calls ``runner.scaled_for_domain(domain)`` first so dreamcoder runs —
+    which fan out to N independent per-file invocations — don't over-spend
+    the search budget vs. single-file cogsci runs. The runner instance
+    carries its own hyperparameters; pass overrides as kwargs at
+    construction (e.g. ``OursBf(rebuild_egraph=True)``).
 
     Returns ``(Result, egraph_min_term_size)``. The second element is the
     sum of egg-stitch's ``cost_after_rewrites`` across files (a property of
-    the corpus + DSRs alone) when ``method`` is one of ours and DSRs are in
-    use; ``None`` otherwise.
+    the corpus + DSRs alone) when ``runner.is_ours`` and DSRs are in use;
+    ``None`` otherwise.
     """
-    assert method in _METHOD_WRAPPERS, f"unknown method {method!r}"
-    wrapper = _METHOD_WRAPPERS[method]
+    runner = runner.scaled_for_domain(domain)
     weighting = weighting_for(domain)
     rew = rewrites_path(domain) if use_dsrs else None
-    is_ours = method in ("enum", "smc")
-    egraph_min_total: int | None = 0 if (is_ours and rew is not None) else None
+    egraph_min_total: int | None = 0 if (runner.is_ours and rew is not None) else None
 
-    # Dreamcoder domains run as N independent per-file invocations within one
-    # (method, domain) call, so a search budget chosen for a single cogsci
-    # corpus would over-spend by ~N×. Scale the budget-bearing constants in
-    # the ``ours`` module down for the duration of this call so total compute
-    # is comparable.
-    saved = (_ours.BF_NUM_STEPS, _ours.SMC_NUM_PARTICLES)
-    _ours.BF_NUM_STEPS = scale_budget_for_domain(domain, _ours.BF_NUM_STEPS)
-    _ours.SMC_NUM_PARTICLES = scale_budget_for_domain(domain, _ours.SMC_NUM_PARTICLES)
-    try:
-        per_file: list[tuple[BenchResult, int, int]] = []
-        for f in input_files(domain):
-            b = wrapper(rounds, f, rew, weighting)
-            ic, fc = _bench_cost(b, weighting)
-            per_file.append((b, ic, fc))
-            if egraph_min_total is not None and b.cost_after_rewrites is not None:
-                egraph_min_total += b.cost_after_rewrites
-    finally:
-        _ours.BF_NUM_STEPS, _ours.SMC_NUM_PARTICLES = saved
-    return _aggregate(method, domain, per_file), egraph_min_total
+    per_file: list[tuple[BenchResult, int, int]] = []
+    for f in input_files(domain):
+        b = runner(rounds, f, rew, weighting)
+        ic, fc = _bench_cost(b, weighting)
+        per_file.append((b, ic, fc))
+        if egraph_min_total is not None and b.cost_after_rewrites is not None:
+            egraph_min_total += b.cost_after_rewrites
+    return _aggregate(runner.method, domain, per_file), egraph_min_total

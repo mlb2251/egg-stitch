@@ -15,6 +15,7 @@ import numpy as np
 
 from . import ALL_DOMAINS
 from .folders import current_folder_path, set_folder
+from .run_models import Babble, OursBf, OursSmc
 from .runner import run_method
 
 NUM_RUNS = 10
@@ -46,13 +47,20 @@ def table1(
     folder_prefix: str = "table1",
     output_name: str = "table1.json",
     title: str = DEFAULT_TABLE1_TITLE,
+    enum: OursBf = OursBf(),
+    smc: OursSmc = OursSmc(),
+    babble: Babble = Babble(),
 ) -> Path:
     """Run Enum, SMC, and babble on the Table 1 domains with DSRs.
 
-    Hyperparameters (SMC steps/particles/temperature, enum num_steps, max
-    arity, …) live as module-level constants in :mod:`expts.bench`; patch
-    them there for one-off overrides. ``num_abstractions`` is forwarded to
-    every compressor so each run stacks that many abstractions sequentially.
+    Each runner is a dataclass instance carrying its own hyperparameters
+    (``num_steps``, ``num_particles``, ``temperature``, ``rebuild_egraph``,
+    …). Pass overrides as kwargs at construction — e.g. ``smc=OursSmc(
+    num_steps=50)`` — rather than mutating module state. Table 3 reuses
+    this runner with ``rebuild_egraph=True``.
+
+    ``num_abstractions`` is forwarded to every compressor so each run stacks
+    that many abstractions sequentially.
     """
     assert all(d in ALL_DOMAINS for d in TABLE1_DOMAINS), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
@@ -68,8 +76,8 @@ def table1(
         egraph_min_term_size = None
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, enum_egraph_min = run_method("enum", domain, rounds=num_abstractions, use_dsrs=True)
-            smc_res, smc_egraph_min = run_method("smc", domain, rounds=num_abstractions, use_dsrs=True)
+            enum_res, enum_egraph_min = run_method(enum, domain, rounds=num_abstractions, use_dsrs=True)
+            smc_res, smc_egraph_min = run_method(smc, domain, rounds=num_abstractions, use_dsrs=True)
             # ``cost_after_rewrites`` is a property of the corpus + DSRs, so
             # Enum and SMC must agree on it.
             assert enum_egraph_min == smc_egraph_min, (
@@ -77,7 +85,7 @@ def table1(
                 f"(enum={enum_egraph_min}, smc={smc_egraph_min})"
             )
             egraph_min_term_size = enum_egraph_min
-            babble_res, _ = run_method("babble", domain, rounds=num_abstractions, use_dsrs=True)
+            babble_res, _ = run_method(babble, domain, rounds=num_abstractions, use_dsrs=True)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())

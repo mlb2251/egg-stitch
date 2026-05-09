@@ -1,16 +1,18 @@
 """Wrappers around our egg-stitch compressor binary.
 
-Exposes two table-targeted entry points (:func:`run_ours_smc`,
-:func:`run_ours_bf`) sharing a common subprocess body, plus a low-level
-:func:`egg_stitch` escape hatch for ad-hoc dev experiments (used by
-``run.py``).
+Two callable dataclasses (:class:`OursBf`, :class:`OursSmc`) carry their own
+hyperparameters as fields; the runner instantiates them with domain-scaled
+budgets via :meth:`scaled_for_domain` rather than mutating module-level
+state. :func:`egg_stitch` is a low-level escape hatch for ad-hoc dev runs.
 """
 
 import json
 import os
 import subprocess
+from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
+from typing import ClassVar
 
 from .._build import cargo_build
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
@@ -27,28 +29,10 @@ EGG_STITCH_DIR: Path = Path(__file__).resolve().parent.parent.parent
 def egg_stitch_bin() -> Path:
     """Build (if needed) and return the path to the egg-stitch binary.
 
-    Lazily called from the wrappers so importing this module is cheap; cargo
-    only runs the first time someone actually wants to invoke the tool.
+    Lazy + cached so importing this module is cheap; cargo only runs the
+    first time someone actually wants to invoke the tool.
     """
     return cargo_build(EGG_STITCH_DIR, "egg-stitch")
-
-
-# ─── Hyperparameters ───────────────────────────────────────────────────────
-# Patch these at module level for one-off overrides; otherwise treat as fixed.
-
-# SMC search
-SMC_NUM_STEPS = 100
-SMC_NUM_PARTICLES = 1000
-SMC_TEMPERATURE = 1000.0
-
-# Best-first (enum) search
-BF_NUM_STEPS = 500
-
-# Pass ``--rebuild-egraph`` to egg-stitch. Required when stacking many
-# abstractions in one run (Tables 3/4) so the e-graph stays consistent
-# after each successive abstraction is applied; off for single-abstraction
-# runs since rebuilding is wasted work then.
-REBUILD_EGRAPH = False
 
 
 def egg_stitch(input, output="out.json", rewrites=None, flamegraph=False, samply=False, **kwargs) -> Path:
@@ -85,9 +69,14 @@ def egg_stitch(input, output="out.json", rewrites=None, flamegraph=False, samply
 
 
 def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
-         weighting: Weighting, search: str, extra_flags: dict[str, object]) -> BenchResult:
-    """Shared body for the SMC/best-first wrappers; only the search-kind-
-    specific flags differ between them."""
+         weighting: Weighting, search: str, max_arity: int, rebuild_egraph: bool,
+         search_flags: dict[str, object]) -> BenchResult:
+    """Shared subprocess body for the SMC/best-first runners.
+
+    ``search_flags`` carries only the runner-specific dials (num_steps,
+    particles, temperature, …); the rest is identical between the two
+    search modes.
+    """
     output_path = unique_path(
         current_folder_path() / f"{input_path.stem}_{search.replace('-', '_')}.json"
     )
@@ -98,18 +87,18 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         "--output", str(output_path),
         "--search", search,
         "--language", language,
-        "--max-arity", str(MAX_ARITY),
+        "--max-arity", str(max_arity),
         "--num-abstractions", str(rounds),
         # cogsci/no-apps tables suppress 0-arity abstractions to match how
         # babble/stitch are invoked; lambda-calc runs use the same setting
         # since the table comparison is symmetric.
         "--no-zero-arity",
     ]
-    if REBUILD_EGRAPH:
+    if rebuild_egraph:
         cmd.append("--rebuild-egraph")
     if rewrites_path is not None:
         cmd += ["-r", rewrites_path]
-    for k, v in extra_flags.items():
+    for k, v in search_flags.items():
         flag = "--" + k.replace("_", "-")
         if isinstance(v, bool):
             if v:
@@ -135,23 +124,66 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     )
 
 
-def run_ours_smc(rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
-    """Run egg-stitch in SMC mode on a single ``input_path``."""
-    return _run(
-        rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
-        weighting=weighting, search="smc",
-        extra_flags={
-            "num_steps": SMC_NUM_STEPS,
-            "num_particles": SMC_NUM_PARTICLES,
-            "temperature": SMC_TEMPERATURE,
-        },
-    )
+@dataclass(frozen=True)
+class OursBf:
+    """Egg-stitch in best-first ("enum") search mode, on a single input file."""
+
+    method: ClassVar[str] = "enum"
+    is_ours: ClassVar[bool] = True
+
+    num_steps: int = 500
+    rebuild_egraph: bool = False
+    max_arity: int = MAX_ARITY
+
+    def scaled_for_domain(self, domain: str) -> "OursBf":
+        """Return a copy with ``num_steps`` reduced for multi-file domains.
+
+        The runner calls this once per (domain, runner) so dreamcoder runs
+        — which fan out to N independent per-file invocations — don't
+        over-spend the search budget vs. the single-file cogsci runs.
+        """
+        from ..runner import scale_budget_for_domain
+        return replace(self, num_steps=scale_budget_for_domain(domain, self.num_steps))
+
+    def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
+        return _run(
+            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
+            weighting=weighting, search="best-first",
+            max_arity=self.max_arity, rebuild_egraph=self.rebuild_egraph,
+            search_flags={"num_steps": self.num_steps},
+        )
 
 
-def run_ours_bf(rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
-    """Run egg-stitch in best-first (enum) mode on a single ``input_path``."""
-    return _run(
-        rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
-        weighting=weighting, search="best-first",
-        extra_flags={"num_steps": BF_NUM_STEPS},
-    )
+@dataclass(frozen=True)
+class OursSmc:
+    """Egg-stitch in SMC search mode, on a single input file."""
+
+    method: ClassVar[str] = "smc"
+    is_ours: ClassVar[bool] = True
+
+    num_steps: int = 100
+    num_particles: int = 1000
+    temperature: float = 1000.0
+    rebuild_egraph: bool = False
+    max_arity: int = MAX_ARITY
+
+    def scaled_for_domain(self, domain: str) -> "OursSmc":
+        """Return a copy with ``num_particles`` reduced for multi-file domains.
+
+        SMC's compute scales linearly in particle count, so that's the dial
+        we shrink to keep total work comparable across cogsci/dreamcoder.
+        """
+        from ..runner import scale_budget_for_domain
+        return replace(self, num_particles=scale_budget_for_domain(domain, self.num_particles))
+
+    def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
+        return _run(
+            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
+            weighting=weighting, search="smc",
+            max_arity=self.max_arity, rebuild_egraph=self.rebuild_egraph,
+            search_flags={
+                "num_steps": self.num_steps,
+                "num_particles": self.num_particles,
+                "temperature": self.temperature,
+            },
+        )

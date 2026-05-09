@@ -27,12 +27,13 @@ python3 -c 'from expts import *; run_domain("dials", num_steps=10, num_particles
 run a single (method, domain) cell of Table 1/2 directly
 
 ```
-python3 -c 'from expts import *; print(run_method("smc", "dials", rounds=1, use_dsrs=True)[0].summary_line())'
+python3 -c 'from expts import *; print(run_method(OursSmc(), "dials", rounds=1, use_dsrs=True)[0].summary_line())'
 ```
 
-Hyperparameters (SMC steps/particles/temperature, enum num_steps, max
-arity, rebuild-egraph) are module-level constants in ``expts/bench.py``;
-patch them there for one-off overrides. To invoke the egg-stitch binary
+Each runner (`OursSmc`, `OursBf`, `Babble`, `Stitch`) is a frozen
+dataclass carrying its own hyperparameters as fields — pass overrides as
+kwargs at construction (e.g. `OursSmc(num_steps=50)`) instead of mutating
+module state. To invoke the egg-stitch binary
 directly with custom flags, drive ``$(cargo build --release && ls
 target/release/egg-stitch)`` yourself.
 

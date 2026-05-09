@@ -14,6 +14,7 @@ import numpy as np
 
 from . import ALL_DOMAINS
 from .folders import current_folder_path, set_folder
+from .run_models import Babble, OursBf, OursSmc, Stitch
 from .runner import run_method
 from .table1 import DOMAIN_LABELS, NUM_RUNS
 
@@ -32,12 +33,17 @@ def table2(
     folder_prefix: str = "table2",
     output_name: str = "table2.json",
     title: str = DEFAULT_TABLE2_TITLE,
+    enum: OursBf = OursBf(),
+    smc: OursSmc = OursSmc(),
+    babble: Babble = Babble(),
+    stitch: Stitch = Stitch(),
 ) -> Path:
     """Run Enum, SMC, babble, and Stitch on the Table 2 domains with no DSRs.
 
-    Hyperparameters live in :mod:`expts.bench`; patch them there for one-off
-    overrides. ``num_abstractions`` is forwarded to every compressor so each
-    run stacks that many abstractions sequentially.
+    Each runner is a dataclass instance carrying its own hyperparameters; pass
+    overrides as kwargs at construction (see :func:`expts.table1.table1` for
+    the pattern). ``num_abstractions`` is forwarded to every compressor so
+    each run stacks that many abstractions sequentially.
     """
     assert all(d in ALL_DOMAINS for d in TABLE2_DOMAINS), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
@@ -52,10 +58,10 @@ def table2(
         enum_runs, smc_runs, babble_runs, stitch_runs = [], [], [], []
         for i in range(NUM_RUNS):
             print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            enum_res, _ = run_method("enum", domain, rounds=num_abstractions, use_dsrs=False)
-            smc_res, _ = run_method("smc", domain, rounds=num_abstractions, use_dsrs=False)
-            babble_res, _ = run_method("babble", domain, rounds=num_abstractions, use_dsrs=False)
-            stitch_res, _ = run_method("stitch", domain, rounds=num_abstractions, use_dsrs=False)
+            enum_res, _ = run_method(enum, domain, rounds=num_abstractions, use_dsrs=False)
+            smc_res, _ = run_method(smc, domain, rounds=num_abstractions, use_dsrs=False)
+            babble_res, _ = run_method(babble, domain, rounds=num_abstractions, use_dsrs=False)
+            stitch_res, _ = run_method(stitch, domain, rounds=num_abstractions, use_dsrs=False)
             enum_runs.append(enum_res.to_dict())
             smc_runs.append(smc_res.to_dict())
             babble_runs.append(babble_res.to_dict())
