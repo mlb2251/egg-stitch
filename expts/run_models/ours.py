@@ -9,6 +9,7 @@ Exposes two table-targeted entry points (:func:`run_ours_smc`,
 import json
 import os
 import subprocess
+from functools import cache
 from pathlib import Path
 
 from .._build import cargo_build
@@ -16,11 +17,20 @@ from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
 
 
-# Project root and binary path for the egg-stitch (this repo) compressor.
-# We're already on this tree so there's no clean-main check — that's the
-# user's working copy by definition.
+# Project root for the egg-stitch (this repo) compressor. We're already on
+# this tree so there's no clean-main check — that's the user's working copy
+# by definition.
 EGG_STITCH_DIR: Path = Path(__file__).resolve().parent.parent.parent
-EGG_STITCH_BIN: Path = cargo_build(EGG_STITCH_DIR, "egg-stitch")
+
+
+@cache
+def egg_stitch_bin() -> Path:
+    """Build (if needed) and return the path to the egg-stitch binary.
+
+    Lazily called from the wrappers so importing this module is cheap; cargo
+    only runs the first time someone actually wants to invoke the tool.
+    """
+    return cargo_build(EGG_STITCH_DIR, "egg-stitch")
 
 
 # ─── Hyperparameters ───────────────────────────────────────────────────────
@@ -57,9 +67,9 @@ def egg_stitch(input, output="out.json", rewrites=None, flamegraph=False, samply
         svg_path = str(output_path).replace(".json", "_flamegraph.svg")
         cmd = ["cargo", "flamegraph", "--root", "-o", svg_path, "--", *prog_args]
     elif samply:
-        cmd = ["samply", "record", str(EGG_STITCH_BIN), *prog_args]
+        cmd = ["samply", "record", str(egg_stitch_bin()), *prog_args]
     else:
-        cmd = [str(EGG_STITCH_BIN), *prog_args]
+        cmd = [str(egg_stitch_bin()), *prog_args]
     if rewrites is not None:
         cmd += ["-r", rewrites]
     for k, v in kwargs.items():
@@ -83,7 +93,7 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     )
     language = "op-children" if weighting == "no-apps" else "lambda-calc"
     cmd: list[str] = [
-        str(EGG_STITCH_BIN),
+        str(egg_stitch_bin()),
         "-i", str(input_path),
         "--output", str(output_path),
         "--search", search,

@@ -10,6 +10,7 @@ node-count metric; at ``apps-equal`` they're all 1.
 import json
 import subprocess
 import time
+from functools import cache
 from pathlib import Path
 
 from .._build import cargo_build, check_clean_main
@@ -17,11 +18,20 @@ from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
 
 
-# Stitch lives as a sibling clone of this repo; verify it's on a clean,
-# up-to-date main before building so reported numbers are reproducible.
+# Stitch lives as a sibling clone of this repo.
 STITCH_DIR: Path = (Path(__file__).resolve().parent.parent.parent.parent / "stitch").resolve()
-check_clean_main(STITCH_DIR, "git@github.com:mlb2251/stitch.git")
-STITCH_BIN: Path = cargo_build(STITCH_DIR, "compress")
+
+
+@cache
+def stitch_bin() -> Path:
+    """Verify ``../stitch`` is clean+synced, build, and return the binary path.
+
+    Lazily called from the wrapper so importing this module is cheap and
+    doesn't fetch from origin / shell out to cargo until someone actually
+    wants to invoke stitch.
+    """
+    check_clean_main(STITCH_DIR, "git@github.com:mlb2251/stitch.git")
+    return cargo_build(STITCH_DIR, "compress")
 
 
 def run_stitch(rounds: int, input_path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
@@ -30,7 +40,7 @@ def run_stitch(rounds: int, input_path, rewrites_path: str | None, weighting: We
     cost = "1" if weighting == "apps-equal" else "10000"
     out_path = unique_path(current_folder_path() / f"{input_path.stem}_stitch.json")
     cmd = [
-        str(STITCH_BIN),
+        str(stitch_bin()),
         str(input_path),
         f"-i{rounds}",
         f"-a{MAX_ARITY}",

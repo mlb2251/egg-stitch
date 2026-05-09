@@ -14,6 +14,7 @@ recovers the domain from the input file's parent directory.
 import json
 import subprocess
 import time
+from functools import cache
 from pathlib import Path
 
 from .._build import cargo_build, check_clean_main
@@ -26,13 +27,34 @@ from ..folders import current_folder_path, unique_path
 # be plain ``Path("data/domains/<name>")`` rather than absolutes.
 EGG_STITCH_DIR: Path = Path(__file__).resolve().parent.parent.parent
 
-# Babble lives as a sibling clone of this repo. We need both binaries: the
-# ``drawings`` runner for cogsci (flat s-exprs) and the ``benchmark`` runner
-# for dreamcoder (curried lambda-calc).
+# Babble lives as a sibling clone of this repo.
 BABBLE_DIR: Path = (EGG_STITCH_DIR.parent / "babble").resolve()
-check_clean_main(BABBLE_DIR, "git@github.com:kavigupta/babble.git")
-BABBLE_BIN: Path = cargo_build(BABBLE_DIR, "drawings")
-BABBLE_BENCH_BIN: Path = cargo_build(BABBLE_DIR, "benchmark")
+
+
+@cache
+def _babble_ready() -> None:
+    """Verify ``../babble`` is on a clean, synced main exactly once per process.
+
+    Both binaries below build from the same source tree, so we share one
+    check between them.
+    """
+    check_clean_main(BABBLE_DIR, "git@github.com:kavigupta/babble.git")
+
+
+@cache
+def babble_bin() -> Path:
+    """Build (if needed) and return the path to babble's ``drawings`` binary
+    — the cogsci (flat s-expr) runner."""
+    _babble_ready()
+    return cargo_build(BABBLE_DIR, "drawings")
+
+
+@cache
+def babble_bench_bin() -> Path:
+    """Build (if needed) and return the path to babble's ``benchmark`` binary
+    — the dreamcoder (curried lambda-calc) runner."""
+    _babble_ready()
+    return cargo_build(BABBLE_DIR, "benchmark")
 
 
 # ─── Hyperparameters ───────────────────────────────────────────────────────
@@ -72,7 +94,7 @@ def _run_drawings(rounds: int, input_path: Path, rewrites_path: str | None) -> B
     json_dump = unique_path(current_folder_path() / f"{input_path.stem}_babble.json")
     csv_out = unique_path(current_folder_path() / f"{input_path.stem}_babble.csv")
     cmd = [
-        str(BABBLE_BIN),
+        str(babble_bin()),
         str(bab),
         f"--beams={BABBLE_BEAMS}",
         f"--lps={BABBLE_LPS}",
@@ -120,7 +142,7 @@ def _run_benchmark(rounds: int, input_path: Path, rewrites_path: str | None) -> 
     json_dump = unique_path(current_folder_path() / f"{input_path.stem}_babble.json")
     csv_out = unique_path(current_folder_path() / f"{input_path.stem}_babble.csv")
     cmd = [
-        str(BABBLE_BENCH_BIN),
+        str(babble_bench_bin()),
         "--domain", domain,
         "--input-file", str(input_path),
         "--output", str(csv_out),
