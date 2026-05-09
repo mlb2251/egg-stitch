@@ -10,10 +10,18 @@ node-count metric; at ``apps-equal`` they're all 1.
 import json
 import subprocess
 import time
+from pathlib import Path
 
-from .. import STITCH_BIN
+from .._build import cargo_build, check_clean_main
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
+
+
+# Stitch lives as a sibling clone of this repo; verify it's on a clean,
+# up-to-date main before building so reported numbers are reproducible.
+STITCH_DIR: Path = (Path(__file__).resolve().parent.parent.parent.parent / "stitch").resolve()
+check_clean_main(STITCH_DIR, "git@github.com:mlb2251/stitch.git")
+STITCH_BIN: Path = cargo_build(STITCH_DIR, "compress")
 
 
 def run_stitch(rounds: int, input_path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:

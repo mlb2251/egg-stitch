@@ -11,9 +11,16 @@ import os
 import subprocess
 from pathlib import Path
 
-from .. import EGG_STITCH_BIN, EGG_STITCH_DIR
+from .._build import cargo_build
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
+
+
+# Project root and binary path for the egg-stitch (this repo) compressor.
+# We're already on this tree so there's no clean-main check — that's the
+# user's working copy by definition.
+EGG_STITCH_DIR: Path = Path(__file__).resolve().parent.parent.parent
+EGG_STITCH_BIN: Path = cargo_build(EGG_STITCH_DIR, "egg-stitch")
 
 
 # ─── Hyperparameters ───────────────────────────────────────────────────────

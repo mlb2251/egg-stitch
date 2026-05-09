@@ -16,9 +16,23 @@ import subprocess
 import time
 from pathlib import Path
 
-from .. import BABBLE_BENCH_BIN, BABBLE_BIN, BABBLE_DIR, EGG_STITCH_DIR
+from .._build import cargo_build, check_clean_main
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
+
+
+# Repo root for *this* project — used to compute the dreamcoder input path's
+# parent relative to the egg-stitch tree, so DREAMCODER_DOMAIN_PATHS keys can
+# be plain ``Path("data/domains/<name>")`` rather than absolutes.
+EGG_STITCH_DIR: Path = Path(__file__).resolve().parent.parent.parent
+
+# Babble lives as a sibling clone of this repo. We need both binaries: the
+# ``drawings`` runner for cogsci (flat s-exprs) and the ``benchmark`` runner
+# for dreamcoder (curried lambda-calc).
+BABBLE_DIR: Path = (EGG_STITCH_DIR.parent / "babble").resolve()
+check_clean_main(BABBLE_DIR, "git@github.com:kavigupta/babble.git")
+BABBLE_BIN: Path = cargo_build(BABBLE_DIR, "drawings")
+BABBLE_BENCH_BIN: Path = cargo_build(BABBLE_DIR, "benchmark")
 
 
 # ─── Hyperparameters ───────────────────────────────────────────────────────

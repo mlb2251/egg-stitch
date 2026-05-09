@@ -21,16 +21,17 @@ from typing import Callable
 
 from s_expression_parser import parse, ParserConfig, Pair, nil
 
-from . import (
-    BABBLE_DIR,
-    COGSCI_DOMAINS,
-    DREAMCODER_DOMAINS,
-    EGG_STITCH_DIR,
-)
+from . import COGSCI_DOMAINS, DREAMCODER_DOMAINS
 from .bench import Abstraction, BenchResult, Weighting
 from .result import Result
 from .run_models import run_babble, run_ours_bf, run_ours_smc, run_stitch
+from .run_models import babble as _babble
 from .run_models import ours as _ours
+
+# The ours and babble model files own their respective project roots; pull
+# them in here so domain-path resolution lives in a single place.
+EGG_STITCH_DIR = _ours.EGG_STITCH_DIR
+BABBLE_DIR = _babble.BABBLE_DIR
 
 
 # ─── domain helpers ────────────────────────────────────────────────────────
