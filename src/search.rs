@@ -190,7 +190,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 .collect();
             if !reuse_candidates.is_empty() {
                 let second_var_idx = reuse_candidates[rand::rng().random_range(0..reuse_candidates.len())];
-                return Some(Action::Reuse { keep: var_idx.min(second_var_idx), drop: var_idx.max(second_var_idx) });
+                return Some(Action::Reuse {
+                    keep: var_idx.min(second_var_idx),
+                    drop: var_idx.max(second_var_idx),
+                });
             }
         }
 
@@ -201,7 +204,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             return None;
         }
         let target = candidates[rand::rng().random_range(0..candidates.len())];
-        Some(Action::Expand { var_idx, op: target.discriminant(), arity: target.children().len() })
+        Some(Action::Expand {
+            var_idx,
+            op: target.discriminant(),
+            arity: target.children().len(),
+        })
     }
 
     /// Applies a previously-sampled `Action` to this state. `expand` and
