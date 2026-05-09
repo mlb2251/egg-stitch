@@ -158,18 +158,21 @@ pub enum LanguageChoice {
 }
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
-/// the corpus size after DSRs (before any abstractions), and the final combined cost.
+/// the corpus size after DSRs (before any abstractions), the final combined cost,
+/// and the final rewritten corpus (`Some` once any abstraction has been applied,
+/// `None` if no abstraction was found).
 ///
 /// After each abstraction is found, `fn_N(args...)` enodes are added directly to the
 /// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
 /// serialising programs to strings and re-parsing. The eclass arguments already carry
 /// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
     let mut egraph = egraph;
     let mut root = root;
     let mut library = Vec::new();
     let mut original_size = 0;
     let mut final_cost = None;
+    let mut final_rewritten: Option<Vec<String>> = None;
 
     for abstraction_idx in 0..args.num_abstractions {
         let (best, iter_original_size, best_found_at, num_steps_run, result_egraph, best_history) = match args.search {
@@ -200,6 +203,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref());
 
                 final_cost = Some(best_cost);
+                final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
                     arity: state.pattern.vars.len(),
@@ -211,7 +215,6 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                     num_expansions: best_found_at.map(|n| n + 1),
                     best_iteration: best_found_at,
                     best_history,
-                    rewritten_programs,
                 });
 
                 if abstraction_idx + 1 < args.num_abstractions {
@@ -224,7 +227,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         }
     }
 
-    (library, original_size, final_cost)
+    (library, original_size, final_cost, final_rewritten)
 }
 
 /// Applies an abstraction to the egraph by adding `fn_name(args...)` enodes for every

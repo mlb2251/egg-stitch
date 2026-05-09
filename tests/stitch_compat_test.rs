@@ -255,12 +255,10 @@ fn abstraction_bodies(run: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Returns the rewritten corpus from the last library entry, falling back to
-/// the supplied original program list when no abstraction was found.
+/// Returns the top-level rewritten corpus, falling back to the supplied
+/// original program list when the field is missing.
 fn rewritten_corpus(run: &Value, original: &[String]) -> Vec<String> {
-    if let Some(last) = run.get("library").and_then(|l| l.as_array()).and_then(|l| l.last())
-        && let Some(arr) = last.get("rewritten_programs").and_then(|p| p.as_array())
-    {
+    if let Some(arr) = run.get("rewritten_programs").and_then(|p| p.as_array()) {
         return arr.iter().filter_map(|s| s.as_str().map(String::from)).collect();
     }
     original.to_vec()

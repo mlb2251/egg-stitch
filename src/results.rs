@@ -17,7 +17,6 @@ pub struct AbstractionResult {
     /// Successive "new best" events recorded during best-first search.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub best_history: Option<Vec<crate::best_first::BestHistoryEntry>>,
-    pub rewritten_programs: Vec<String>,
 }
 
 /// Full JSON-serializable record of a single run.
