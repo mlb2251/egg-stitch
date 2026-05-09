@@ -13,7 +13,7 @@ fn main() {
     // gets `OpDB<Op>` so `$n` parses as a real De Bruijn variable (the fv
     // analysis and depth-aware extraction need that). OpChildren has no
     // binders, so DB vars are meaningless there — keeps plain `Op`.
-    let (library, original_size, final_cost, cost_before_rewrites) = match args.language {
+    let (library, original_size, final_cost, cost_before_rewrites, original_programs) = match args.language {
         LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
         LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
     };
@@ -29,6 +29,9 @@ fn main() {
         SearchKind::BestFirst => "best-first",
     };
 
+    // Final corpus = last abstraction's rewritten output, or originals if none was found.
+    let rewritten_programs = library.last().map(|a| a.rewritten_programs.clone()).unwrap_or_else(|| original_programs.clone());
+
     let run_result = results::RunResult {
         timestamp,
         search: search_kind.to_string(),
@@ -40,6 +43,8 @@ fn main() {
         final_cost,
         compression_ratio,
         debug_log_file,
+        original_programs,
+        rewritten_programs,
         library,
     };
 
@@ -50,11 +55,12 @@ fn main() {
 }
 
 /// Loads the egraph and runs the multi-abstraction search loop, parameterized
-/// by both the language family `F` and the leaf-Op `O`.
-fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, usize) {
+/// by both the language family `F` and the leaf-Op `O`. Also returns the
+/// original program strings so they can be reported alongside the rewritten corpus.
+fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, usize, Vec<String>) {
     let load_start = std::time::Instant::now();
-    let (egraph, root, cost_before_rewrites) = io::load_egraph::<F::Apply<O>>(&args.input, args.rules.as_deref(), args.weights);
+    let (egraph, root, cost_before_rewrites, original_programs) = io::load_egraph::<F::Apply<O>>(&args.input, args.rules.as_deref(), args.weights);
     println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
     let (library, original_size, final_cost) = multiple_step_search::<F, O>(egraph, root, args);
-    (library, original_size, final_cost, cost_before_rewrites)
+    (library, original_size, final_cost, cost_before_rewrites, original_programs)
 }

@@ -19,5 +19,19 @@
       ],
       "usage_matches": 4
     }
+  ],
+  "original_programs": [
+    "(a b c)",
+    "(a b c d)",
+    "(a b c d e)",
+    "(a b c d e f)",
+    "(a b c d e f g)"
+  ],
+  "rewritten_programs": [
+    "(a b c)",
+    "fn_0",
+    "(fn_0 e)",
+    "(fn_0 e f)",
+    "(fn_0 e f g)"
   ]
 }

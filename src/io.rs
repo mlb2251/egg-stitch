@@ -5,9 +5,10 @@ use std::{fs, path::Path};
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
 /// All programs are combined into a single term (programs A B C ...).
-/// Returns the egraph, the root e-class Id of the programs node, and the
-/// minimum AST cost of that root *before* any rewrites were applied.
-pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<L>, egg::Id, usize) {
+/// Returns the egraph, the root e-class Id of the programs node, the
+/// minimum AST cost of that root *before* any rewrites were applied, and
+/// the original program strings as parsed from the input file.
+pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<L>, egg::Id, usize, Vec<String>) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
     println!("Loaded {} programs", exprs.len());
@@ -29,7 +30,7 @@ pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>, w
     runner.egraph.rebuild();
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
-    (runner.egraph, root, cost_before_rewrites)
+    (runner.egraph, root, cost_before_rewrites, exprs)
 }
 
 /// Builds a fresh egraph from program strings, applies rewrite rules, and returns it with its root.

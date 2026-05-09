@@ -21,5 +21,23 @@
       ],
       "usage_matches": 7
     }
+  ],
+  "original_programs": [
+    "(+ a b c)",
+    "(* a b c)",
+    "(^ a b c)",
+    "(& a b c)",
+    "(/ a b c d e f)",
+    "(- a b c d e f)",
+    "(- a b c d e f)"
+  ],
+  "rewritten_programs": [
+    "(fn_0 +)",
+    "(fn_0 *)",
+    "(fn_0 ^)",
+    "(fn_0 &)",
+    "(fn_0 / d e f)",
+    "(fn_0 - d e f)",
+    "(fn_0 - d e f)"
   ]
 }

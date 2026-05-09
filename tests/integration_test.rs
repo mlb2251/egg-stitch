@@ -14,7 +14,7 @@ fn fixtures_present() -> bool {
 }
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
-    let (egraph, root, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
+    let (egraph, root, _, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
     smc::smc(egraph, root, args)
 }
 
