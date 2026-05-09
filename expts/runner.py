@@ -213,7 +213,7 @@ def run_method(
     *,
     rounds: int,
     use_dsrs: bool,
-) -> tuple[Result, int | None]:
+) -> tuple[Result, float]:
     """Run ``runner`` on every input file of ``domain`` and aggregate.
 
     Calls ``runner.scaled_for_domain(domain)`` first so dreamcoder runs —
@@ -223,20 +223,18 @@ def run_method(
     construction (e.g. ``OursBf(rebuild_egraph=True)``).
 
     Returns ``(Result, egraph_min_term_size)``. The second element is the
-    sum of egg-stitch's ``cost_after_rewrites`` across files (a property of
-    the corpus + DSRs alone) when ``runner.is_ours`` and DSRs are in use;
-    ``None`` otherwise.
+    sum of ``BenchResult.cost_after_rewrites`` across per-file invocations;
+    NaN propagates automatically when any file didn't produce one (i.e.
+    when the runner isn't ours, or DSRs weren't used).
     """
     runner = runner.scaled_for_domain(domain)
     weighting = weighting_for(domain)
     rew = rewrites_path(domain) if use_dsrs else None
-    egraph_min_total: int | None = 0 if (runner.is_ours and rew is not None) else None
 
     per_file: list[tuple[BenchResult, int, int]] = []
     for f in input_files(domain):
         b = runner(rounds, f, rew, weighting)
         ic, fc = _bench_cost(b, weighting)
         per_file.append((b, ic, fc))
-        if egraph_min_total is not None and b.cost_after_rewrites is not None:
-            egraph_min_total += b.cost_after_rewrites
+    egraph_min_total = sum(b.cost_after_rewrites for b, _, _ in per_file)
     return _aggregate(runner.method, domain, per_file), egraph_min_total

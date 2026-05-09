@@ -7,6 +7,7 @@ state. :func:`egg_stitch` is a low-level escape hatch for ad-hoc dev runs.
 """
 
 import json
+import math
 import os
 import subprocess
 from dataclasses import dataclass, replace
@@ -118,9 +119,9 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         initial_corpus=list(data["original_programs"]),
         final_corpus=list(data["rewritten_programs"]),
         abstractions=abstractions,
-        cost_after_rewrites=(
-            int(data["cost_after_rewrites"]) if rewrites_path is not None else None
-        ),
+        # Only meaningful when DSRs were applied; leave NaN otherwise so it
+        # propagates through the cross-file sum in the runner.
+        cost_after_rewrites=float(data["cost_after_rewrites"]) if rewrites_path is not None else math.nan,
     )
 
 

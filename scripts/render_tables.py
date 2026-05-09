@@ -119,8 +119,10 @@ def geomean_of(runs: dict, method: str, key: str) -> float | None:
 
 
 def fmt(x: float | None, spec: str, na: str = "N/A") -> str:
-    """Format a scalar with ``spec`` or return ``na`` when ``x`` is None."""
-    return na if x is None else format(x, spec)
+    """Format a scalar with ``spec`` or return ``na`` when ``x`` is None / NaN."""
+    if x is None or (isinstance(x, float) and math.isnan(x)):
+        return na
+    return format(x, spec)
 
 
 def geomean_col(xs: list[float | None]) -> float | None:
@@ -212,7 +214,7 @@ def render(saved: dict, table: int) -> str:
     for label, original, egraph_min, crs, ts in rows:
         size_cells = [fmt(original, "d")]
         if has_egraph_min:
-            size_cells.append(fmt(egraph_min, "d"))
+            size_cells.append(fmt(egraph_min, ".0f"))
         lines.append(emit(label, size_cells, crs, ts))
 
     # Geometric mean across benchmarks (per method, skipping missing cells).

@@ -8,6 +8,7 @@ text table matching the paper layout.
 """
 
 import json
+import math
 import time
 from pathlib import Path
 
@@ -79,8 +80,9 @@ def table1(
             enum_res, enum_egraph_min = run_method(enum, domain, rounds=num_abstractions, use_dsrs=True)
             smc_res, smc_egraph_min = run_method(smc, domain, rounds=num_abstractions, use_dsrs=True)
             # ``cost_after_rewrites`` is a property of the corpus + DSRs, so
-            # Enum and SMC must agree on it.
-            assert enum_egraph_min == smc_egraph_min, (
+            # Enum and SMC must agree on it. NaN==NaN is False, so handle the
+            # "no DSRs / not ours" case (both NaN) explicitly.
+            assert enum_egraph_min == smc_egraph_min or (math.isnan(enum_egraph_min) and math.isnan(smc_egraph_min)), (
                 f"{domain}: e-graph min term size disagrees between algorithms "
                 f"(enum={enum_egraph_min}, smc={smc_egraph_min})"
             )
@@ -103,8 +105,10 @@ def table1(
 
 
 def _fmt(x, spec: str, na: str = "N/A") -> str:
-    """Format ``x`` with ``spec`` or return ``na`` when ``x`` is None."""
-    return na if x is None else format(x, spec)
+    """Format ``x`` with ``spec`` or return ``na`` when ``x`` is None / NaN."""
+    if x is None or (isinstance(x, float) and math.isnan(x)):
+        return na
+    return format(x, spec)
 
 
 def print_table1(path: str | Path) -> None:
@@ -151,7 +155,7 @@ def print_table1(path: str | Path) -> None:
         row = (
             f"{label:<14}"
             f"{_fmt(original_size, 'd'):>14}"
-            f"{_fmt(d.get('egraph_min_term_size'), 'd'):>22}  "
+            f"{_fmt(d.get('egraph_min_term_size'), '.0f'):>22}  "
             f"{_fmt(cr('enum'), '.2f'):>10}"
             f"{_fmt(cr('smc'), '.2f'):>10}"
             f"{_fmt(cr('babble'), '.2f'):>8}"

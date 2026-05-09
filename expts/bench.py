@@ -7,7 +7,8 @@ Each tool wrapper lives under :mod:`expts.run_models` and returns a
 the truly cross-tool dial — :data:`MAX_ARITY` — is here.
 """
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, field
 from typing import Literal
 
 
@@ -46,11 +47,12 @@ class BenchResult:
     initial_corpus: list[str]
     final_corpus: list[str]
     abstractions: list[Abstraction]
-    # Optional: the minimum AST size reachable in the e-graph after DSR
-    # rewrites are applied, before any abstraction is found. Only egg-stitch
-    # reports this (it falls out of the e-graph extraction it does anyway);
-    # other tools leave it ``None``.
-    cost_after_rewrites: int | None = None
+    # The minimum AST size reachable in the e-graph after DSR rewrites are
+    # applied, before any abstraction is found. Only egg-stitch (with DSRs)
+    # reports a real number; everything else leaves the default NaN, which
+    # propagates through ``sum(...)`` so a mixed batch automatically yields
+    # NaN at the aggregate level.
+    cost_after_rewrites: float = field(default=math.nan)
 
 
 # Maximum arity of learned abstractions — set the same across all tools so the
