@@ -111,6 +111,12 @@ class Babble:
             f"--max-arity={self.max_arity}",
             f"--output={csv_out}",
             f"--dump-json={json_dump}",
+            # Match the dreamcoder ``benchmark`` binary's hardcoded
+            # ``learn_constants=true``, so 0-arity (constant) abstractions
+            # are findable in cogsci runs too. Without this flag the
+            # cogsci binary would silently disallow them, handicapping
+            # babble vs. its dreamcoder behavior and against our tool.
+            "--learn-constants",
         ]
         if rewrites_path is not None:
             cmd += [f"--dsr={rewrites_path}"]

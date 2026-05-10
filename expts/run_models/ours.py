@@ -90,11 +90,12 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         "--language", language,
         "--max-arity", str(max_arity),
         "--num-abstractions", str(rounds),
-        # cogsci/no-apps tables suppress 0-arity abstractions to match how
-        # babble/stitch are invoked; lambda-calc runs use the same setting
-        # since the table comparison is symmetric.
-        "--no-zero-arity",
     ]
+    # 0-arity (constant) abstractions are allowed: stitch finds them by
+    # default, babble's dreamcoder ``benchmark`` binary hardcodes
+    # ``learn_constants=true``, and our cogsci ``Babble`` wrapper passes
+    # ``--learn-constants`` to drawings. Forbidding them only here would
+    # handicap the comparison, so we don't pass ``--no-zero-arity``.
     if rebuild_egraph:
         cmd.append("--rebuild-egraph")
     if rewrites_path is not None:
