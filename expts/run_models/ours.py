@@ -110,10 +110,13 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     subprocess.run(cmd, check=True, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"))
     with open(output_path) as f:
         data = json.load(f)
-    abstractions = [
-        Abstraction(name=f"fn_{i}", body=a["pattern"])
-        for i, a in enumerate(data.get("library", []))
-    ]
+    # egg-stitch's RunResult serialises ``pattern`` as ``"<fn_name>: <body>"``
+    # (see src/lib.rs ~ line 208); split it back into the BenchResult shape.
+    abstractions: list[Abstraction] = []
+    for i, a in enumerate(data.get("library", [])):
+        s = a["pattern"]
+        name, _, body = s.partition(": ")
+        abstractions.append(Abstraction(name=name or f"fn_{i}", body=body or s))
     return BenchResult(
         elapsed_secs=float(data["elapsed_secs"]),
         initial_corpus=list(data["original_programs"]),

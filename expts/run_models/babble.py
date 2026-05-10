@@ -125,6 +125,11 @@ class Babble:
     def _run_benchmark(self, rounds: int, input_path: Path, rewrites_path: str | None) -> BenchResult:
         """Run babble's ``benchmark`` binary in single-file mode (``--input-file``).
 
+        Babble's ``benchmark`` binary expects a ``CompressionInput`` JSON
+        (with grammar/DSL metadata), not the flat program list our
+        ``data/domains/<dom>/*.json`` holds. We map our path to the matching
+        ``harness/data/dreamcoder-benchmarks/benches/<domain>_<set>/<file>.json``.
+
         ``rewrites_path`` must equal what babble would auto-load for the
         inferred domain, or be ``None`` (which switches the binary to
         ``--mode au``). Babble has no flag for an arbitrary DSR path.
@@ -139,6 +144,15 @@ class Babble:
             f"can't resolve dreamcoder domain for {input_path}; "
             f"add its parent to DREAMCODER_DOMAIN_PATHS"
         )
+        # Translate ``<dataset>__<bench>_itN`` → ``<domain>_<dataset>/<bench>_itN.json``.
+        stem = input_path.stem
+        dataset, sep, bench_file = stem.partition("__")
+        assert sep, f"unexpected dreamcoder filename {stem!r}; expected '<dataset>__<bench>'"
+        babble_input = (
+            BABBLE_DIR / "harness" / "data" / "dreamcoder-benchmarks" / "benches"
+            / f"{domain}_{dataset}" / f"{bench_file}.json"
+        )
+        assert babble_input.exists(), f"babble input not found at {babble_input}"
         if rewrites_path is not None:
             from ..runner import rewrites_path as _expected_rewrites
             expected = _expected_rewrites(domain)
@@ -155,7 +169,7 @@ class Babble:
         cmd = [
             str(babble_bench_bin()),
             "--domain", domain,
-            "--input-file", str(input_path),
+            "--input-file", str(babble_input),
             "--output", str(csv_out),
             "--dump-json", str(json_dump),
             "--beam-size", str(self.beams),
