@@ -17,7 +17,6 @@ pub struct AbstractionResult {
     /// Successive "new best" events recorded during best-first search.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub best_history: Option<Vec<crate::best_first::BestHistoryEntry>>,
-    pub rewritten_programs: Vec<String>,
 }
 
 /// Full JSON-serializable record of a single run.
@@ -39,6 +38,12 @@ pub struct RunResult {
     /// Filename of the debug log (in the same directory), if debug logging was enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_log_file: Option<String>,
+    /// Programs as loaded from the input file (verbatim s-expression strings).
+    pub original_programs: Vec<String>,
+    /// Programs after all abstractions have been applied. Equal to `original_programs`
+    /// if no abstractions were found; otherwise the rewritten corpus from the last
+    /// abstraction in `library`.
+    pub rewritten_programs: Vec<String>,
     /// All abstractions found, in order (each stacks on the previous).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub library: Vec<AbstractionResult>,

@@ -10,11 +10,15 @@
       "num_matches": 2,
       "pattern": "fn_0: (lam (lam (+ (?#0 $0 f) (?#0 $0 f))))",
       "pattern_size": 708,
-      "rewritten_programs": [
-        "(fn_0 (a b c))",
-        "(fn_0 (a b z))"
-      ],
       "usage_matches": 2
     }
+  ],
+  "original_programs": [
+    "(lam (lam (+ (a b c $0 f) (a b c $0 f))))",
+    "(lam (lam (+ (a b z $0 f) (a b z $0 f))))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 (a b c))",
+    "(fn_0 (a b z))"
   ]
 }

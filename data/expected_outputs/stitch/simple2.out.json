@@ -2,5 +2,13 @@
   "compression_ratio": null,
   "cost_after_rewrites": 9,
   "final_cost": null,
-  "initial_cost": 9
+  "initial_cost": 9,
+  "original_programs": [
+    "(a (lam (a a)))",
+    "(b (lam (b b)))"
+  ],
+  "rewritten_programs": [
+    "(a (lam (a a)))",
+    "(b (lam (b b)))"
+  ]
 }

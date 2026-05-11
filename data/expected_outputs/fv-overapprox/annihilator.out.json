@@ -10,12 +10,17 @@
       "num_matches": 3,
       "pattern": "fn_0: (big (chain (of (g ?#0 (lam ?#0)))))",
       "pattern_size": 606,
-      "rewritten_programs": [
-        "(fn_0 xx)",
-        "(fn_0 yy)",
-        "(fn_0 0)"
-      ],
       "usage_matches": 3
     }
+  ],
+  "original_programs": [
+    "(big (chain (of (g xx (lam xx)))))",
+    "(big (chain (of (g yy (lam yy)))))",
+    "(big (chain (of (g 0 (lam (* 0 $0))))))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 xx)",
+    "(fn_0 yy)",
+    "(fn_0 0)"
   ]
 }

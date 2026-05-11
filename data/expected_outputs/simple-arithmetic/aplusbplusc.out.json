@@ -9,15 +9,23 @@
       "arity": 1,
       "num_matches": 6,
       "pattern_size": 5,
-      "rewritten_programs": [
-        "(fn_0 2)",
-        "(fn_0 7)",
-        "(fn_0 4)",
-        "(+ (fn_0 4) 8)",
-        "(+ 2 (fn_0 4))",
-        "(fn_0 2)"
-      ],
       "usage_matches": 8
     }
+  ],
+  "original_programs": [
+    "(+ (+ 2 a) b)",
+    "(+ (+ 7 a) b)",
+    "(+ (+ a b) 4)",
+    "(+ (+ a b) (+ 4 8))",
+    "(+ (+ 4 a) (+ 2 b))",
+    "(+ b (+ 2 a))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 2)",
+    "(fn_0 7)",
+    "(fn_0 4)",
+    "(+ (fn_0 4) 8)",
+    "(+ 2 (fn_0 4))",
+    "(fn_0 2)"
   ]
 }

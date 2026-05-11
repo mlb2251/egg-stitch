@@ -10,13 +10,19 @@
       "num_matches": 4,
       "pattern": "fn_0: (?#0 a b c)",
       "pattern_size": 7,
-      "rewritten_programs": [
-        "(fn_0 +)",
-        "(fn_0 *)",
-        "(fn_0 /)",
-        "(fn_0 -)"
-      ],
       "usage_matches": 4
     }
+  ],
+  "original_programs": [
+    "(+ a b c)",
+    "(* a b c)",
+    "(/ a b c)",
+    "(- a b c)"
+  ],
+  "rewritten_programs": [
+    "(fn_0 +)",
+    "(fn_0 *)",
+    "(fn_0 /)",
+    "(fn_0 -)"
   ]
 }

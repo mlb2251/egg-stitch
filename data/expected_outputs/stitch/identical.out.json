@@ -10,11 +10,15 @@
       "num_matches": 1,
       "pattern": "fn_0: (a b c d e)",
       "pattern_size": 5,
-      "rewritten_programs": [
-        "fn_0",
-        "fn_0"
-      ],
       "usage_matches": 2
     }
+  ],
+  "original_programs": [
+    "(a b c d e)",
+    "(a b c d e)"
+  ],
+  "rewritten_programs": [
+    "fn_0",
+    "fn_0"
   ]
 }

@@ -23,3 +23,5 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: cargo test
         run: cargo test --release
+      - name: SMC fv-crash regression sweep
+        run: ./tests/smc_fv_crash_regression.sh

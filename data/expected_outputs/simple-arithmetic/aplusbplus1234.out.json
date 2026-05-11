@@ -9,15 +9,23 @@
       "arity": 2,
       "num_matches": 13,
       "pattern_size": 9,
-      "rewritten_programs": [
-        "(fn_0 a b)",
-        "(fn_0 x y)",
-        "(fn_0 u v)",
-        "(fn_0 u v)",
-        "(fn_0 p q)",
-        "(fn_0 a 0)"
-      ],
       "usage_matches": 23
     }
+  ],
+  "original_programs": [
+    "(+ (+ (* 1 2 3 4) a) b)",
+    "(+ (+ (* 1 2 3 4) x) y)",
+    "(+ (+ u v) (* 1 2 3 4))",
+    "(+ (+ u v) (+ (* 1 2 3 4) 0))",
+    "(+ (+ 0 p) (+ (* 1 2 3 4) q))",
+    "(+ a (* 1 2 3 4))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 a b)",
+    "(fn_0 x y)",
+    "(fn_0 u v)",
+    "(fn_0 u v)",
+    "(fn_0 p q)",
+    "(fn_0 a 0)"
   ]
 }

@@ -10,11 +10,15 @@
       "num_matches": 2,
       "pattern": "fn_0: (app (app (app if (app is_nil ?#0)) nil) (app (app cons (app (app ?#1 (app car ?#0)) ?#2)) (app ?#3 (app cdr ?#0))))",
       "pattern_size": 2322,
-      "rewritten_programs": [
-        "(app Y (lam (lam (fn_0 $0 + (app car $0) $1))))",
-        "(app Y (lam (lam (fn_0 $0 - 1 $1))))"
-      ],
       "usage_matches": 2
     }
+  ],
+  "original_programs": [
+    "(app Y (lam (lam (app (app (app if (app is_nil $0)) nil) (app (app cons (app (app + (app car $0)) (app car $0))) (app $1 (app cdr $0)))))))",
+    "(app Y (lam (lam (app (app (app if (app is_nil $0)) nil) (app (app cons (app (app - (app car $0)) 1))            (app $1 (app cdr $0)))))))"
+  ],
+  "rewritten_programs": [
+    "(app Y (lam (lam (fn_0 $0 + (app car $0) $1))))",
+    "(app Y (lam (lam (fn_0 $0 - 1 $1))))"
   ]
 }

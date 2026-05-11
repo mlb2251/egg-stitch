@@ -36,13 +36,25 @@ fn args(num_steps: usize, num_abstractions: usize) -> Args {
 
 const FIRST_REWRITTEN: &[&str] = &["(+ (fn_0 (h a) (h b)) 2 2 2)", "(+ (fn_0 (a e) (b f)) 3 3 3)", "(+ (fn_0 (e i) (f j)) 4 4 4)", "(* (fn_0 (k m) (l n)) 5)"];
 
-/// Baseline: num_abstractions=0 gives an empty library.
+/// Baseline: num_abstractions=0 gives an empty library and no rewritten corpus.
 #[test]
 fn zero_abstractions() {
     let (eg, root) = load::<OpChildrenLanguage>();
-    let (library, _original_size, final_cost) = multiple_step_search::<OpChildren, Op>(eg, root, &args(100, 0));
+    let (library, _original_size, final_cost, final_rewritten) = multiple_step_search::<OpChildren, Op>(eg, root, &args(100, 0));
     assert!(library.is_empty());
     assert!(final_cost.is_none());
+    assert!(final_rewritten.is_none());
+}
+
+/// Single-abstraction run: pins the rewritten corpus shape that the next round
+/// would consume in a multi-abstraction loop.
+#[test]
+fn one_abstraction_rewritten_corpus() {
+    let (eg, root) = load::<OpChildrenLanguage>();
+    let (library, _original_size, _final_cost, final_rewritten) = multiple_step_search::<OpChildren, Op>(eg, root, &args(500, 1));
+    assert_eq!(library.len(), 1);
+    assert_eq!(library[0].pattern, "fn_0: (f (g ?#0) (g ?#1))");
+    assert_eq!(final_rewritten.expect("one abstraction → rewritten corpus"), FIRST_REWRITTEN);
 }
 
 /// Two-abstraction run: second search runs on the rewritten corpus (+ (fn_0 ..) (fn_0 ..)).
@@ -51,7 +63,7 @@ fn zero_abstractions() {
 #[test]
 fn two_abstractions() {
     let (eg, root) = load::<OpChildrenLanguage>();
-    let (library, original_size, final_cost) = multiple_step_search::<OpChildren, Op>(eg, root, &args(500, 2));
+    let (library, original_size, final_cost, _final_rewritten) = multiple_step_search::<OpChildren, Op>(eg, root, &args(500, 2));
 
     println!("Abstractions found:");
     for abs in &library {
@@ -64,7 +76,6 @@ fn two_abstractions() {
 
     let first = &library[0];
     assert_eq!(first.pattern, "fn_0: (f (g ?#0) (g ?#1))");
-    assert_eq!(first.rewritten_programs, FIRST_REWRITTEN);
 
     // Second search ran on the rewritten corpus; with max-arity=2 and flat (fn_0 x y)
     // programs the best it can find is the leaf `a`.

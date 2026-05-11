@@ -10,14 +10,21 @@
       "num_matches": 5,
       "pattern": "fn_0: (foo (bar ?#0))",
       "pattern_size": 5,
-      "rewritten_programs": [
-        "(lam (fn_0 (h $0)))",
-        "(lam (fn_0 ($0 a)))",
-        "(lam (fn_0 (k $0 b)))",
-        "(lam (fn_0 (m c $0 d)))",
-        "(lam (fn_0 $0))"
-      ],
       "usage_matches": 5
     }
+  ],
+  "original_programs": [
+    "(lam (foo (bar (h $0))))",
+    "(lam (foo (bar ($0 a))))",
+    "(lam (foo (bar (k $0 b))))",
+    "(lam (foo (bar (m c $0 d))))",
+    "(lam (foo (bar $0)))"
+  ],
+  "rewritten_programs": [
+    "(lam (fn_0 (h $0)))",
+    "(lam (fn_0 ($0 a)))",
+    "(lam (fn_0 (k $0 b)))",
+    "(lam (fn_0 (m c $0 d)))",
+    "(lam (fn_0 $0))"
   ]
 }

@@ -8,6 +8,7 @@ use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
 use crate::search::{Action, SearchState, setup_search};
 use rand::Rng;
+use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
 /// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
@@ -40,7 +41,7 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
 /// expansion step, identical patterns are deduplicated and their counts merged,
 /// so cost computation runs once per unique pattern instead of once per particle.
 #[allow(clippy::needless_range_loop)]
-pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, args: &crate::Args) -> SmcResult<F, O> {
+pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
@@ -73,7 +74,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
             let mut action_counts: FxHashMap<Action<F::Discriminant<O>>, usize> = FxHashMap::default();
             let mut noop_count: usize = 0;
             for _ in 0..mult {
-                match state.sample_random_expansion(&shared, false) {
+                match state.sample_random_expansion(&shared, false, rng) {
                     Some(action) => *action_counts.entry(action).or_insert(0) += 1,
                     None => noop_count += 1,
                 }
@@ -139,7 +140,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
         let mut counts: Vec<usize> = vec![0; expanded.len()];
         let resample_indices: Vec<usize> = (0..num_particles)
             .map(|_| {
-                let idx = weighted_choice(&weights_acc);
+                let idx = weighted_choice(&weights_acc, rng);
                 counts[idx] += 1;
                 idx
             })
@@ -194,8 +195,8 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
 }
 
 /// Samples an index from a normalized cumulative weight array.
-pub fn weighted_choice(acc_weights: &[f64]) -> usize {
-    let r: f64 = rand::rng().random_range(0.0..1.0);
+pub fn weighted_choice(acc_weights: &[f64], rng: &mut StdRng) -> usize {
+    let r: f64 = rng.random_range(0.0..1.0);
     match acc_weights.binary_search_by(|&w| w.partial_cmp(&r).unwrap()) {
         Ok(idx) => idx,
         Err(idx) => idx,

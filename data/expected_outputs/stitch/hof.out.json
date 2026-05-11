@@ -10,12 +10,17 @@
       "num_matches": 3,
       "pattern": "fn_0: (lam (app (app cons (app (?#0 $0) $0)) (app (app cons (app (?#0 $0) $0)) empty)))",
       "pattern_size": 1414,
-      "rewritten_programs": [
-        "(fn_0 (lam inc))",
-        "(fn_0 (lam dec))",
-        "(fn_0 (lam (app plus $0)))"
-      ],
       "usage_matches": 3
     }
+  ],
+  "original_programs": [
+    "(lam (app (app cons (app inc $0)) (app (app cons (app inc $0)) empty)))",
+    "(lam (app (app cons (app dec $0)) (app (app cons (app dec $0)) empty)))",
+    "(lam (app (app cons (app (app plus $0) $0)) (app (app cons (app (app plus $0) $0)) empty)))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 (lam inc))",
+    "(fn_0 (lam dec))",
+    "(fn_0 (lam (app plus $0)))"
   ]
 }

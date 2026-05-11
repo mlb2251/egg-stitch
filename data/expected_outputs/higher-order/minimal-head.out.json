@@ -10,14 +10,21 @@
       "num_matches": 5,
       "pattern": "fn_0: (lam (?#0 $0))",
       "pattern_size": 4,
-      "rewritten_programs": [
-        "(fn_0 h)",
-        "(fn_0 k)",
-        "(fn_0 m)",
-        "(fn_0 n)",
-        "(fn_0 p)"
-      ],
       "usage_matches": 5
     }
+  ],
+  "original_programs": [
+    "(lam (h $0))",
+    "(lam (k $0))",
+    "(lam (m $0))",
+    "(lam (n $0))",
+    "(lam (p $0))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 h)",
+    "(fn_0 k)",
+    "(fn_0 m)",
+    "(fn_0 n)",
+    "(fn_0 p)"
   ]
 }

@@ -5,6 +5,17 @@ use egg_stitch::{
     multiple_step_search, results,
 };
 
+/// Bundles everything `main` needs from a language-specialised run, so the
+/// language-generic post-processing stays out of `run`.
+struct RunOutput {
+    library: Vec<results::AbstractionResult>,
+    original_size: usize,
+    final_cost: Option<usize>,
+    final_rewritten: Option<Vec<String>>,
+    cost_before_rewrites: usize,
+    original_programs: Vec<String>,
+}
+
 fn main() {
     let args = Args::parse();
     let start = std::time::Instant::now();
@@ -13,7 +24,14 @@ fn main() {
     // gets `OpDB<Op>` so `$n` parses as a real De Bruijn variable (the fv
     // analysis and depth-aware extraction need that). OpChildren has no
     // binders, so DB vars are meaningless there — keeps plain `Op`.
-    let (library, original_size, final_cost, cost_before_rewrites) = match args.language {
+    let RunOutput {
+        library,
+        original_size,
+        final_cost,
+        final_rewritten,
+        cost_before_rewrites,
+        original_programs,
+    } = match args.language {
         LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
         LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
     };
@@ -29,6 +47,8 @@ fn main() {
         SearchKind::BestFirst => "best-first",
     };
 
+    let rewritten_programs = final_rewritten.unwrap_or_else(|| original_programs.clone());
+
     let run_result = results::RunResult {
         timestamp,
         search: search_kind.to_string(),
@@ -40,6 +60,8 @@ fn main() {
         final_cost,
         compression_ratio,
         debug_log_file,
+        original_programs,
+        rewritten_programs,
         library,
     };
 
@@ -51,10 +73,17 @@ fn main() {
 
 /// Loads the egraph and runs the multi-abstraction search loop, parameterized
 /// by both the language family `F` and the leaf-Op `O`.
-fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, usize) {
+fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> RunOutput {
     let load_start = std::time::Instant::now();
-    let (egraph, root, cost_before_rewrites) = io::load_egraph::<F::Apply<O>>(&args.input, args.rules.as_deref(), args.weights);
+    let (egraph, root, cost_before_rewrites, original_programs) = io::load_egraph::<F::Apply<O>>(&args.input, args.rules.as_deref(), args.weights);
     println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
-    let (library, original_size, final_cost) = multiple_step_search::<F, O>(egraph, root, args);
-    (library, original_size, final_cost, cost_before_rewrites)
+    let (library, original_size, final_cost, final_rewritten) = multiple_step_search::<F, O>(egraph, root, args);
+    RunOutput {
+        library,
+        original_size,
+        final_cost,
+        final_rewritten,
+        cost_before_rewrites,
+        original_programs,
+    }
 }

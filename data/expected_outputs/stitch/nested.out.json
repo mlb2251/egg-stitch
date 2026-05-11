@@ -10,14 +10,21 @@
       "num_matches": 11,
       "pattern": "fn_0: (+ ?#0 (* ?#1 ?#1))",
       "pattern_size": 5,
-      "rewritten_programs": [
-        "(fn_0 u (/ v 6))",
-        "(fn_0 a y)",
-        "(fn_0 b z)",
-        "(fn_0 (fn_0 v v) u)",
-        "(* 7 (fn_0 0 (- v)))"
-      ],
       "usage_matches": 11
     }
+  ],
+  "original_programs": [
+    "(+ u (* (/ v 6) (/ v 6)))",
+    "(+ a (* y y))",
+    "(+ b (* z z))",
+    "(+ (+ v (* v v)) (* u u))",
+    "(* 7 (* (- v) (- v)))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 u (/ v 6))",
+    "(fn_0 a y)",
+    "(fn_0 b z)",
+    "(fn_0 (fn_0 v v) u)",
+    "(* 7 (fn_0 0 (- v)))"
   ]
 }

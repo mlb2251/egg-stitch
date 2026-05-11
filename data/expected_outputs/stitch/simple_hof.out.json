@@ -10,13 +10,19 @@
       "num_matches": 4,
       "pattern": "fn_0: (a (lam (?#0 $0 (?#0 $0))))",
       "pattern_size": 505,
-      "rewritten_programs": [
-        "(fn_0 (lam (a $0)))",
-        "(fn_0 (lam ($0 b)))",
-        "(fn_0 (lam (+ $0 c)))",
-        "(fn_0 (lam (+ $0 d)))"
-      ],
       "usage_matches": 4
     }
+  ],
+  "original_programs": [
+    "(a (lam ((a $0) (a $0))))",
+    "(a (lam (($0 b) ($0 b))))",
+    "(a (lam ((+ $0 c) (+ $0 c))))",
+    "(a (lam ((+ $0 d) (+ $0 d))))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 (lam (a $0)))",
+    "(fn_0 (lam ($0 b)))",
+    "(fn_0 (lam (+ $0 c)))",
+    "(fn_0 (lam (+ $0 d)))"
   ]
 }

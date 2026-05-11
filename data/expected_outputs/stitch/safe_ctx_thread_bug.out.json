@@ -10,11 +10,15 @@
       "num_matches": 2,
       "pattern": "fn_0: (Y (lam (lam (is_nil $0 nil (cons (?#0 $0))))))",
       "pattern_size": 708,
-      "rewritten_programs": [
-        "(fn_0 +)",
-        "(fn_0 -)"
-      ],
       "usage_matches": 2
     }
+  ],
+  "original_programs": [
+    "(Y (lam (lam ((is_nil $0) nil (cons (+ $0))))))",
+    "(Y (lam (lam ((is_nil $0) nil (cons (- $0))))))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 +)",
+    "(fn_0 -)"
   ]
 }
