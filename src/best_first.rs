@@ -5,7 +5,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::{Duration, Instant};
 
-use crate::cost::{CostScratch, compute_cost, compute_lower_bound, compute_pattern_size};
+use crate::cost::{CostScratch, compute_cost, compute_lower_bound};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchEgraph, StitchOp};
 use crate::search::{Action, SearchState, SeenTracker, setup_search};
@@ -199,7 +199,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             // when the bound already exceeds the current best.
             let child_lower_bound = if args.opt_lower_bound {
                 let t = Instant::now();
-                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &mut scratch, &child_state) + compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights);
+                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &mut scratch, &child_state) + child_state.pattern.pattern_size;
                 let pruned = best.as_ref().is_some_and(|(c, _)| lb >= *c);
                 lower_bound_time += t.elapsed();
                 if pruned {
@@ -280,7 +280,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
     let best_pair = best.map(|(cost, id)| (cost, nodes[id].state.clone()));
 
     let tree_log = if debug {
-        let weights = shared.egraph.analysis.weights;
         Some(SearchTreeLog {
             original_size,
             nodes: nodes
@@ -292,7 +291,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
                     action: n.action.as_ref().map(|a| a.to_string()),
                     pattern: n.state.pattern.to_string(),
                     arity: n.state.pattern.vars.len(),
-                    pattern_size: compute_pattern_size(&n.state.pattern, &weights),
+                    pattern_size: n.state.pattern.pattern_size,
                     num_matches: n.state.matches.len(),
                     cost: n.cost,
                     expanded: n.expanded,

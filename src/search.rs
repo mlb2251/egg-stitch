@@ -235,7 +235,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
-        self.pattern.expand(var_idx, target);
+        self.pattern.expand(var_idx, target, &shared.egraph.analysis.weights);
+        if shared.check_slow {
+            self.pattern.verify_size(&shared.egraph.analysis.weights);
+        }
         self.subset_matches(var_idx, target, shared);
     }
 
@@ -246,6 +249,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let d_a = self.pattern.var_depth[var_idx];
         let d_b = self.pattern.var_depth[second_var_idx];
         self.pattern.reuse(var_idx, second_var_idx);
+        if shared.check_slow {
+            self.pattern.verify_size(&shared.egraph.analysis.weights);
+        }
         self.subset_matches_reuse(var_idx, second_var_idx, d_a.min(d_b), d_a.max(d_b), shared);
     }
 
@@ -323,7 +329,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn new(shared: &SharedSearchData<F, O>) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
-        Self { pattern: Pattern::single_var(), matches, num_substs }
+        Self { pattern: Pattern::single_var(&shared.egraph.analysis.weights), matches, num_substs }
     }
 
     /// Enumerates every successor state reachable in one `expand` or `reuse` step.

@@ -1,4 +1,5 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchLanguage, StitchOp};
+use crate::cost::compute_pattern_size;
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchLanguage, StitchOp, Weights};
 use crate::revexpr::RevExpr;
 use egg::{Id, Language, RecExpr};
 use rustc_hash::FxHashMap;
@@ -25,6 +26,13 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
     pub vars: Vec<Vec<Id>>,  // vars[k] = all RecExpr ids holding Var(k)
     pub var_depth: Vec<u32>, // var_depth[k] = pattern-internal binders enclosing ?#k
+    /// Tree-walk multiplicity of `?#k`: how many times Var(k) is visited by a
+    /// recursive walk from the root. Equal to `Σ paths(root → id)` over `vars[k]`.
+    /// Maintained incrementally so `pattern_size` updates locally.
+    pub var_weight: Vec<usize>,
+    /// Cached tree-walk size of `pattern` under the active weights. Equals
+    /// `compute_pattern_size(self, weights)`; verified when `check_slow`.
+    pub pattern_size: usize,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -33,11 +41,13 @@ fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> 
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Creates the initial `?#0` pattern: a single variable at depth 0.
-    pub fn single_var() -> Self {
+    pub fn single_var(weights: &Weights) -> Self {
         Pattern {
             pattern: RevExpr::new(vec![var_node::<F, O>(0)]),
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
+            var_weight: vec![1],
+            pattern_size: weights.sym_var_cost as usize,
         }
     }
 
@@ -49,12 +59,20 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Each new child meta-var inherits the parent's binder depth, plus one if
     /// `target.discriminant().binds_child(j)` is true for that slot — i.e., a
     /// `Lam` body bumps the depth of the meta-var that lands inside it.
-    pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
+    pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>, weights: &Weights) {
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
+        let w = self.var_weight.remove(var_idx);
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
+        // Tree-walk size delta: the var leaf at this slot was visited `w` times
+        // (each contributing sym_var_cost). After expansion, the slot holds
+        // `target` (visited `w` times) and references `num_children` fresh var
+        // leaves, each visited `w` times.
+        let var_intrinsic = weights.sym_var_cost as usize;
+        let target_intrinsic = target_disc.intrinsic_size(weights) as usize;
+        self.pattern_size = self.pattern_size + w * target_intrinsic + w * num_children * var_intrinsic - w * var_intrinsic;
 
         // Shift names of trailing vars: a var currently at post-removal index p
         // will end up at post-insertion index p + num_children, so rename its leaves.
@@ -77,6 +95,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             self.vars.insert(var_idx + j, vec![new_id]);
             let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
             self.var_depth.insert(var_idx + j, child_depth);
+            self.var_weight.insert(var_idx + j, w);
         }
         let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
@@ -113,6 +132,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.vars.remove(drop_idx);
         self.var_depth.remove(drop_idx);
         self.var_depth[keep_idx] = merged_depth;
+        // All var leaves cost `sym_var_cost`, so collapsing two metavars into
+        // one leaves `pattern_size` unchanged; only var_weight aggregates.
+        let merged_weight = self.var_weight[keep_idx] + self.var_weight[drop_idx];
+        self.var_weight.remove(drop_idx);
+        self.var_weight[keep_idx] = merged_weight;
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -121,6 +145,15 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
                 self.pattern[id] = shifted.clone();
             }
         }
+    }
+}
+
+impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
+    /// Asserts the cached `pattern_size` agrees with a from-scratch
+    /// `compute_pattern_size` walk. Invoked from search paths under `check_slow`.
+    pub fn verify_size(&self, weights: &Weights) {
+        let expected = compute_pattern_size::<F, O>(self, weights);
+        assert_eq!(self.pattern_size, expected, "pattern_size cache out of sync: cached {}, recomputed {} for pattern {}", self.pattern_size, expected, self);
     }
 }
 
@@ -238,11 +271,13 @@ mod tests {
                 }
             }
         }
+        assert_eq!(p.var_weight.len(), p.vars.len(), "var_weight/vars length mismatch");
+        p.verify_size(&Weights::default());
     }
 
     #[test]
     fn single_var_is_canonical() {
-        let p: Pattern<OpChildren, Op> = Pattern::single_var();
+        let p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
         assert_eq!(p.vars.len(), 1);
         assert_eq!(p.to_string(), "?#0");
         assert_vars_canonical(&p);
@@ -250,8 +285,8 @@ mod tests {
 
     #[test]
     fn expand_fresh_var_binary() {
-        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
-        p.expand(0, &op("+", 2));
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p.expand(0, &op("+", 2), &Weights::default());
         assert_eq!(p.vars.len(), 2);
         assert_eq!(p.to_string(), "(+ ?#0 ?#1)");
         assert_vars_canonical(&p);
@@ -259,9 +294,9 @@ mod tests {
 
     #[test]
     fn expand_nested_left_first() {
-        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
-        p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
-        p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p.expand(0, &op("+", 2), &Weights::default()); // (+ ?#0 ?#1)
+        p.expand(0, &op("-", 2), &Weights::default()); // (+ (- ?#0 ?#1) ?#2)
         assert_eq!(p.to_string(), "(+ (- ?#0 ?#1) ?#2)");
         assert_eq!(p.vars.len(), 3);
         assert_vars_canonical(&p);
@@ -269,9 +304,9 @@ mod tests {
 
     #[test]
     fn expand_right_keeps_earlier_vars_first() {
-        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
-        p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
-        p.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p.expand(0, &op("+", 2), &Weights::default()); // (+ ?#0 ?#1)
+        p.expand(1, &op("*", 2), &Weights::default()); // (+ ?#0 (* ?#1 ?#2))
         assert_eq!(p.to_string(), "(+ ?#0 (* ?#1 ?#2))");
         assert_eq!(p.vars.len(), 3);
         assert_vars_canonical(&p);
@@ -279,8 +314,8 @@ mod tests {
 
     #[test]
     fn expand_ternary() {
-        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
-        p.expand(0, &op("f", 3));
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p.expand(0, &op("f", 3), &Weights::default());
         assert_eq!(p.to_string(), "(f ?#0 ?#1 ?#2)");
         assert_eq!(p.vars.len(), 3);
         assert_vars_canonical(&p);
@@ -288,8 +323,8 @@ mod tests {
 
     #[test]
     fn reuse_adjacent() {
-        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
-        p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p.expand(0, &op("+", 2), &Weights::default()); // (+ ?#0 ?#1)
         p.reuse(0, 1); // (+ ?#0 ?#0)
         assert_eq!(p.to_string(), "(+ ?#0 ?#0)");
         assert_eq!(p.vars.len(), 1);
@@ -298,14 +333,14 @@ mod tests {
 
     #[test]
     fn reuse_normalizes_reversed_args() {
-        let mut p1: Pattern<OpChildren, Op> = Pattern::single_var();
-        p1.expand(0, &op("+", 2));
-        p1.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
+        let mut p1: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p1.expand(0, &op("+", 2), &Weights::default());
+        p1.expand(1, &op("*", 2), &Weights::default()); // (+ ?#0 (* ?#1 ?#2))
         p1.reuse(0, 2);
 
-        let mut p2: Pattern<OpChildren, Op> = Pattern::single_var();
-        p2.expand(0, &op("+", 2));
-        p2.expand(1, &op("*", 2));
+        let mut p2: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p2.expand(0, &op("+", 2), &Weights::default());
+        p2.expand(1, &op("*", 2), &Weights::default());
         p2.reuse(2, 0); // reversed
 
         assert_eq!(p1.to_string(), "(+ ?#0 (* ?#1 ?#0))");
@@ -315,8 +350,8 @@ mod tests {
         assert_vars_canonical(&p2);
 
         // Downstream expansion should agree: "var 0" must mean the same thing in both.
-        p1.expand(0, &op("h", 1));
-        p2.expand(0, &op("h", 1));
+        p1.expand(0, &op("h", 1), &Weights::default());
+        p2.expand(0, &op("h", 1), &Weights::default());
         assert_eq!(p1.to_string(), p2.to_string());
         assert_vars_canonical(&p1);
         assert_vars_canonical(&p2);
@@ -324,8 +359,8 @@ mod tests {
 
     #[test]
     fn reuse_with_intervening_var() {
-        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
-        p.expand(0, &op("f", 3)); // (f ?#0 ?#1 ?#2)
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p.expand(0, &op("f", 3), &Weights::default()); // (f ?#0 ?#1 ?#2)
         p.reuse(0, 2); // (f ?#0 ?#1 ?#0)
         assert_eq!(p.to_string(), "(f ?#0 ?#1 ?#0)");
         assert_eq!(p.vars.len(), 2);
@@ -334,11 +369,11 @@ mod tests {
 
     #[test]
     fn expand_reused_var_preserves_dag_sharing() {
-        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
-        p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p.expand(0, &op("+", 2), &Weights::default()); // (+ ?#0 ?#1)
         p.reuse(0, 1); // (+ ?#0 ?#0)
         assert_eq!(p.vars.len(), 1);
-        p.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
+        p.expand(0, &op("*", 2), &Weights::default()); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
         assert_eq!(p.to_string(), "(+ (* ?#0 ?#1) (* ?#0 ?#1))");
         assert_eq!(p.vars.len(), 2);
         assert_vars_canonical(&p);
@@ -351,9 +386,9 @@ mod tests {
 
     #[test]
     fn expand_then_reuse_across_structure() {
-        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
-        p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
-        p.expand(1, &op("*", 2)); // (+ ?#0 (* ?#1 ?#2))
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        p.expand(0, &op("+", 2), &Weights::default()); // (+ ?#0 ?#1)
+        p.expand(1, &op("*", 2), &Weights::default()); // (+ ?#0 (* ?#1 ?#2))
         p.reuse(1, 2); // (+ ?#0 (* ?#1 ?#1))
         assert_eq!(p.to_string(), "(+ ?#0 (* ?#1 ?#1))");
         assert_eq!(p.vars.len(), 2);
@@ -362,15 +397,15 @@ mod tests {
 
     #[test]
     fn to_string_distinguishes_non_equivalent_shapes() {
-        let mut a: Pattern<OpChildren, Op> = Pattern::single_var();
-        a.expand(0, &op("+", 2));
+        let mut a: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        a.expand(0, &op("+", 2), &Weights::default());
         a.reuse(0, 1); // (+ ?#0 ?#0)
-        a.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
+        a.expand(0, &op("*", 2), &Weights::default()); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
 
-        let mut b: Pattern<OpChildren, Op> = Pattern::single_var();
-        b.expand(0, &op("+", 2));
-        b.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) ?#2)
-        b.expand(2, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#2 ?#3))
+        let mut b: Pattern<OpChildren, Op> = Pattern::single_var(&Weights::default());
+        b.expand(0, &op("+", 2), &Weights::default());
+        b.expand(0, &op("*", 2), &Weights::default()); // (+ (* ?#0 ?#1) ?#2)
+        b.expand(2, &op("*", 2), &Weights::default()); // (+ (* ?#0 ?#1) (* ?#2 ?#3))
 
         assert_ne!(a.to_string(), b.to_string());
         assert_eq!(a.to_string(), "(+ (* ?#0 ?#1) (* ?#0 ?#1))");
