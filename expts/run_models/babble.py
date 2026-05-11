@@ -82,10 +82,6 @@ class Babble:
     lps: int = 1
     max_arity: int = MAX_ARITY
 
-    def scaled_for_domain(self, domain: str) -> "Babble":
-        """No-op: babble's compute is fixed by ``beams``/``lps``, not a step budget."""
-        return self
-
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         if weighting == "no-apps":
             return self._run_drawings(rounds, input_path, rewrites_path)

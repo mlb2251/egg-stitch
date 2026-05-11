@@ -1,16 +1,15 @@
 """Wrappers around our egg-stitch compressor binary.
 
 Two callable dataclasses (:class:`OursBf`, :class:`OursSmc`) carry their own
-hyperparameters as fields; the runner instantiates them with domain-scaled
-budgets via :meth:`scaled_for_domain` rather than mutating module-level
-state. :func:`egg_stitch` is a low-level escape hatch for ad-hoc dev runs.
+hyperparameters as fields rather than mutating module-level state.
+:func:`egg_stitch` is a low-level escape hatch for ad-hoc dev runs.
 """
 
 import json
 import math
 import os
 import subprocess
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import ClassVar
@@ -131,16 +130,6 @@ class OursBf:
     rebuild_egraph: bool = False
     max_arity: int = MAX_ARITY
 
-    def scaled_for_domain(self, domain: str) -> "OursBf":
-        """Return a copy with ``num_steps`` reduced for multi-file domains.
-
-        The runner calls this once per (domain, runner) so dreamcoder runs
-        — which fan out to N independent per-file invocations — don't
-        over-spend the search budget vs. the single-file cogsci runs.
-        """
-        from ..runner import scale_budget_for_domain
-        return replace(self, num_steps=scale_budget_for_domain(domain, self.num_steps))
-
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
             rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
@@ -162,15 +151,6 @@ class OursSmc:
     temperature: float = 1000.0
     rebuild_egraph: bool = False
     max_arity: int = MAX_ARITY
-
-    def scaled_for_domain(self, domain: str) -> "OursSmc":
-        """Return a copy with ``num_particles`` reduced for multi-file domains.
-
-        SMC's compute scales linearly in particle count, so that's the dial
-        we shrink to keep total work comparable across cogsci/dreamcoder.
-        """
-        from ..runner import scale_budget_for_domain
-        return replace(self, num_particles=scale_budget_for_domain(domain, self.num_particles))
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(

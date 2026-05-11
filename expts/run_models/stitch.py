@@ -45,10 +45,6 @@ class Stitch:
 
     max_arity: int = MAX_ARITY
 
-    def scaled_for_domain(self, domain: str) -> "Stitch":
-        """No-op: stitch's per-call cost is set by the corpus, not a budget dial."""
-        return self
-
     def __call__(self, rounds: int, input_path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         assert rewrites_path is None, "stitch doesn't accept DSRs"
         cost = "1" if weighting == "apps-equal" else "10000"

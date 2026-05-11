@@ -9,8 +9,7 @@ Sits between :mod:`expts.bench` (per-file subprocess wrappers, returning
 - the per-file loop over a single tool, with cost recomputation via a uniform
   :func:`ast_size` so all four tools' numbers are comparable;
 - aggregation across files into a single :class:`~expts.result.Result`
-  (sums for cost/time, geomean of per-file ratios — matching the babble paper);
-- search-budget scaling for dreamcoder's many-file domains.
+  (sums for cost/time, geomean of per-file ratios — matching the babble paper).
 """
 
 from __future__ import annotations
@@ -38,15 +37,13 @@ class Runner(Protocol):
     """The shape :func:`run_method` expects from any tool runner.
 
     Implemented by the dataclasses in :mod:`expts.run_models`. Concrete
-    runners carry their hyperparameters as fields, expose ``method`` /
-    ``is_ours`` class constants for downstream bookkeeping, and produce a
-    domain-scaled copy of themselves via :meth:`scaled_for_domain`.
+    runners carry their hyperparameters as fields and expose ``method`` /
+    ``is_ours`` class constants for downstream bookkeeping.
     """
 
     method: str
     is_ours: bool
 
-    def scaled_for_domain(self, domain: str) -> "Runner": ...
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult: ...
 
 
@@ -92,23 +89,6 @@ def rewrites_path(domain: str) -> str | None:
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
         return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None
     return f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites"
-
-
-# Dreamcoder domains run as many independent per-file invocations within a
-# single (method, domain) call, so a search budget chosen for a single cogsci
-# corpus over-spends by roughly the file count. Divide step budgets by this
-# factor so the two regimes stay comparable.
-DREAMCODER_STEP_DIVISOR = 4
-
-
-def scale_budget_for_domain(domain: str, n: int) -> int:
-    """Reduce ``n`` for dreamcoder domains, leave it unchanged for cogsci.
-
-    Floors at 1 so callers passing already-small budgets still get a valid run.
-    """
-    if domain_type(domain) == "dreamcoder":
-        return max(1, n // DREAMCODER_STEP_DIVISOR)
-    return n
 
 
 # ─── uniform cost ──────────────────────────────────────────────────────────
@@ -216,18 +196,14 @@ def run_method(
 ) -> tuple[Result, float]:
     """Run ``runner`` on every input file of ``domain`` and aggregate.
 
-    Calls ``runner.scaled_for_domain(domain)`` first so dreamcoder runs —
-    which fan out to N independent per-file invocations — don't over-spend
-    the search budget vs. single-file cogsci runs. The runner instance
-    carries its own hyperparameters; pass overrides as kwargs at
-    construction (e.g. ``OursBf(rebuild_egraph=True)``).
+    The runner instance carries its own hyperparameters; pass overrides as
+    kwargs at construction (e.g. ``OursBf(rebuild_egraph=True)``).
 
     Returns ``(Result, egraph_min_term_size)``. The second element is the
     sum of ``BenchResult.cost_after_rewrites`` across per-file invocations;
     NaN propagates automatically when any file didn't produce one (i.e.
     when the runner isn't ours, or DSRs weren't used).
     """
-    runner = runner.scaled_for_domain(domain)
     weighting = weighting_for(domain)
     rew = rewrites_path(domain) if use_dsrs else None
 
