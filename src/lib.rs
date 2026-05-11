@@ -257,12 +257,20 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let var_depth = &state.pattern.var_depth;
     let ho_arity = cost::compute_ho_arity::<F, O>(&egraph, state);
     let mut shift_memo: rustc_hash::FxHashMap<(Id, u32), Id> = rustc_hash::FxHashMap::default();
+    // Defer unions until all shifts are done. A mid-loop `union` shrinks
+    // `data.fv` on the unioned classes but leaves parent classes stale until
+    // `rebuild`, and the next iteration's `shift_free_egraph` would then read
+    // that stale fv and trip the intersection-fv assertion.
+    let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &state.matches {
         for subst in &m.substs {
             let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &ho_arity, var_depth, &mut shift_memo);
             let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
-            egraph.union(x, m.root_eclass);
+            pending.push((x, m.root_eclass));
         }
+    }
+    for (x, root_eclass) in pending {
+        egraph.union(x, root_eclass);
     }
     egraph.rebuild();
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
