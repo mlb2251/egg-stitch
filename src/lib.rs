@@ -14,7 +14,10 @@ pub mod search;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
+use colored::Colorize;
 use egg::{Id, Language};
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 
 pub use best_first::SearchPriority;
 
@@ -52,6 +55,11 @@ pub struct Args {
     /// Number of particles.
     #[arg(long, default_value_t = 10_000)]
     pub num_particles: usize,
+
+    /// Seed for the search RNG. When omitted, a fresh u64 is generated and
+    /// printed at startup so a crashing run can be replayed exactly.
+    #[arg(long)]
+    pub seed: Option<u64>,
 
     /// Number of search steps (SMC steps, or best-first heap pops).
     /// Required for SMC. For best-first, at least one of --num-steps or
@@ -174,10 +182,14 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     let mut final_cost = None;
     let mut final_rewritten: Option<Vec<String>> = None;
 
+    let seed = args.seed.unwrap_or_else(|| rand::rng().random());
+    println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
+    let mut rng = StdRng::seed_from_u64(seed);
+
     for abstraction_idx in 0..args.num_abstractions {
         let (best, iter_original_size, best_found_at, num_steps_run, result_egraph, best_history) = match args.search {
             SearchKind::Smc => {
-                let r = smc::smc::<F, O>(egraph, root, args);
+                let r = smc::smc::<F, O>(egraph, root, args, &mut rng);
                 (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, None)
             }
             SearchKind::BestFirst => {
