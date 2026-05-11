@@ -16,8 +16,8 @@ pub mod smc;
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
 use egg::{Id, Language};
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 pub use best_first::SearchPriority;
 
