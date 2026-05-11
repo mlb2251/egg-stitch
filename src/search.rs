@@ -4,6 +4,7 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use egg::{Id, Language};
 use rand::Rng;
+use rand::rngs::StdRng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -124,13 +125,13 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Randomly selects a match and variable, then expands or reuses the variable.
-    pub fn expand_random(&mut self, shared: &SharedSearchData<F, O>, verbose: bool) {
+    pub fn expand_random(&mut self, shared: &SharedSearchData<F, O>, verbose: bool, rng: &mut StdRng) {
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
-            crate::smc::weighted_choice(&weights_acc)
+            crate::smc::weighted_choice(&weights_acc, rng)
         } else {
-            rand::rng().random_range(0..self.matches.len())
+            rng.random_range(0..self.matches.len())
         };
         let m = &self.matches[match_idx];
         let extractor = if verbose { Some(egg::Extractor::new(&shared.egraph, egg::AstSize)) } else { None };
@@ -138,10 +139,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let (_cost, minimal_term) = ext.find_best(m.root_eclass);
             println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
         }
-        let subst_idx = rand::rng().random_range(0..m.substs.len());
+        let subst_idx = rng.random_range(0..m.substs.len());
         let subst = &m.substs[subst_idx];
 
-        let var_idx = rand::rng().random_range(0..self.pattern.vars.len());
+        let var_idx = rng.random_range(0..self.pattern.vars.len());
         if verbose {
             println!("Expanding variable {:?} in pattern {}", self.pattern.vars[var_idx], self.pattern);
         }
@@ -151,7 +152,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             println!("Target eclass is represented by minimal term {}", ext.find_best(target_id).1);
         }
 
-        if rand::rng().random_bool(shared.p_reuse) {
+        if rng.random_bool(shared.p_reuse) {
             // Pre-filter reuse candidates so we only invoke `reuse` when at
             // least one subst will survive `subset_matches_reuse`; otherwise
             // we'd empty the match set and panic on the next call.
@@ -180,7 +181,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 })
                 .collect();
             if !reuse_candidates.is_empty() {
-                let candidate_var_idx = reuse_candidates[rand::rng().random_range(0..reuse_candidates.len())];
+                let candidate_var_idx = reuse_candidates[rng.random_range(0..reuse_candidates.len())];
                 self.reuse(var_idx, candidate_var_idx, shared);
                 return;
             }
@@ -192,7 +193,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         if candidates.is_empty() {
             return;
         }
-        let target_node = candidates[rand::rng().random_range(0..candidates.len())].clone();
+        let target_node = candidates[rng.random_range(0..candidates.len())].clone();
 
         self.expand(var_idx, &target_node, shared);
     }

@@ -438,12 +438,17 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
     let mut egraph = egraph.clone();
     let var_depth = &search_state.pattern.var_depth;
     let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
+    // See `apply_abstraction` for why unions are deferred.
+    let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &search_state.matches {
         for subst in &m.substs {
             let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, ho_arity, var_depth, &mut shift_memo);
             let x = F::add_stub_application::<O>("inv_0", wrapped, &mut egraph);
-            egraph.union(x, m.root_eclass);
+            pending.push((x, m.root_eclass));
         }
+    }
+    for (x, root_eclass) in pending {
+        egraph.union(x, root_eclass);
     }
     egraph.rebuild();
     egraph

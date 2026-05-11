@@ -5,6 +5,8 @@ use egg_stitch::{
     pattern::PatternRecExpr,
     smc,
 };
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 const INPUT: &str = "data/domains/cogsci/dials.json";
 const RULES: &str = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
@@ -15,7 +17,8 @@ fn fixtures_present() -> bool {
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
     let (egraph, root, _, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
-    smc::smc(egraph, root, args)
+    let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
+    smc::smc(egraph, root, args, &mut rng)
 }
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
