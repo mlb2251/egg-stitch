@@ -197,7 +197,7 @@ def run_method(
     """Run ``runner`` on every input file of ``domain`` and aggregate.
 
     The runner instance carries its own hyperparameters; pass overrides as
-    kwargs at construction (e.g. ``OursBf(rebuild_egraph=True)``).
+    kwargs at construction (e.g. ``OursBf(num_steps=5000)``).
 
     Returns ``(Result, egraph_min_term_size)``. The second element is the
     sum of ``BenchResult.cost_after_rewrites`` across per-file invocations;

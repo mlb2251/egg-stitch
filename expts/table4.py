@@ -1,14 +1,11 @@
 """Table 4 experiment: same as Table 2 but with ``num_abstractions=20``.
 
 Thin wrapper around :func:`expts.table2.table2`; switches the results folder,
-output filename, and title, forwards ``num_abstractions=20``, and constructs
-the egg-stitch runners with ``rebuild_egraph=True`` so successive
-abstractions land on a consistent e-graph.
+output filename, and title, and forwards ``num_abstractions=20``.
 """
 
 from pathlib import Path
 
-from .run_models import OursBf, OursSmc
 from .table2 import print_table2, table2
 
 NUM_ABSTRACTIONS = 20
@@ -25,8 +22,6 @@ def table4(**kwargs) -> Path:
     kwargs.setdefault("folder_prefix", "table4")
     kwargs.setdefault("output_name", "table4.json")
     kwargs.setdefault("title", TABLE4_TITLE)
-    kwargs.setdefault("enum", OursBf(rebuild_egraph=True))
-    kwargs.setdefault("smc", OursSmc(rebuild_egraph=True))
     return table2(**kwargs)
 
 

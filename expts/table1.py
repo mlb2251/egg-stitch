@@ -55,10 +55,9 @@ def table1(
     """Run Enum, SMC, and babble on the Table 1 domains with DSRs.
 
     Each runner is a dataclass instance carrying its own hyperparameters
-    (``num_steps``, ``num_particles``, ``temperature``, ``rebuild_egraph``,
-    …). Pass overrides as kwargs at construction — e.g. ``smc=OursSmc(
-    num_steps=50)`` — rather than mutating module state. Table 3 reuses
-    this runner with ``rebuild_egraph=True``.
+    (``num_steps``, ``num_particles``, ``temperature``, …). Pass overrides
+    as kwargs at construction — e.g. ``smc=OursSmc(num_steps=50)`` —
+    rather than mutating module state.
 
     ``num_abstractions`` is forwarded to every compressor so each run stacks
     that many abstractions sequentially.
