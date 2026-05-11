@@ -329,7 +329,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn new(shared: &SharedSearchData<F, O>) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
-        Self { pattern: Pattern::single_var(&shared.egraph.analysis.weights), matches, num_substs }
+        Self {
+            pattern: Pattern::single_var(&shared.egraph.analysis.weights),
+            matches,
+            num_substs,
+        }
     }
 
     /// Enumerates every successor state reachable in one `expand` or `reuse` step.
