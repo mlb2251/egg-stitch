@@ -36,25 +36,16 @@ def egg_stitch_bin() -> Path:
     return cargo_build(EGG_STITCH_DIR, "egg-stitch")
 
 
-def egg_stitch(input, output="out.json", rewrites=None, flamegraph=False, samply=False, **kwargs) -> Path:
+def egg_stitch(input, output="out.json", rewrites=None, **kwargs) -> Path:
     """Low-level escape hatch: run the egg-stitch binary with arbitrary CLI flags.
 
     Used by ``run.py`` for ad-hoc dev experiments where the table-runner API
     is too coarse. ``output`` is interpreted relative to the current results
-    folder. ``flamegraph=True`` profiles via ``cargo flamegraph`` (macOS,
-    needs sudo); ``samply=True`` profiles via ``samply record``. All other
-    kwargs are forwarded as ``--key value`` (or ``--key`` for ``True``
-    booleans).
+    folder. All other kwargs are forwarded as ``--key value`` (or ``--key``
+    for ``True`` booleans).
     """
     output_path = unique_path(current_folder_path() / output)
-    prog_args = ["-i", input, "--output", str(output_path)]
-    if flamegraph:
-        svg_path = str(output_path).replace(".json", "_flamegraph.svg")
-        cmd = ["cargo", "flamegraph", "--root", "-o", svg_path, "--", *prog_args]
-    elif samply:
-        cmd = ["samply", "record", str(egg_stitch_bin()), *prog_args]
-    else:
-        cmd = [str(egg_stitch_bin()), *prog_args]
+    cmd = [str(egg_stitch_bin()), "-i", input, "--output", str(output_path)]
     if rewrites is not None:
         cmd += ["-r", rewrites]
     for k, v in kwargs.items():
