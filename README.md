@@ -24,17 +24,18 @@ Debug the dials domain
 python3 -c 'from expts import *; run_domain("dials", num_steps=10, num_particles=1000, debug_log=True)'
 ```
 
-compress a json directly
+run a single (method, domain) cell of Table 1/2 directly
 
 ```
-python3 -c 'from expts import *; from expts.egg_stitch import *; egg_stitch("data/domains/cogsci/dials.json", rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites", num_steps=100, num_particles=1000, debug_log=False, max_arity=2, temperature=1000)'
+python3 -c 'from expts import *; print(run_method(OursSmc(), "dials", rounds=1, use_dsrs=True)[0].summary_line())'
 ```
 
-Follow:
-
-```
-python3 -c 'from expts import *; from expts.egg_stitch import *; egg_stitch("data/domains/cogsci/dials.json", rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites", num_steps=10, num_particles=100, debug_log=False, follow="(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))")'
-```
+Each runner (`OursSmc`, `OursBf`, `Babble`, `Stitch`) is a frozen
+dataclass carrying its own hyperparameters as fields — pass overrides as
+kwargs at construction (e.g. `OursSmc(num_steps=50)`) instead of mutating
+module state. To invoke the egg-stitch binary
+directly with custom flags, drive ``$(cargo build --release && ls
+target/release/egg-stitch)`` yourself.
 
 
 

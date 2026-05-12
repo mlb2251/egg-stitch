@@ -1,0 +1,769 @@
+[
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0",
+    "initial_cost": 166,
+    "final_cost": 155,
+    "compression_ratio": 1.070967741935484,
+    "elapsed_secs": 0.068253818,
+    "library": [
+      "fn_0: (lam (map (lam (index $0 (cons ?#0 (range $0)))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench001_it1",
+    "initial_cost": 216,
+    "final_cost": 213,
+    "compression_ratio": 1.0140845070422535,
+    "elapsed_secs": 0.06823905,
+    "library": [
+      "fn_0: (+ 1)"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench002_it2",
+    "initial_cost": 326,
+    "final_cost": 307,
+    "compression_ratio": 1.0618892508143323,
+    "elapsed_secs": 0.081044861,
+    "library": [
+      "fn_0: (+ 1 1)"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench003_it4",
+    "initial_cost": 429,
+    "final_cost": 420,
+    "compression_ratio": 1.0214285714285714,
+    "elapsed_secs": 0.087963668,
+    "library": [
+      "fn_0: (is-prime (- ?#0 (if (is-square ?#0) 1 ?#0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench004_it5",
+    "initial_cost": 498,
+    "final_cost": 490,
+    "compression_ratio": 1.0163265306122449,
+    "elapsed_secs": 0.094636896,
+    "library": [
+      "fn_0: (lam (fn_0 1 (fn_0 1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench005_it7",
+    "initial_cost": 770,
+    "final_cost": 754,
+    "compression_ratio": 1.0212201591511936,
+    "elapsed_secs": 0.114001089,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench006_it8",
+    "initial_cost": 896,
+    "final_cost": 880,
+    "compression_ratio": 1.018181818181818,
+    "elapsed_secs": 0.120791707,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench007_it10",
+    "initial_cost": 1101,
+    "final_cost": 1075,
+    "compression_ratio": 1.024186046511628,
+    "elapsed_secs": 0.134046029,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench008_it11",
+    "initial_cost": 1002,
+    "final_cost": 976,
+    "compression_ratio": 1.026639344262295,
+    "elapsed_secs": 0.125190057,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench009_it12",
+    "initial_cost": 1052,
+    "final_cost": 1026,
+    "compression_ratio": 1.0253411306042886,
+    "elapsed_secs": 0.134815672,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench010_it15",
+    "initial_cost": 1065,
+    "final_cost": 1041,
+    "compression_ratio": 1.0230547550432276,
+    "elapsed_secs": 0.137431629,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0",
+    "initial_cost": 171,
+    "final_cost": 148,
+    "compression_ratio": 1.1554054054054055,
+    "elapsed_secs": 0.056603043,
+    "library": [
+      "fn_0: (+ 1 1)"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench001_it1",
+    "initial_cost": 215,
+    "final_cost": 203,
+    "compression_ratio": 1.0591133004926108,
+    "elapsed_secs": 0.056258508,
+    "library": [
+      "fn_0: (lam (map ?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench002_it2",
+    "initial_cost": 286,
+    "final_cost": 262,
+    "compression_ratio": 1.0916030534351144,
+    "elapsed_secs": 0.069912049,
+    "library": [
+      "fn_0: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench003_it3",
+    "initial_cost": 322,
+    "final_cost": 316,
+    "compression_ratio": 1.018987341772152,
+    "elapsed_secs": 0.072814803,
+    "library": [
+      "fn_0: (lam (is-square (fold $0 ?#0 (lam (lam (?#1 $0 $1))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench004_it4",
+    "initial_cost": 424,
+    "final_cost": 403,
+    "compression_ratio": 1.0521091811414391,
+    "elapsed_secs": 0.097303899,
+    "library": [
+      "fn_0: (lam (fold $0 empty (lam (lam (if (?#0 $0 $1) (cons $1 $0) $0)))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench005_it5",
+    "initial_cost": 481,
+    "final_cost": 471,
+    "compression_ratio": 1.0212314225053079,
+    "elapsed_secs": 0.083849793,
+    "library": [
+      "fn_0: (fn_11 ?#0 (lam (is-prime (mod (+ $0 $0) fn_19))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench006_it6",
+    "initial_cost": 549,
+    "final_cost": 540,
+    "compression_ratio": 1.0166666666666666,
+    "elapsed_secs": 0.084570575,
+    "library": [
+      "fn_0: (lam (fn_25 $0 ?#0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench007_it7",
+    "initial_cost": 651,
+    "final_cost": 627,
+    "compression_ratio": 1.0382775119617225,
+    "elapsed_secs": 0.095220822,
+    "library": [
+      "fn_0: (lam (map (lam (?#0 $0 $0)) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench008_it8",
+    "initial_cost": 751,
+    "final_cost": 727,
+    "compression_ratio": 1.0330123796423658,
+    "elapsed_secs": 0.112123427,
+    "library": [
+      "fn_0: (lam (map (lam (?#0 $0 $0)) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench009_it11",
+    "initial_cost": 900,
+    "final_cost": 884,
+    "compression_ratio": 1.0180995475113122,
+    "elapsed_secs": 0.121669173,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench010_it16",
+    "initial_cost": 837,
+    "final_cost": 813,
+    "compression_ratio": 1.029520295202952,
+    "elapsed_secs": 0.112400366,
+    "library": [
+      "fn_0: (lam (map (lam (?#0 $0 $0)) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench011_it18",
+    "initial_cost": 903,
+    "final_cost": 876,
+    "compression_ratio": 1.0308219178082192,
+    "elapsed_secs": 0.125020869,
+    "library": [
+      "fn_0: (lam (fn_11 $0 (lam (?#0 $0))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench000_it0",
+    "initial_cost": 146,
+    "final_cost": 137,
+    "compression_ratio": 1.0656934306569343,
+    "elapsed_secs": 0.0763743,
+    "library": [
+      "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench001_it1",
+    "initial_cost": 212,
+    "final_cost": 205,
+    "compression_ratio": 1.0341463414634147,
+    "elapsed_secs": 0.065306469,
+    "library": [
+      "fn_0: (fold ?#0 1 (lam (lam (* $0 $1))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench002_it2",
+    "initial_cost": 288,
+    "final_cost": 266,
+    "compression_ratio": 1.0827067669172932,
+    "elapsed_secs": 0.083112649,
+    "library": [
+      "fn_0: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench003_it3",
+    "initial_cost": 400,
+    "final_cost": 368,
+    "compression_ratio": 1.0869565217391304,
+    "elapsed_secs": 0.075155163,
+    "library": [
+      "fn_0: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench004_it4",
+    "initial_cost": 490,
+    "final_cost": 451,
+    "compression_ratio": 1.0864745011086474,
+    "elapsed_secs": 0.077580712,
+    "library": [
+      "fn_0: (lam (map ?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench005_it5",
+    "initial_cost": 632,
+    "final_cost": 596,
+    "compression_ratio": 1.0604026845637584,
+    "elapsed_secs": 0.100435493,
+    "library": [
+      "fn_0: (lam (map ?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench006_it6",
+    "initial_cost": 679,
+    "final_cost": 634,
+    "compression_ratio": 1.0709779179810726,
+    "elapsed_secs": 0.096963871,
+    "library": [
+      "fn_0: (lam (map ?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench007_it7",
+    "initial_cost": 739,
+    "final_cost": 712,
+    "compression_ratio": 1.0379213483146068,
+    "elapsed_secs": 0.106086133,
+    "library": [
+      "fn_0: (lam (map ?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench008_it8",
+    "initial_cost": 744,
+    "final_cost": 720,
+    "compression_ratio": 1.0333333333333334,
+    "elapsed_secs": 0.10646367,
+    "library": [
+      "fn_0: (lam (map ?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench009_it10",
+    "initial_cost": 883,
+    "final_cost": 864,
+    "compression_ratio": 1.0219907407407407,
+    "elapsed_secs": 0.115906884,
+    "library": [
+      "fn_0: (lam (map (lam (?#0 $0 $0)) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench010_it12",
+    "initial_cost": 917,
+    "final_cost": 898,
+    "compression_ratio": 1.0211581291759466,
+    "elapsed_secs": 0.128586116,
+    "library": [
+      "fn_0: (lam (map (lam (?#0 $0 $0)) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench011_it17",
+    "initial_cost": 919,
+    "final_cost": 895,
+    "compression_ratio": 1.0268156424581005,
+    "elapsed_secs": 0.127720764,
+    "library": [
+      "fn_0: (lam (map (lam (?#0 $0 $0)) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench000_it0",
+    "initial_cost": 176,
+    "final_cost": 165,
+    "compression_ratio": 1.0666666666666667,
+    "elapsed_secs": 0.061504257,
+    "library": [
+      "fn_0: (+ 1)"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench001_it1",
+    "initial_cost": 245,
+    "final_cost": 236,
+    "compression_ratio": 1.0381355932203389,
+    "elapsed_secs": 0.072707803,
+    "library": [
+      "fn_0: (map (lam (index $0 ?#0)) (range ?#1))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench002_it3",
+    "initial_cost": 473,
+    "final_cost": 456,
+    "compression_ratio": 1.037280701754386,
+    "elapsed_secs": 0.101482637,
+    "library": [
+      "fn_0: (lam (map (lam (mod $0 (fn_54 ?#0))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench003_it4",
+    "initial_cost": 480,
+    "final_cost": 466,
+    "compression_ratio": 1.0300429184549356,
+    "elapsed_secs": 0.088750205,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench004_it5",
+    "initial_cost": 559,
+    "final_cost": 537,
+    "compression_ratio": 1.0409683426443204,
+    "elapsed_secs": 0.093905074,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench005_it6",
+    "initial_cost": 570,
+    "final_cost": 548,
+    "compression_ratio": 1.0401459854014599,
+    "elapsed_secs": 0.096090823,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench006_it7",
+    "initial_cost": 614,
+    "final_cost": 592,
+    "compression_ratio": 1.037162162162162,
+    "elapsed_secs": 0.090963806,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench007_it8",
+    "initial_cost": 703,
+    "final_cost": 681,
+    "compression_ratio": 1.0323054331864905,
+    "elapsed_secs": 0.093329804,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench008_it9",
+    "initial_cost": 776,
+    "final_cost": 752,
+    "compression_ratio": 1.0319148936170213,
+    "elapsed_secs": 0.111062847,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench009_it10",
+    "initial_cost": 825,
+    "final_cost": 799,
+    "compression_ratio": 1.032540675844806,
+    "elapsed_secs": 0.099581451,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench010_it11",
+    "initial_cost": 782,
+    "final_cost": 758,
+    "compression_ratio": 1.0316622691292876,
+    "elapsed_secs": 0.097967994,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench011_it14",
+    "initial_cost": 808,
+    "final_cost": 786,
+    "compression_ratio": 1.0279898218829517,
+    "elapsed_secs": 0.100851904,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench000_it0",
+    "initial_cost": 135,
+    "final_cost": 120,
+    "compression_ratio": 1.125,
+    "elapsed_secs": 0.058462562,
+    "library": [
+      "fn_0: (+ 1 (+ 1 1))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench001_it1",
+    "initial_cost": 251,
+    "final_cost": 242,
+    "compression_ratio": 1.037190082644628,
+    "elapsed_secs": 0.066359053,
+    "library": [
+      "fn_0: (map (lam (index $0 ?#0)) (range ?#1))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench002_it2",
+    "initial_cost": 303,
+    "final_cost": 288,
+    "compression_ratio": 1.0520833333333333,
+    "elapsed_secs": 0.06709817,
+    "library": [
+      "fn_0: (lam (map ?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench003_it3",
+    "initial_cost": 427,
+    "final_cost": 416,
+    "compression_ratio": 1.0264423076923077,
+    "elapsed_secs": 0.081309257,
+    "library": [
+      "fn_0: (cdr (cdr ?#0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench004_it4",
+    "initial_cost": 478,
+    "final_cost": 469,
+    "compression_ratio": 1.019189765458422,
+    "elapsed_secs": 0.081594672,
+    "library": [
+      "fn_0: (+ 1)"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench005_it5",
+    "initial_cost": 588,
+    "final_cost": 575,
+    "compression_ratio": 1.0226086956521738,
+    "elapsed_secs": 0.089123374,
+    "library": [
+      "fn_0: (+ fn_18)"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench006_it6",
+    "initial_cost": 671,
+    "final_cost": 656,
+    "compression_ratio": 1.0228658536585367,
+    "elapsed_secs": 0.095426668,
+    "library": [
+      "fn_0: (+ ?#0 1)"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench007_it7",
+    "initial_cost": 761,
+    "final_cost": 740,
+    "compression_ratio": 1.0283783783783784,
+    "elapsed_secs": 0.101589558,
+    "library": [
+      "fn_0: (+ ?#0 1)"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench008_it8",
+    "initial_cost": 831,
+    "final_cost": 811,
+    "compression_ratio": 1.024660912453761,
+    "elapsed_secs": 0.106940665,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench009_it13",
+    "initial_cost": 1070,
+    "final_cost": 1042,
+    "compression_ratio": 1.0268714011516316,
+    "elapsed_secs": 0.122216689,
+    "library": [
+      "fn_0: (lam (map (?#0 $0) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench010_it17",
+    "initial_cost": 1027,
+    "final_cost": 1003,
+    "compression_ratio": 1.0239282153539382,
+    "elapsed_secs": 0.121282888,
+    "library": [
+      "fn_0: (lam (fn_73 $0 ?#0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "list",
+    "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench011_it19",
+    "initial_cost": 1008,
+    "final_cost": 984,
+    "compression_ratio": 1.024390243902439,
+    "elapsed_secs": 0.117173059,
+    "library": [
+      "fn_0: (lam (fn_73 $0 (lam (?#0 $0))))"
+    ],
+    "egraph_min_term_size": null
+  }
+]

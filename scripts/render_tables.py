@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Render Table 1-4 JSON result files as LaTeX tabulars and PNG plots.
 
-Picks the newest timestamped run under
-``viz/results/tableN/<timestamp>/tableN.json`` and writes
-``figures/tableN.tex`` (LaTeX tabular) plus ``figures/tableN.png`` (log-log
-scatter of compression ratio vs time; color = method, marker = domain).
-Compression ratio and time are aggregated across runs with a geometric mean,
-matching ``expts.table1.print_table1``.
+Reads ``results/tableN.json`` (per-file records, list per (method, repeat))
+and writes ``figures/tableN.tex`` (LaTeX tabular) plus ``figures/tableN.png``
+(log-log scatter of compression ratio vs time; color = method, marker =
+domain). Sizes shown for DC (dreamcoder) domains are per-file averages;
+cogsci domains have a single file per repeat and show that size directly.
 """
 
 import argparse
@@ -15,8 +14,16 @@ import math
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from expts.render_common import (  # noqa: E402
+    aggregate_methods_cr,
+    aggregate_methods_time,
+    egraph_min_for_domain,
+    initial_size_for_domain,
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = PROJECT_ROOT / "viz" / "results"
+RESULTS_DIR = PROJECT_ROOT / "results"
 FIGURES_DIR = PROJECT_ROOT / "figures"
 
 # Tables 1/3 (DSR runs) only include domains that have a babble equational
@@ -96,31 +103,19 @@ DOMAIN_PLOT_LABELS = {
 }
 
 
-def latest_json(table: int) -> Path:
-    """Return ``tableN.json`` from the newest timestamped subfolder."""
-    root = RESULTS_DIR / f"table{table}"
-    subdirs = [p for p in root.iterdir() if p.is_dir()]
-    if not subdirs:
-        sys.exit(f"no runs found under {root}")
-    newest = max(subdirs, key=lambda p: p.name)
-    path = newest / f"table{table}.json"
+def results_json(table: int) -> Path:
+    """Return the path to ``results/tableN.json`` (the canonical checked-in copy)."""
+    path = RESULTS_DIR / f"table{table}.json"
     if not path.exists():
         sys.exit(f"missing {path}")
     return path
 
 
-def geomean_of(runs: dict, method: str, key: str) -> float | None:
-    """Geometric mean of ``key`` across ``runs[method]``, or None if missing."""
-    rs = runs.get(method)
-    if not rs:
-        return None
-    xs = [r[key] for r in rs]
-    return math.exp(sum(math.log(x) for x in xs) / len(xs))
-
-
 def fmt(x: float | None, spec: str, na: str = "N/A") -> str:
-    """Format a scalar with ``spec`` or return ``na`` when ``x`` is None."""
-    return na if x is None else format(x, spec)
+    """Format a scalar with ``spec`` or return ``na`` when ``x`` is None / NaN."""
+    if x is None or (isinstance(x, float) and math.isnan(x)):
+        return na
+    return format(x, spec)
 
 
 def geomean_col(xs: list[float | None]) -> float | None:
@@ -188,19 +183,20 @@ def render(saved: dict, table: int) -> str:
     lines.append("\\midrule")
 
     # Collect per-domain aggregates so we can bold the best cell in each row
-    # and compute a geometric-mean summary row across benchmarks.
-    rows: list[tuple[str, int, int | None, list[float | None], list[float | None]]] = []
+    # and compute a geometric-mean summary row across benchmarks. Sizes are
+    # the per-file geomean within the domain (so DC domains with many files
+    # are directly comparable to single-file cogsci domains).
+    rows: list[tuple[str, float | None, float | None, list[float | None], list[float | None]]] = []
     for domain in domains_for_table(table):
         if domain not in domains:
             continue
-        d = domains[domain]
-        runs = d.get("runs", {})
-        any_run = (runs.get("enum") or next(iter(runs.values())))[0]
-        original = any_run["initial_cost"]
+        runs = domains[domain].get("runs", {})
         label = DOMAIN_LABELS.get(domain, domain)
-        crs = [geomean_of(runs, m, "compression_ratio") for m in methods]
-        ts = [geomean_of(runs, m, "elapsed_secs") for m in methods]
-        rows.append((label, original, d.get("egraph_min_term_size"), crs, ts))
+        cr_map = aggregate_methods_cr(runs)
+        t_map = aggregate_methods_time(runs)
+        crs = [cr_map.get(m) for m in methods]
+        ts = [t_map.get(m) for m in methods]
+        rows.append((label, initial_size_for_domain(runs), egraph_min_for_domain(runs), crs, ts))
 
     def emit(label: str, size_cells: list[str],
              crs: list[float | None], ts: list[float | None]) -> str:
@@ -210,9 +206,9 @@ def render(saved: dict, table: int) -> str:
         return " & ".join([label, *size_cells, *cr_strs, *t_strs]) + " \\\\"
 
     for label, original, egraph_min, crs, ts in rows:
-        size_cells = [fmt(original, "d")]
+        size_cells = [fmt(original, ".0f")]
         if has_egraph_min:
-            size_cells.append(fmt(egraph_min, "d"))
+            size_cells.append(fmt(egraph_min, ".0f"))
         lines.append(emit(label, size_cells, crs, ts))
 
     # Geometric mean across benchmarks (per method, skipping missing cells).
@@ -247,9 +243,11 @@ def plot(saved: dict, table: int, out_path: Path) -> None:
             continue
         marker = DOMAIN_MARKERS.get(domain, "x")
         runs_by_method = domains[domain].get("runs", {})
+        cr_map = aggregate_methods_cr(runs_by_method)
+        t_map = aggregate_methods_time(runs_by_method)
         for method in METHODS:
-            cr = geomean_of(runs_by_method, method, "compression_ratio")
-            t = geomean_of(runs_by_method, method, "elapsed_secs")
+            cr = cr_map.get(method)
+            t = t_map.get(method)
             if cr is None or t is None:
                 continue
             methods_seen.add(method)
@@ -326,7 +324,10 @@ def main() -> None:
 
     FIGURES_DIR.mkdir(exist_ok=True)
     for table in (1, 2, 3, 4):
-        path = latest_json(table)
+        path = RESULTS_DIR / f"table{table}.json"
+        if not path.exists():
+            print(f"skipping table{table}: {path} not present", file=sys.stderr)
+            continue
         with open(path) as f:
             saved = json.load(f)
         tex_path = FIGURES_DIR / f"table{table}.tex"

@@ -1,0 +1,15 @@
+[
+  {
+    "method": "Babble(beams=400, lps=1, max_arity=2)",
+    "domain": "nuts-bolts",
+    "file": "nuts-bolts",
+    "initial_cost": 19008,
+    "final_cost": 10861,
+    "compression_ratio": 1.7501150906914649,
+    "elapsed_secs": 19.384142637252808,
+    "library": [
+      "fn_116: (\u03bb (\u03bb (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ \u03c0 $0))))) $0 (M 1 (/ (* 2 \u03c0) $0) 0 0)) (M $1 0 0 0))))"
+    ],
+    "egraph_min_term_size": null
+  }
+]

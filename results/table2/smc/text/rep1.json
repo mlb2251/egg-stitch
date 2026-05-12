@@ -1,0 +1,860 @@
+[
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench000_it0",
+    "initial_cost": 131,
+    "final_cost": 126,
+    "compression_ratio": 1.0396825396825398,
+    "elapsed_secs": 0.055239346,
+    "library": [
+      "fn_0: (lam (lam (cons $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench001_it1",
+    "initial_cost": 194,
+    "final_cost": 173,
+    "compression_ratio": 1.1213872832369942,
+    "elapsed_secs": 0.06557337,
+    "library": [
+      "fn_0: (lam (lam (cons (car $1) (cons '.' (cons (car $0) (cons '.' empty))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench002_it2",
+    "initial_cost": 210,
+    "final_cost": 192,
+    "compression_ratio": 1.09375,
+    "elapsed_secs": 0.086366243,
+    "library": [
+      "fn_0: (lam (fold $0 $0 (lam (lam (if (char-eq? ?#0 $1) empty (cons $1 $0))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench003_it3",
+    "initial_cost": 296,
+    "final_cost": 278,
+    "compression_ratio": 1.064748201438849,
+    "elapsed_secs": 0.061095601,
+    "library": [
+      "fn_0: (lam (lam (fn_170 (?#0 $0) $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench004_it4",
+    "initial_cost": 370,
+    "final_cost": 355,
+    "compression_ratio": 1.0422535211267605,
+    "elapsed_secs": 0.066155903,
+    "library": [
+      "fn_0: (lam (fn_170 $0 ?#0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench005_it5",
+    "initial_cost": 389,
+    "final_cost": 372,
+    "compression_ratio": 1.0456989247311828,
+    "elapsed_secs": 0.060293626,
+    "library": [
+      "fn_0: (lam (lam (fn_170 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench006_it6",
+    "initial_cost": 445,
+    "final_cost": 430,
+    "compression_ratio": 1.0348837209302326,
+    "elapsed_secs": 0.063029388,
+    "library": [
+      "fn_0: (lam (lam (fn_174 $0 ?#0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench007_it7",
+    "initial_cost": 480,
+    "final_cost": 457,
+    "compression_ratio": 1.0503282275711159,
+    "elapsed_secs": 0.063442162,
+    "library": [
+      "fn_0: (lam (lam (fn_172 $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench008_it9",
+    "initial_cost": 604,
+    "final_cost": 581,
+    "compression_ratio": 1.0395869191049913,
+    "elapsed_secs": 0.065268779,
+    "library": [
+      "fn_0: (lam (lam (fn_170 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench009_it10",
+    "initial_cost": 651,
+    "final_cost": 624,
+    "compression_ratio": 1.0432692307692308,
+    "elapsed_secs": 0.067155047,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.49.39__bench010_it15",
+    "initial_cost": 742,
+    "final_cost": 709,
+    "compression_ratio": 1.0465444287729195,
+    "elapsed_secs": 0.071969107,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench000_it0",
+    "initial_cost": 94,
+    "final_cost": 89,
+    "compression_ratio": 1.0561797752808988,
+    "elapsed_secs": 0.052228869,
+    "library": [
+      "fn_0: (lam (lam (cons $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench001_it4",
+    "initial_cost": 303,
+    "final_cost": 282,
+    "compression_ratio": 1.074468085106383,
+    "elapsed_secs": 0.071055433,
+    "library": [
+      "fn_0: (lam (lam (fn_36 $1 (cons ?#0 $0))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench002_it5",
+    "initial_cost": 328,
+    "final_cost": 304,
+    "compression_ratio": 1.0789473684210527,
+    "elapsed_secs": 0.071790352,
+    "library": [
+      "fn_0: (lam (lam (fn_36 $1 (?#0 $0))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench003_it6",
+    "initial_cost": 363,
+    "final_cost": 339,
+    "compression_ratio": 1.0707964601769913,
+    "elapsed_secs": 0.071969227,
+    "library": [
+      "fn_0: (lam (lam (fn_36 $1 (?#0 $0))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench004_it7",
+    "initial_cost": 370,
+    "final_cost": 347,
+    "compression_ratio": 1.0662824207492796,
+    "elapsed_secs": 0.072479003,
+    "library": [
+      "fn_0: (lam (lam (fn_189 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench005_it8",
+    "initial_cost": 397,
+    "final_cost": 374,
+    "compression_ratio": 1.0614973262032086,
+    "elapsed_secs": 0.075539584,
+    "library": [
+      "fn_0: (lam (lam (fn_189 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench006_it10",
+    "initial_cost": 476,
+    "final_cost": 449,
+    "compression_ratio": 1.0601336302895323,
+    "elapsed_secs": 0.081745996,
+    "library": [
+      "fn_0: (lam (lam (fn_191 $0 $1 ?#0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench007_it12",
+    "initial_cost": 523,
+    "final_cost": 494,
+    "compression_ratio": 1.0587044534412955,
+    "elapsed_secs": 0.079701702,
+    "library": [
+      "fn_0: (lam (lam (fn_36 $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.53.45__bench008_it18",
+    "initial_cost": 631,
+    "final_cost": 602,
+    "compression_ratio": 1.048172757475083,
+    "elapsed_secs": 0.09943119,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench000_it0",
+    "initial_cost": 99,
+    "final_cost": 94,
+    "compression_ratio": 1.053191489361702,
+    "elapsed_secs": 0.053397731,
+    "library": [
+      "fn_0: (lam (lam (cons $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench001_it1",
+    "initial_cost": 137,
+    "final_cost": 130,
+    "compression_ratio": 1.0538461538461539,
+    "elapsed_secs": 0.057836928,
+    "library": [
+      "fn_0: (cons (car ?#0) (cons ?#1 empty))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench002_it2",
+    "initial_cost": 185,
+    "final_cost": 169,
+    "compression_ratio": 1.0946745562130178,
+    "elapsed_secs": 0.063215828,
+    "library": [
+      "fn_0: (lam (fold $0 $0 (lam (lam (cdr (if (char-eq? ?#0 $1) $2 $0))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench003_it4",
+    "initial_cost": 326,
+    "final_cost": 305,
+    "compression_ratio": 1.0688524590163935,
+    "elapsed_secs": 0.067747689,
+    "library": [
+      "fn_0: (lam (lam (fn_36 $1 (?#0 $0))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench004_it5",
+    "initial_cost": 394,
+    "final_cost": 377,
+    "compression_ratio": 1.0450928381962865,
+    "elapsed_secs": 0.078290885,
+    "library": [
+      "fn_0: (lam (lam (fn_36 $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench005_it6",
+    "initial_cost": 438,
+    "final_cost": 411,
+    "compression_ratio": 1.0656934306569343,
+    "elapsed_secs": 0.075965302,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1 ?#1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench006_it7",
+    "initial_cost": 519,
+    "final_cost": 492,
+    "compression_ratio": 1.0548780487804879,
+    "elapsed_secs": 0.082639061,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1 ?#1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench007_it8",
+    "initial_cost": 546,
+    "final_cost": 511,
+    "compression_ratio": 1.0684931506849316,
+    "elapsed_secs": 0.075175572,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1 ?#1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench008_it9",
+    "initial_cost": 587,
+    "final_cost": 558,
+    "compression_ratio": 1.0519713261648747,
+    "elapsed_secs": 0.073694513,
+    "library": [
+      "fn_0: (lam (lam (fn_36 $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench009_it10",
+    "initial_cost": 627,
+    "final_cost": 592,
+    "compression_ratio": 1.0591216216216217,
+    "elapsed_secs": 0.075732115,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1 ?#1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench010_it12",
+    "initial_cost": 754,
+    "final_cost": 725,
+    "compression_ratio": 1.04,
+    "elapsed_secs": 0.104957635,
+    "library": [
+      "fn_0: (lam (lam (fn_36 $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench011_it15",
+    "initial_cost": 808,
+    "final_cost": 769,
+    "compression_ratio": 1.0507152145643692,
+    "elapsed_secs": 0.096379175,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1 ?#1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench012_it16",
+    "initial_cost": 814,
+    "final_cost": 775,
+    "compression_ratio": 1.0503225806451613,
+    "elapsed_secs": 0.098398542,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1 ?#1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T21.58.02__bench013_it19",
+    "initial_cost": 805,
+    "final_cost": 776,
+    "compression_ratio": 1.0373711340206186,
+    "elapsed_secs": 0.085494968,
+    "library": [
+      "fn_0: (lam (lam (fn_199 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench000_it1",
+    "initial_cost": 187,
+    "final_cost": 168,
+    "compression_ratio": 1.1130952380952381,
+    "elapsed_secs": 0.06553578,
+    "library": [
+      "fn_0: (lam (fold ?#0 $0 (lam (lam (cons $1 $0)))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench001_it2",
+    "initial_cost": 260,
+    "final_cost": 237,
+    "compression_ratio": 1.0970464135021096,
+    "elapsed_secs": 0.071666118,
+    "library": [
+      "fn_0: (lam (unfold $0 ?#0 (lam (car $0)) (lam (cdr $0))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench002_it3",
+    "initial_cost": 338,
+    "final_cost": 313,
+    "compression_ratio": 1.0798722044728435,
+    "elapsed_secs": 0.113664909,
+    "library": [
+      "fn_0: (lam (fn_170 (cons RPAREN empty) (cons LPAREN $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench003_it4",
+    "initial_cost": 346,
+    "final_cost": 325,
+    "compression_ratio": 1.0646153846153845,
+    "elapsed_secs": 0.081207997,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench004_it5",
+    "initial_cost": 403,
+    "final_cost": 378,
+    "compression_ratio": 1.066137566137566,
+    "elapsed_secs": 0.089274938,
+    "library": [
+      "fn_0: (lam (lam (fn_170 (cons ?#0 (cons ?#1 $0)) $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench005_it7",
+    "initial_cost": 573,
+    "final_cost": 548,
+    "compression_ratio": 1.0456204379562044,
+    "elapsed_secs": 0.112683548,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench006_it8",
+    "initial_cost": 646,
+    "final_cost": 626,
+    "compression_ratio": 1.0319488817891374,
+    "elapsed_secs": 0.101855416,
+    "library": [
+      "fn_0: (lam (fn_177 (fn_209 $0 SPACE)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench007_it9",
+    "initial_cost": 689,
+    "final_cost": 652,
+    "compression_ratio": 1.0567484662576687,
+    "elapsed_secs": 0.108006084,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench008_it10",
+    "initial_cost": 751,
+    "final_cost": 710,
+    "compression_ratio": 1.0577464788732394,
+    "elapsed_secs": 0.108151677,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench009_it11",
+    "initial_cost": 806,
+    "final_cost": 777,
+    "compression_ratio": 1.0373230373230373,
+    "elapsed_secs": 0.116228357,
+    "library": [
+      "fn_0: (lam (lam (fn_170 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.01.57__bench010_it12",
+    "initial_cost": 863,
+    "final_cost": 824,
+    "compression_ratio": 1.0473300970873787,
+    "elapsed_secs": 0.120652806,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 ?#1 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench000_it0",
+    "initial_cost": 65,
+    "final_cost": 53,
+    "compression_ratio": 1.2264150943396226,
+    "elapsed_secs": 0.047061927,
+    "library": [
+      "fn_0: (lam (fold STRING $0 (lam (lam (cons $1 $0)))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench001_it1",
+    "initial_cost": 76,
+    "final_cost": 67,
+    "compression_ratio": 1.1343283582089552,
+    "elapsed_secs": 0.045476453,
+    "library": [
+      "fn_0: (lam (fn_170 STRING $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench002_it2",
+    "initial_cost": 178,
+    "final_cost": 172,
+    "compression_ratio": 1.0348837209302326,
+    "elapsed_secs": 0.055466221,
+    "library": [
+      "fn_0: (lam (lam (fn_170 (?#0 $0) $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench003_it3",
+    "initial_cost": 247,
+    "final_cost": 232,
+    "compression_ratio": 1.0646551724137931,
+    "elapsed_secs": 0.069476752,
+    "library": [
+      "fn_0: (unfold ?#0 ?#1 (lam (car $0)) (lam (cdr $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench004_it4",
+    "initial_cost": 226,
+    "final_cost": 207,
+    "compression_ratio": 1.0917874396135265,
+    "elapsed_secs": 0.057198982,
+    "library": [
+      "fn_0: (lam (lam (fn_221 ?#0 (cons ?#1 $0) $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench005_it6",
+    "initial_cost": 325,
+    "final_cost": 300,
+    "compression_ratio": 1.0833333333333333,
+    "elapsed_secs": 0.063386588,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench006_it9",
+    "initial_cost": 581,
+    "final_cost": 520,
+    "compression_ratio": 1.1173076923076923,
+    "elapsed_secs": 0.088378337,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench007_it10",
+    "initial_cost": 589,
+    "final_cost": 528,
+    "compression_ratio": 1.115530303030303,
+    "elapsed_secs": 0.091001688,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench008_it13",
+    "initial_cost": 699,
+    "final_cost": 634,
+    "compression_ratio": 1.1025236593059937,
+    "elapsed_secs": 0.097286947,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench009_it15",
+    "initial_cost": 711,
+    "final_cost": 646,
+    "compression_ratio": 1.1006191950464397,
+    "elapsed_secs": 0.106331984,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-24T22.05.53__bench010_it17",
+    "initial_cost": 753,
+    "final_cost": 726,
+    "compression_ratio": 1.037190082644628,
+    "elapsed_secs": 0.124133675,
+    "library": [
+      "fn_0: (lam (lam (fn_221 ?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench000_it0",
+    "initial_cost": 157,
+    "final_cost": 152,
+    "compression_ratio": 1.0328947368421053,
+    "elapsed_secs": 0.065445761,
+    "library": [
+      "fn_0: (lam (lam (cons $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench001_it1",
+    "initial_cost": 248,
+    "final_cost": 227,
+    "compression_ratio": 1.092511013215859,
+    "elapsed_secs": 0.076912239,
+    "library": [
+      "fn_0: (lam (lam (cons (car $1) (cons '.' (cons (car $0) (cons '.' empty))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench002_it2",
+    "initial_cost": 366,
+    "final_cost": 331,
+    "compression_ratio": 1.105740181268882,
+    "elapsed_secs": 0.092662352,
+    "library": [
+      "fn_0: (lam (fold $0 $0 (lam (lam (cdr (if (char-eq? $1 ?#0) $2 $0))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench003_it3",
+    "initial_cost": 340,
+    "final_cost": 328,
+    "compression_ratio": 1.0365853658536586,
+    "elapsed_secs": 0.075189077,
+    "library": [
+      "fn_0: (lam (fn_170 $0 ?#0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench004_it4",
+    "initial_cost": 407,
+    "final_cost": 392,
+    "compression_ratio": 1.038265306122449,
+    "elapsed_secs": 0.080074491,
+    "library": [
+      "fn_0: (lam (fn_170 $0 ?#0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench005_it5",
+    "initial_cost": 436,
+    "final_cost": 421,
+    "compression_ratio": 1.03562945368171,
+    "elapsed_secs": 0.086908029,
+    "library": [
+      "fn_0: (lam (lam (fn_174 $0 ?#0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench006_it6",
+    "initial_cost": 482,
+    "final_cost": 467,
+    "compression_ratio": 1.032119914346895,
+    "elapsed_secs": 0.089970113,
+    "library": [
+      "fn_0: (lam (lam (fn_174 $0 ?#0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench007_it9",
+    "initial_cost": 670,
+    "final_cost": 647,
+    "compression_ratio": 1.035548686244204,
+    "elapsed_secs": 0.099279525,
+    "library": [
+      "fn_0: (lam (lam (fn_172 $1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench008_it10",
+    "initial_cost": 720,
+    "final_cost": 699,
+    "compression_ratio": 1.0300429184549356,
+    "elapsed_secs": 0.103825422,
+    "library": [
+      "fn_0: (lam (lam (fn_174 $0 ?#0 $1)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "text",
+    "file": "text_ellisk_2019-01-25T20.19.06__bench009_it11",
+    "initial_cost": 762,
+    "final_cost": 737,
+    "compression_ratio": 1.033921302578019,
+    "elapsed_secs": 0.123787355,
+    "library": [
+      "fn_0: (lam (fn_172 $0 (fn_236 $0 ?#0)))"
+    ],
+    "egraph_min_term_size": null
+  }
+]

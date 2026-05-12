@@ -1,0 +1,15 @@
+[
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "dials",
+    "file": "dials",
+    "initial_cost": 35712,
+    "final_cost": 17218,
+    "compression_ratio": 2.0741084911139507,
+    "elapsed_secs": 0.043738463,
+    "library": [
+      "fn_0: (T (T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0)) (M 1 0 (* ?#0 (* 0.5 (cos (/ pi 4)))) (* ?#0 (* 0.5 (sin (/ pi 4))))))"
+    ],
+    "egraph_min_term_size": 20583.0
+  }
+]
