@@ -8,7 +8,6 @@ metric; at ``apps-equal`` they're all 1.
 """
 
 import json
-import subprocess
 import time
 from dataclasses import dataclass
 from functools import cache
@@ -16,6 +15,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .._build import cargo_build, check_clean_main
+from .._subproc import run as _subproc_run
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
 
@@ -65,9 +65,8 @@ class Stitch:
             "--cost-prim-default", cost,
             "--cost-lam", cost,
         ]
-        print("+", " ".join(cmd), flush=True)
         start = time.time()
-        subprocess.run(cmd, check=True)
+        _subproc_run(cmd)
         elapsed = time.time() - start
         with open(out_path) as f:
             data = json.load(f)

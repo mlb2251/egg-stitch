@@ -156,6 +156,7 @@ def run_method(
     *,
     rounds: int,
     use_dsrs: bool,
+    on_file_done=None,
 ) -> list[PerFileResult]:
     """Run ``runner`` on every input file of ``domain`` and return the per-file
     results unaggregated.
@@ -166,6 +167,10 @@ def run_method(
     Each :class:`PerFileResult` carries its own ``egraph_min_term_size``
     (None when the runner isn't ours, or DSRs weren't used). Callers that
     need a domain-level number aggregate across the list themselves.
+
+    ``on_file_done`` is an optional zero-arg callable invoked after each
+    per-file subprocess finishes (used by the table runners to advance a
+    tqdm progress bar).
     """
     weighting = weighting_for(domain)
     rew = rewrites_path(domain) if use_dsrs else None
@@ -186,4 +191,6 @@ def run_method(
             library=[f"{a.name}: {a.body}" for a in b.abstractions],
             egraph_min_term_size=egraph_min_from_bench(b.cost_after_rewrites),
         ))
+        if on_file_done is not None:
+            on_file_done()
     return out

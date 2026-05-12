@@ -11,13 +11,30 @@ from pathlib import Path
 
 
 def cargo_build(project_dir: Path, bin_name: str) -> Path:
-    """Run ``cargo build --release --bin=<bin_name>`` and return the binary path."""
-    print(f"+ cargo build --release --bin={bin_name}  (in {project_dir})", flush=True)
-    subprocess.run(
+    """Run ``cargo build --release --bin=<bin_name>`` and return the binary path.
+
+    Output is captured by default to keep table runs quiet; on build failure
+    the captured stdout/stderr is replayed before re-raising. Set
+    ``EXPTS_VERBOSE=1`` to stream output instead.
+    """
+    import os
+    import sys
+    verbose = os.environ.get("EXPTS_VERBOSE", "").lower() in ("1", "true", "yes")
+    if verbose:
+        print(f"+ cargo build --release --bin={bin_name}  (in {project_dir})", flush=True)
+        subprocess.run(
+            ["cargo", "build", "--release", "--bin", bin_name],
+            check=True, cwd=project_dir,
+        )
+        return project_dir / "target" / "release" / bin_name
+    res = subprocess.run(
         ["cargo", "build", "--release", "--bin", bin_name],
-        check=True,
-        cwd=project_dir,
+        cwd=project_dir, capture_output=True, text=True,
     )
+    if res.returncode != 0:
+        sys.stdout.write(res.stdout)
+        sys.stderr.write(res.stderr)
+        raise subprocess.CalledProcessError(res.returncode, ["cargo", "build", "--release", "--bin", bin_name])
     return project_dir / "target" / "release" / bin_name
 
 

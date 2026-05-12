@@ -8,13 +8,13 @@ hyperparameters as fields rather than mutating module-level state.
 import json
 import math
 import os
-import subprocess
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import ClassVar
 
 from .._build import cargo_build
+from .._subproc import run as _subproc_run
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
 
@@ -54,8 +54,7 @@ def egg_stitch(input, output="out.json", rewrites=None, **kwargs) -> Path:
                 cmd.append(flag)
             continue
         cmd += [flag, str(v)]
-    print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, check=True, env=dict(os.environ, RUST_BACKTRACE="1"))
+    _subproc_run(cmd, env=dict(os.environ, RUST_BACKTRACE="1"))
     return output_path
 
 
@@ -99,8 +98,7 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
                 cmd.append(flag)
         else:
             cmd += [flag, str(v)]
-    print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, check=True, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"))
+    _subproc_run(cmd, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"))
     with open(output_path) as f:
         data = json.load(f)
     # egg-stitch's RunResult serialises ``pattern`` as ``"<fn_name>: <body>"``

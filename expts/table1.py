@@ -11,6 +11,8 @@ import json
 import time
 from pathlib import Path
 
+from tqdm import tqdm
+
 from . import ALL_DOMAINS
 from .folders import set_folder, summary_results_path
 from .render_common import (
@@ -21,7 +23,7 @@ from .render_common import (
     initial_size_for_domain,
 )
 from .run_models import Babble, OursBf, OursSmc
-from .runner import run_method
+from .runner import input_files, run_method
 
 NUM_RUNS = 10
 
@@ -59,16 +61,22 @@ def table1(
         "config": {"num_abstractions": num_abstractions},
         "domains": {},
     }
+    runners = (("enum", enum), ("smc", smc), ("babble", babble))
 
-    for domain in TABLE1_DOMAINS:
-        print(f"\n=== {domain} ===", flush=True)
-        by_method: dict[str, list[list[dict]]] = {"enum": [], "smc": [], "babble": []}
-        for i in range(NUM_RUNS):
-            print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            for label, runner in (("enum", enum), ("smc", smc), ("babble", babble)):
-                per_file = run_method(runner, domain, rounds=num_abstractions, use_dsrs=True)
-                by_method[label].append([r.to_dict() for r in per_file])
-        results["domains"][domain] = {"runs": by_method}
+    # One progress bar over every per-file subprocess across the whole run.
+    total = sum(len(input_files(d)) for d in TABLE1_DOMAINS) * NUM_RUNS * len(runners)
+    with tqdm(total=total, unit="file", smoothing=0.05) as bar:
+        for domain in TABLE1_DOMAINS:
+            by_method: dict[str, list[list[dict]]] = {label: [] for label, _ in runners}
+            for i in range(NUM_RUNS):
+                for label, runner in runners:
+                    bar.set_description(f"{domain} {label} rep {i+1}/{NUM_RUNS}")
+                    per_file = run_method(
+                        runner, domain, rounds=num_abstractions, use_dsrs=True,
+                        on_file_done=bar.update,
+                    )
+                    by_method[label].append([r.to_dict() for r in per_file])
+            results["domains"][domain] = {"runs": by_method}
 
     out_path = summary_results_path(output_name)
     with open(out_path, "w") as f:

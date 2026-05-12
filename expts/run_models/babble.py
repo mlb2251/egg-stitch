@@ -12,7 +12,6 @@ recovers the domain from the input file's parent directory.
 """
 
 import json
-import subprocess
 import time
 from dataclasses import dataclass
 from functools import cache
@@ -20,6 +19,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .._build import cargo_build, check_clean_main
+from .._subproc import run as _subproc_run
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
 
@@ -116,9 +116,8 @@ class Babble:
         ]
         if rewrites_path is not None:
             cmd += [f"--dsr={rewrites_path}"]
-        print("+", " ".join(cmd), flush=True)
         start = time.time()
-        subprocess.run(cmd, check=True, cwd=BABBLE_DIR)
+        _subproc_run(cmd, cwd=BABBLE_DIR)
         elapsed = time.time() - start
         with open(json_dump) as f:
             data = json.load(f)
@@ -182,9 +181,8 @@ class Babble:
             "--use-all", "0",
             "--mode", mode,
         ]
-        print("+", " ".join(cmd), flush=True)
         start = time.time()
-        subprocess.run(cmd, check=True, cwd=BABBLE_DIR)
+        _subproc_run(cmd, cwd=BABBLE_DIR)
         elapsed = time.time() - start
         with open(json_dump) as f:
             data = json.load(f)

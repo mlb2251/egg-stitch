@@ -10,6 +10,8 @@ import json
 import time
 from pathlib import Path
 
+from tqdm import tqdm
+
 from . import ALL_DOMAINS
 from .folders import set_folder, summary_results_path
 from .render_common import (
@@ -19,7 +21,7 @@ from .render_common import (
     initial_size_for_domain,
 )
 from .run_models import Babble, OursBf, OursSmc, Stitch
-from .runner import run_method
+from .runner import input_files, run_method
 from .table1 import NUM_RUNS
 
 # Table 2 is the no-DSR comparison, so it includes the dreamcoder domains
@@ -53,15 +55,19 @@ def table2(
 
     runners = (("enum", enum), ("smc", smc), ("babble", babble), ("stitch", stitch))
 
-    for domain in TABLE2_DOMAINS:
-        print(f"\n=== {domain} ===", flush=True)
-        by_method: dict[str, list[list[dict]]] = {m: [] for m, _ in runners}
-        for i in range(NUM_RUNS):
-            print(f"  run {i+1}/{NUM_RUNS}", flush=True)
-            for label, runner in runners:
-                per_file = run_method(runner, domain, rounds=num_abstractions, use_dsrs=False)
-                by_method[label].append([r.to_dict() for r in per_file])
-        results["domains"][domain] = {"runs": by_method}
+    total = sum(len(input_files(d)) for d in TABLE2_DOMAINS) * NUM_RUNS * len(runners)
+    with tqdm(total=total, unit="file", smoothing=0.05) as bar:
+        for domain in TABLE2_DOMAINS:
+            by_method: dict[str, list[list[dict]]] = {m: [] for m, _ in runners}
+            for i in range(NUM_RUNS):
+                for label, runner in runners:
+                    bar.set_description(f"{domain} {label} rep {i+1}/{NUM_RUNS}")
+                    per_file = run_method(
+                        runner, domain, rounds=num_abstractions, use_dsrs=False,
+                        on_file_done=bar.update,
+                    )
+                    by_method[label].append([r.to_dict() for r in per_file])
+            results["domains"][domain] = {"runs": by_method}
 
     out_path = summary_results_path(output_name)
     with open(out_path, "w") as f:
