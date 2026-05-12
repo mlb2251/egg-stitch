@@ -1,0 +1,15 @@
+[
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "furniture",
+    "file": "furniture",
+    "initial_cost": 42935,
+    "final_cost": 31094,
+    "compression_ratio": 1.3808130185887952,
+    "elapsed_secs": 0.647317814,
+    "library": [
+      "fn_0: (T ?#0 (M 1 0 0 ?#1))"
+    ],
+    "egraph_min_term_size": null
+  }
+]

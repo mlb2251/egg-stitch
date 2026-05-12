@@ -1,0 +1,236 @@
+[
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench000_it0",
+    "initial_cost": 406,
+    "final_cost": 269,
+    "compression_ratio": 1.5092936802973977,
+    "elapsed_secs": 0.084769667,
+    "library": [
+      "fn_0: (lam (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0)))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench001_it1",
+    "initial_cost": 672,
+    "final_cost": 575,
+    "compression_ratio": 1.1686956521739131,
+    "elapsed_secs": 0.107805588,
+    "library": [
+      "fn_0: (fn_242 ?#0 (lam (reverseHand $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench002_it3",
+    "initial_cost": 571,
+    "final_cost": 523,
+    "compression_ratio": 1.0917782026768643,
+    "elapsed_secs": 0.086981186,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench003_it9",
+    "initial_cost": 569,
+    "final_cost": 526,
+    "compression_ratio": 1.0817490494296578,
+    "elapsed_secs": 0.105326637,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench000_it0",
+    "initial_cost": 376,
+    "final_cost": 259,
+    "compression_ratio": 1.4517374517374517,
+    "elapsed_secs": 0.080496994,
+    "library": [
+      "fn_0: (lam (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0)))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench001_it1",
+    "initial_cost": 679,
+    "final_cost": 526,
+    "compression_ratio": 1.290874524714829,
+    "elapsed_secs": 0.094123544,
+    "library": [
+      "fn_0: (lam (lam (fn_242 (moveHand 4 $0) (lam (reverseHand $0)) ?#0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench002_it2",
+    "initial_cost": 579,
+    "final_cost": 535,
+    "compression_ratio": 1.0822429906542057,
+    "elapsed_secs": 0.099602671,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench003_it13",
+    "initial_cost": 536,
+    "final_cost": 504,
+    "compression_ratio": 1.0634920634920635,
+    "elapsed_secs": 0.101081926,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench000_it0",
+    "initial_cost": 92,
+    "final_cost": 73,
+    "compression_ratio": 1.2602739726027397,
+    "elapsed_secs": 0.060553915,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (reverseHand (tower_embed (lam (moveHand 2 (1x3 $0))) $0)))) (3x1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench001_it1",
+    "initial_cost": 608,
+    "final_cost": 553,
+    "compression_ratio": 1.0994575045207957,
+    "elapsed_secs": 0.087618993,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 ?#1 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench002_it3",
+    "initial_cost": 541,
+    "final_cost": 510,
+    "compression_ratio": 1.0607843137254902,
+    "elapsed_secs": 0.082331404,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench003_it5",
+    "initial_cost": 511,
+    "final_cost": 478,
+    "compression_ratio": 1.0690376569037656,
+    "elapsed_secs": 0.089049355,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.01.50__bench000_it0",
+    "initial_cost": 376,
+    "final_cost": 265,
+    "compression_ratio": 1.4188679245283018,
+    "elapsed_secs": 0.085311674,
+    "library": [
+      "fn_0: (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.01.50__bench001_it1",
+    "initial_cost": 695,
+    "final_cost": 502,
+    "compression_ratio": 1.3844621513944224,
+    "elapsed_secs": 0.117113136,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (fn_270 (moveHand 4 $0) ?#1 (lam (reverseHand $0))))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.01.50__bench002_it3",
+    "initial_cost": 626,
+    "final_cost": 579,
+    "compression_ratio": 1.081174438687392,
+    "elapsed_secs": 0.102221223,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.05.16__bench000_it0",
+    "initial_cost": 532,
+    "final_cost": 435,
+    "compression_ratio": 1.2229885057471264,
+    "elapsed_secs": 0.104151022,
+    "library": [
+      "fn_0: (lam (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0)))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.05.16__bench001_it1",
+    "initial_cost": 641,
+    "final_cost": 592,
+    "compression_ratio": 1.0827702702702702,
+    "elapsed_secs": 0.100296402,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 ?#1 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.05.16__bench002_it2",
+    "initial_cost": 528,
+    "final_cost": 491,
+    "compression_ratio": 1.075356415478615,
+    "elapsed_secs": 0.082551477,
+    "library": [
+      "fn_0: (lam (lam (moveHand 6 (tower_embed (lam (reverseHand (fn_276 $2 1 $0))) $0))))"
+    ],
+    "egraph_min_term_size": null
+  }
+]

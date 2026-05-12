@@ -1,0 +1,236 @@
+[
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench000_it0",
+    "initial_cost": 406,
+    "final_cost": 361,
+    "compression_ratio": 1.1246537396121883,
+    "elapsed_secs": 0.006842024,
+    "library": [
+      "fn_0: (tower_loopM 6 (lam (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench001_it1",
+    "initial_cost": 672,
+    "final_cost": 497,
+    "compression_ratio": 1.352112676056338,
+    "elapsed_secs": 0.011292101,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (fn_242 (moveHand 4 $0) (lam (reverseHand $0)) ?#1))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench002_it3",
+    "initial_cost": 571,
+    "final_cost": 522,
+    "compression_ratio": 1.0938697318007662,
+    "elapsed_secs": 0.010344023,
+    "library": [
+      "fn_0: (lam (fn_246 ?#0 ?#1 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench003_it9",
+    "initial_cost": 569,
+    "final_cost": 520,
+    "compression_ratio": 1.0942307692307693,
+    "elapsed_secs": 0.009813447,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (moveHand 6 (tower_embed (lam (reverseHand (fn_249 1 2 $2 $0))) $0)))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench000_it0",
+    "initial_cost": 376,
+    "final_cost": 249,
+    "compression_ratio": 1.5100401606425702,
+    "elapsed_secs": 0.012780123,
+    "library": [
+      "fn_0: (tower_loopM ?#0 (lam (lam (moveHand 3 (reverseHand (tower_loopM ?#1 (lam (lam (moveHand 6 (3x1 $0)))) $0))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench001_it1",
+    "initial_cost": 679,
+    "final_cost": 468,
+    "compression_ratio": 1.4508547008547008,
+    "elapsed_secs": 0.010676146,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (fn_242 (moveHand 4 $0) (lam (reverseHand $0)) ?#1))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench002_it2",
+    "initial_cost": 579,
+    "final_cost": 530,
+    "compression_ratio": 1.0924528301886793,
+    "elapsed_secs": 0.010564096,
+    "library": [
+      "fn_0: (lam (fn_255 ?#0 ?#1 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench003_it13",
+    "initial_cost": 536,
+    "final_cost": 504,
+    "compression_ratio": 1.0634920634920635,
+    "elapsed_secs": 0.007690305,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench000_it0",
+    "initial_cost": 92,
+    "final_cost": 73,
+    "compression_ratio": 1.2602739726027397,
+    "elapsed_secs": 0.004620677,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (reverseHand (tower_embed (lam (moveHand 2 (1x3 $0))) $0)))) (3x1 $0)))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench001_it1",
+    "initial_cost": 608,
+    "final_cost": 496,
+    "compression_ratio": 1.2258064516129032,
+    "elapsed_secs": 0.01411669,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (fn_261 (moveHand 6 $0) ?#1))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench002_it3",
+    "initial_cost": 541,
+    "final_cost": 530,
+    "compression_ratio": 1.0207547169811322,
+    "elapsed_secs": 0.006211151,
+    "library": [
+      "fn_0: (fn_264 2 4 (moveHand 6 (reverseHand (fn_266 4 ?#0))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench003_it5",
+    "initial_cost": 511,
+    "final_cost": 478,
+    "compression_ratio": 1.0690376569037656,
+    "elapsed_secs": 0.009097154,
+    "library": [
+      "fn_0: (lam (?#0 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.01.50__bench000_it0",
+    "initial_cost": 376,
+    "final_cost": 331,
+    "compression_ratio": 1.13595166163142,
+    "elapsed_secs": 0.006934467,
+    "library": [
+      "fn_0: (tower_loopM 6 (lam (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.01.50__bench001_it1",
+    "initial_cost": 695,
+    "final_cost": 502,
+    "compression_ratio": 1.3844621513944224,
+    "elapsed_secs": 0.012376846,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (fn_270 (moveHand 4 $0) ?#1 (lam (reverseHand $0))))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.01.50__bench002_it3",
+    "initial_cost": 626,
+    "final_cost": 565,
+    "compression_ratio": 1.1079646017699114,
+    "elapsed_secs": 0.011070235,
+    "library": [
+      "fn_0: (lam (fn_272 ?#0 ?#1 $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.05.16__bench000_it0",
+    "initial_cost": 532,
+    "final_cost": 427,
+    "compression_ratio": 1.2459016393442623,
+    "elapsed_secs": 0.011372622,
+    "library": [
+      "fn_0: (tower_loopM ?#0 (lam (lam (moveHand 3 (reverseHand (tower_loopM ?#1 (lam (lam (moveHand 6 (3x1 $0)))) $0))))))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.05.16__bench001_it1",
+    "initial_cost": 641,
+    "final_cost": 581,
+    "compression_ratio": 1.1032702237521514,
+    "elapsed_secs": 0.012086832,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (fn_275 (moveHand 4 $0) ?#1))) $0))"
+    ],
+    "egraph_min_term_size": null
+  },
+  {
+    "method": "OursBf(num_steps=500, max_arity=2)",
+    "domain": "towers",
+    "file": "tower_batch_50_3600_ellisk_2019-03-26T11.05.16__bench002_it2",
+    "initial_cost": 528,
+    "final_cost": 483,
+    "compression_ratio": 1.093167701863354,
+    "elapsed_secs": 0.00941478,
+    "library": [
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (moveHand 6 (tower_embed (lam (reverseHand (fn_276 $2 1 $0))) $0)))) $0))"
+    ],
+    "egraph_min_term_size": null
+  }
+]
