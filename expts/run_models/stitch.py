@@ -12,7 +12,6 @@ import time
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import ClassVar
 
 from .._build import cargo_build, check_clean_main
 from .._subproc import run as _subproc_run
@@ -39,8 +38,6 @@ def stitch_bin() -> Path:
 @dataclass(frozen=True)
 class Stitch:
     """Run stitch on a single input file."""
-
-    method: ClassVar[str] = "stitch"
 
     max_arity: int = MAX_ARITY
 

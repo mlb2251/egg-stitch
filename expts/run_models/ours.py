@@ -11,7 +11,6 @@ import os
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import ClassVar
 
 from .._build import cargo_build
 from .._subproc import run as _subproc_run
@@ -123,8 +122,6 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
 class OursBf:
     """Egg-stitch in best-first ("enum") search mode, on a single input file."""
 
-    method: ClassVar[str] = "enum"
-
     num_steps: int = 500
     max_arity: int = MAX_ARITY
 
@@ -140,8 +137,6 @@ class OursBf:
 @dataclass(frozen=True)
 class OursSmc:
     """Egg-stitch in SMC search mode, on a single input file."""
-
-    method: ClassVar[str] = "smc"
 
     num_steps: int = 100
     num_particles: int = 1000

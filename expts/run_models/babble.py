@@ -16,7 +16,6 @@ import time
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import ClassVar
 
 from .._build import cargo_build, check_clean_main
 from .._subproc import run as _subproc_run
@@ -74,8 +73,6 @@ DREAMCODER_DOMAIN_PATHS: dict[Path, str] = {
 @dataclass(frozen=True)
 class Babble:
     """Run babble (drawings or benchmark, picked by ``weighting``) on one file."""
-
-    method: ClassVar[str] = "babble"
 
     beams: int = 400
     lps: int = 1
