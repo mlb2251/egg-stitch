@@ -51,8 +51,6 @@ class Stitch:
             f"-i{rounds}",
             f"-a{self.max_arity}",
             "--out", str(out_path),
-            "--no-curried-bodies",
-            "--no-curried-metavars",
             "--silent",
             "--allow-single-task",
             "--cost-app", "1",
@@ -61,6 +59,11 @@ class Stitch:
             "--cost-prim-default", cost,
             "--cost-lam", cost,
         ]
+        # Curried abstractions can't be expressed in op-children (no-apps),
+        # so restrict stitch to match. lambda-calc (apps-equal) represents
+        # them natively, so leave stitch unconstrained there.
+        if weighting == "no-apps":
+            cmd += ["--no-curried-bodies", "--no-curried-metavars"]
         start = time.time()
         _subproc_run(cmd)
         elapsed = time.time() - start
