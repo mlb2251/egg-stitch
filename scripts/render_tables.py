@@ -190,19 +190,27 @@ def render(saved: dict, table: int) -> str:
     lines.append("\\midrule")
 
     # Collect per-domain aggregates so we can bold the best cell in each row
-    # and compute a geometric-mean summary row across benchmarks.
-    rows: list[tuple[str, int, int | None, list[float | None], list[float | None]]] = []
+    # and compute a geometric-mean summary row across benchmarks. DC-style
+    # domains (DreamCoder: list/physics/text/logo/towers) bundle many files
+    # per run; their `initial_cost` / `egraph_min_term_size` are sums across
+    # files, so divide by `num_files` to report a per-file average.
+    rows: list[tuple[str, float, float | None, list[float | None], list[float | None]]] = []
     for domain in domains_for_table(table):
         if domain not in domains:
             continue
         d = domains[domain]
         runs = d.get("runs", {})
         any_run = (runs.get("enum") or next(iter(runs.values())))[0]
-        original = any_run["initial_cost"]
+        num_files = any_run.get("extra", {}).get("num_files")
+        divisor = num_files if num_files else 1
+        original = any_run["initial_cost"] / divisor
+        egmin = d.get("egraph_min_term_size")
+        if egmin is not None:
+            egmin = egmin / divisor
         label = DOMAIN_LABELS.get(domain, domain)
         crs = [geomean_of(runs, m, "compression_ratio") for m in methods]
         ts = [geomean_of(runs, m, "elapsed_secs") for m in methods]
-        rows.append((label, original, d.get("egraph_min_term_size"), crs, ts))
+        rows.append((label, original, egmin, crs, ts))
 
     def emit(label: str, size_cells: list[str],
              crs: list[float | None], ts: list[float | None]) -> str:
@@ -212,7 +220,7 @@ def render(saved: dict, table: int) -> str:
         return " & ".join([label, *size_cells, *cr_strs, *t_strs]) + " \\\\"
 
     for label, original, egraph_min, crs, ts in rows:
-        size_cells = [fmt(original, "d")]
+        size_cells = [fmt(original, ".0f")]
         if has_egraph_min:
             size_cells.append(fmt(egraph_min, ".0f"))
         lines.append(emit(label, size_cells, crs, ts))
