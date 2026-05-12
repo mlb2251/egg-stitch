@@ -41,7 +41,6 @@ class Stitch:
     """Run stitch on a single input file."""
 
     method: ClassVar[str] = "stitch"
-    is_ours: ClassVar[bool] = False
 
     max_arity: int = MAX_ARITY
 

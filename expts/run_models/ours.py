@@ -124,7 +124,6 @@ class OursBf:
     """Egg-stitch in best-first ("enum") search mode, on a single input file."""
 
     method: ClassVar[str] = "enum"
-    is_ours: ClassVar[bool] = True
 
     num_steps: int = 500
     max_arity: int = MAX_ARITY
@@ -143,7 +142,6 @@ class OursSmc:
     """Egg-stitch in SMC search mode, on a single input file."""
 
     method: ClassVar[str] = "smc"
-    is_ours: ClassVar[bool] = True
 
     num_steps: int = 100
     num_particles: int = 1000

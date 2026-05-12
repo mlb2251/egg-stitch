@@ -76,7 +76,6 @@ class Babble:
     """Run babble (drawings or benchmark, picked by ``weighting``) on one file."""
 
     method: ClassVar[str] = "babble"
-    is_ours: ClassVar[bool] = False
 
     beams: int = 400
     lps: int = 1

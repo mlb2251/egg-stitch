@@ -37,12 +37,11 @@ class Runner(Protocol):
     """The shape :func:`run_method` expects from any tool runner.
 
     Implemented by the dataclasses in :mod:`expts.run_models`. Concrete
-    runners carry their hyperparameters as fields and expose ``method`` /
-    ``is_ours`` class constants for downstream bookkeeping.
+    runners carry their hyperparameters as fields and expose a ``method``
+    class constant for downstream bookkeeping.
     """
 
     method: str
-    is_ours: bool
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult: ...
 
