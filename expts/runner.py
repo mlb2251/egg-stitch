@@ -1,4 +1,4 @@
-"""Domain dispatch + multi-file aggregation for the four bench wrappers.
+"""Domain dispatch for the four bench wrappers.
 
 Sits between :mod:`expts.bench` (per-file subprocess wrappers, returning
 :class:`~expts.bench.BenchResult`) and the table runners
@@ -7,14 +7,14 @@ Sits between :mod:`expts.bench` (per-file subprocess wrappers, returning
 - the domain → input files + rewrites mapping (``input_files``,
   ``rewrites_path``, ``weighting_for``);
 - the per-file loop over a single tool, with cost recomputation via a uniform
-  :func:`ast_size` so all four tools' numbers are comparable;
-- aggregation across files into a single :class:`~expts.result.Result`
-  (sums for cost/time, geomean of per-file ratios — matching the babble paper).
+  :func:`ast_size` so all four tools' numbers are comparable.
+
+Aggregation across files is *not* done here: ``run_method`` returns the raw
+``list[PerFileResult]`` and readers aggregate at display time.
 """
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -22,7 +22,7 @@ from s_expression_parser import parse, ParserConfig, Pair, nil
 
 from . import COGSCI_DOMAINS, DREAMCODER_DOMAINS
 from .bench import Abstraction, BenchResult, Weighting
-from .result import Result
+from .result import PerFileResult, egraph_min_from_bench
 from .run_models import babble as _babble
 from .run_models import ours as _ours
 
@@ -150,67 +150,40 @@ def _bench_cost(b: BenchResult, weighting: Weighting) -> tuple[int, int]:
 # ─── runner ────────────────────────────────────────────────────────────────
 
 
-def _ratio(initial: int, final: int) -> float:
-    """Compression ratio with ``inf`` for the degenerate ``final == 0`` case."""
-    return float("inf") if final == 0 else initial / final
-
-
-def _aggregate(method: str, domain: str, per_file: list[tuple[BenchResult, int, int]]) -> Result:
-    """Combine per-file results into a single :class:`Result`.
-
-    Costs and time sum across files; ``compression_ratio`` is the geometric
-    mean of the per-file ratios (Fig. 12 in the babble paper). The library is
-    the concatenation of per-file abstractions, formatted as
-    ``"<name>: <body>"`` to match the existing JSON consumers.
-    """
-    assert per_file, "need at least one per-file result"
-    initial = sum(ic for _, ic, _ in per_file)
-    final = sum(fc for _, _, fc in per_file)
-    elapsed = sum(b.elapsed_secs for b, _, _ in per_file)
-    ratios = [_ratio(ic, fc) for _, ic, fc in per_file]
-    for r in ratios:
-        assert 0 < r < math.inf, (
-            f"per-file compression_ratio={r} on {domain} would make the geomean degenerate"
-        )
-    geo_cr = math.exp(sum(math.log(r) for r in ratios) / len(ratios))
-    library: list[str] = []
-    for b, _, _ in per_file:
-        library.extend(f"{a.name}: {a.body}" for a in b.abstractions)
-    return Result(
-        method=method,
-        domain=domain,
-        initial_cost=initial,
-        final_cost=final,
-        compression_ratio=geo_cr,
-        elapsed_secs=elapsed,
-        library=library,
-    )
-
-
 def run_method(
     runner: Runner,
     domain: str,
     *,
     rounds: int,
     use_dsrs: bool,
-) -> tuple[Result, float]:
-    """Run ``runner`` on every input file of ``domain`` and aggregate.
+) -> list[PerFileResult]:
+    """Run ``runner`` on every input file of ``domain`` and return the per-file
+    results unaggregated.
 
     The runner instance carries its own hyperparameters; pass overrides as
     kwargs at construction (e.g. ``OursBf(num_steps=5000)``).
 
-    Returns ``(Result, egraph_min_term_size)``. The second element is the
-    sum of ``BenchResult.cost_after_rewrites`` across per-file invocations;
-    NaN propagates automatically when any file didn't produce one (i.e.
-    when the runner isn't ours, or DSRs weren't used).
+    Each :class:`PerFileResult` carries its own ``egraph_min_term_size``
+    (None when the runner isn't ours, or DSRs weren't used). Callers that
+    need a domain-level number aggregate across the list themselves.
     """
     weighting = weighting_for(domain)
     rew = rewrites_path(domain) if use_dsrs else None
 
-    per_file: list[tuple[BenchResult, int, int]] = []
+    out: list[PerFileResult] = []
     for f in input_files(domain):
         b = runner(rounds, f, rew, weighting)
         ic, fc = _bench_cost(b, weighting)
-        per_file.append((b, ic, fc))
-    egraph_min_total = sum(b.cost_after_rewrites for b, _, _ in per_file)
-    return _aggregate(runner.method, domain, per_file), egraph_min_total
+        assert fc > 0, f"{domain}/{f.name}: final_cost=0 would make compression_ratio undefined"
+        out.append(PerFileResult(
+            method=runner.method,
+            domain=domain,
+            file=f.stem,
+            initial_cost=ic,
+            final_cost=fc,
+            compression_ratio=ic / fc,
+            elapsed_secs=b.elapsed_secs,
+            library=[f"{a.name}: {a.body}" for a in b.abstractions],
+            egraph_min_term_size=egraph_min_from_bench(b.cost_after_rewrites),
+        ))
+    return out

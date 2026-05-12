@@ -1,16 +1,19 @@
-"""Common result format shared by all compression methods.
+"""Per-file result record shared by all compression methods.
 
-A :class:`Result` is the per-(method, domain) record consumed by the table
-renderers and the HTML viz. It's produced by :mod:`expts.runner` after
-aggregating the per-file :class:`~expts.bench.BenchResult` records.
+A :class:`PerFileResult` is the row produced for a single input file by one
+tool; the table runners save a ``list[PerFileResult]`` per (method, domain,
+repeat) and the readers (``scripts/render_tables.py``, ``print_tableN``)
+aggregate at display time. Cogsci domains have one file per domain, so their
+list is length 1; dreamcoder domains have many.
 """
 
 from dataclasses import asdict, dataclass
+from math import isnan
 
 
 @dataclass
-class Result:
-    """Uniform result record for a single (method, domain) compression run."""
+class PerFileResult:
+    """Compression result for one (method, domain, input file)."""
 
     method: str
     """One of ``"enum"``, ``"smc"``, ``"babble"``, ``"stitch"``."""
@@ -18,34 +21,35 @@ class Result:
     domain: str
     """The benchmark domain name (e.g. ``"dials"``, ``"list"``)."""
 
+    file: str
+    """Stem of the input file (e.g. ``"dials"`` for cogsci, ``"...bench003..."`` for DC)."""
+
     initial_cost: int
-    """Corpus AST size before any compression is applied."""
+    """AST size of this file before any compression is applied."""
 
     final_cost: int
-    """Corpus AST size after the learned library is applied."""
+    """AST size of this file (plus the abstractions' bodies) after rewriting."""
 
     compression_ratio: float
-    """Compression ratio. For single-file (cogsci) runs this is
-    ``initial_cost / final_cost``; for multi-file (dreamcoder) runs it is the
-    geometric mean of the per-file ratios (matching the babble paper, Fig. 12)
-    and therefore does *not* equal ``initial_cost / final_cost``."""
+    """``initial_cost / final_cost`` for this file."""
 
     elapsed_secs: float
-    """Total wall-clock time for the run (sum across files for multi-file)."""
+    """Wall-clock time the tool spent on this file."""
 
     library: list[str]
-    """Human-readable strings for each learned abstraction (``"<name>: <body>"``).
-    Empty when the underlying tool didn't learn any abstractions."""
+    """Human-readable strings for each abstraction learned from this file
+    (``"<name>: <body>"``); empty when the tool didn't learn any."""
+
+    egraph_min_term_size: float | None
+    """``cost_after_rewrites`` for this file under the DSRs, or None when the
+    runner doesn't expose one (i.e. not ours, or DSRs weren't used). Stored as
+    None rather than NaN so JSON round-trips cleanly."""
 
     def to_dict(self) -> dict:
         """Plain-dict representation for JSON serialization."""
         return asdict(self)
 
-    def summary_line(self) -> str:
-        """Single-line summary suitable for printing."""
-        return (
-            f"{self.method}/{self.domain}: "
-            f"{self.initial_cost} -> {self.final_cost} "
-            f"(ratio {self.compression_ratio:.2f}, time {self.elapsed_secs:.1f}s, "
-            f"{len(self.library)} lib)"
-        )
+
+def egraph_min_from_bench(cost_after_rewrites: float) -> float | None:
+    """Convert a runner's NaN-as-missing sentinel into None for JSON output."""
+    return None if isnan(cost_after_rewrites) else cost_after_rewrites
