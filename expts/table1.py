@@ -23,7 +23,7 @@ from .render_common import (
     initial_size_for_domain,
 )
 from .run_models import Babble, OursBf, OursSmc
-from .runner import input_files, run_method
+from .runner import run_method
 
 NUM_RUNS = 10
 
@@ -63,9 +63,9 @@ def table1(
     }
     runners = (("enum", enum), ("smc", smc), ("babble", babble))
 
-    # One progress bar over every per-file subprocess across the whole run.
-    total = sum(len(input_files(d)) for d in TABLE1_DOMAINS) * NUM_RUNS * len(runners)
-    with tqdm(total=total, unit="file", smoothing=0.05) as bar:
+    # One progress bar tick per run_method invocation (one tool × domain × rep).
+    total = len(TABLE1_DOMAINS) * NUM_RUNS * len(runners)
+    with tqdm(total=total, unit="run", smoothing=0.05) as bar:
         for domain in TABLE1_DOMAINS:
             by_method: dict[str, list[list[dict]]] = {label: [] for label, _ in runners}
             for i in range(NUM_RUNS):
@@ -73,9 +73,9 @@ def table1(
                     bar.set_description(f"{domain} {label} rep {i+1}/{NUM_RUNS}")
                     per_file = run_method(
                         runner, domain, rounds=num_abstractions, use_dsrs=True,
-                        on_file_done=bar.update,
                     )
                     by_method[label].append([r.to_dict() for r in per_file])
+                    bar.update()
             results["domains"][domain] = {"runs": by_method}
 
     out_path = summary_results_path(output_name)
