@@ -60,7 +60,7 @@ def egg_stitch(input, output="out.json", rewrites=None, **kwargs) -> Path:
 
 
 def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
-         weighting: Weighting, search: str, max_arity: int, rebuild_egraph: bool,
+         weighting: Weighting, search: str, max_arity: int,
          search_flags: dict[str, object]) -> BenchResult:
     """Shared subprocess body for the SMC/best-first runners.
 
@@ -80,14 +80,16 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         "--language", language,
         "--max-arity", str(max_arity),
         "--num-abstractions", str(rounds),
+        # Always rebuild: at rounds=1 it's a no-op output-wise (same final
+        # programs, ~same wall time); at rounds>1 it keeps successive
+        # abstractions on a consistent e-graph.
+        "--rebuild-egraph",
     ]
     # 0-arity (constant) abstractions are allowed: stitch finds them by
     # default, babble's dreamcoder ``benchmark`` binary hardcodes
     # ``learn_constants=true``, and our cogsci ``Babble`` wrapper passes
     # ``--learn-constants`` to drawings. Forbidding them only here would
     # handicap the comparison, so we don't pass ``--no-zero-arity``.
-    if rebuild_egraph:
-        cmd.append("--rebuild-egraph")
     if rewrites_path is not None:
         cmd += ["-r", rewrites_path]
     for k, v in search_flags.items():
@@ -127,14 +129,13 @@ class OursBf:
     is_ours: ClassVar[bool] = True
 
     num_steps: int = 500
-    rebuild_egraph: bool = False
     max_arity: int = MAX_ARITY
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
             rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
             weighting=weighting, search="best-first",
-            max_arity=self.max_arity, rebuild_egraph=self.rebuild_egraph,
+            max_arity=self.max_arity,
             search_flags={"num_steps": self.num_steps},
         )
 
@@ -149,14 +150,13 @@ class OursSmc:
     num_steps: int = 100
     num_particles: int = 1000
     temperature: float = 1000.0
-    rebuild_egraph: bool = False
     max_arity: int = MAX_ARITY
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
             rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
             weighting=weighting, search="smc",
-            max_arity=self.max_arity, rebuild_egraph=self.rebuild_egraph,
+            max_arity=self.max_arity,
             search_flags={
                 "num_steps": self.num_steps,
                 "num_particles": self.num_particles,
