@@ -2,8 +2,7 @@
 
 A :class:`PerFileResult` is the row produced for a single input file by one
 tool; the table runners save a ``list[PerFileResult]`` per (method, domain,
-repeat) and the readers (``scripts/render_tables.py``, ``print_tableN``)
-aggregate at display time. Cogsci domains have one file per domain, so their
+repeat); ``scripts/render_tables.py`` aggregates at display time. Cogsci domains have one file per domain, so their
 list is length 1; dreamcoder domains have many.
 """
 

@@ -2,7 +2,7 @@
 
 Sits between :mod:`expts.bench` (per-file subprocess wrappers, returning
 :class:`~expts.bench.BenchResult`) and the table runners
-(:mod:`expts.table1`/:mod:`expts.table2` etc.). Owns:
+(:mod:`expts.tables`). Owns:
 
 - the domain → input files + rewrites mapping (``input_files``,
   ``rewrites_path``, ``weighting_for``);

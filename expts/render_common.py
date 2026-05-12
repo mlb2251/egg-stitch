@@ -1,9 +1,8 @@
-"""Aggregation helpers shared by ``print_tableN`` and ``scripts/render_tables.py``.
+"""Aggregation helpers used by ``scripts/render_tables.py``.
 
 The on-disk JSON shape after the per-file refactor is::
 
     {
-      "title": ...,
       "config": {...},
       "domains": {
         "<domain>": {

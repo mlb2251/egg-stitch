@@ -2,7 +2,7 @@
 
 By default we capture stdout/stderr from each tool subprocess so a typical
 table run doesn't dump thousands of lines to the terminal — progress bars in
-:mod:`expts.table1`/:mod:`expts.table2` give the user enough feedback. Set
+:mod:`expts.tables` give the user enough feedback. Set
 ``EXPTS_VERBOSE=1`` to fall back to streaming output (and printing each
 ``+ <cmd>`` line, the way the runners used to behave).
 

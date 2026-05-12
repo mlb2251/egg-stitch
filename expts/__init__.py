@@ -27,7 +27,4 @@ ALL_DOMAINS = COGSCI_DOMAINS + DREAMCODER_DOMAINS
 from .runner import *
 from .bench import *
 from .run_models import *
-from .table1 import *
-from .table2 import *
-from .table3 import *
-from .table4 import *
+from .tables import *
