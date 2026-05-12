@@ -13,7 +13,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from . import ALL_DOMAINS
-from .folders import set_folder, summary_results_path
+from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .render_common import (
     DOMAIN_LABELS,
     aggregate_methods_cr,
@@ -54,6 +54,7 @@ def table2(
     }
 
     runners = (("enum", enum), ("smc", smc), ("babble", babble), ("stitch", stitch))
+    cache_root = SUMMARY_RESULTS_DIR / Path(output_name).stem
 
     total = len(TABLE2_DOMAINS) * NUM_RUNS * len(runners)
     with tqdm(total=total, unit="run", smoothing=0.05) as bar:
@@ -64,6 +65,7 @@ def table2(
                     bar.set_description(f"{domain} {label} rep {i+1}/{NUM_RUNS}")
                     per_file = run_method(
                         runner, domain, rounds=num_abstractions, use_dsrs=False,
+                        cache_path=cache_root / label / domain / f"rep{i}.json",
                     )
                     by_method[label].append([r.to_dict() for r in per_file])
                     bar.update()
