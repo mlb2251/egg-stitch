@@ -406,7 +406,7 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     if check_slow {
         let rewritten = build_rewritten_egraph(egraph, search_state, ho_arity);
         let slow_size = rewritten[root].data.size as i64;
-        assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
+        F::check_fast_vs_slow(final_size, slow_size);
         // Semantic guard: rewriting must preserve the free-variable set at the
         // root. A mismatch means `wrap_subst_args` is shifting captured args
         // incorrectly and the abstraction's call site no longer agrees with the

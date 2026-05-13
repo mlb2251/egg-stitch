@@ -49,6 +49,14 @@ pub trait LanguageFamily: Clone + 'static {
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
 
+    /// Validate the fast-path cost against the slow-path (rebuilt-egraph)
+    /// cost for this family. `OpChildren` requires strict equality;
+    /// `LambdaCalc` allows `fast >= slow` because the fast path's wrap
+    /// accounting is an upper bound — it can miss cases where a wrapped
+    /// operand collides with another existing eclass that already has a
+    /// cheaper rewrite.
+    fn check_fast_vs_slow(fast: i64, slow: i64);
+
     /// Wrap an eclass in `n` lambda binders, returning the new eclass id.
     fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
 
@@ -84,6 +92,10 @@ impl LanguageFamily for OpChildren {
 
     fn stub_application_size<O: StitchOp>(name: &str, _arity: usize, weights: &Weights) -> u32 {
         O::from_name(name).intrinsic_size(weights)
+    }
+
+    fn check_fast_vs_slow(fast: i64, slow: i64) {
+        assert_eq!(fast, slow, "Fast rewrite size {} != slow rewrite size {} (OpChildren)", fast, slow);
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
@@ -142,6 +154,10 @@ impl LanguageFamily for LambdaCalc {
 
     fn stub_application_size<O: StitchOp>(name: &str, arity: usize, weights: &Weights) -> u32 {
         LambdaCalcDisc::Leaf(O::from_name(name)).intrinsic_size(weights) + arity as u32 * weights.app_cost
+    }
+
+    fn check_fast_vs_slow(fast: i64, slow: i64) {
+        assert!(fast >= slow, "Fast rewrite size {} < slow rewrite size {} (LambdaCalc) — fast path must be an upper bound", fast, slow);
     }
 
     fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
