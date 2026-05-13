@@ -188,3 +188,35 @@ fn check_slow_intermediate_propagation() {
     let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "1000", "--check-slow", "--language", "lambda-calc", "--seed", "888315200261588942"]);
     let _ = run_lambda_calc(&args);
 }
+
+/// Exercises the lambda-calc fast/slow check against real physics corpora.
+/// One test per file so they parallelize and failures point at a specific input.
+fn check_slow_physics(name: &str) {
+    let input = format!("data/domains/physics/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "1000", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_physics_bench000_it0() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0.json"); }
+#[test]
+fn check_slow_physics_bench001_it1() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1.json"); }
+#[test]
+fn check_slow_physics_bench002_it2() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2.json"); }
+#[test]
+fn check_slow_physics_bench003_it3() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3.json"); }
+#[test]
+fn check_slow_physics_bench004_it4() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4.json"); }
+#[test]
+fn check_slow_physics_18_09_34_bench000() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0.json"); }
+#[test]
+fn check_slow_physics_18_09_34_bench001() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1.json"); }
+#[test]
+fn check_slow_physics_18_09_34_bench002() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2.json"); }
+#[test]
+fn check_slow_physics_18_09_34_bench003() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3.json"); }
+#[test]
+fn check_slow_physics_18_09_34_bench004() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json"); }
