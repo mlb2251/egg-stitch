@@ -201,22 +201,42 @@ fn check_slow_physics(name: &str) {
 }
 
 #[test]
-fn check_slow_physics_bench000_it0() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0.json"); }
+fn check_slow_physics_bench000_it0() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0.json");
+}
 #[test]
-fn check_slow_physics_bench001_it1() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1.json"); }
+fn check_slow_physics_bench001_it1() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1.json");
+}
 #[test]
-fn check_slow_physics_bench002_it2() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2.json"); }
+fn check_slow_physics_bench002_it2() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2.json");
+}
 #[test]
-fn check_slow_physics_bench003_it3() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3.json"); }
+fn check_slow_physics_bench003_it3() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3.json");
+}
 #[test]
-fn check_slow_physics_bench004_it4() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4.json"); }
+fn check_slow_physics_bench004_it4() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4.json");
+}
 #[test]
-fn check_slow_physics_18_09_34_bench000() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0.json"); }
+fn check_slow_physics_18_09_34_bench000() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0.json");
+}
 #[test]
-fn check_slow_physics_18_09_34_bench001() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1.json"); }
+fn check_slow_physics_18_09_34_bench001() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1.json");
+}
 #[test]
-fn check_slow_physics_18_09_34_bench002() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2.json"); }
+fn check_slow_physics_18_09_34_bench002() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2.json");
+}
 #[test]
-fn check_slow_physics_18_09_34_bench003() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3.json"); }
+fn check_slow_physics_18_09_34_bench003() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3.json");
+}
 #[test]
-fn check_slow_physics_18_09_34_bench004() { check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json"); }
+fn check_slow_physics_18_09_34_bench004() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json");
+}
