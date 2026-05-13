@@ -61,9 +61,7 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
     let out_str = out.to_str().expect("utf-8 temp path");
     let mut cmd = Command::new(BIN);
     cmd.args(["--search", search, "--input", input, "--check-slow", "--num-abstractions", "1", "--output", out_str]);
-    if search == "best-first" {
-        cmd.args(["--num-steps", "50000"]);
-    } else {
+    if search != "best-first" {
         cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
     }
     cmd.args(extra_args);
