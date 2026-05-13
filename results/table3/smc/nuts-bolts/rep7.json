@@ -1,0 +1,34 @@
+[
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "nuts-bolts",
+    "file": "nuts-bolts",
+    "initial_cost": 19008,
+    "final_cost": 1259,
+    "compression_ratio": 15.097696584590945,
+    "elapsed_secs": 9.0387818,
+    "library": [
+      "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+      "fn_1: (repeat (T (T ?#0 (M 0.5 0 0 0)) (M 1 0 (* 3 (cos (/ pi 4))) (* 3 (sin (/ pi 4))))) ?#1 (M 1 (/ (* 2 pi) ?#1) 0 0))",
+      "fn_2: (repeat (T (T ?#0 (M 0.5 0 0 0)) (M 1 0 (* 1.5 (cos (/ pi 4))) (* 1.5 (sin (/ pi 4))))) ?#1 (M 1 (/ (* 2 pi) ?#1) 0 0))",
+      "fn_3: (T (T (T (T c (M 2 0 0 0)) (M ?#0 0 0 0)) (M 1.0 0 0 0)) (M 1.0 0 0 0))",
+      "fn_4: (C (C (fn_0 6 4) ?#0) ?#1)",
+      "fn_5: (T ?#0 (M ?#1 0 0 0))",
+      "fn_6: (C (C (fn_0 8 4) ?#0) ?#1)",
+      "fn_7: (C (fn_4 (fn_0 6 4.25) ?#0) ?#1)",
+      "fn_8: (C (C (fn_3 4) ?#0) ?#1)",
+      "fn_9: (fn_0 6 ?#0)",
+      "fn_10: (fn_5 r ?#0)",
+      "fn_11: (fn_9 2)",
+      "fn_12: (fn_3 2)",
+      "fn_13: (fn_2 c ?#0)",
+      "fn_14: (fn_1 r ?#0)",
+      "fn_15: (fn_2 r ?#0)",
+      "fn_16: (fn_1 c ?#0)",
+      "fn_17: (fn_3 1)",
+      "fn_18: (fn_9 1)",
+      "fn_19: (fn_10 1)"
+    ],
+    "egraph_min_term_size": 19009.0
+  }
+]

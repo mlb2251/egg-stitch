@@ -1,0 +1,34 @@
+[
+  {
+    "method": "Stitch(max_arity=2)",
+    "domain": "nuts-bolts",
+    "file": "nuts-bolts",
+    "initial_cost": 19008,
+    "final_cost": 1279,
+    "compression_ratio": 14.861610633307272,
+    "elapsed_secs": 0.09658408164978027,
+    "library": [
+      "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi #1))))) #1 (M 1 (/ (* 2 pi) #1) 0 0)) (M #0 0 0 0))",
+      "fn_1: (T (T #1 (M 0.5 0 0 0)) (M 1 0 (* #0 (cos (/ pi 4))) (* #0 (sin (/ pi 4)))))",
+      "fn_2: (T (T c (M 2 0 0 0)) (M #0 0 0 0))",
+      "fn_3: (repeat #1 #0 (M 1 (/ (* 2 pi) #0) 0 0))",
+      "fn_4: (C #1 (T r (M #0 0 0 0)))",
+      "fn_5: (C (fn_0 4 #1) (fn_0 #0 6))",
+      "fn_6: (C #1 (fn_3 #0 (fn_1 1.5 c)))",
+      "fn_7: (C #1 (fn_3 #0 (fn_1 3 r)))",
+      "fn_8: (C #1 (fn_3 #0 (fn_1 3 c)))",
+      "fn_9: (C #1 (fn_3 #0 (fn_1 1.5 r)))",
+      "fn_10: (C #1 (fn_0 #0 6))",
+      "fn_11: (C (fn_0 4 #1) (fn_2 #0))",
+      "fn_12: (fn_5 4.25 6)",
+      "fn_13: (fn_4 #1 (fn_0 4 #0))",
+      "fn_14: (C (fn_2 4) (fn_2 #0))",
+      "fn_15: (fn_2 4)",
+      "fn_16: (C #1 (fn_2 #0))",
+      "fn_17: (fn_10 1 #0)",
+      "fn_18: (fn_0 2 6)",
+      "fn_19: (fn_4 1 #0)"
+    ],
+    "egraph_min_term_size": null
+  }
+]

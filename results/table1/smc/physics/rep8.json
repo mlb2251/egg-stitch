@@ -1,0 +1,236 @@
+[
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0",
+    "initial_cost": 567,
+    "final_cost": 540,
+    "compression_ratio": 1.05,
+    "elapsed_secs": 0.095421458,
+    "library": [
+      "fn_0: (fold ?#0 0. (lam (lam (+. $0 $1))))"
+    ],
+    "egraph_min_term_size": 568.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1",
+    "initial_cost": 474,
+    "final_cost": 455,
+    "compression_ratio": 1.0417582417582418,
+    "elapsed_secs": 0.09237851,
+    "library": [
+      "fn_0: (lam (lam (lam (lam (+. (*. (+. $2 (fn_137 $0 $1)) $0) $3)))))"
+    ],
+    "egraph_min_term_size": 475.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2",
+    "initial_cost": 438,
+    "final_cost": 417,
+    "compression_ratio": 1.0503597122302157,
+    "elapsed_secs": 0.069279462,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": 439.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3",
+    "initial_cost": 527,
+    "final_cost": 517,
+    "compression_ratio": 1.0193423597678917,
+    "elapsed_secs": 0.090100918,
+    "library": [
+      "fn_0: (lam (lam (lam (+. $2 (*. $1 $0)))))"
+    ],
+    "egraph_min_term_size": 528.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4",
+    "initial_cost": 521,
+    "final_cost": 498,
+    "compression_ratio": 1.0461847389558232,
+    "elapsed_secs": 0.082761962,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1 $1 $0)))"
+    ],
+    "egraph_min_term_size": 522.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0",
+    "initial_cost": 600,
+    "final_cost": 551,
+    "compression_ratio": 1.0889292196007259,
+    "elapsed_secs": 0.098500754,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 601.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1",
+    "initial_cost": 490,
+    "final_cost": 453,
+    "compression_ratio": 1.0816777041942605,
+    "elapsed_secs": 0.083803405,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 491.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2",
+    "initial_cost": 449,
+    "final_cost": 404,
+    "compression_ratio": 1.1113861386138615,
+    "elapsed_secs": 0.081739905,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 450.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3",
+    "initial_cost": 433,
+    "final_cost": 388,
+    "compression_ratio": 1.115979381443299,
+    "elapsed_secs": 0.070119197,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 434.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4",
+    "initial_cost": 507,
+    "final_cost": 462,
+    "compression_ratio": 1.0974025974025974,
+    "elapsed_secs": 0.07318123,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 508.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench005_it5",
+    "initial_cost": 518,
+    "final_cost": 461,
+    "compression_ratio": 1.123644251626898,
+    "elapsed_secs": 0.082594869,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 519.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench006_it7",
+    "initial_cost": 527,
+    "final_cost": 474,
+    "compression_ratio": 1.1118143459915613,
+    "elapsed_secs": 0.086225659,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 528.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench000_it0",
+    "initial_cost": 567,
+    "final_cost": 522,
+    "compression_ratio": 1.0862068965517242,
+    "elapsed_secs": 0.092902763,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 568.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench001_it1",
+    "initial_cost": 505,
+    "final_cost": 488,
+    "compression_ratio": 1.0348360655737705,
+    "elapsed_secs": 0.082880935,
+    "library": [
+      "fn_0: (lam (lam (?#0 $0 $1)))"
+    ],
+    "egraph_min_term_size": 506.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench000_it0",
+    "initial_cost": 567,
+    "final_cost": 536,
+    "compression_ratio": 1.0578358208955223,
+    "elapsed_secs": 0.101476886,
+    "library": [
+      "fn_0: (fold ?#0 0. (lam (lam (+. (?#1 $0 $1) $0))))"
+    ],
+    "egraph_min_term_size": 568.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench001_it1",
+    "initial_cost": 576,
+    "final_cost": 539,
+    "compression_ratio": 1.0686456400742115,
+    "elapsed_secs": 0.08405116,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 577.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench000_it0",
+    "initial_cost": 658,
+    "final_cost": 605,
+    "compression_ratio": 1.087603305785124,
+    "elapsed_secs": 0.098793603,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 659.0
+  },
+  {
+    "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=2)",
+    "domain": "physics",
+    "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench001_it1",
+    "initial_cost": 463,
+    "final_cost": 426,
+    "compression_ratio": 1.0868544600938967,
+    "elapsed_secs": 0.071926988,
+    "library": [
+      "fn_0: (lam (lam (?#0 $1 $0)))"
+    ],
+    "egraph_min_term_size": 464.0
+  }
+]
