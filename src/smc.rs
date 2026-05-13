@@ -11,19 +11,6 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
-/// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize>) {
-    match dedup.get(&s.pattern.pattern) {
-        Some(&idx) => mults[idx] += count,
-        None => {
-            let idx = states.len();
-            dedup.insert(s.pattern.pattern.clone(), idx);
-            states.push(s);
-            mults.push(count);
-        }
-    }
-}
 
 /// Output of a completed SMC run.
 pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
@@ -69,7 +56,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
         // patterns are then deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
-        let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             let mut action_counts: FxHashMap<Action<F::Discriminant<O>>, usize> = FxHashMap::default();
             let mut noop_count: usize = 0;
@@ -82,13 +68,14 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
             for (action, count) in action_counts {
                 let mut s = state.clone();
                 s.apply_action(&action, &shared);
-                dedup_insert(s, count, &mut expanded, &mut mults, &mut dedup);
+                expanded.push(s);
+                mults.push(count);
             }
             if noop_count > 0 {
-                dedup_insert(state, noop_count, &mut expanded, &mut mults, &mut dedup);
+                mults.push(noop_count);
+                expanded.push(state.clone());
             }
         }
-        drop(dedup);
 
         let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
 
