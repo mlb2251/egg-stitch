@@ -11,7 +11,6 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-
 /// Output of a completed SMC run.
 pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
     pub best: Option<(usize, SearchState<F, O>)>,
