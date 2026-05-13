@@ -305,12 +305,51 @@ impl RewriteScratch {
     }
 }
 
+/// Pre-resolved capture for one `?#k` slot at one subst: the eclass id to sum
+/// from the analysis plus any lambda binders that still need to be charged
+/// because no existing eclass realizes them. `extra_lams` is zero when the
+/// wrapped+shifted form was found in the egraph (and thus may share with
+/// another match-root's rewrite); otherwise it equals the unrealized wraps so
+/// the cost matches `wrap_lams_cost + size(arg)`.
+#[derive(Clone, Copy, Debug)]
+pub struct ResolvedArg {
+    pub eclass: Id,
+    pub extra_lams: u32,
+}
+
+/// Resolve one `(arg, h, d_k)` triple to a `ResolvedArg`. When the shifted
+/// arg's eclass would not change (shift is a no-op), we run a non-mutating
+/// `try_lookup_wrap_lams` to fold as many of the `h` lambda wraps as already
+/// exist in the egraph into a real eclass id. Wraps that don't already exist
+/// remain as `extra_lams` cost. Shifts with actual movement bail and behave
+/// like the pre-fix formula (eclass = arg, all `h` wraps unrealized).
+fn resolve_subst_arg<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, arg: Id, h: u32, d_k: u32) -> ResolvedArg {
+    if h == 0 {
+        return ResolvedArg { eclass: arg, extra_lams: 0 };
+    }
+    let by = h as i32 - d_k as i32;
+    let shift_is_noop = by == 0 || egraph[arg].data.fv.iter().all(|&i| i < d_k);
+    if !shift_is_noop {
+        return ResolvedArg { eclass: arg, extra_lams: h };
+    }
+    let (eclass, extra_lams) = F::try_lookup_wrap_lams::<O>(arg, h, egraph);
+    ResolvedArg { eclass, extra_lams }
+}
+
 /// Default analysis: at each match root, rewriting via `inv_0(args...)` is allowed,
 /// otherwise we fall back to the minimum enode size.
 pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub search_state: &'a SearchState<F, O>,
     pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
-    pub ho_arity: &'a [u32],
+    /// Per-match list of pre-resolved subst arg costs. `resolved_substs[i][s][k]`
+    /// is the `?#k` slot of the `s`-th subst at the `i`-th match. Built once in
+    /// `compute_size` so `best` only does arithmetic.
+    pub resolved_substs: &'a [Vec<Vec<ResolvedArg>>],
+    /// Cached stub-application size for `inv_0` at this pattern's arity.
+    pub stub_size: i64,
+    /// Cached `lam_cost`; multiplied by `ResolvedArg::extra_lams`.
+    pub lam_cost: i64,
+    _marker: std::marker::PhantomData<(F, O)>,
 }
 
 impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for RewriteAnalysis<'a, F, O> {
@@ -319,23 +358,12 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
         let mut best = sizes.min_enode_size(eclass);
         // For every way we match at this eclass (if any), try all ways of rewriting it.
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
-            let substs = &sizes.analysis.search_state.matches[i].substs;
-            let weights = sizes.weights();
-            let ho_arity = sizes.analysis.ho_arity;
-            if let Some(rewrite_size) = substs
+            let stub_size = sizes.analysis.stub_size;
+            let lam_cost = sizes.analysis.lam_cost;
+            if let Some(rewrite_size) = sizes.analysis.resolved_substs[i]
                 .iter()
-                .map(|subst| {
-                    let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
-                    let args_size: i64 = subst
-                        .vars
-                        .iter()
-                        .enumerate()
-                        .map(|(k, &v)| {
-                            let h = ho_arity[k];
-                            let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
-                            wrap + sizes.get(v)
-                        })
-                        .sum();
+                .map(|args| {
+                    let args_size: i64 = args.iter().map(|a| sizes.get(a.eclass) + a.extra_lams as i64 * lam_cost).sum();
                     stub_size + args_size
                 })
                 .min()
@@ -392,16 +420,47 @@ pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, w
 /// dirty set; as their sizes improve, parents are re-dirtied and reconsidered.
 pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, ho_arity: &[u32]) -> usize {
     scratch.rewrite.fill(search_state);
+    let weights = &egraph.analysis.weights;
+    let var_depth = &search_state.pattern.var_depth;
+    let stub_size = F::stub_application_size::<O>("inv_0", var_depth.len(), weights) as i64;
+    let lam_cost = weights.lam_cost as i64;
+    // Pre-resolve every (subst arg, ho_arity, var_depth) triple to a real
+    // eclass id where possible. Doing this once outside the solve loop lets
+    // `RewriteAnalysis::best` pick up transitive rewrites at the wrapped
+    // operand's eclass — e.g. when `Lam^h(arg)` is itself another match-root —
+    // which a plain `wrap_cost + sizes.get(arg)` would miss.
+    let resolved_substs: Vec<Vec<Vec<ResolvedArg>>> = search_state
+        .matches
+        .iter()
+        .map(|m| m.substs.iter().map(|subst| subst.vars.iter().enumerate().map(|(k, &v)| resolve_subst_arg::<F, O>(egraph, v, ho_arity[k], var_depth[k])).collect()).collect())
+        .collect();
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
-        ho_arity,
+        resolved_substs: &resolved_substs,
+        stub_size,
+        lam_cost,
+        _marker: std::marker::PhantomData,
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for m in &search_state.matches {
         sizes.mark_dirty(m.root_eclass);
     }
     sizes.solve();
+    // A rewrite at match M may reference another match-root M' via a wrapped
+    // operand eclass that isn't a structural parent of M in the original
+    // egraph. When M' improves, the cache's parent edges don't dirty M, so
+    // re-seed all match roots and re-solve until the root size stops shrinking.
+    loop {
+        let before = sizes.get(root);
+        for m in &search_state.matches {
+            sizes.mark_dirty(m.root_eclass);
+        }
+        sizes.solve();
+        if sizes.get(root) == before {
+            break;
+        }
+    }
     let final_size = sizes.get(root);
     if check_slow {
         let rewritten = build_rewritten_egraph(egraph, search_state, ho_arity);
