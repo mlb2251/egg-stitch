@@ -420,6 +420,19 @@ fn stitch_simple_hof() {
     check_fixture_bf_only("data/domains/stitch/simple_hof.json", STITCH_LAMBDA_ARGS, true);
 }
 
+/// Two programs sharing `(+ 2 3 4 (lam (+ $1 6 7)))`; the inner `$1` would
+/// escape its `lam` if extracted into an abstraction body, so the lambda-calc
+/// fv check must reject any candidate that includes the inner `lam`.
+#[test]
+fn stitch_free_no_args() {
+    check_fixture_bf_only("data/domains/stitch/free-no-args.json", STITCH_LAMBDA_ARGS, true);
+}
+
+#[test]
+fn stitch_free_no_args_huge_lam_stack() {
+    check_fixture_bf_only("data/domains/stitch/free-no-args-huge-lam-stack.json", STITCH_LAMBDA_ARGS, true);
+}
+
 // === HO capture tests (formerly tests/higher_order_test.rs) ===
 //
 // These pin best-first behavior on corpora designed to exercise HO arity > 0

@@ -1,0 +1,24 @@
+{
+  "compression_ratio": 1.2700922266139658,
+  "cost_after_rewrites": 1928,
+  "final_cost": 1518,
+  "initial_cost": 47,
+  "library": [
+    {
+      "approx_cost": 1116,
+      "arity": 1,
+      "num_matches": 1,
+      "pattern": "fn_0: (lam (lam (lam (lam (+ 2 3 4 (lam (+ ?#0 6 7)))))))",
+      "pattern_size": 812,
+      "usage_matches": 2
+    }
+  ],
+  "original_programs": [
+    "(lam (* 3 (lam (lam (lam (lam (+ 2 3 4 (lam (+ $5 6 7)))))))))",
+    "(lam (lam (lam (lam (lam (+ 2 3 4 (lam (+ $5 6 7))))))))"
+  ],
+  "rewritten_programs": [
+    "(lam (* 3 (fn_0 $0)))",
+    "(lam (fn_0 $0))"
+  ]
+}

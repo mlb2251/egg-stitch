@@ -256,7 +256,7 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     // into pattern-internal binders before passing them in.
     let var_depth = &state.pattern.var_depth;
     let ho_arity = cost::compute_ho_arity::<F, O>(&egraph, state);
-    let mut shift_memo: rustc_hash::FxHashMap<(Id, u32), Id> = rustc_hash::FxHashMap::default();
+    let mut shift_memo: rustc_hash::FxHashMap<(Id, u32, i32), Id> = rustc_hash::FxHashMap::default();
     // Defer unions until all shifts are done. A mid-loop `union` shrinks
     // `data.fv` on the unioned classes but leaves parent classes stale until
     // `rebuild`, and the next iteration's `shift_free_egraph` would then read

@@ -31,22 +31,27 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
 }
 
 /// Build a copy of `eclass` in `egraph` with every free DB index `≥ initial_depth`
-/// shifted by `+by`, so it can sit under `by` newly-introduced binders without
-/// changing meaning. Picks the size-minimal enode per visited eclass (using the
-/// analysis's `data.size`, which is the same quantity AstSize would minimize)
-/// so the shifted witness is as small as possible.
+/// shifted by `by` (positive = up, negative = down), so it can be relocated under
+/// a different number of binders without changing meaning. Picks the size-minimal
+/// enode per visited eclass (using the analysis's `data.size`, which is the same
+/// quantity AstSize would minimize) so the shifted witness is as small as possible.
 ///
-/// Memoized per `(eclass, initial_depth)` for the lifetime of `memo`. Note `by`
-/// is fixed per top-level call, so it isn't part of the key.
-pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, by: u32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32), Id>) -> Id {
+/// Memoized per `(eclass, initial_depth, by)` for the lifetime of `memo` — callers
+/// reuse one `memo` across different `(initial_depth, by)` pairs, so both must be
+/// part of the key.
+///
+/// When `by` is negative, the caller must ensure no free index lies in
+/// `[initial_depth, initial_depth + |by|)` — otherwise the shifted index would
+/// underflow into the bound-variable range.
+pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, by: i32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32, i32), Id>) -> Id {
     let canonical = egraph.find(eclass);
-    if let Some(&cached) = memo.get(&(canonical, initial_depth)) {
+    if let Some(&cached) = memo.get(&(canonical, initial_depth, by)) {
         return cached;
     }
     // If no fv `≥ initial_depth` is present in this class, the shift is a no-op
     // — return the original eclass to preserve sharing.
-    if egraph[canonical].data.fv.iter().all(|&i| i < initial_depth) {
-        memo.insert((canonical, initial_depth), canonical);
+    if by == 0 || egraph[canonical].data.fv.iter().all(|&i| i < initial_depth) {
+        memo.insert((canonical, initial_depth, by), canonical);
         return canonical;
     }
     // Pick the size-minimal enode by recomputing the analysis's `make` formula
@@ -72,9 +77,10 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     if let Some(n) = disc.de_bruijn_index() {
         // Free DB-var leaf: rebuild with shifted index. (Bound vars `< initial_depth`
         // were already short-circuited by the fv check above.)
-        let new_disc = F::map_discriminant(disc, |_| O::make_db_var(n + by).expect("higher-order capture requires a DB-var-bearing leaf op"));
+        let shifted_n = u32::try_from(n as i32 + by).expect("shifted DB index underflowed; caller violated negative-shift precondition");
+        let new_disc = F::map_discriminant(disc, |_| O::make_db_var(shifted_n).expect("higher-order capture requires a DB-var-bearing leaf op"));
         let new_id = egraph.add(F::make(new_disc, vec![]));
-        memo.insert((canonical, initial_depth), new_id);
+        memo.insert((canonical, initial_depth, by), new_id);
         return new_id;
     }
     let new_children: Vec<Id> = rep
@@ -87,7 +93,7 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
         })
         .collect();
     let new_id = egraph.add(F::make(disc, new_children));
-    memo.insert((canonical, initial_depth), new_id);
+    memo.insert((canonical, initial_depth, by), new_id);
     new_id
 }
 
@@ -431,13 +437,14 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 /// node, then rebuilds. Source of truth for the rewrite — `compute_size`'s
 /// fast path is validated against this via `check_slow`.
 ///
-/// For each k with `ho_arity[k] > 0`, the captured eclass is shifted (fv
-/// `≥ d_k` up by `ho_arity[k]`) and wrapped under `ho_arity[k]` λs before
-/// being passed in.
+/// Each captured eclass's free indices `≥ d_k` are shifted by `ho_arity[k] - d_k`
+/// (lifting them from the pattern-internal capture position out to the call
+/// site, then accounting for the `ho_arity[k]` η-binders), and the result is
+/// wrapped under `ho_arity[k]` λs before being passed in.
 pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, ho_arity: &[u32]) -> StitchEgraph<F::Apply<O>> {
     let mut egraph = egraph.clone();
     let var_depth = &search_state.pattern.var_depth;
-    let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
+    let mut shift_memo: FxHashMap<(Id, u32, i32), Id> = FxHashMap::default();
     // See `apply_abstraction` for why unions are deferred.
     let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &search_state.matches {
@@ -455,21 +462,21 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
 }
 
 /// Per-subst HO wrapping: for each captured arg `arg_id` at metavar slot `k`,
-/// returns either `arg_id` unchanged (when `ho_arity[k] == 0`) or
-/// `λ^h. shift_free(arg_id, +h, var_depth[k])` (otherwise). Used by both
-/// `build_rewritten_egraph` and `lib::apply_abstraction`; `shift_memo` is
-/// shared across calls so equivalent shifts are deduplicated.
-pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], ho_arity: &[u32], var_depth: &[u32], shift_memo: &mut FxHashMap<(Id, u32), Id>) -> Vec<Id> {
+/// returns `λ^h. shift_free(arg_id, h - d_k, d_k)`, where `h = ho_arity[k]` and
+/// `d_k = var_depth[k]`. The `-d_k` component lifts free indices out of the
+/// pattern-internal capture position to the call site; the `+h` component
+/// accounts for the η-wrapping. Used by both `build_rewritten_egraph` and
+/// `lib::apply_abstraction`; `shift_memo` is shared across calls so equivalent
+/// shifts are deduplicated.
+pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], ho_arity: &[u32], var_depth: &[u32], shift_memo: &mut FxHashMap<(Id, u32, i32), Id>) -> Vec<Id> {
     vars.iter()
         .enumerate()
         .map(|(k, &arg_id)| {
             let h = ho_arity[k];
-            if h == 0 {
-                arg_id
-            } else {
-                let shifted = shift_free_egraph::<F, O>(egraph, arg_id, h, var_depth[k], shift_memo);
-                F::wrap_lams::<O>(shifted, h, egraph)
-            }
+            let d_k = var_depth[k];
+            let by = h as i32 - d_k as i32;
+            let shifted = shift_free_egraph::<F, O>(egraph, arg_id, by, d_k, shift_memo);
+            if h == 0 { shifted } else { F::wrap_lams::<O>(shifted, h, egraph) }
         })
         .collect()
 }
