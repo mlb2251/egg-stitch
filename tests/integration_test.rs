@@ -1,7 +1,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{Op, OpChildren, Weights},
+    lang::{LambdaCalc, Op, OpChildren, OpDB, Weights},
     pattern::PatternRecExpr,
     smc,
 };
@@ -16,6 +16,12 @@ fn fixtures_present() -> bool {
 }
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
+    let (egraph, root, _, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
+    let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
+    smc::smc(egraph, root, args, &mut rng)
+}
+
+fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
     let (egraph, root, _, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
     smc::smc(egraph, root, args, &mut rng)
@@ -155,5 +161,32 @@ fn check_slow_high_arity_multi_abstr() {
     }
     let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--num-abstractions", "2"]);
     let result = run(&args);
+    assert!(result.best.is_some());
+}
+
+/// Regression: fast path under-counted when a match's wrapped operand
+/// resolved to another match-root eclass that itself had a cheaper rewrite.
+#[test]
+fn check_slow_lambda_calc_fast_slow_mismatch() {
+    let input = "data/domains/stitch/lambda-calc-fast-slow-mismatch.json";
+    if !std::path::Path::new(input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "1000", "--check-slow", "--language", "lambda-calc", "--seed", "145514431571737541"]);
+    let result = run_lambda_calc(&args);
+    assert!(result.best.is_some());
+}
+
+/// Regression: fast path needs to re-sum non-match parent eclasses (the
+/// Programs root above a match-root) after a match's rewrite shrinks the
+/// child's size.
+#[test]
+fn check_slow_intermediate_propagation() {
+    let input = "data/domains/stitch/intermediate-propagation.json";
+    if !std::path::Path::new(input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "1000", "--check-slow", "--language", "lambda-calc", "--seed", "888315200261588942"]);
+    let result = run_lambda_calc(&args);
     assert!(result.best.is_some());
 }
