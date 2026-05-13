@@ -5,7 +5,7 @@
 //! the depth of the meta-var that lands in its body; `App`/`Leaf` don't.
 
 use egg::Id;
-use egg_stitch::lang::{LambdaCalc, LambdaCalcDisc, LambdaCalcLanguage, LanguageFamily, Op, OpDB, StitchOp};
+use egg_stitch::lang::{LambdaCalc, LambdaCalcDisc, LambdaCalcLanguage, LanguageFamily, Op, OpDB, StitchOp, Weights};
 use egg_stitch::pattern::Pattern;
 
 type LamLang = LambdaCalcLanguage<OpDB<Op>>;
@@ -28,49 +28,49 @@ fn leaf(name: &str) -> LamLang {
 
 #[test]
 fn single_var_depth_is_zero() {
-    let p: Pat = Pattern::single_var();
+    let p: Pat = Pattern::single_var(&Weights::default());
     assert_eq!(p.var_depth, vec![0]);
 }
 
 #[test]
 fn lam_bumps_child_depth() {
-    let mut p: Pat = Pattern::single_var();
-    p.expand(0, &lam());
+    let mut p: Pat = Pattern::single_var(&Weights::default());
+    p.expand(0, &lam(), &Weights::default());
     assert_eq!(p.to_string(), "(lam ?#0)");
     assert_eq!(p.var_depth, vec![1]);
-    p.expand(0, &lam());
+    p.expand(0, &lam(), &Weights::default());
     assert_eq!(p.to_string(), "(lam (lam ?#0))");
     assert_eq!(p.var_depth, vec![2]);
 }
 
 #[test]
 fn app_does_not_bump_depth() {
-    let mut p: Pat = Pattern::single_var();
-    p.expand(0, &app()); // (@ ?#0 ?#1) at depths [0, 0]
+    let mut p: Pat = Pattern::single_var(&Weights::default());
+    p.expand(0, &app(), &Weights::default()); // (@ ?#0 ?#1) at depths [0, 0]
     assert_eq!(p.var_depth, vec![0, 0]);
 }
 
 #[test]
 fn lam_then_app_inherits_outer_depth() {
-    let mut p: Pat = Pattern::single_var();
-    p.expand(0, &lam()); // (lam ?#0), depths [1]
-    p.expand(0, &app()); // (lam (@ ?#0 ?#1)), both children inherit depth 1
+    let mut p: Pat = Pattern::single_var(&Weights::default());
+    p.expand(0, &lam(), &Weights::default()); // (lam ?#0), depths [1]
+    p.expand(0, &app(), &Weights::default()); // (lam (@ ?#0 ?#1)), both children inherit depth 1
     assert_eq!(p.var_depth, vec![1, 1]);
 }
 
 #[test]
 fn mixed_depths_are_independent() {
     // Build (@ (lam ?#0) ?#1): only the meta-var inside `lam` gets bumped.
-    let mut p: Pat = Pattern::single_var();
-    p.expand(0, &app()); // (@ ?#0 ?#1), depths [0, 0]
-    p.expand(0, &lam()); // (@ (lam ?#0) ?#1), depths [1, 0]
+    let mut p: Pat = Pattern::single_var(&Weights::default());
+    p.expand(0, &app(), &Weights::default()); // (@ ?#0 ?#1), depths [0, 0]
+    p.expand(0, &lam(), &Weights::default()); // (@ (lam ?#0) ?#1), depths [1, 0]
     assert_eq!(p.var_depth, vec![1, 0]);
 }
 
 #[test]
 fn reuse_at_equal_depth_ok() {
-    let mut p: Pat = Pattern::single_var();
-    p.expand(0, &app()); // depths [0, 0]
+    let mut p: Pat = Pattern::single_var(&Weights::default());
+    p.expand(0, &app(), &Weights::default()); // depths [0, 0]
     p.reuse(0, 1);
     assert_eq!(p.var_depth, vec![0]);
 }
@@ -81,9 +81,9 @@ fn reuse_at_unequal_depth_takes_max() {
     // (max) depth. The captures filter (`subset_matches_reuse`) enforces that
     // both occurrences' kept e-class fits the new max-depth invariant; this
     // structural test only checks the depth-bookkeeping side.
-    let mut p: Pat = Pattern::single_var();
-    p.expand(0, &app()); // depths [0, 0]
-    p.expand(0, &lam()); // (@ (lam ?#0) ?#1), depths [1, 0]
+    let mut p: Pat = Pattern::single_var(&Weights::default());
+    p.expand(0, &app(), &Weights::default()); // depths [0, 0]
+    p.expand(0, &lam(), &Weights::default()); // (@ (lam ?#0) ?#1), depths [1, 0]
     p.reuse(0, 1);
     assert_eq!(p.var_depth, vec![1]);
 }
@@ -92,9 +92,9 @@ fn reuse_at_unequal_depth_takes_max() {
 fn leaf_expansion_drops_var() {
     // Filling a hole with a 0-arity leaf removes that meta-var entirely; depth
     // bookkeeping shouldn't trip on the empty insert.
-    let mut p: Pat = Pattern::single_var();
-    p.expand(0, &lam()); // (lam ?#0), depths [1]
-    p.expand(0, &leaf("foo")); // (lam foo), no remaining holes
+    let mut p: Pat = Pattern::single_var(&Weights::default());
+    p.expand(0, &lam(), &Weights::default()); // (lam ?#0), depths [1]
+    p.expand(0, &leaf("foo"), &Weights::default()); // (lam foo), no remaining holes
     assert!(p.var_depth.is_empty());
     assert!(p.vars.is_empty());
 }
