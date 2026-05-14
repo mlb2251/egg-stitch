@@ -42,7 +42,7 @@ from expts.runner import run_method  # noqa: E402
 DOMAINS = ["nuts-bolts", "dials", "list", "physics"]
 # DOMAINS = ["nuts-bolts", "dials"]
 
-NUM_RUNS = 7  # plus one warmup rep that gets discarded
+NUM_RUNS = 15  # plus one warmup rep that gets discarded
 
 
 def sh(cmd, *, cwd=None, **kw):
