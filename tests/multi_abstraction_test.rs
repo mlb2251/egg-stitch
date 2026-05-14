@@ -12,7 +12,8 @@ use egg_stitch::{
     Args,
     lang::{Op, OpChildren, OpChildrenLanguage, StitchEgraph, StitchLanguage},
     multiple_step_search,
-    shifted::{SharedData, ShiftedVariants},
+    shared::SharedData,
+    shifted::ShiftedVariants,
 };
 use rustc_hash::FxHashSet;
 
