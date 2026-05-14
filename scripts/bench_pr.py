@@ -2,13 +2,14 @@
 """Benchmark a PR by running our SMC and best-first searches on two branches
 and comparing.
 
-For each (branch, rep) pair we check out, build release, and run
-``run_method`` for each (domain, method) once — once with the babble DSRs
-("with DSRs") and once without ("without DSRs"). Babble and Stitch are not
-invoked; only our two methods are timed. Reps are interleaved between
-base and PR (one warmup rep on each branch first, results discarded) so
-system-load drift doesn't bias one side. Prints a side-by-side mean
-elapsed time and mean compression ratio per (domain, method).
+Builds the egg-stitch binary in two ephemeral git worktrees (one at ``BASE``,
+one at ``PR``), then drives all measurements from a single Python process,
+swapping ``egg_stitch_bin`` between the two binaries per measurement. No
+``git checkout`` happens in the main repo. For each (rep, domain, method,
+DSR condition) we run base then PR back-to-back. The first rep is treated
+as warmup and dropped from the aggregate. Babble and Stitch are not
+invoked; only our two methods are timed. Prints a side-by-side mean elapsed
+time and mean compression ratio per (domain, method).
 
 Usage:
     python scripts/bench_pr.py [BASE=main] [PR=<current-branch>]
@@ -30,25 +31,30 @@ from pathlib import Path
 from statistics import mean
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from expts.run_models import OursBf, OursSmc  # noqa: E402
+from expts.run_models import ours as _ours_mod  # noqa: E402
+from expts.runner import run_method  # noqa: E402
 
 DOMAINS = ["nuts-bolts", "dials", "list", "physics"]
 # DOMAINS = ["nuts-bolts", "dials"]
 
-NUM_RUNS = 3
+NUM_RUNS = 3  # plus one warmup rep that gets discarded
 
 
-def sh(cmd, **kw):
-    """Run a subprocess in the repo root, echoing the command first."""
-    print("+", " ".join(cmd), flush=True)
-    return subprocess.run(cmd, check=True, cwd=ROOT, **kw)
+def sh(cmd, *, cwd=None, **kw):
+    """Run a subprocess, echoing the command first. Defaults cwd to the repo root."""
+    print("+", " ".join(str(c) for c in cmd), flush=True)
+    return subprocess.run(cmd, check=True, cwd=cwd or ROOT, **kw)
 
 
 def check_clean_worktree() -> None:
-    """Abort if the working tree has any uncommitted or untracked changes.
+    """Abort if the main worktree has any uncommitted or untracked changes.
 
-    bench_pr.py does ``git checkout`` between branches; running it with a
-    dirty tree risks an aborted checkout mid-script or, worse, silently
-    carrying staged/unstaged edits across branches and contaminating timings.
+    We don't ``git checkout`` here anymore — worktrees handle that — but a
+    dirty tree usually indicates the user is mid-edit, which is rarely what
+    they want to benchmark.
     """
     dirty = subprocess.check_output(
         ["git", "status", "--porcelain"], cwd=ROOT, text=True
@@ -60,85 +66,61 @@ def check_clean_worktree() -> None:
         )
 
 
-def run_branch_rep(branch: str, rep_tag: str, smc_steps: int, smc_parts: int, smc_temp: float, enum_steps: int, session: str) -> tuple[Path, Path]:
-    """Check out ``branch``, build, run ours-bf / ours-smc once on each DSR
-    condition, and return paths to the two per-rep JSON dumps.
+def setup_worktree(branch: str, wt_dir: Path) -> Path:
+    """Create a git worktree for ``branch`` at ``wt_dir``, build release, return binary path."""
+    sh(["git", "worktree", "add", str(wt_dir), branch])
+    sh(["cargo", "build", "--release", "--bin", "egg-stitch", "--quiet"], cwd=wt_dir)
+    return wt_dir / "target" / "release" / "egg-stitch"
 
-    ``rep_tag`` is used as the leaf directory under the per-branch output
-    root, so callers can interleave reps across branches without clobbering
-    cache files. Pass e.g. ``"warmup"`` for runs that should be discarded.
+
+def teardown_worktree(wt_dir: Path) -> None:
+    """Remove a git worktree (force-removing despite the untracked ``target/``)."""
+    subprocess.run(
+        ["git", "worktree", "remove", "--force", str(wt_dir)],
+        cwd=ROOT, check=False,
+    )
+
+
+def time_cell(binary_path: Path, runner, domain: str, use_dsrs: bool, cache_path: Path):
+    """Run one (binary, domain, method, condition) cell, going through the cache.
+
+    Monkey-patches ``expts.run_models.ours.egg_stitch_bin`` so ``run_method``
+    invokes the requested binary; the rest of the pipeline (cwd, env,
+    command-line construction) is shared between branches.
     """
-    sh(["git", "checkout", branch])
-    sh(["cargo", "build", "--release", "--quiet"])
-    safe = branch.replace("/", "_")
-    out_root = ROOT / "viz" / "results" / "bench_pr" / session / safe / rep_tag
-    with_path = out_root / "with_dsrs.json"
-    without_path = out_root / "without_dsrs.json"
-    # Hyperparameters are now fields on OursBf/OursSmc rather than module
-    # globals or run_method kwargs, so we instantiate fresh runners with
-    # the script's CLI/env settings inside the subprocess.
-    py = f"""
-import json
-import tqdm
-from pathlib import Path
-from expts.run_models import OursBf, OursSmc
-from expts.runner import run_method
-
-def go(name, use_dsrs, out_path):
-    runners = {{
-        'enum': OursBf(num_steps={enum_steps}),
-        'smc': OursSmc(num_steps={smc_steps}, num_particles={smc_parts}, temperature={smc_temp}),
-    }}
-    out = {{'branch': {branch!r}, 'rep': {rep_tag!r}, 'domains': {{}}}}
-    cache_root = Path(out_path).parent / name
-    for d in tqdm.tqdm({DOMAINS!r}, desc=f"{{name}} {rep_tag} ({branch!r})"):
-        runs = {{}}
-        for label, runner in runners.items():
-            per_file = run_method(
-                runner, d,
-                rounds=1, use_dsrs=use_dsrs,
-                cache_path=cache_root / label / d / 'res.json',
-            )
-            runs[label] = [r.to_dict() for r in per_file]
-        out['domains'][d] = runs
-    p = Path(out_path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, 'w') as f:
-        json.dump(out, f, indent=2)
-
-go('with_dsrs', use_dsrs=True, out_path={str(with_path)!r})
-go('without_dsrs', use_dsrs=False, out_path={str(without_path)!r})
-"""
-    res = subprocess.run([sys.executable, "-c", py], cwd=ROOT)
-    if res.returncode != 0:
-        raise SystemExit(f"benchmark subprocess failed for {branch} rep={rep_tag} (exit {res.returncode})")
-    return with_path, without_path
+    _ours_mod.egg_stitch_bin = lambda: binary_path
+    return run_method(runner, domain, rounds=1, use_dsrs=use_dsrs, cache_path=cache_path)
 
 
-def summarize(paths: list[Path]) -> dict:
-    """Aggregate per-rep, per-file results into ``{domain: {method: {time, compression}}}``.
+def cache_path_for(session: str, branch_label: str, dsr_label: str, method: str, domain: str, rep_idx: int) -> Path:
+    """Per-cell cache file path. Unique per (branch, condition, method, domain, rep)."""
+    return (
+        ROOT / "viz" / "results" / "bench_pr" / session
+        / branch_label / dsr_label / method / domain / f"rep{rep_idx}.json"
+    )
 
-    ``time`` sums elapsed_secs across files in a rep (total wall time for the
-    domain), then averages those totals across reps. ``compression`` averages
-    each file's ``compression_ratio`` across all reps and files.
+
+def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str]) -> dict:
+    """Aggregate cached per-cell results (dropping rep 0 as warmup) into
+    ``{domain: {method: {time, compression}}}``.
+
+    Per-rep ``time`` sums elapsed_secs across files of a domain; the cell's
+    reported ``time`` is the mean of those per-rep totals. ``compression``
+    is the mean of every file's compression_ratio across the kept reps.
     """
-    runs_by_dom: dict[str, dict[str, list[list[dict]]]] = {}
-    for path in paths:
-        with open(path) as f:
-            data = json.load(f)
-        for dom, methods in data["domains"].items():
-            runs_by_dom.setdefault(dom, {})
-            for method, files in methods.items():
-                runs_by_dom[dom].setdefault(method, []).append(files)
     out: dict = {}
-    for dom, methods in runs_by_dom.items():
-        out[dom] = {}
-        for method, rs in methods.items():
-            if not rs:
-                continue
-            per_run_time = [sum(r["elapsed_secs"] for r in run) for run in rs]
-            all_ratios = [r["compression_ratio"] for run in rs for r in run]
-            out[dom][method] = {
+    for domain in DOMAINS:
+        out[domain] = {}
+        for method in methods:
+            per_run_time = []
+            all_ratios = []
+            for rep in range(1, NUM_RUNS + 1):  # rep 0 is warmup, dropped
+                p = cache_path_for(session, branch_label, dsr_label, method, domain, rep)
+                with open(p) as f:
+                    files = json.load(f)
+                per_run_time.append(sum(r["elapsed_secs"] for r in files))
+                all_ratios.extend(r["compression_ratio"] for r in files)
+            out[domain][method] = {
                 "time": mean(per_run_time),
                 "compression": mean(all_ratios),
             }
@@ -176,28 +158,47 @@ def main() -> None:
 
     check_clean_worktree()
 
-    print(f"base={base}  pr={pr}  NUM_RUNS={NUM_RUNS}  smc=({smc_steps} steps, {smc_parts} particles, T={smc_temp})  enum_steps={enum_steps}  session={session}")
+    print(f"base={base}  pr={pr}  NUM_RUNS={NUM_RUNS}+1warmup  smc=({smc_steps} steps, {smc_parts} particles, T={smc_temp})  enum_steps={enum_steps}  session={session}")
 
-    common = (smc_steps, smc_parts, smc_temp, enum_steps, session)
+    wt_root = Path(f"/tmp/bench_pr_{session}")
+    wt_base = wt_root / "base"
+    wt_pr = wt_root / "pr"
+    try:
+        base_bin = setup_worktree(base, wt_base)
+        pr_bin = setup_worktree(pr, wt_pr)
 
-    # Warmup: one rep on each branch, results discarded. Soaks up cold-cache
-    # / first-build costs so the timed reps measure steady-state behavior.
-    print("\n=== warmup (results discarded) ===")
-    run_branch_rep(base, "warmup", *common)
-    run_branch_rep(pr, "warmup", *common)
+        runners = {
+            "enum": OursBf(num_steps=enum_steps),
+            "smc": OursSmc(num_steps=smc_steps, num_particles=smc_parts, temperature=smc_temp),
+        }
+        conditions = [("with_dsrs", True), ("without_dsrs", False)]
 
-    # Timed reps, interleaved between base and PR per rep so any drift in
-    # system load is shared across both sides rather than biasing one.
-    base_with, base_without = [], []
-    pr_with, pr_without = [], []
-    for i in range(NUM_RUNS):
-        b_w, b_wo = run_branch_rep(base, f"rep{i}", *common)
-        base_with.append(b_w); base_without.append(b_wo)
-        p_w, p_wo = run_branch_rep(pr, f"rep{i}", *common)
-        pr_with.append(p_w); pr_without.append(p_wo)
+        # rep 0 is warmup (dropped by summarize); reps 1..NUM_RUNS are timed.
+        # Within each cell we always run base then PR back-to-back so the two
+        # binaries see the most similar system state we can give them.
+        for rep_idx in range(NUM_RUNS + 1):
+            tag = "warmup" if rep_idx == 0 else f"rep{rep_idx}"
+            for dsr_label, use_dsrs in conditions:
+                for domain in DOMAINS:
+                    for method, runner in runners.items():
+                        print(f"\n--- {tag} | {dsr_label} | {domain} | {method} ---", flush=True)
+                        time_cell(base_bin, runner, domain, use_dsrs,
+                                  cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
+                        time_cell(pr_bin, runner, domain, use_dsrs,
+                                  cache_path_for(session, "pr", dsr_label, method, domain, rep_idx))
 
-    fmt_table(base, pr, summarize(base_with), summarize(pr_with), "with DSRs")
-    fmt_table(base, pr, summarize(base_without), summarize(pr_without), "without DSRs")
+        methods = list(runners.keys())
+        fmt_table(base, pr,
+                  summarize(session, "base", "with_dsrs", methods),
+                  summarize(session, "pr", "with_dsrs", methods),
+                  "with DSRs")
+        fmt_table(base, pr,
+                  summarize(session, "base", "without_dsrs", methods),
+                  summarize(session, "pr", "without_dsrs", methods),
+                  "without DSRs")
+    finally:
+        teardown_worktree(wt_base)
+        teardown_worktree(wt_pr)
 
 
 if __name__ == "__main__":
