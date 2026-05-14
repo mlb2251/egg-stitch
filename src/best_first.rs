@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use crate::cost::{CostScratch, compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
-use crate::lang::{LanguageFamily, StitchEgraph, StitchOp};
+use crate::lang::{LanguageFamily, StitchOp};
 use crate::search::{Action, SearchState, SeenTracker, setup_search};
 
 /// How to order the best-first search heap.
@@ -79,7 +79,7 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     pub best_history: Vec<BestHistoryEntry>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
-    pub egraph: StitchEgraph<F::Apply<O>>,
+    pub data: crate::shared::SharedData<F, O>,
     pub tree_log: Option<SearchTreeLog>,
 }
 
@@ -105,8 +105,8 @@ struct Node<F: LanguageFamily, O: StitchOp> {
 /// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
 /// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
 /// improvement" just means we're grinding through a less promising branch.)
-pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, args: &crate::Args) -> BestFirstResult<F, O> {
-    let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
+pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> BestFirstResult<F, O> {
+    let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let budget = args.num_steps;
@@ -121,7 +121,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
 
     let initial_state = SearchState::new(&shared);
     let mut scratch = CostScratch::new(&shared.egraph);
-    let initial_cost = compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, &initial_state, shared.check_slow);
+    let initial_cost = compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow);
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
@@ -199,7 +199,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             // when the bound already exceeds the current best.
             let child_lower_bound = if args.opt_lower_bound {
                 let t = Instant::now();
-                let lb = compute_lower_bound(&shared.egraph, root, &cost_cache, &mut scratch, &child_state) + compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights);
+                let lb = compute_lower_bound(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state) + compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights);
                 let pruned = best.as_ref().is_some_and(|(c, _)| lb >= *c);
                 lower_bound_time += t.elapsed();
                 if pruned {
@@ -212,7 +212,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
             };
 
             let cost_t = Instant::now();
-            let child_cost = compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, &child_state, shared.check_slow);
+            let child_cost = compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, shared.check_slow);
             cost_time += cost_t.elapsed();
             cost_calls += 1;
             let child_depth = parent_depth + 1;
@@ -311,7 +311,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<
         best_history,
         best_found_at,
         num_expansions,
-        egraph: shared.egraph,
+        data: shared.into_data(),
         tree_log,
     }
 }

@@ -2,7 +2,7 @@ use colored::Colorize;
 
 use crate::cost::{CostScratch, compute_cost};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::lang::{LanguageFamily, OpWithVar, StitchEgraph, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
@@ -31,7 +31,7 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
     pub original_size: usize,
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
-    pub egraph: StitchEgraph<F::Apply<O>>,
+    pub data: crate::shared::SharedData<F, O>,
     pub debug_log: Option<DebugLog>,
 }
 
@@ -41,8 +41,8 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
 /// expansion step, identical patterns are deduplicated and their counts merged,
 /// so cost computation runs once per unique pattern instead of once per particle.
 #[allow(clippy::needless_range_loop)]
-pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
-    let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
+pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
+    let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = args.num_particles;
@@ -90,7 +90,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
         }
         drop(dedup);
 
-        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
+        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
 
         for (i, cost) in costs.iter().enumerate() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
@@ -189,7 +189,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, ro
         original_size,
         best_found_at,
         num_steps_run: steps_run,
-        egraph: shared.egraph,
+        data: shared.into_data(),
         debug_log,
     }
 }

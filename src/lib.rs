@@ -11,6 +11,7 @@ pub mod pattern;
 pub mod results;
 pub mod revexpr;
 pub mod search;
+pub mod shared;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
@@ -168,9 +169,8 @@ pub enum LanguageChoice {
 /// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
 /// their match roots, then the rewritten programs are extracted as strings and used to
 /// build a fresh egraph for the next round (DSR rules are re-applied there).
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
-    let mut egraph = egraph;
-    let mut root = root;
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
+    let mut data = data;
     let mut library = Vec::new();
     let mut original_size = 0;
     let mut final_cost = None;
@@ -184,17 +184,17 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     // present in the input — otherwise rerunning the search on an already
     // abstracted corpus (or any input that happens to use `fn_N` as a symbol)
     // produces output that can't be inlined unambiguously.
-    let fn_name_base = first_free_fn_index::<F::Apply<O>>(&egraph);
+    let fn_name_base = first_free_fn_index::<F::Apply<O>>(&data.egraph);
 
     for abstraction_idx in 0..args.num_abstractions {
-        let (best, iter_original_size, best_found_at, num_steps_run, result_egraph, best_history) = match args.search {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history) = match args.search {
             SearchKind::Smc => {
-                let r = smc::smc::<F, O>(egraph, root, args, &mut rng);
-                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, None)
+                let r = smc::smc::<F, O>(data, args, &mut rng);
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None)
             }
             SearchKind::BestFirst => {
-                let r = best_first::best_first(egraph, root, args);
-                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph, Some(r.best_history))
+                let r = best_first::best_first(data, args);
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history))
             }
         };
 
@@ -205,15 +205,15 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let ho_arity = cost::compute_ho_arity::<F, O>(&result_egraph, &state);
-                let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_egraph.analysis.weights);
+                let ho_arity = cost::compute_ho_arity::<F, O>(&result_data.egraph, &state);
+                let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_data.egraph.analysis.weights);
                 let body_str = state.pattern.display_with_ho(&ho_arity);
                 let lambda = state.pattern.display_as_lambda(&ho_arity);
-                let usage_counts = search::compute_usage_counts(&result_egraph, root);
+                let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
-                let (next_egraph, next_root, rewritten_programs) = apply_abstraction::<F, O>(result_egraph, root, &state, &fn_name, args.rules.as_deref());
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, &state, &fn_name, args.rules.as_deref());
 
                 final_cost = Some(best_cost);
                 final_rewritten = Some(rewritten_programs);
@@ -232,8 +232,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 });
 
                 if abstraction_idx + 1 < args.num_abstractions {
-                    egraph = next_egraph;
-                    root = next_root;
+                    data = next_data;
                 } else {
                     break;
                 }
@@ -273,8 +272,8 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// rules re-applied).
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
-    let mut egraph = egraph;
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
+    let shared::SharedData { mut egraph, root } = data;
     // Mirrors `build_rewritten_egraph`: η-wrap captures whose fv reaches
     // into pattern-internal binders before passing them in.
     let var_depth = &state.pattern.var_depth;
@@ -301,6 +300,6 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
     let weights = egraph.analysis.weights;
-    let (fresh_egraph, fresh_root) = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
-    (fresh_egraph, fresh_root, programs)
+    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
+    (fresh, programs)
 }
