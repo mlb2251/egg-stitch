@@ -9,20 +9,42 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+          components: rustfmt
       - name: cargo fmt
         run: cargo fmt -- --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
       - name: cargo clippy
         run: cargo clippy --all-targets -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: cargo test
         run: cargo test --release
+
+  smc-fv-crash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: SMC fv-crash regression sweep
         run: ./tests/smc_fv_crash_regression.sh
 
@@ -43,11 +65,28 @@ jobs:
       - name: check every expected_outputs/*.out.json
         run: python3 scripts/check_all_outputs.py
 
-  # Run the search end-to-end (both backends) on every problem in the
-  # physics/, list/, and cogsci/ corpora, then verify each rewritten corpus
-  # is equivalent to the input under the same oracle.
-  search-and-check-domains:
+  # Enumerate data/domains/* so the matrix below stays in sync with the repo.
+  list-domains:
     runs-on: ubuntu-latest
+    outputs:
+      domains: ${{ steps.ls.outputs.domains }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ls
+        run: |
+          domains=$(ls -1 data/domains | jq -R . | jq -sc .)
+          echo "domains=$domains" >> "$GITHUB_OUTPUT"
+
+  # Run the search end-to-end (both backends) on every problem in each
+  # data/domains/* corpus, then verify each rewritten corpus is equivalent
+  # to the input under the same oracle. One job per domain, in parallel.
+  search-and-check-domains:
+    needs: list-domains
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        domain: ${{ fromJson(needs.list-domains.outputs.domains) }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -57,9 +96,5 @@ jobs:
           python-version: "3.11"
       - name: build release binary
         run: cargo build --release
-      - name: search-and-check physics
-        run: python3 scripts/search_and_check_domain.py data/domains/physics -- --language lambda-calc --num-steps 2000
-      - name: search-and-check list
-        run: python3 scripts/search_and_check_domain.py data/domains/list -- --language lambda-calc --num-steps 2000
-      - name: search-and-check cogsci
-        run: python3 scripts/search_and_check_domain.py data/domains/cogsci -- --language lambda-calc --num-steps 2000
+      - name: search-and-check ${{ matrix.domain }}
+        run: python3 scripts/search_and_check_domain.py data/domains/${{ matrix.domain }} -- --language lambda-calc --num-steps 2000
