@@ -2,7 +2,8 @@ use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp}
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
-use crate::shifted::{SharedData, ShiftedVariants};
+use crate::shared::SharedData;
+use crate::shifted::ShiftedVariants;
 
 /// Shift-aware equality of two captured e-class ids at depths `da` and `db`.
 /// Two captures represent "the same value at different depths" when either:
@@ -481,10 +482,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
-pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
+pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
     let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
-    let SharedData { egraph, root, shifted, original_eclasses } = data;
+    let crate::shared::SharedData { egraph, root, shifted, original_eclasses } = data;
     let cache = crate::cost::CostCache::new(&egraph, root, &original_eclasses);
     let shared = SharedSearchData {
         egraph,

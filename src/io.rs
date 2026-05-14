@@ -1,5 +1,6 @@
 use crate::lang::{LanguageFamily, StitchAnalysis, StitchEgraph, StitchLanguage, StitchOp, Weights};
-use crate::shifted::{SharedData, build_shifted_variants};
+use crate::shared::SharedData;
+use crate::shifted::build_shifted_variants;
 use anyhow::anyhow;
 use egg::{Analysis, Pattern, Rewrite};
 use std::{fs, path::Path};

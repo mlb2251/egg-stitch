@@ -11,6 +11,7 @@ pub mod pattern;
 pub mod results;
 pub mod revexpr;
 pub mod search;
+pub mod shared;
 pub mod shifted;
 pub mod smc;
 
@@ -170,7 +171,7 @@ pub enum LanguageChoice {
 /// their match roots, then the rewritten programs are extracted as strings and used to
 /// build a fresh egraph for the next round (DSR rules are re-applied there). The shifted
 /// variants are rebuilt against the fresh egraph as part of that step.
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shifted::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
     let mut data = data;
     let mut library = Vec::new();
     let mut original_size = 0;
@@ -274,8 +275,8 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 ///
 /// Returns the fresh egraph, its root id, the shifted-variant table built against
 /// that fresh egraph, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shifted::SharedData<F, O>, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (shifted::SharedData<F, O>, Vec<String>) {
-    let shifted::SharedData { mut egraph, root, .. } = data;
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
+    let shared::SharedData { mut egraph, root, .. } = data;
     // Mirrors `build_rewritten_egraph`: η-wrap captures whose fv reaches
     // into pattern-internal binders before passing them in.
     let var_depth = &state.pattern.var_depth;
