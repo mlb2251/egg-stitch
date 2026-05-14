@@ -167,7 +167,8 @@ fn identical() {
 /// pairs with `wrap_pattern_with_db_apps`'s splice order. Pre-fix the splice
 /// ran `($0 $1)` while the wrap produced bodies assuming `($1 $0)`, so
 /// β-reducing a capture of local-$1 came out as local-$0. Identity at HO
-/// arity 1, so all earlier HO tests passed unchanged.
+/// arity 1, so all earlier HO tests passed unchanged. The β-equivalence
+/// sweep in `scripts/check_all_outputs.py` catches the semantic version too.
 #[test]
 fn ho_arity2_capture() {
     check_fixture("data/domains/ho-bugs/arity2_capture.json", &["--language", "lambda-calc"], true);
@@ -299,7 +300,7 @@ fn rewritten_corpus(run: &Value, original: &[String]) -> Vec<String> {
 #[test]
 fn arith_rewrites() {
     let input = "data/domains/basic-apps/multi-arg-assoc.json";
-    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--language", "lambda-calc", "--max-arity", "0"];
+    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--language", "lambda-calc", "--max-arity", "0", "--seed", "0"];
     let bf = run_backend("best-first", input, extra_args);
     let smc = run_backend("smc", input, extra_args);
     let original: Vec<String> = serde_json::from_str(&fs::read_to_string(input).unwrap_or_else(|e| panic!("read {input}: {e}"))).unwrap_or_else(|e| panic!("parse {input}: {e}"));

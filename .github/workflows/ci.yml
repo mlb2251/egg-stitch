@@ -25,3 +25,41 @@ jobs:
         run: cargo test --release
       - name: SMC fv-crash regression sweep
         run: ./tests/smc_fv_crash_regression.sh
+
+  # External equivalence-oracle checks. The checker is pure Python and lives
+  # under `scripts/`; it reads each fixture's `original_programs` and
+  # `rewritten_programs`, inlines library lambdas, and verifies β-equivalence
+  # (plus DSRs where applicable). Independent of the Rust search code, so it
+  # catches abstraction bugs the unit tests don't.
+  check-fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: oracle self-tests
+        run: python3 scripts/test_check_equiv.py
+      - name: check every expected_outputs/*.out.json
+        run: python3 scripts/check_all_outputs.py
+
+  # Run the search end-to-end (both backends) on every problem in the
+  # physics/, list/, and cogsci/ corpora, then verify each rewritten corpus
+  # is equivalent to the input under the same oracle.
+  search-and-check-domains:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: build release binary
+        run: cargo build --release
+      - name: search-and-check physics
+        run: python3 scripts/search_and_check_domain.py data/domains/physics -- --language lambda-calc --num-steps 2000
+      - name: search-and-check list
+        run: python3 scripts/search_and_check_domain.py data/domains/list -- --language lambda-calc --num-steps 2000
+      - name: search-and-check cogsci
+        run: python3 scripts/search_and_check_domain.py data/domains/cogsci -- --language lambda-calc --num-steps 2000
