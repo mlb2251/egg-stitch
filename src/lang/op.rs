@@ -26,10 +26,10 @@ pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 
     /// just reports the shape of the leaf. Negative indices represent re-wrap
     /// slots produced by the shifted-variants pass: a `$-k` leaf means "this
     /// subtree needs `k` additional outer binders to be reinjected at a
-    /// shallower depth than where it originally appeared". Like positive
-    /// indices that escape the local binders, negative indices are *free with
-    /// respect to the match location* — they reference context outside the
-    /// captured subtree, not anything the pattern itself introduces.
+    /// shallower depth than where it originally appeared". Despite the
+    /// negative sign, a `$-k` is *not* a free reference — it is an explicit
+    /// marker that will be bound by an outer lambda the shifted-variant
+    /// capture mechanism re-introduces around the body.
     fn de_bruijn_index(&self) -> Option<i32> {
         None
     }

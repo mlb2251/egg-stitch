@@ -38,11 +38,15 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
                 }
                 // Keep only `0 ≤ i < d_k`: indices in that range reference the
                 // pattern-internal binders above the `?#k` site, which is what
-                // `ho_arity` wraps. Both `i ≥ d_k` (binders above the pattern
-                // root) and negative `i` (re-wrap slots from shifted variants;
-                // see `StitchDisc::de_bruijn_index`) reference context that is
-                // *free at the match location* — not introduced by the pattern
-                // — so neither contributes to ho-arity.
+                // `ho_arity` wraps. The other two cases are excluded for
+                // different reasons:
+                //   - `i ≥ d_k`: a binder above the pattern root, free at the
+                //     match location, not introduced by the pattern.
+                //   - negative `i`: a re-wrap slot (see
+                //     `StitchDisc::de_bruijn_index`) — explicitly *not* free,
+                //     but bound by an outer lambda that the shifted-variant
+                //     capture mechanism re-introduces, not by an ho-arity
+                //     wrap-lam.
                 let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i >= 0 && (i as u32) < d_k).map(|&i| (i + 1) as u32).max().unwrap_or(0);
                 if needed > out[k] {
                     out[k] = needed;
