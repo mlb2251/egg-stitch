@@ -90,11 +90,14 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
     v
 }
 
-/// Strips the `pattern` field from every entry in `library` (in place). Used
-/// when SMC's chosen e-class representative is non-deterministic (e.g. once
-/// commutativity rewrites unify multiple equivalent pattern strings).
+/// Strips the `pattern` and `lambda` fields from every entry in `library` (in
+/// place). Used when SMC's chosen e-class representative is non-deterministic
+/// (e.g. once commutativity rewrites unify multiple equivalent pattern
+/// strings). The `lambda` field is derived from the pattern so it varies
+/// together — strip both to keep the comparison stable.
 fn strip_library_patterns(v: &mut Value) {
     strip_library_field(v, "pattern");
+    strip_library_field(v, "lambda");
 }
 
 /// Strips a named field from every entry in `library` (in place).
@@ -158,6 +161,26 @@ fn bless_or_check(path: &str, value: &Value, input: &str) {
 #[test]
 fn identical() {
     check_fixture("data/domains/stitch/identical.json", &[], true);
+}
+
+/// HO-arity-2 capture regression. The η-wrap convention in `wrap_subst_args`
+/// pairs with `wrap_pattern_with_db_apps`'s splice order. Pre-fix the splice
+/// ran `($0 $1)` while the wrap produced bodies assuming `($1 $0)`, so
+/// β-reducing a capture of local-$1 came out as local-$0. Identity at HO
+/// arity 1, so all earlier HO tests passed unchanged.
+#[test]
+fn ho_arity2_capture() {
+    check_fixture("data/domains/ho-bugs/arity2_capture.json", &["--language", "lambda-calc"], true);
+}
+
+/// Regression: the search picks `fn_{N+1}` (or higher) when the input already
+/// contains a leaf named `fn_N`, so re-running stitch on an already-abstracted
+/// corpus doesn't produce a name that aliases an existing symbol. The blessed
+/// fixture pins the chosen index — pre-fix the new abstraction would have been
+/// named `fn_0`, collapsing onto the input's existing `fn_0` symbol.
+#[test]
+fn fn_name_collision() {
+    check_fixture("data/domains/ho-bugs/fn_name_collision.json", &[], true);
 }
 
 /// Diverges from Stitch.jl: Stitch.jl finds the arity-0 body

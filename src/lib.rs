@@ -183,6 +183,12 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
     let mut rng = StdRng::seed_from_u64(seed);
 
+    // Pick the first `fn_N` name that doesn't collide with any leaf already
+    // present in the input — otherwise rerunning the search on an already
+    // abstracted corpus (or any input that happens to use `fn_N` as a symbol)
+    // produces output that can't be inlined unambiguously.
+    let fn_name_base = first_free_fn_index::<F::Apply<O>>(&egraph);
+
     for abstraction_idx in 0..args.num_abstractions {
         let (best, iter_original_size, best_found_at, num_steps_run, result_egraph, best_history) = match args.search {
             SearchKind::Smc => {
@@ -205,16 +211,18 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 let ho_arity = cost::compute_ho_arity::<F, O>(&result_egraph, &state);
                 let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_egraph.analysis.weights);
                 let body_str = state.pattern.display_with_ho(&ho_arity);
+                let lambda = state.pattern.display_as_lambda(&ho_arity);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
-                let fn_name = format!("fn_{abstraction_idx}");
+                let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
                 let (next_egraph, next_root, next_shifted, rewritten_programs) = apply_abstraction::<F, O>(result_egraph, root, &state, &fn_name, args.rules.as_deref());
 
                 final_cost = Some(best_cost);
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
+                    lambda,
                     arity: state.pattern.vars.len(),
                     pattern_size: pat_size,
                     num_matches: state.matches.len(),
@@ -238,6 +246,29 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     }
 
     (library, original_size, final_cost, final_rewritten)
+}
+
+/// Smallest `k` such that no discriminant in `egraph` renders as `fn_k`,
+/// `fn_{k+1}`, … Used to avoid clashes between the search's chosen abstraction
+/// names and any `fn_*` symbol already present in the input (e.g. when
+/// re-running the search over a corpus that already contains stitch output).
+///
+/// Scans the discriminant of every enode, not just leaves: in `OpChildren`
+/// languages a multi-arity head like `(fn_0 1 2)` lives in a single enode
+/// `(op=fn_0, children=[1,2])` whose op is what we'd collide with.
+fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
+    let mut max_existing: Option<usize> = None;
+    for class in egraph.classes() {
+        for enode in &class.nodes {
+            let name = enode.discriminant().to_string();
+            if let Some(rest) = name.strip_prefix("fn_")
+                && let Ok(idx) = rest.parse::<usize>()
+            {
+                max_existing = Some(max_existing.map_or(idx, |m| m.max(idx)));
+            }
+        }
+    }
+    max_existing.map_or(0, |m| m + 1)
 }
 
 /// Applies an abstraction to the egraph: adds `fn_name(args...)` enodes for every

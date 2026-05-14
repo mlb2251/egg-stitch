@@ -7,6 +7,7 @@
     {
       "approx_cost": 706,
       "arity": 1,
+      "lambda": "(lam (big (chain (of (g $0 (lam $1))))))",
       "num_matches": 3,
       "pattern": "fn_0: (big (chain (of (g ?#0 (lam ?#0)))))",
       "pattern_size": 606,

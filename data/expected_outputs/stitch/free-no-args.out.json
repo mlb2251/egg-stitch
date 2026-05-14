@@ -7,6 +7,7 @@
     {
       "approx_cost": 1112,
       "arity": 1,
+      "lambda": "(lam (+ 2 3 4 (lam (+ $1 6 7))))",
       "num_matches": 1,
       "pattern": "fn_0: (+ 2 3 4 (lam (+ ?#0 6 7)))",
       "pattern_size": 808,
