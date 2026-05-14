@@ -7,6 +7,7 @@
     {
       "approx_cost": 1716,
       "arity": 2,
+      "lambda": "(lam (lam (lam (app (app cons (app (app $2 (app car $0)) ($1 $0))) (app rec (app cdr $0))))))",
       "num_matches": 2,
       "pattern": "fn_0: (lam (app (app cons (app (app ?#0 (app car $0)) (?#1 $0))) (app rec (app cdr $0))))",
       "pattern_size": 1616,

@@ -208,6 +208,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 let ho_arity = cost::compute_ho_arity::<F, O>(&result_egraph, &state);
                 let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_egraph.analysis.weights);
                 let body_str = state.pattern.display_with_ho(&ho_arity);
+                let lambda = state.pattern.display_as_lambda(&ho_arity);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
@@ -218,6 +219,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
+                    lambda,
                     arity: state.pattern.vars.len(),
                     pattern_size: pat_size,
                     num_matches: state.matches.len(),
