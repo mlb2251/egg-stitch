@@ -280,8 +280,8 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F,
     // Mirrors `build_rewritten_egraph`: η-wrap captures whose fv reaches
     // into pattern-internal binders before passing them in.
     let var_depth = &state.pattern.var_depth;
-    let ho_arity = cost::compute_ho_arity::<F, O>(&egraph, state);
-    let mut shift_memo: rustc_hash::FxHashMap<(Id, u32, i32), Id> = rustc_hash::FxHashMap::default();
+    let magnitudes = cost::compute_ho_magnitudes::<F, O>(&egraph, state);
+    let mut shift_memo: rustc_hash::FxHashMap<(Id, u32), Id> = rustc_hash::FxHashMap::default();
     // Defer unions until all shifts are done. A mid-loop `union` shrinks
     // `data.fv` on the unioned classes but leaves parent classes stale until
     // `rebuild`, and the next iteration's `shift_free_egraph` would then read
@@ -289,7 +289,7 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F,
     let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &state.matches {
         for subst in &m.substs {
-            let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &ho_arity, var_depth, &mut shift_memo);
+            let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &magnitudes, var_depth, &mut shift_memo);
             let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
             pending.push((x, m.root_eclass));
         }
