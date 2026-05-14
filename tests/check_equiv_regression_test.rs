@@ -22,7 +22,25 @@ fn run_and_check(input: &str, seed: u64) -> Result<(), String> {
     let out_str = out.to_str().expect("utf-8 temp path");
 
     let status = Command::new(BIN)
-        .args(["-i", input, "--output", out_str, "--search", "smc", "--language", "lambda-calc", "--num-abstractions", "1", "--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000", "--seed"])
+        .args([
+            "-i",
+            input,
+            "--output",
+            out_str,
+            "--search",
+            "smc",
+            "--language",
+            "lambda-calc",
+            "--num-abstractions",
+            "1",
+            "--num-particles",
+            "1000",
+            "--num-steps",
+            "1000",
+            "--temperature",
+            "1000",
+            "--seed",
+        ])
         .arg(seed.to_string())
         .output()
         .map_err(|e| format!("spawn egg-stitch: {e}"))?;
