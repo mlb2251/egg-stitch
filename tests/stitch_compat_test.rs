@@ -290,7 +290,7 @@ fn rewritten_corpus(run: &Value, original: &[String]) -> Vec<String> {
 #[test]
 fn arith_rewrites() {
     let input = "data/domains/basic-apps/multi-arg-assoc.json";
-    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--language", "lambda-calc", "--max-arity", "0"];
+    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--language", "lambda-calc", "--max-arity", "0", "--seed", "0"];
     let bf = run_backend("best-first", input, extra_args);
     let smc = run_backend("smc", input, extra_args);
     let original: Vec<String> = serde_json::from_str(&fs::read_to_string(input).unwrap_or_else(|e| panic!("read {input}: {e}"))).unwrap_or_else(|e| panic!("parse {input}: {e}"));
