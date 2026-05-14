@@ -27,6 +27,8 @@ import subprocess
 import sys
 import time
 import numpy as np
+import tqdm
+from itertools import product
 from pathlib import Path
 from statistics import mean
 
@@ -129,12 +131,20 @@ def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str
     return out
 
 
+def _speedup_emoji(speedup: float) -> str:
+    """Green for >1.02, red for <0.98, gray for the in-between band."""
+    if speedup > 1.02:
+        return "🟢"
+    if speedup < 0.98:
+        return "🔴"
+    return "⚪"
+
+
 def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str) -> None:
-    """Print a side-by-side comparison table for one (DSR-on / DSR-off) condition."""
-    print(f"\n=== {title} — {pr_label} vs {base_label} ===")
-    header = f"{'domain':<14} {'method':<6}  {'time base[s]':>13} {'time pr[s]':>11} {'speedup':>8}  {'comp base':>10} {'comp pr':>8}"
-    print(header)
-    print("-" * len(header))
+    """Print a GitHub-flavored markdown comparison table for one DSR condition."""
+    print(f"\n### {title} — `{pr_label}` vs `{base_label}`\n")
+    print(f"|   | domain | method | time `{base_label}` [s] | time `{pr_label}` [s] | speedup | comp `{base_label}` | comp `{pr_label}` |")
+    print("|---|---|---|---:|---:|---:|---:|---:|")
     for m in ("enum", "smc"):
         elements = []
         for dom in DOMAINS:
@@ -144,7 +154,8 @@ def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str) 
             elements.append((b["time"], p["time"], speedup, b["compression"], p["compression"]))
         elements.append(np.prod(elements, axis=0) ** (1 / len(elements)))
         for dom, (t_base, t_pr, speedup, c_base, c_pr) in zip(DOMAINS + ["geomean"], elements):
-            print(f"{dom:<14} {m:<6}  {t_base:>13.3f} {t_pr:>11.3f} {speedup:>7.2f}x  {c_base:>10.3f} {c_pr:>8.3f}")
+            comp_warn = " ‼️" if c_pr / c_base < 0.99 else ""
+            print(f"| {_speedup_emoji(speedup)}{comp_warn} | {dom} | {m} | {t_base:.3f} | {t_pr:.3f} | {speedup:.2f}x | {c_base:.3f} | {c_pr:.3f} |")
 
 
 def main() -> None:
@@ -178,16 +189,15 @@ def main() -> None:
         # rep 0 is warmup (dropped by summarize); reps 1..NUM_RUNS are timed.
         # Within each cell we always run base then PR back-to-back so the two
         # binaries see the most similar system state we can give them.
-        for rep_idx in range(NUM_RUNS + 1):
+        cells = list(product(range(NUM_RUNS + 1), conditions, DOMAINS, runners.items()))
+        pbar = tqdm.tqdm(cells, desc="bench_pr", unit="cell")
+        for rep_idx, (dsr_label, use_dsrs), domain, (method, runner) in pbar:
             tag = "warmup" if rep_idx == 0 else f"rep{rep_idx}"
-            for dsr_label, use_dsrs in conditions:
-                for domain in DOMAINS:
-                    for method, runner in runners.items():
-                        print(f"\n--- {tag} | {dsr_label} | {domain} | {method} ---", flush=True)
-                        time_cell(base_bin, runner, domain, use_dsrs,
-                                  cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
-                        time_cell(pr_bin, runner, domain, use_dsrs,
-                                  cache_path_for(session, "pr", dsr_label, method, domain, rep_idx))
+            pbar.set_postfix_str(f"{tag} {dsr_label} {domain} {method}")
+            time_cell(base_bin, runner, domain, use_dsrs,
+                      cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
+            time_cell(pr_bin, runner, domain, use_dsrs,
+                      cache_path_for(session, "pr", dsr_label, method, domain, rep_idx))
 
         methods = list(runners.keys())
         fmt_table(base, pr,
