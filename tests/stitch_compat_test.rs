@@ -163,13 +163,12 @@ fn identical() {
     check_fixture("data/domains/stitch/identical.json", &[], true);
 }
 
-/// HO-arity-2 capture regression. The search's η-wrap convention pairs with
-/// `wrap_pattern_with_db_apps`'s splice order — pre-fix the splice ran
-/// `($0 $1)` while the wrap produced bodies indexed assuming `($1 $0)`, so
-/// β-reducing a capture of local-$1 came out as local-$0. Identity at HO arity
-/// 1, so all earlier HO tests passed. The fixture pins the search output so a
-/// future regression breaks here; the β-equivalence sweep in
-/// `scripts/check_all_outputs.py` catches the semantic version too.
+/// HO-arity-2 capture regression. The η-wrap convention in `wrap_subst_args`
+/// pairs with `wrap_pattern_with_db_apps`'s splice order. Pre-fix the splice
+/// ran `($0 $1)` while the wrap produced bodies assuming `($1 $0)`, so
+/// β-reducing a capture of local-$1 came out as local-$0. Identity at HO
+/// arity 1, so all earlier HO tests passed unchanged. The β-equivalence
+/// sweep in `scripts/check_all_outputs.py` catches the semantic version too.
 #[test]
 fn ho_arity2_capture() {
     check_fixture("data/domains/ho-bugs/arity2_capture.json", &["--language", "lambda-calc"], true);

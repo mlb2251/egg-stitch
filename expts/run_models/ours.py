@@ -78,10 +78,6 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         "--language", language,
         "--max-arity", str(max_arity),
         "--num-abstractions", str(rounds),
-        # Always rebuild: at rounds=1 it's a no-op output-wise (same final
-        # programs, ~same wall time); at rounds>1 it keeps successive
-        # abstractions on a consistent e-graph.
-        "--rebuild-egraph",
     ]
     # 0-arity (constant) abstractions are allowed: stitch finds them by
     # default, babble's dreamcoder ``benchmark`` binary hardcodes

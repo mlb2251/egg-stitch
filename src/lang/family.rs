@@ -74,7 +74,7 @@ pub trait LanguageFamily: Clone + 'static {
     /// per-index reflection: the first-applied arg `$(n-1)` binds the outermost
     /// wrap-lam, so a captured reference to local-$i lands at de Bruijn `$i`
     /// inside the body. For `n ≤ 1` the order is irrelevant; for `n ≥ 2` it
-    /// matters (see `data/ho_arity2_bug_repro.json`).
+    /// matters (see `data/domains/ho-bugs/arity2_capture.json`).
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, n: u32) -> Id;
 
     /// Render an abstraction body as `(lam … (lam BODY))` with `vars.len()`

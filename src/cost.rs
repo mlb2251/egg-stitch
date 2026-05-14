@@ -474,13 +474,13 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
 /// `lib::apply_abstraction`; `shift_memo` is shared across calls so equivalent
 /// shifts are deduplicated.
 ///
-/// The splice — the `(?#k $α₀ $α₁ … $α_{h-1})` form rendered by
-/// `wrap_pattern_with_db_apps` — uses `α_j = h - 1 - j` (i.e. `$(h-1), $(h-2), …, $0`).
-/// That ordering is what makes this trivial λ-wrap (no per-index reflection)
-/// β-reduce back to the captured term: with `$(h-1)` applied first, it lands on
-/// the outermost wrap-lam and binds local-$(h-1); each subsequent arg binds the
-/// next wrap-lam. A captured reference to local-$i then naturally sits at de
-/// Bruijn `$i` inside the body, matching what `shift_free_egraph` produces.
+/// The splice that this wrap pairs with — rendered by `wrap_pattern_with_db_apps`
+/// as `(?#k $(h-1) … $1 $0)` (outer-local first) — is what makes this trivial
+/// λ-wrap (no per-index reflection) β-reduce back to the captured term: with
+/// `$(h-1)` applied first, it binds the outermost wrap-lam = local-$(h-1), each
+/// subsequent arg binds the next wrap-lam, and a captured reference to local-$i
+/// thus sits at de Bruijn `$i` inside the body — matching `shift_free_egraph`'s
+/// output exactly.
 pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], ho_arity: &[u32], var_depth: &[u32], shift_memo: &mut FxHashMap<(Id, u32, i32), Id>) -> Vec<Id> {
     vars.iter()
         .enumerate()
