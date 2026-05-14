@@ -5,11 +5,15 @@ use crate::revexpr::RevExpr;
 use crate::shifted::ShiftedVariants;
 
 /// Shift-aware equality of two captured e-class ids at depths `da` and `db`.
-/// Two captures represent "the same value at different depths" when the
-/// deeper one's depth-difference-shift variant equals the shallower one.
-fn shift_equal(a: Id, b: Id, da: u32, db: u32, shifted: &ShiftedVariants) -> bool {
+/// Two captures represent "the same value at different depths" when either:
+/// - same e-class at the same depth, or at different depths only if the
+///   class is closed (empty fv) — otherwise the same leaf `$k` references
+///   different binders in the two depths' contexts; or
+/// - distinct ids where the deeper one is the depth-difference shift
+///   variant of the shallower one.
+fn shift_equal<L: crate::lang::StitchLanguage>(a: Id, b: Id, da: u32, db: u32, shifted: &ShiftedVariants, egraph: &StitchEgraph<L>) -> bool {
     if a == b {
-        return true;
+        return da == db || egraph[a].data.fv.is_empty();
     }
     match da.cmp(&db) {
         std::cmp::Ordering::Greater => shifted.get(a, da - db) == Some(b),
@@ -209,7 +213,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     }
                     let d_a = self.pattern.var_depth[var_idx];
                     let d_b = self.pattern.var_depth[idx];
-                    if shift_equal(*id, target_id, d_b, d_a, &shared.shifted) { Some(idx) } else { None }
+                    if shift_equal(*id, target_id, d_b, d_a, &shared.shifted, &shared.egraph) { Some(idx) } else { None }
                 })
                 .collect();
             if !reuse_candidates.is_empty() {
@@ -353,12 +357,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.update_matches(|subst, out| {
             let shallow_id = subst.vars[shallow_idx];
             let deep_id = subst.vars[deep_idx];
-            // Same e-class is equiv at any depth. For k > 0 with distinct
-            // ids, the deep side must be the k-shift variant of the shallow
-            // side: deep = shift_down_by_k(shallow). The shift-down captures
-            // the depth-shift relationship exactly — the kept (shallow) form
-            // shifts back up via β-reduction at the deeper `?#k` site.
-            let equiv = shallow_id == deep_id || (k > 0 && shared.shifted.get(deep_id, k) == Some(shallow_id));
+            // Shift-aware equality:
+            // - Same e-class at different depths is sound only when closed
+            //   (empty fv) — otherwise the same `$k` leaf references
+            //   different binders in the two depths' contexts.
+            // - Distinct ids are sound when the deep side is the k-shift
+            //   variant of the shallow side; the kept shallow form shifts
+            //   back up via β-reduction at the deeper `?#k` site.
+            let equiv = if shallow_id == deep_id {
+                k == 0 || shared.egraph[shallow_id].data.fv.is_empty()
+            } else {
+                k > 0 && shared.shifted.get(deep_id, k) == Some(shallow_id)
+            };
             if !equiv {
                 return;
             }
@@ -399,7 +409,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.shifted)));
+                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.shifted, &shared.egraph)));
                 if !unifiable {
                     continue;
                 }
