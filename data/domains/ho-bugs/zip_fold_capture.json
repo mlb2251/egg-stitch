@@ -1,0 +1,9 @@
+[
+  "(lam (lam (fold (zip $0 $1 (lam (lam (*. $0 $1)))) 0. (lam (lam (+. $0 $1))))))",
+  "(lam (lam (fold (zip $0 $1 (lam (lam (*. $0 $1)))) 0. (lam (lam (+. $0 $1))))))",
+  "(lam (lam (/. $1 (/. (+. 1. 1.) (fold $0 0. (lam (lam (+. $0 (*. $1 $1)))))))))",
+  "(lam (lam (lam (/. $1 (/. (fold $0 0. (lam (lam (+. $0 (*. $1 $1))))) $2)))))",
+  "(lam (fold $0 0. (lam (lam (+. $0 $1)))))",
+  "(lam (fold $0 0. (lam (lam (+. $0 $1)))))",
+  "(lam (/. 1. (fold $0 0. (lam (lam (+. $0 (/. 1. $1)))))))"
+]

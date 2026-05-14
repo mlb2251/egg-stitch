@@ -500,12 +500,11 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, magnitudes: &[Vec<u32>]) -> StitchEgraph<F::Apply<O>> {
     let mut egraph = egraph.clone();
     let var_depth = &search_state.pattern.var_depth;
-    let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
     // See `apply_abstraction` for why unions are deferred.
     let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &search_state.matches {
         for subst in &m.substs {
-            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, magnitudes, var_depth, &mut shift_memo);
+            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, magnitudes, var_depth);
             let x = F::add_stub_application::<O>("inv_0", wrapped, &mut egraph);
             pending.push((x, m.root_eclass));
         }
@@ -532,7 +531,7 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
 /// subsequent arg binds the next wrap-lam, and a captured reference to local-$i
 /// thus sits at de Bruijn `$i` inside the body — matching `shift_free_egraph`'s
 /// output exactly.
-pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], magnitudes: &[Vec<u32>], var_depth: &[u32], shift_memo: &mut FxHashMap<(Id, u32), Id>) -> Vec<Id> {
+pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], magnitudes: &[Vec<u32>], var_depth: &[u32]) -> Vec<Id> {
     vars.iter()
         .enumerate()
         .map(|(k, &arg_id)| {
@@ -543,7 +542,14 @@ pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
             // pattern-internal positives map to ranks here; above-pattern
             // positives shift to land above the `h` wrap-lams.
             let rank_map: FxHashMap<u32, u32> = mag_list.iter().enumerate().map(|(r, &m)| (m, r as u32)).collect();
-            let shifted = permuted_shift_egraph::<F, O>(egraph, arg_id, d_k, &rank_map, h, 0, shift_memo);
+            // Per-slot memo: the transform depends on `(d_k, rank_map, h)`,
+            // which differ across slots. A shared memo across slots would
+            // return an earlier slot's transformed sub-eclass for a later
+            // slot whose transform is different — caught by the physics
+            // fixtures (a sub-tree of one slot's capture being another
+            // slot's full capture).
+            let mut memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
+            let shifted = permuted_shift_egraph::<F, O>(egraph, arg_id, d_k, &rank_map, h, 0, &mut memo);
             if h == 0 { shifted } else { F::wrap_lams::<O>(shifted, h, egraph) }
         })
         .collect()
