@@ -96,13 +96,14 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
-        // Cross-depth reuse is OK under stitch's fv pruning: every captured
-        // subterm has fv ≥ d_k for its location's depth, so its meaning is
-        // independent of which pattern-internal lams enclose it. The merged
-        // metavar adopts the *max* depth — that's the strictest constraint
-        // its captures must satisfy (the corresponding subst-filter happens
-        // in `subset_matches_reuse`).
-        let merged_depth = self.var_depth[keep_idx].max(self.var_depth[drop_idx]);
+        // Merged metavar adopts the *min* depth so that `compute_ho_arity`
+        // sees `d_k = min` and returns 0 for shift-aware captures whose
+        // shallow-form fv lies in `[min, max)`. The lambda renderer's
+        // `head_idx = (arity-1-k) + depth[i]` then produces the correct
+        // deeper-form DB index at each `?#k` occurrence via β-reduction's
+        // natural index shift, recovering the corpus value at every depth
+        // without an η-wrap. Same-depth reuse has `min == max`, no change.
+        let merged_depth = self.var_depth[keep_idx].min(self.var_depth[drop_idx]);
 
         let keep_name = var_node::<F, O>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
