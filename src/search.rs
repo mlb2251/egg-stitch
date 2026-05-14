@@ -208,7 +208,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
 
         let d_k = self.pattern.var_depth[var_idx];
-        let candidates: Vec<&F::Apply<O>> = crate::shifted::enodes_across_shifts(&shared.egraph, &shared.shifted, target_id).filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
+        let candidates: Vec<&F::Apply<O>> = shared.egraph[target_id].nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
         if candidates.is_empty() {
             return None;
         }
@@ -292,7 +292,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn subset_matches(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
-            for node in crate::shifted::enodes_across_shifts(&shared.egraph, &shared.shifted, var_id) {
+            // Iterate only the original e-class's enodes, not variant ones.
+            // Descending through a variant's structure would swap captured
+            // child e-classes to their shifted counterparts (e.g. `$1`'s
+            // shift-1 variant deduplicates to `$0`), making later positions
+            // see the wrong e-class and downstream `reuse` accept unsound
+            // multi-depth merges. Shifted variants are only legitimate in the
+            // reuse check itself, comparing-up-to-shift.
+            for node in shared.egraph[var_id].nodes.iter() {
                 if !node.matches(target) {
                     continue;
                 }
@@ -388,7 +395,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
-                    for node in crate::shifted::enodes_across_shifts(&shared.egraph, &shared.shifted, subst.vars[var_idx]) {
+                    for node in shared.egraph[subst.vars[var_idx]].nodes.iter() {
                         if invalid_literal_expansion(node, d_k) {
                             continue;
                         }
