@@ -152,7 +152,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             if let Some(&k) = pos_to_k.get(&i)
                 && ho_arity[k] > 0
             {
-                new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, ho_arity[k]);
+                let db_args: Vec<i32> = (0..ho_arity[k] as i32).rev().collect();
+                new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, &db_args);
             }
             id_map[i] = new_id;
         }
@@ -161,8 +162,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 
     /// Render this abstraction as a closed lambda term — see
     /// `LanguageFamily::display_pattern_as_lambda`.
-    pub fn display_as_lambda(&self, ho_arity: &[u32]) -> String {
-        F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, ho_arity)
+    pub fn display_as_lambda(&self, magnitudes: &[Vec<u32>]) -> String {
+        F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, magnitudes)
     }
 }
 

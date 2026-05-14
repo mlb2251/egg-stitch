@@ -30,6 +30,42 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
     out
 }
 
+/// Per-metavar sorted-ascending list of distinct re-wrap-slot magnitudes used
+/// across all matches. `magnitudes[k][j]` is a magnitude `m = d_k - i` for some
+/// captured arg's free DB index `i` (0 ≤ i < d_k). Symmetric to `compute_ho_arity`
+/// but returns the actual set of binder magnitudes referenced, not just their max.
+pub fn compute_ho_magnitudes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<Vec<u32>> {
+    let arity = search_state.pattern.var_depth.len();
+    let var_depth = &search_state.pattern.var_depth;
+    let mut sets: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); arity];
+    let mut seen_per_slot: Vec<FxHashSet<Id>> = vec![FxHashSet::default(); arity];
+    for m in &search_state.matches {
+        for subst in &m.substs {
+            for (k, &arg_id) in subst.vars.iter().enumerate() {
+                let d_k = var_depth[k];
+                if d_k == 0 {
+                    continue;
+                }
+                if !seen_per_slot[k].insert(arg_id) {
+                    continue;
+                }
+                for &i in egraph[arg_id].data.fv.iter() {
+                    if i >= 0 && (i as u32) < d_k {
+                        sets[k].insert(d_k - i as u32);
+                    }
+                }
+            }
+        }
+    }
+    sets.into_iter()
+        .map(|s| {
+            let mut v: Vec<u32> = s.into_iter().collect();
+            v.sort();
+            v
+        })
+        .collect()
+}
+
 /// Build a copy of `eclass` in `egraph` with every free DB index `≥ initial_depth`
 /// shifted by `by` (positive = up, negative = down), so it can be relocated under
 /// a different number of binders without changing meaning. Picks the size-minimal

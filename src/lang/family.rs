@@ -75,13 +75,13 @@ pub trait LanguageFamily: Clone + 'static {
     /// wrap-lam, so a captured reference to local-$i lands at de Bruijn `$i`
     /// inside the body. For `n ≤ 1` the order is irrelevant; for `n ≥ 2` it
     /// matters (see `data/domains/ho-bugs/arity2_capture.json`).
-    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, n: u32) -> Id;
+    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id;
 
     /// Render an abstraction body as `(lam … (lam BODY))` with `vars.len()`
     /// binders, where each `?#k` becomes a de-Bruijn variable pointing at the
     /// `k`-th outer wrap-lam. Inlining a call site `(fn_N a_0 … a_{k-1})`
     /// against the result and β-reducing recovers the original captured term.
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], ho_arity: &[u32]) -> String;
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], magnitudes: &[Vec<u32>]) -> String;
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -124,11 +124,11 @@ impl LanguageFamily for OpChildren {
         panic!("OpChildren has no lambda binders; higher-order capture is unreachable here");
     }
 
-    fn wrap_pattern_with_db_apps<O: StitchOp>(_recexpr: &mut egg::RecExpr<OpChildrenLanguage<OpWithVar<O>>>, _head: Id, _n: u32) -> Id {
+    fn wrap_pattern_with_db_apps<O: StitchOp>(_recexpr: &mut egg::RecExpr<OpChildrenLanguage<OpWithVar<O>>>, _head: Id, _db_args: &[i32]) -> Id {
         panic!("OpChildren has no apps/binders; higher-order display is unreachable here");
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _ho_arity: &[u32]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _magnitudes: &[Vec<u32>]) -> String {
         // OpChildren has no real binders, so `?#k` becomes a `$<arity-1-k>`
         // symbol leaf and the body is wrapped in `arity` `lam`-headed nodes.
         let arity = vars.len();
@@ -225,19 +225,17 @@ impl LanguageFamily for LambdaCalc {
         n * weights.lam_cost
     }
 
-    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<LambdaCalcLanguage<OpWithVar<O>>>, head: Id, n: u32) -> Id {
-        // Iterate outer→inner so the splice reads `(?#k $(n-1) … $1 $0)` — see
-        // `LanguageFamily::wrap_pattern_with_db_apps` for why this order matters.
+    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<LambdaCalcLanguage<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id {
         let mut current = head;
-        for i in (0..n).rev() {
-            let var_op = OpWithVar::Node(O::make_db_var(i as i32).expect("higher-order display needs a DB-var-bearing leaf op"));
+        for &db in db_args {
+            let var_op = OpWithVar::Node(O::make_db_var(db).expect("higher-order display needs a DB-var-bearing leaf op"));
             let var_id = recexpr.add(LambdaCalcLanguage::Leaf(var_op));
             current = recexpr.add(LambdaCalcLanguage::App([current, var_id]));
         }
         current
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], ho_arity: &[u32]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], magnitudes: &[Vec<u32>]) -> String {
         let arity = vars.len();
         let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
         for (k, ids) in vars.iter().enumerate() {
@@ -255,18 +253,17 @@ impl LanguageFamily for LambdaCalc {
                 depth[usize::from(c)] = d + if disc.binds_child(j) { 1 } else { 0 };
             }
         }
-        let db = |n: u32| O::make_db_var(n as i32).expect("LambdaCalc requires a DB-var-bearing leaf op");
+        let db = |n: i32| O::make_db_var(n).expect("LambdaCalc requires a DB-var-bearing leaf op");
         let mut out: RecExpr<LambdaCalcLanguage<O>> = RecExpr::default();
         let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
         for i in (0..nodes.len()).rev() {
             let new_id = if let Some(&k) = pos_to_k.get(&i) {
-                // `?#k` → DB var pointing at the k-th outer wrap-lam, shifted by
-                // local lam depth. HO splice mirrors `wrap_pattern_with_db_apps`.
-                let head_idx = (arity as u32 - 1 - k as u32) + depth[i];
+                let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
                 let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
-                // Splice in outer→inner order to match `wrap_pattern_with_db_apps`.
-                for j in (0..ho_arity[k]).rev() {
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(j)));
+                let mags = &magnitudes[k];
+                for j in (0..mags.len()).rev() {
+                    let db_idx = depth[i] as i32 - mags[j] as i32;
+                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(db_idx)));
                     current = out.add(LambdaCalcLanguage::App([current, arg_id]));
                 }
                 current
