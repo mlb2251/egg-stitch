@@ -1,6 +1,6 @@
 use crate::lang::{LanguageFamily, StitchAnalysis, StitchEgraph, StitchLanguage, StitchOp, Weights};
 use crate::shared::SharedData;
-use crate::shifted::build_shifted_variants;
+use crate::shifted::{build_shifted_variants, corpus_max_binder_depth};
 use anyhow::anyhow;
 use egg::{Analysis, Pattern, Rewrite};
 use std::{fs, path::Path};
@@ -33,7 +33,8 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
     let mut egraph = runner.egraph;
-    let (shifted, original_eclasses) = build_shifted_variants::<F, O>(&mut egraph);
+    let max_shift = corpus_max_binder_depth(&egraph, root);
+    let (shifted, original_eclasses) = build_shifted_variants::<F, O>(&mut egraph, max_shift);
     println!("Egraph size after shifted-variant enrichment: {}", egraph.classes().len());
     (SharedData::new(egraph, root, shifted, original_eclasses), cost_before_rewrites, exprs)
 }
@@ -52,7 +53,8 @@ pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String],
     runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
     runner.egraph.rebuild();
     let mut egraph = runner.egraph;
-    let (shifted, original_eclasses) = build_shifted_variants::<F, O>(&mut egraph);
+    let max_shift = corpus_max_binder_depth(&egraph, root);
+    let (shifted, original_eclasses) = build_shifted_variants::<F, O>(&mut egraph, max_shift);
     SharedData::new(egraph, root, shifted, original_eclasses)
 }
 

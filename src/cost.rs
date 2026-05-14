@@ -104,7 +104,8 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     if let Some(n) = disc.de_bruijn_index() {
         // Free DB-var leaf: rebuild with shifted index. (Bound vars `< initial_depth`
         // were already short-circuited by the fv check above.) Negative results
-        // are valid: they materialize a re-wrap slot.
+        // are valid: they materialize a re-wrap slot — `build_shifted_variants`
+        // emits them past `max(fv)` so every `(eclass, d_k)` lookup is covered.
         let shifted_n = n + by;
         let new_disc = F::map_discriminant(disc, |_| O::make_db_var(shifted_n).expect("higher-order capture requires a DB-var-bearing leaf op"));
         let new_id = egraph.add(F::make(new_disc, vec![]));

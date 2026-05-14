@@ -34,45 +34,50 @@ fn no_variants_for_closed_term() {
     let mut eg: egg::EGraph<LamLang, StitchAnalysis> = egg::EGraph::default();
     let root = eg.add_expr(&LamLang::parse_program("(lam $0)").unwrap());
     eg.rebuild();
-    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg, 4);
     let root = eg.find(root);
     assert_eq!(v.get(root, 0), Some(root));
     assert_eq!(v.get(root, 1), None);
 }
 
 #[test]
-fn variants_built_up_to_max_fv() {
-    // `$1` has fv {1}, so max(fv) = 1:
-    //   shift s=1 → `$0`   (fv {0})    — still a positive free index
-    //   s=2 would give `$-1` (a variant-only class with no original
-    //   counterpart); not built — those would leak into extracted programs
-    //   via captured metavar substitutions.
+fn variants_built_up_to_max_shift() {
+    // `$1` has fv {1}. With max_shift=4 the builder produces variants at
+    // s=1..4: s=1 → `$0` (fv {0}, still a positive free index); s=2..4 cross
+    // the original-fv boundary and produce re-wrap slots `$-1`, `$-2`, `$-3`.
+    // ho-arity uses those negatives at capture-time depth lookups.
     let mut eg: egg::EGraph<LamLang, StitchAnalysis> = egg::EGraph::default();
     eg.add_expr(&LamLang::parse_program("(lam $1)").unwrap());
     let leaf = eg.add_expr(&LamLang::parse_program("$1").unwrap());
     eg.rebuild();
-    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg, 4);
     let leaf = eg.find(leaf);
 
     assert_eq!(v.get(leaf, 0), Some(leaf));
     let s1 = v.get(leaf, 1).expect("shift by 1 should be built");
     assert_eq!(fv_sorted(&eg, s1), vec![0]);
-    assert_eq!(v.get(leaf, 2), None);
+    let s2 = v.get(leaf, 2).expect("shift by 2 should be built (re-wrap slot)");
+    assert_eq!(fv_sorted(&eg, s2), vec![-1]);
+    let s3 = v.get(leaf, 3).expect("shift by 3 should be built");
+    assert_eq!(fv_sorted(&eg, s3), vec![-2]);
+    assert_eq!(v.get(leaf, 5), None);
 }
 
 #[test]
-fn fv_zero_only_gets_no_variants() {
-    // A class with fv {0} would yield a variant-only class under any negative
-    // shift (s=1 gives `$-1`), so no variants are built.
+fn fv_zero_only_gets_negative_variants() {
+    // A class with fv {0} yields re-wrap-slot variants under negative shifts:
+    // s=1 → `$-1`, s=2 → `$-2`. These exist now so capture-time lookups can
+    // find them.
     let mut eg: egg::EGraph<LamLang, StitchAnalysis> = egg::EGraph::default();
     eg.add_expr(&LamLang::parse_program("(lam $0)").unwrap());
     let leaf = eg.add_expr(&LamLang::parse_program("$0").unwrap());
     eg.rebuild();
-    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg, 3);
     let leaf = eg.find(leaf);
     assert_eq!(eg[leaf].data.fv.iter().copied().collect::<Vec<_>>(), vec![0]);
     assert_eq!(v.get(leaf, 0), Some(leaf));
-    assert_eq!(v.get(leaf, 1), None);
+    let s1 = v.get(leaf, 1).expect("shift by 1 should be built (re-wrap slot)");
+    assert_eq!(fv_sorted(&eg, s1), vec![-1]);
 }
 
 #[test]
@@ -83,7 +88,7 @@ fn get_returns_canonical_id() {
     eg.add_expr(&LamLang::parse_program("(lam $1)").unwrap());
     let leaf = eg.add_expr(&LamLang::parse_program("$1").unwrap());
     eg.rebuild();
-    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg, 4);
     let leaf = eg.find(leaf);
     let s1 = v.get(leaf, 1).expect("shift by 1");
     assert_eq!(s1, eg.find(s1), "returned id must be canonical");
@@ -96,7 +101,7 @@ fn fv_empty_subclass_gets_no_entry() {
     let mut eg: egg::EGraph<LamLang, StitchAnalysis> = egg::EGraph::default();
     let root = eg.add_expr(&LamLang::parse_program("(lam $0)").unwrap());
     eg.rebuild();
-    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg, 4);
     let root = eg.find(root);
     assert!(eg[root].data.fv.is_empty());
     assert_eq!(v.get(root, 1), None);
