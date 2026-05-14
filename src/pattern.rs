@@ -158,6 +158,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         }
         <F::Apply<OpWithVar<O>> as StitchLanguage>::display_recexpr(&out)
     }
+
+    /// Render this abstraction as a closed lambda term — see
+    /// `LanguageFamily::display_pattern_as_lambda`.
+    pub fn display_as_lambda(&self, ho_arity: &[u32]) -> String {
+        F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, ho_arity)
+    }
 }
 
 /// Recursively compare two pattern subtrees for structural equality. Walks from

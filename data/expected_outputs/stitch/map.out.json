@@ -7,6 +7,7 @@
     {
       "approx_cost": 3032,
       "arity": 4,
+      "lambda": "(lam (lam (lam (lam (app (app (app if (app is_nil $3)) nil) (app (app cons (app (app $2 (app car $3)) $1)) (app $0 (app cdr $3))))))))",
       "num_matches": 2,
       "pattern": "fn_0: (app (app (app if (app is_nil ?#0)) nil) (app (app cons (app (app ?#1 (app car ?#0)) ?#2)) (app ?#3 (app cdr ?#0))))",
       "pattern_size": 2322,
