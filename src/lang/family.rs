@@ -81,7 +81,7 @@ pub trait LanguageFamily: Clone + 'static {
     /// binders, where each `?#k` becomes a de-Bruijn variable pointing at the
     /// `k`-th outer wrap-lam. Inlining a call site `(fn_N a_0 … a_{k-1})`
     /// against the result and β-reducing recovers the original captured term.
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], magnitudes: &[Vec<u32>]) -> String;
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String;
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -128,7 +128,7 @@ impl LanguageFamily for OpChildren {
         panic!("OpChildren has no apps/binders; higher-order display is unreachable here");
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _magnitudes: &[Vec<u32>]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _variable_indices: &[Vec<i32>]) -> String {
         // OpChildren has no real binders, so `?#k` becomes a `$<arity-1-k>`
         // symbol leaf and the body is wrapped in `arity` `lam`-headed nodes.
         let arity = vars.len();
@@ -235,7 +235,7 @@ impl LanguageFamily for LambdaCalc {
         current
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], magnitudes: &[Vec<u32>]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
         let arity = vars.len();
         let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
         for (k, ids) in vars.iter().enumerate() {
@@ -260,10 +260,9 @@ impl LanguageFamily for LambdaCalc {
             let new_id = if let Some(&k) = pos_to_k.get(&i) {
                 let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
                 let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
-                let mags = &magnitudes[k];
-                for j in (0..mags.len()).rev() {
-                    let db_idx = depth[i] as i32 - mags[j] as i32;
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(db_idx)));
+                let vis = &variable_indices[k];
+                for j in (0..vis.len()).rev() {
+                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(vis[j])));
                     current = out.add(LambdaCalcLanguage::App([current, arg_id]));
                 }
                 current

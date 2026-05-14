@@ -162,8 +162,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 
     /// Render this abstraction as a closed lambda term — see
     /// `LanguageFamily::display_pattern_as_lambda`.
-    pub fn display_as_lambda(&self, magnitudes: &[Vec<u32>]) -> String {
-        F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, magnitudes)
+    pub fn display_as_lambda(&self, variable_indices: &[Vec<i32>]) -> String {
+        F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, variable_indices)
     }
 }
 

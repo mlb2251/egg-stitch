@@ -30,14 +30,15 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
     out
 }
 
-/// Per-metavar sorted-ascending list of distinct re-wrap-slot magnitudes used
-/// across all matches. `magnitudes[k][j]` is a magnitude `m = d_k - i` for some
-/// captured arg's free DB index `i` (0 ≤ i < d_k). Symmetric to `compute_ho_arity`
-/// but returns the actual set of binder magnitudes referenced, not just their max.
-pub fn compute_ho_magnitudes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<Vec<u32>> {
+/// Per-metavar sorted-ascending list of distinct pattern-internal DB indices
+/// referenced by any match's captured arg. `variable_indices[k][j]` is a free
+/// DB index `i` (0 ≤ i < d_k) appearing in `fv(arg_{m,k})` for some match `m`.
+/// Symmetric to `compute_ho_arity` but returns the actual set of binder indices
+/// referenced, not just their count.
+pub fn compute_variable_indices<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<Vec<i32>> {
     let arity = search_state.pattern.var_depth.len();
     let var_depth = &search_state.pattern.var_depth;
-    let mut sets: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); arity];
+    let mut sets: Vec<FxHashSet<i32>> = vec![FxHashSet::default(); arity];
     let mut seen_per_slot: Vec<FxHashSet<Id>> = vec![FxHashSet::default(); arity];
     for m in &search_state.matches {
         for subst in &m.substs {
@@ -51,7 +52,7 @@ pub fn compute_ho_magnitudes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgra
                 }
                 for &i in egraph[arg_id].data.fv.iter() {
                     if i >= 0 && (i as u32) < d_k {
-                        sets[k].insert(d_k - i as u32);
+                        sets[k].insert(i);
                     }
                 }
             }
@@ -59,7 +60,7 @@ pub fn compute_ho_magnitudes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgra
     }
     sets.into_iter()
         .map(|s| {
-            let mut v: Vec<u32> = s.into_iter().collect();
+            let mut v: Vec<i32> = s.into_iter().collect();
             v.sort();
             v
         })
