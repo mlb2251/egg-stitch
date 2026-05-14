@@ -547,16 +547,30 @@ def check_pair_beta(o, r, fuel):
 def check_file(path, args):
     with open(path) as f:
         data = json.load(f)
+    # `check_fixture` writes `{best-first: <result>, smc: <result>}` when the
+    # two backends diverge; otherwise the flat single-`RunResult` shape.
+    # Treat each backend independently in the dual case.
+    if "library" not in data and ("best-first" in data or "smc" in data):
+        ok = True
+        for backend, sub in data.items():
+            if not _check_run_result(path, backend, sub, args):
+                ok = False
+        return ok
+    return _check_run_result(path, None, data, args)
+
+
+def _check_run_result(path, backend, data, args):
     library_entries = data.get("library", [])
+    tag = f"{path}" if backend is None else f"{path}[{backend}]"
     if library_entries and not any(e.get("lambda") for e in library_entries):
-        print(f"{path}: library has no `lambda` fields (non-lambda-calc run); skipping.")
+        print(f"{tag}: library has no `lambda` fields (non-lambda-calc run); skipping.")
         return True
 
     lib = build_library(library_entries)
     originals = data["original_programs"]
     rewritten = data["rewritten_programs"]
     if len(originals) != len(rewritten):
-        print(f"{path}: original/rewritten length mismatch ({len(originals)} vs {len(rewritten)})")
+        print(f"{tag}: original/rewritten length mismatch ({len(originals)} vs {len(rewritten)})")
         return False
 
     rules = parse_rewrites(args.rewrites) if args.rewrites else None
@@ -575,13 +589,13 @@ def check_file(path, args):
                 msg = f"ok ({status})"
         if not pair_ok:
             ok = False
-            print(f"{path}[{i}]: {msg}")
+            print(f"{tag}[{i}]: {msg}")
             print(f"  original : {o_str}")
             print(f"  rewritten: {r_str}")
         elif args.verbose:
-            print(f"{path}[{i}]: {msg}")
+            print(f"{tag}[{i}]: {msg}")
     if ok and args.verbose:
-        print(f"{path}: all {len(originals)} programs equivalent.")
+        print(f"{tag}: all {len(originals)} programs equivalent.")
     return ok
 
 
