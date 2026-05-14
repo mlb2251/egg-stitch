@@ -4,13 +4,10 @@ use serde::Serialize;
 #[derive(Serialize)]
 pub struct AbstractionResult {
     pub pattern: String,
-    /// Closed-lambda rendering of the abstraction body: `(lam … (lam BODY))`
-    /// with `arity` binders, where each `?#k` is replaced by the matching
-    /// de-Bruijn variable. Inlining a call site `(fn_N a_0 … a_{k-1})` against
-    /// this lambda and β-reducing recovers the original captured term — used
-    /// by external equivalence checkers. Absent for families without lambdas.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lambda: Option<String>,
+    /// Closed-lambda form of the abstraction: inlining a call site
+    /// `(fn_N a_0 … a_{k-1})` against this and β-reducing recovers the original
+    /// captured term.
+    pub lambda: String,
     pub arity: usize,
     pub pattern_size: usize,
     pub num_matches: usize,

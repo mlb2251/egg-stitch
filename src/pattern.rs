@@ -160,9 +160,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     }
 
     /// Render this abstraction as a closed lambda term — see
-    /// `LanguageFamily::display_pattern_as_lambda`. Returns `None` for
-    /// non-lambda families.
-    pub fn display_as_lambda(&self, ho_arity: &[u32]) -> Option<String> {
+    /// `LanguageFamily::display_pattern_as_lambda`.
+    pub fn display_as_lambda(&self, ho_arity: &[u32]) -> String {
         F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, ho_arity)
     }
 }
