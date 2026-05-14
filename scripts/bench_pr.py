@@ -68,7 +68,9 @@ def check_clean_worktree() -> None:
 
 def setup_worktree(branch: str, wt_dir: Path) -> Path:
     """Create a git worktree for ``branch`` at ``wt_dir``, build release, return binary path."""
-    sh(["git", "worktree", "add", str(wt_dir), branch])
+    # --detach so we don't conflict with whichever branch the main worktree
+    # currently has checked out (commonly the PR branch itself).
+    sh(["git", "worktree", "add", "--detach", str(wt_dir), branch])
     sh(["cargo", "build", "--release", "--bin", "egg-stitch", "--quiet"], cwd=wt_dir)
     return wt_dir / "target" / "release" / "egg-stitch"
 
