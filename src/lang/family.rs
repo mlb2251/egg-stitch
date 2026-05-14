@@ -80,8 +80,11 @@ pub trait LanguageFamily: Clone + 'static {
     /// Inlining a call site `(fn_N a_0 … a_{k-1})` against the returned lambda
     /// and β-reducing recovers the original captured term.
     ///
-    /// Returns `None` for families without `Lam`/`App` (e.g. `OpChildren`) or
-    /// when the leaf-op `O` cannot represent DB-var leaves.
+    /// Returns `None` only when the leaf-op `O` cannot represent DB-var leaves.
+    /// Families without first-class `Lam`/`App` (e.g. `OpChildren`) emit the
+    /// lam wrappers and `$N` variables as plain symbol leaves — useful for
+    /// external β-equivalence oracles that parse the result with a generic
+    /// lambda-calc reader regardless of which family produced it.
     fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], ho_arity: &[u32]) -> Option<String>;
 }
 
@@ -129,9 +132,42 @@ impl LanguageFamily for OpChildren {
         panic!("OpChildren has no apps/binders; higher-order display is unreachable here");
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(_nodes: &[OpChildrenLanguage<OpWithVar<O>>], _vars: &[Vec<Id>], _var_depth: &[u32], _ho_arity: &[u32]) -> Option<String> {
-        // No lambda binders in this family; a closed-lambda rendering is not meaningful.
-        None
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _ho_arity: &[u32]) -> Option<String> {
+        // OpChildren has no real binders; `var_depth` is always 0 and `ho_arity`
+        // is always 0, so the lambda form is just: replace each `?#k` leaf with
+        // a `$<arity-1-k>` symbol, then wrap the body in `arity` `lam` nodes,
+        // both rendered as plain ops. An external reader interprets them as
+        // lambda-calc — within this family they're just opaque symbol leaves.
+        let arity = vars.len();
+        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
+        for (k, ids) in vars.iter().enumerate() {
+            for &id in ids {
+                pos_to_k.insert(usize::from(id), k);
+            }
+        }
+        let mut out: RecExpr<OpChildrenLanguage<O>> = RecExpr::default();
+        let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
+        for i in (0..nodes.len()).rev() {
+            let new_id = if let Some(&k) = pos_to_k.get(&i) {
+                let name = format!("${}", arity - 1 - k);
+                out.add(OpChildrenLanguage { op: O::from_name(&name), children: vec![] })
+            } else {
+                let new_children: Vec<Id> = nodes[i].children.iter().map(|&c| id_map[usize::from(c)]).collect();
+                let op = match &nodes[i].op {
+                    OpWithVar::Node(o) => o.clone(),
+                    OpWithVar::Var(_) => unreachable!("Var leaf at position not in pos_to_k"),
+                };
+                out.add(OpChildrenLanguage { op, children: new_children })
+            };
+            id_map[i] = new_id;
+        }
+        let lam_op = O::from_name("lam");
+        let mut current = id_map[0];
+        for _ in 0..arity {
+            current = out.add(OpChildrenLanguage { op: lam_op.clone(), children: vec![current] });
+        }
+        let _ = current;
+        Some(<OpChildrenLanguage<O> as StitchLanguage>::display_recexpr(&out))
     }
 }
 

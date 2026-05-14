@@ -90,11 +90,14 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
     v
 }
 
-/// Strips the `pattern` field from every entry in `library` (in place). Used
-/// when SMC's chosen e-class representative is non-deterministic (e.g. once
-/// commutativity rewrites unify multiple equivalent pattern strings).
+/// Strips the `pattern` and `lambda` fields from every entry in `library` (in
+/// place). Used when SMC's chosen e-class representative is non-deterministic
+/// (e.g. once commutativity rewrites unify multiple equivalent pattern
+/// strings). The `lambda` field is derived from the pattern so it varies
+/// together — strip both to keep the comparison stable.
 fn strip_library_patterns(v: &mut Value) {
     strip_library_field(v, "pattern");
+    strip_library_field(v, "lambda");
 }
 
 /// Strips a named field from every entry in `library` (in place).
