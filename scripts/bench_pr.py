@@ -42,7 +42,7 @@ from expts.runner import run_method  # noqa: E402
 DOMAINS = ["nuts-bolts", "dials", "list", "physics"]
 # DOMAINS = ["nuts-bolts", "dials"]
 
-NUM_RUNS = 3  # plus one warmup rep that gets discarded
+NUM_RUNS = 7  # plus one warmup rep that gets discarded
 
 
 def sh(cmd, *, cwd=None, **kw):
@@ -131,6 +131,42 @@ def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str
     return out
 
 
+def update_pr_timing(pr_branch: str, timing_section: str) -> None:
+    """Replace (or append) the ``## Timing`` section in the PR description.
+
+    Looks up the open PR for ``pr_branch`` via ``gh``; if none exists, prints
+    a warning and returns. ``timing_section`` must start with ``## Timing``.
+    The section is replaced from its heading up to (but not including) the
+    next ``## `` heading or EOF; if no existing section is found it's
+    appended (separated by a blank line).
+    """
+    try:
+        body = subprocess.check_output(
+            ["gh", "pr", "view", pr_branch, "--json", "body", "-q", ".body"],
+            cwd=ROOT, text=True, stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"\nbench_pr: no PR found for branch {pr_branch!r}, skipping PR update.\n  {e.stderr.strip()}")
+        return
+    body = body.rstrip("\n")
+    # Match "## Timing" up to (but not including) the next "## " or EOF.
+    import re
+    pattern = re.compile(r"(?m)^## Timing\b.*?(?=^## |\Z)", re.DOTALL)
+    if pattern.search(body):
+        new_body = pattern.sub(timing_section.rstrip() + "\n\n", body).rstrip() + "\n"
+    else:
+        sep = "\n\n" if body else ""
+        new_body = body + sep + timing_section.rstrip() + "\n"
+    res = subprocess.run(
+        ["gh", "pr", "edit", pr_branch, "--body-file", "-"],
+        cwd=ROOT, input=new_body, text=True, capture_output=True,
+    )
+    if res.returncode != 0:
+        print(f"\nbench_pr: gh pr edit failed (exit {res.returncode}):\n{res.stderr}")
+    else:
+        print(f"\nbench_pr: updated Timing section on PR for {pr_branch}.")
+
+
 def _speedup_emoji(speedup: float) -> str:
     """Green for >1.02, red for <0.98, gray for the in-between band."""
     if speedup > 1.02:
@@ -140,11 +176,14 @@ def _speedup_emoji(speedup: float) -> str:
     return "⚪"
 
 
-def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str) -> None:
-    """Print a GitHub-flavored markdown comparison table for one DSR condition."""
-    print(f"\n### {title} — `{pr_label}` vs `{base_label}`\n")
-    print(f"|   | domain | method | time `{base_label}` [s] | time `{pr_label}` [s] | speedup | comp `{base_label}` | comp `{pr_label}` |")
-    print("|---|---|---|---:|---:|---:|---:|---:|")
+def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str) -> str:
+    """Return a GitHub-flavored markdown comparison table for one DSR condition."""
+    lines = [
+        f"### {title} — `{pr_label}` vs `{base_label}`",
+        "",
+        f"|   | domain | method | time `{base_label}` [s] | time `{pr_label}` [s] | speedup | comp `{base_label}` | comp `{pr_label}` |",
+        "|---|---|---|---:|---:|---:|---:|---:|",
+    ]
     for m in ("enum", "smc"):
         elements = []
         for dom in DOMAINS:
@@ -155,7 +194,8 @@ def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str) 
         elements.append(np.prod(elements, axis=0) ** (1 / len(elements)))
         for dom, (t_base, t_pr, speedup, c_base, c_pr) in zip(DOMAINS + ["geomean"], elements):
             comp_warn = " ‼️" if c_pr / c_base < 0.99 else ""
-            print(f"| {_speedup_emoji(speedup)}{comp_warn} | {dom} | {m} | {t_base:.3f} | {t_pr:.3f} | {speedup:.2f}x | {c_base:.3f} | {c_pr:.3f} |")
+            lines.append(f"| {_speedup_emoji(speedup)}{comp_warn} | {dom} | {m} | {t_base:.3f} | {t_pr:.3f} | {speedup:.2f}x | {c_base:.3f} | {c_pr:.3f} |")
+    return "\n".join(lines)
 
 
 def main() -> None:
@@ -200,14 +240,18 @@ def main() -> None:
                       cache_path_for(session, "pr", dsr_label, method, domain, rep_idx))
 
         methods = list(runners.keys())
-        fmt_table(base, pr,
-                  summarize(session, "base", "with_dsrs", methods),
-                  summarize(session, "pr", "with_dsrs", methods),
-                  "with DSRs")
-        fmt_table(base, pr,
-                  summarize(session, "base", "without_dsrs", methods),
-                  summarize(session, "pr", "without_dsrs", methods),
-                  "without DSRs")
+        with_md = fmt_table(base, pr,
+                            summarize(session, "base", "with_dsrs", methods),
+                            summarize(session, "pr", "with_dsrs", methods),
+                            "with DSRs")
+        without_md = fmt_table(base, pr,
+                               summarize(session, "base", "without_dsrs", methods),
+                               summarize(session, "pr", "without_dsrs", methods),
+                               "without DSRs")
+        timing_section = "## Timing\n\n" + with_md + "\n\n" + without_md + "\n"
+        print()
+        print(timing_section)
+        update_pr_timing(pr, timing_section)
     finally:
         teardown_worktree(wt_base)
         teardown_worktree(wt_pr)
