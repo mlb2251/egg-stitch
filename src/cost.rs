@@ -36,9 +36,13 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
                 if !seen_per_slot[k].insert(arg_id) {
                     continue;
                 }
-                // `fv` is `i32`: negative indices are re-wrap slots from
-                // shifted variants (see `StitchDisc::de_bruijn_index`) and
-                // never contribute to ho-arity. Keep only `0 ≤ i < d_k`.
+                // Keep only `0 ≤ i < d_k`: indices in that range reference the
+                // pattern-internal binders above the `?#k` site, which is what
+                // `ho_arity` wraps. Both `i ≥ d_k` (binders above the pattern
+                // root) and negative `i` (re-wrap slots from shifted variants;
+                // see `StitchDisc::de_bruijn_index`) reference context that is
+                // *free at the match location* — not introduced by the pattern
+                // — so neither contributes to ho-arity.
                 let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i >= 0 && (i as u32) < d_k).map(|&i| (i + 1) as u32).max().unwrap_or(0);
                 if needed > out[k] {
                     out[k] = needed;
