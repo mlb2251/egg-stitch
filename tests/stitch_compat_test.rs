@@ -160,6 +160,16 @@ fn identical() {
     check_fixture("data/domains/stitch/identical.json", &[], true);
 }
 
+/// HO-arity-2 capture regression. The η-wrap convention in `wrap_subst_args`
+/// pairs with `wrap_pattern_with_db_apps`'s splice order. Pre-fix the splice
+/// ran `($0 $1)` while the wrap produced bodies assuming `($1 $0)`, so
+/// β-reducing a capture of local-$1 came out as local-$0. Identity at HO
+/// arity 1, so all earlier HO tests passed unchanged.
+#[test]
+fn ho_arity2_capture() {
+    check_fixture("data/domains/ho-bugs/arity2_capture.json", &["--language", "lambda-calc"], true);
+}
+
 /// Diverges from Stitch.jl: Stitch.jl finds the arity-0 body
 /// `(a b c d e f g h (A B C) (A B C) (A B C) (A B C))`; egg-stitch's e-class
 /// equality unifies the four `(A B C)` subterms and picks the arity-1

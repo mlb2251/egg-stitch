@@ -64,9 +64,16 @@ pub trait LanguageFamily: Clone + 'static {
     fn lams_cost(n: u32, weights: &Weights) -> u32;
 
     /// In a pattern-side `RecExpr`, wrap `head` in `n` curried applications to
-    /// fresh DB-var leaves `$0, $1, …, $(n-1)` (innermost first). Returns the
-    /// id of the outermost App. Used by `Pattern::display_with_ho` to render
-    /// HO body uses as `(@ … (@ ?#k $0) … $(n-1))`.
+    /// fresh DB-var leaves `$(n-1), $(n-2), …, $0` (outer-local first). Returns
+    /// the id of the outermost App. Used by `Pattern::display_with_ho` to render
+    /// HO body uses as `(@ … (@ ?#k $(n-1)) … $0)`.
+    ///
+    /// The reverse iteration order is what makes the corresponding η-wrap built
+    /// by `wrap_subst_args` β-reduce back to the captured term without any
+    /// per-index reflection: the first-applied arg `$(n-1)` binds the outermost
+    /// wrap-lam, so a captured reference to local-$i lands at de Bruijn `$i`
+    /// inside the body. For `n ≤ 1` the order is irrelevant; for `n ≥ 2` it
+    /// matters (see `data/domains/ho-bugs/arity2_capture.json`).
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, n: u32) -> Id;
 }
 
@@ -177,8 +184,10 @@ impl LanguageFamily for LambdaCalc {
     }
 
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<LambdaCalcLanguage<OpWithVar<O>>>, head: Id, n: u32) -> Id {
+        // Iterate outer→inner so the splice reads `(?#k $(n-1) … $1 $0)` — see
+        // `LanguageFamily::wrap_pattern_with_db_apps` for why this order matters.
         let mut current = head;
-        for i in 0..n {
+        for i in (0..n).rev() {
             let var_op = OpWithVar::Node(O::make_db_var(i).expect("higher-order display needs a DB-var-bearing leaf op"));
             let var_id = recexpr.add(LambdaCalcLanguage::Leaf(var_op));
             current = recexpr.add(LambdaCalcLanguage::App([current, var_id]));
