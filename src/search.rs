@@ -73,25 +73,27 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     }
 }
 
-/// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
-fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
+/// True iff `target` is a DB-var leaf that can't be expanded to at a slot
+/// with depth `d_k` and cross-depth-merged flag `cross_depth`. Three cases:
+/// - `i ≥ d_k`: would escape the pattern's binders.
+/// - `i < 0`: a re-wrap slot, only legitimately reached via the variant table.
+/// - any `i` when `cross_depth` is set: cross-depth-merged slots can't admit
+///   any DB-var literal — the same literal references different binders at
+///   the merged occurrences (`tests/cross_depth_reuse_then_db_var_regression.sh`).
+fn target_is_free_db_var<L: Language>(target: &L, d_k: u32, cross_depth: bool) -> bool
 where
     L::Discriminant: StitchDisc,
 {
-    // Reject any free DB-var leaf that can't be expanded to here: positive
-    // indices `≥ d_k` (would escape the pattern's binders) and any negative
-    // index (re-wrap slots only legitimately appear inside shifted-variant
-    // e-classes consulted via the side table).
-    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i < 0 || (i as u32) >= d_k)
+    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i < 0 || (i as u32) >= d_k || cross_depth)
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
 /// Currently the only such case is a free DB-var leaf.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32, cross_depth: bool) -> bool
 where
     L::Discriminant: StitchDisc,
 {
-    target_is_free_db_var(target, depth)
+    target_is_free_db_var(target, depth, cross_depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -239,6 +241,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
 
         let d_k = self.pattern.var_depth[var_idx];
+        let cross_depth = self.pattern.var_cross_depth[var_idx];
         // Expansion candidates come only from the original e-class's enodes.
         // Variant enodes belong to shift-conjugate classes — descending
         // through them would commit the metavar to a shifted-space value
@@ -246,7 +249,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // (literal `$k` at one depth, but the corpus has `$k+s` there).
         // Cross-depth equivalence is handled by `subset_matches_reuse`'s
         // shift-aware comparison.
-        let candidates: Vec<&F::Apply<O>> = shared.egraph[target_id].nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
+        let candidates: Vec<&F::Apply<O>> = shared.egraph[target_id].nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k, cross_depth)).collect();
         if candidates.is_empty() {
             return None;
         }
@@ -444,13 +447,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // Literal expansions.
         for var_idx in 0..self.pattern.vars.len() {
             let d_k = self.pattern.var_depth[var_idx];
+            let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let target_id = subst.vars[var_idx];
                     for node in shared.egraph[target_id].nodes.iter() {
-                        if invalid_literal_expansion(node, d_k) {
+                        if invalid_literal_expansion(node, d_k, cross_depth) {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());
