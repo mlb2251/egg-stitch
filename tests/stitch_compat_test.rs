@@ -160,6 +160,16 @@ fn identical() {
     check_fixture("data/domains/stitch/identical.json", &[], true);
 }
 
+/// Regression: the search picks `fn_{N+1}` (or higher) when the input already
+/// contains a leaf named `fn_N`, so re-running stitch on an already-abstracted
+/// corpus doesn't produce a name that aliases an existing symbol. The blessed
+/// fixture pins the chosen index — pre-fix the new abstraction would have been
+/// named `fn_0`, collapsing onto the input's existing `fn_0` symbol.
+#[test]
+fn fn_name_collision() {
+    check_fixture("data/domains/ho-bugs/fn_name_collision.json", &[], true);
+}
+
 /// Diverges from Stitch.jl: Stitch.jl finds the arity-0 body
 /// `(a b c d e f g h (A B C) (A B C) (A B C) (A B C))`; egg-stitch's e-class
 /// equality unifies the four `(A B C)` subterms and picks the arity-1
