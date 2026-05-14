@@ -70,22 +70,11 @@ pub trait LanguageFamily: Clone + 'static {
     /// HO body uses as `(@ … (@ ?#k $0) … $(n-1))`.
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, n: u32) -> Id;
 
-    /// Render an abstraction body as a closed lambda term. Each `?#k` is
-    /// replaced by the DB var pointing at the corresponding outer wrap-lam
-    /// (shifted by the pattern-internal depth at that position), then the
-    /// body is wrapped in `vars.len()` lams (outermost binds `?#0`). HO uses
-    /// of `?#k` (where `ho_arity[k] > 0`) are spliced as
-    /// `(@ … (@ ?#k $0) … $(h-1))`, mirroring `Pattern::display_with_ho`.
-    ///
-    /// Inlining a call site `(fn_N a_0 … a_{k-1})` against the returned lambda
-    /// and β-reducing recovers the original captured term.
-    ///
-    /// Returns `None` only when the leaf-op `O` cannot represent DB-var leaves.
-    /// Families without first-class `Lam`/`App` (e.g. `OpChildren`) emit the
-    /// lam wrappers and `$N` variables as plain symbol leaves — useful for
-    /// external β-equivalence oracles that parse the result with a generic
-    /// lambda-calc reader regardless of which family produced it.
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], ho_arity: &[u32]) -> Option<String>;
+    /// Render an abstraction body as `(lam … (lam BODY))` with `vars.len()`
+    /// binders, where each `?#k` becomes a de-Bruijn variable pointing at the
+    /// `k`-th outer wrap-lam. Inlining a call site `(fn_N a_0 … a_{k-1})`
+    /// against the result and β-reducing recovers the original captured term.
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], ho_arity: &[u32]) -> String;
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -132,12 +121,9 @@ impl LanguageFamily for OpChildren {
         panic!("OpChildren has no apps/binders; higher-order display is unreachable here");
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _ho_arity: &[u32]) -> Option<String> {
-        // OpChildren has no real binders; `var_depth` is always 0 and `ho_arity`
-        // is always 0, so the lambda form is just: replace each `?#k` leaf with
-        // a `$<arity-1-k>` symbol, then wrap the body in `arity` `lam` nodes,
-        // both rendered as plain ops. An external reader interprets them as
-        // lambda-calc — within this family they're just opaque symbol leaves.
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _ho_arity: &[u32]) -> String {
+        // OpChildren has no real binders, so `?#k` becomes a `$<arity-1-k>`
+        // symbol leaf and the body is wrapped in `arity` `lam`-headed nodes.
         let arity = vars.len();
         let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
         for (k, ids) in vars.iter().enumerate() {
@@ -167,7 +153,7 @@ impl LanguageFamily for OpChildren {
             current = out.add(OpChildrenLanguage { op: lam_op.clone(), children: vec![current] });
         }
         let _ = current;
-        Some(<OpChildrenLanguage<O> as StitchLanguage>::display_recexpr(&out))
+        <OpChildrenLanguage<O> as StitchLanguage>::display_recexpr(&out)
     }
 }
 
@@ -242,22 +228,16 @@ impl LanguageFamily for LambdaCalc {
         current
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], ho_arity: &[u32]) -> Option<String> {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], ho_arity: &[u32]) -> String {
         let arity = vars.len();
-        // Map from RecExpr position → which metavar `k` lives there (if any).
         let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
         for (k, ids) in vars.iter().enumerate() {
             for &id in ids {
                 pos_to_k.insert(usize::from(id), k);
             }
         }
-        // Compute per-position pattern-internal lam depth. RevExpr has root at
-        // index 0 and children at higher indices, so a forward sweep propagates
-        // depth from parents to children. `pattern.var_depth[k]` is the *max*
-        // depth across occurrences (set by `reuse`), but a metavar reused at
-        // different depths needs distinct DB indices per occurrence — so we walk
-        // here. DAG-shared subtrees end up at a single depth because expansion
-        // applies uniformly across shared positions.
+        // Per-position lam depth. We need the *local* depth at each occurrence,
+        // not `var_depth[k]` (which is the max across occurrences after `reuse`).
         let mut depth: Vec<u32> = vec![0; nodes.len()];
         for i in 0..nodes.len() {
             let d = depth[i];
@@ -266,23 +246,17 @@ impl LanguageFamily for LambdaCalc {
                 depth[usize::from(c)] = d + if disc.binds_child(j) { 1 } else { 0 };
             }
         }
-        // Build the program-side body (no `OpWithVar`): copy non-var nodes through,
-        // replace each `?#k` leaf with a DB var pointing at its wrap-lam, optionally
-        // spliced with HO apps so a metavar at depth `d` is applied to `$0..$(h-1)`.
+        let db = |n: u32| O::make_db_var(n).expect("LambdaCalc requires a DB-var-bearing leaf op");
         let mut out: RecExpr<LambdaCalcLanguage<O>> = RecExpr::default();
         let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
         for i in (0..nodes.len()).rev() {
             let new_id = if let Some(&k) = pos_to_k.get(&i) {
-                // Outer wrap-lam for `?#0` is the outermost binder, i.e. DB index
-                // `arity-1` from the body root; `?#k` is `arity-1-k`. Shift by the
-                // local lam depth at *this* occurrence so cross-lam metavars still
-                // reach the correct wrap-lam.
+                // `?#k` → DB var pointing at the k-th outer wrap-lam, shifted by
+                // local lam depth. HO splice mirrors `wrap_pattern_with_db_apps`.
                 let head_idx = (arity as u32 - 1 - k as u32) + depth[i];
-                let head_op = O::make_db_var(head_idx)?;
-                let mut current = out.add(LambdaCalcLanguage::Leaf(head_op));
+                let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
                 for j in 0..ho_arity[k] {
-                    let arg_op = O::make_db_var(j)?;
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(arg_op));
+                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(j)));
                     current = out.add(LambdaCalcLanguage::App([current, arg_id]));
                 }
                 current
@@ -299,11 +273,10 @@ impl LanguageFamily for LambdaCalc {
             };
             id_map[i] = new_id;
         }
-        // Wrap the body in `arity` lams (outermost added last → becomes RecExpr root).
         let mut current = id_map[0];
         for _ in 0..arity {
             current = out.add(LambdaCalcLanguage::Lam([current]));
         }
-        Some(<LambdaCalcLanguage<O> as StitchLanguage>::display_recexpr(&out))
+        <LambdaCalcLanguage<O> as StitchLanguage>::display_recexpr(&out)
     }
 }
