@@ -25,6 +25,7 @@ ROOT = REPO / "data" / "expected_outputs"
 # Keep in sync with `tests/stitch_compat_test.rs`.
 RULES_BY_REL = {
     "fv-overapprox/annihilator.out.json": "data/domains/fv-overapprox/annihilator.rewrites",
+    "stitch/nested.out.json": "data/domains/stitch/nested.rewrites",
 }
 
 
