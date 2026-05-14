@@ -39,8 +39,8 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
 
 /// Builds a fresh egraph from program strings, applies rewrite rules, and returns it with its root.
 ///
-/// Used when `--rebuild-egraph` is set: after each abstraction the rewritten programs are
-/// extracted as strings and fed into a clean egraph, discarding all prior equivalences.
+/// Used between abstractions: the rewritten programs are extracted as strings and fed into a
+/// clean egraph, discarding all prior equivalences.
 pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<F::Apply<O>>, egg::Id, ShiftedVariants) {
     let (egraph, root) = programs_to_egraph::<F::Apply<O>>(programs, weights);
     let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {

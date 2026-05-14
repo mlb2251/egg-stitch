@@ -23,7 +23,7 @@ run_one() {
     if ! "$BIN" -i "$INPUT" \
         --output /dev/null \
         --search smc --language lambda-calc \
-        --max-arity 2 --num-abstractions 20 --rebuild-egraph \
+        --max-arity 2 --num-abstractions 20 \
         --num-steps 100 --num-particles 250 --temperature 1000.0 \
         --seed "$seed" >/dev/null 2>&1; then
         echo "$seed" >> "$2"
