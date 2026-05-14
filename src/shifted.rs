@@ -32,19 +32,19 @@ impl ShiftedVariants {
 
 /// Builds the shifted-variants index for `egraph`.
 ///
-/// For each e-class `C` whose `data.fv` has a non-negative maximum index `m`,
-/// calls `shift_free_egraph(C, -s, 0, …)` for each `s ∈ 1..=m+1` and records
-/// the resulting e-class id under `map[C][s]`. A shared memo across all
-/// `(C, s)` calls keeps the work proportional to the number of distinct
-/// `(class, shift)` pairs reached.
+/// For each e-class `C` whose `data.fv` has a maximum index `m ≥ 1`, calls
+/// `shift_free_egraph(C, -s, 0, …)` for each `s ∈ 1..=m` and records the
+/// resulting e-class id under `map[C][s]`. A shared memo across all `(C, s)`
+/// calls keeps the work proportional to the number of distinct `(class,
+/// shift)` pairs reached.
 ///
-/// Why `m + 1` is the right upper bound: shifts in `1..=m` decrement every
-/// free index by `s`, keeping them non-negative; `s = m + 1` produces the
-/// first variant with `max(fv) = -1` ("first re-wrap"). Larger shifts only
-/// add more negative re-wrap slots, which the consumer can equivalently
-/// materialize as outer lams at extraction time — so they carry no new
-/// structural information. Classes with empty fv or all-negative fv get no
-/// entry (no shift would be useful).
+/// Why `m` is the right upper bound: shifts in `1..=m` keep `max(fv) ≥ 0`,
+/// so the shifted enodes have only non-negative DB-var leaves and structurally
+/// agree with original-space classes (via egg's enode dedup, equal-content
+/// classes union after `rebuild`). A shift of `m + 1` would produce a leaf
+/// like `$-1` — a variant-only class with no original counterpart. Those
+/// leaves leak into final extracted programs via captured metavar
+/// substitutions in `subset_matches`, so we don't build them.
 ///
 /// Mutates `egraph` (adds enodes for the shifted variants and calls
 /// `rebuild()`). Post-rebuild, the recorded ids are canonicalized so callers
@@ -58,7 +58,7 @@ pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
         let canonical = egraph.find(c);
         let max_fv = egraph[canonical].data.fv.iter().copied().max();
         let d = match max_fv {
-            Some(m) if m >= 0 => (m as u32) + 1,
+            Some(m) if m >= 1 => m as u32,
             _ => continue,
         };
         let mut per_class: FxHashMap<u32, Id> = FxHashMap::default();
