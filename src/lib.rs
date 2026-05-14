@@ -1,6 +1,7 @@
 pub mod best_first;
 pub mod cost;
 pub mod debug_log;
+pub mod depth;
 pub mod follow;
 pub mod io;
 pub mod lang;
@@ -11,6 +12,7 @@ pub mod pattern;
 pub mod results;
 pub mod revexpr;
 pub mod search;
+pub mod shifted;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
@@ -174,9 +176,10 @@ pub enum LanguageChoice {
 /// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
 /// serialising programs to strings and re-parsing. The eclass arguments already carry
 /// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, shifted: shifted::ShiftedVariants, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
     let mut egraph = egraph;
     let mut root = root;
+    let mut shifted = shifted;
     let mut library = Vec::new();
     let mut original_size = 0;
     let mut final_cost = None;
@@ -189,11 +192,11 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     for abstraction_idx in 0..args.num_abstractions {
         let (best, iter_original_size, best_found_at, num_steps_run, result_egraph, best_history) = match args.search {
             SearchKind::Smc => {
-                let r = smc::smc::<F, O>(egraph, root, args, &mut rng);
+                let r = smc::smc::<F, O>(egraph, root, shifted.clone(), args, &mut rng);
                 (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, None)
             }
             SearchKind::BestFirst => {
-                let r = best_first::best_first(egraph, root, args);
+                let r = best_first::best_first(egraph, root, shifted.clone(), args);
                 (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph, Some(r.best_history))
             }
         };
@@ -212,7 +215,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{abstraction_idx}");
-                let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref());
+                let (next_egraph, next_root, next_shifted, rewritten_programs) = apply_abstraction::<F, O>(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref());
 
                 final_cost = Some(best_cost);
                 final_rewritten = Some(rewritten_programs);
@@ -232,6 +235,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 if abstraction_idx + 1 < args.num_abstractions {
                     egraph = next_egraph;
                     root = next_root;
+                    shifted = next_shifted;
                 } else {
                     break;
                 }
@@ -250,7 +254,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
 /// If `rebuild` is false, the existing egraph with unions is returned as-is.
 ///
 /// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, shifted::ShiftedVariants, Vec<String>) {
     let mut egraph = egraph;
     // Mirrors `build_rewritten_egraph`: η-wrap captures whose fv reaches
     // into pattern-internal binders before passing them in.
@@ -279,9 +283,11 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
 
     if rebuild {
         let weights = egraph.analysis.weights;
-        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file, weights);
-        (fresh_egraph, fresh_root, programs)
+        let (fresh_egraph, fresh_root, fresh_shifted) = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
+        (fresh_egraph, fresh_root, fresh_shifted, programs)
     } else {
-        (egraph, root, programs)
+        let mut egraph = egraph;
+        let shifted = shifted::build_shifted_variants::<F, O>(&mut egraph, root);
+        (egraph, root, shifted, programs)
     }
 }

@@ -58,7 +58,11 @@ fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
 where
     L::Discriminant: StitchDisc,
 {
-    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= d_k)
+    // Reject any free DB-var leaf that can't be expanded to here: positive
+    // indices `≥ d_k` (would escape the pattern's binders) and any negative
+    // index (re-wrap slots only legitimately appear inside shifted-variant
+    // e-classes consulted via the side table).
+    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i < 0 || (i as u32) >= d_k)
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
@@ -110,6 +114,11 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub weight_by_usage: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
+    /// Per-e-class shifted-variant lookup (see `crate::shifted`). The search
+    /// traverses every shifted version of a candidate e-class when listing
+    /// enodes for expansion, so a subtree captured deeper than the metavar
+    /// slot can still be used via the appropriate shift.
+    pub shifted: crate::shifted::ShiftedVariants,
 }
 
 #[derive(Debug, Clone)]
@@ -186,7 +195,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     let min_depth = d_a.min(d_b);
                     let merged_depth = d_a.max(d_b);
                     let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-                    if kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) { Some(idx) } else { None }
+                    if kept_fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32) { Some(idx) } else { None }
                 })
                 .collect();
             if !reuse_candidates.is_empty() {
@@ -198,9 +207,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
 
-        let target_eclass = &shared.egraph[target_id];
         let d_k = self.pattern.var_depth[var_idx];
-        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
+        let candidates: Vec<&F::Apply<O>> = crate::shifted::enodes_across_shifts(&shared.egraph, &shared.shifted, target_id).filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
         if candidates.is_empty() {
             return None;
         }
@@ -253,11 +261,19 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// which may produce zero or more new substitutions per input. Removes matches
     /// with no remaining substitutions.
     fn update_matches(&mut self, mut f: impl FnMut(&Subst, &mut Vec<Subst>)) {
+        // Shifted-variant traversal in `subset_matches` can produce many
+        // substs that, after egraph canonicalization, are identical to others
+        // (e.g. a shifted `Lam` whose body short-circuited to the original).
+        // Dedup per-match to keep the subst set compact; otherwise downstream
+        // per-subst work (compute_ho_arity, cost) explodes.
+        let mut seen: FxHashSet<Vec<Id>> = FxHashSet::default();
         for m in &mut self.matches {
             let mut new_substs: Vec<Subst> = vec![];
             for subst in &m.substs {
                 f(subst, &mut new_substs);
             }
+            seen.clear();
+            new_substs.retain(|s| seen.insert(s.vars.clone()));
             m.substs = new_substs;
         }
         self.matches.retain(|m| !m.substs.is_empty());
@@ -276,8 +292,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn subset_matches(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
         self.update_matches(|subst, out| {
             let var_id = subst.vars[var_idx];
-            let var_eclass = &shared.egraph[var_id];
-            for node in &var_eclass.nodes {
+            for node in crate::shifted::enodes_across_shifts(&shared.egraph, &shared.shifted, var_id) {
                 if !node.matches(target) {
                     continue;
                 }
@@ -310,7 +325,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 return;
             }
             let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-            if !kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) {
+            if !kept_fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32) {
                 return;
             }
             let mut new_subst = subst.clone();
@@ -373,8 +388,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
-                    let eclass = &shared.egraph[subst.vars[var_idx]];
-                    for node in &eclass.nodes {
+                    for node in crate::shifted::enodes_across_shifts(&shared.egraph, &shared.shifted, subst.vars[var_idx]) {
                         if invalid_literal_expansion(node, d_k) {
                             continue;
                         }
@@ -407,7 +421,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
-pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
+pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, shifted: crate::shifted::ShiftedVariants, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
     let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&egraph, root);
     let shared = SharedSearchData {
@@ -418,6 +432,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Appl
         usage_counts,
         p_reuse: args.p_reuse,
         check_slow: args.check_slow,
+        shifted,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared);

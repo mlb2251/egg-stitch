@@ -89,7 +89,7 @@ pub struct StitchData {
     /// Minimum AST size among e-nodes in this e-class.
     pub size: u32,
     /// Free-variable set (intersection of members' free-var sets).
-    pub fv: FxHashSet<u32>,
+    pub fv: FxHashSet<i32>,
 }
 
 /// Egg analysis that tracks size and free-variable set of each e-class,
@@ -150,16 +150,22 @@ pub type StitchEgraph<L> = egg::EGraph<L, StitchAnalysis>;
 ///
 /// `fv(node) = {n | disc.de_bruijn_index() == Some(n)} ∪ ⋃_j shift_j(child_fv(c_j))`,
 /// where `shift_j` drops `0` and decrements ≥ 1 iff `disc.binds_child(j)`.
-pub fn enode_fv<'a, L: StitchLanguage>(node: &L, child_fv: impl Fn(Id) -> &'a FxHashSet<u32>) -> FxHashSet<u32> {
+/// Negative indices represent re-wrap slots from shifted variants — a binder
+/// does not capture them, so they pass through unchanged.
+pub fn enode_fv<'a, L: StitchLanguage>(node: &L, child_fv: impl Fn(Id) -> &'a FxHashSet<i32>) -> FxHashSet<i32> {
     let disc = node.discriminant();
-    let mut fv: FxHashSet<u32> = FxHashSet::default();
+    let mut fv: FxHashSet<i32> = FxHashSet::default();
     if let Some(n) = disc.de_bruijn_index() {
         fv.insert(n);
     }
     for (j, &c) in node.children().iter().enumerate() {
         let cf = child_fv(c);
         if disc.binds_child(j) {
-            fv.extend(cf.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }));
+            fv.extend(cf.iter().filter_map(|&i| match i {
+                0 => None, // bound by this binder
+                i if i > 0 => Some(i - 1),
+                _ => Some(i), // negative: re-wrap slot, untouched
+            }));
         } else {
             fv.extend(cf.iter().copied());
         }

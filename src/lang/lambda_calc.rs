@@ -59,7 +59,7 @@ impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
         }
     }
 
-    fn de_bruijn_index(&self) -> Option<u32> {
+    fn de_bruijn_index(&self) -> Option<i32> {
         match self {
             Self::Leaf(o) => o.de_bruijn_index(),
             _ => None,
@@ -85,7 +85,7 @@ impl<O: StitchOp> StitchOp for LambdaCalcDisc<O> {
         }
     }
 
-    fn make_db_var(n: u32) -> Option<Self> {
+    fn make_db_var(n: i32) -> Option<Self> {
         O::make_db_var(n).map(Self::Leaf)
     }
 }

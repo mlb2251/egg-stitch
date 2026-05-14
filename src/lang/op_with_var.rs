@@ -37,7 +37,7 @@ impl<O: StitchDisc> StitchDisc for OpWithVar<O> {
         }
     }
 
-    fn de_bruijn_index(&self) -> Option<u32> {
+    fn de_bruijn_index(&self) -> Option<i32> {
         match self {
             Self::Node(o) => o.de_bruijn_index(),
             Self::Var(_) => None,
@@ -50,7 +50,7 @@ impl<O: StitchOp> StitchOp for OpWithVar<O> {
         if let Ok(v) = s.parse::<egg::Var>() { Self::Var(v) } else { Self::Node(O::from_name(s)) }
     }
 
-    fn make_db_var(n: u32) -> Option<Self> {
+    fn make_db_var(n: i32) -> Option<Self> {
         O::make_db_var(n).map(Self::Node)
     }
 }

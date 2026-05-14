@@ -16,11 +16,27 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
     let arity = search_state.pattern.var_depth.len();
     let mut out = vec![0u32; arity];
     let var_depth = &search_state.pattern.var_depth;
+    // Slot k can only contribute fv `i < d_k`, so a slot with `d_k == 0` is
+    // always 0 and we can skip every subst-iter step on its account. When all
+    // slots are zero (common in the early SMC steps), the whole loop is a
+    // no-op and we return the zero vector immediately.
+    if var_depth.iter().all(|&d| d == 0) {
+        return out;
+    }
+    // Per-slot dedup of `arg_id`s already considered: the fv lookup is
+    // identical for repeats, and saturation only depends on `max`.
+    let mut seen_per_slot: Vec<rustc_hash::FxHashSet<Id>> = vec![rustc_hash::FxHashSet::default(); arity];
     for m in &search_state.matches {
         for subst in &m.substs {
             for (k, &arg_id) in subst.vars.iter().enumerate() {
                 let d_k = var_depth[k];
-                let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i < d_k).map(|&i| i + 1).max().unwrap_or(0);
+                if d_k == 0 || out[k] >= d_k {
+                    continue;
+                }
+                if !seen_per_slot[k].insert(arg_id) {
+                    continue;
+                }
+                let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i >= 0 && (i as u32) < d_k).map(|&i| (i + 1) as u32).max().unwrap_or(0);
                 if needed > out[k] {
                     out[k] = needed;
                 }
@@ -40,9 +56,9 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
 /// reuse one `memo` across different `(initial_depth, by)` pairs, so both must be
 /// part of the key.
 ///
-/// When `by` is negative, the caller must ensure no free index lies in
-/// `[initial_depth, initial_depth + |by|)` — otherwise the shifted index would
-/// underflow into the bound-variable range.
+/// Negative shifts may push indices below zero — those are represented as
+/// negative DB-var leaves (re-wrap slots) and consumed by the caller (e.g.
+/// `build_shifted_variants`) that knows to materialize the outer lambdas.
 pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, by: i32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32, i32), Id>) -> Id {
     let canonical = egraph.find(eclass);
     if let Some(&cached) = memo.get(&(canonical, initial_depth, by)) {
@@ -50,7 +66,7 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     }
     // If no fv `≥ initial_depth` is present in this class, the shift is a no-op
     // — return the original eclass to preserve sharing.
-    if by == 0 || egraph[canonical].data.fv.iter().all(|&i| i < initial_depth) {
+    if by == 0 || egraph[canonical].data.fv.iter().all(|&i| i < initial_depth as i32) {
         memo.insert((canonical, initial_depth, by), canonical);
         return canonical;
     }
@@ -76,8 +92,9 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     let disc = rep.discriminant();
     if let Some(n) = disc.de_bruijn_index() {
         // Free DB-var leaf: rebuild with shifted index. (Bound vars `< initial_depth`
-        // were already short-circuited by the fv check above.)
-        let shifted_n = u32::try_from(n as i32 + by).expect("shifted DB index underflowed; caller violated negative-shift precondition");
+        // were already short-circuited by the fv check above.) Negative results
+        // are valid: they materialize a re-wrap slot.
+        let shifted_n = n + by;
         let new_disc = F::map_discriminant(disc, |_| O::make_db_var(shifted_n).expect("higher-order capture requires a DB-var-bearing leaf op"));
         let new_id = egraph.add(F::make(new_disc, vec![]));
         memo.insert((canonical, initial_depth, by), new_id);
@@ -115,15 +132,6 @@ pub struct CostCache {
 impl CostCache {
     /// Builds the cache from the egraph rooted at `root`.
     pub fn new<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> Self {
-        let mut parents_of = FxHashMap::<Id, Vec<Id>>::default();
-        for class in egraph.classes() {
-            for enode in &class.nodes {
-                for &child in enode.children() {
-                    parents_of.entry(child).or_default().push(class.id);
-                }
-            }
-        }
-
         let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
         let mut postorder = vec![None; max_id + 1];
         let mut visit_order: Vec<Id> = Vec::new();
@@ -148,6 +156,23 @@ impl CostCache {
                     postorder[usize::from(id)] = Some(order);
                     visit_order.push(id);
                     order += 1;
+                }
+            }
+        }
+
+        // Restrict parents_of to root-reachable classes. Otherwise `solve()`'s
+        // dirty-bit propagation through `set` would mark parents that don't
+        // appear in `visit_order` (e.g. shifted-variant e-classes built
+        // post-hoc), and `any_dirty()` would never settle.
+        let reachable: FxHashSet<Id> = visit_order.iter().copied().collect();
+        let mut parents_of = FxHashMap::<Id, Vec<Id>>::default();
+        for &cid in &visit_order {
+            for enode in &egraph[cid].nodes {
+                for &child in enode.children() {
+                    let child = egraph.find(child);
+                    if reachable.contains(&child) {
+                        parents_of.entry(child).or_default().push(cid);
+                    }
                 }
             }
         }
@@ -505,9 +530,9 @@ pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
 /// Computes the exact syntactic free-variable set at every position of `expr`,
 /// indexed by `usize::from(Id)`. Shares its per-enode rule with
 /// `StitchAnalysis::make` via `enode_fv`.
-pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
+pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<i32>> {
     let nodes: &[L] = expr.as_ref();
-    let mut fv: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); nodes.len()];
+    let mut fv: Vec<FxHashSet<i32>> = vec![FxHashSet::default(); nodes.len()];
     for (i, node) in nodes.iter().enumerate() {
         fv[i] = enode_fv(node, |c| &fv[usize::from(c)]);
     }
@@ -521,7 +546,7 @@ pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
 /// A mismatch in either direction means the assumption "min-size ⇒ min-fv"
 /// failed for this extraction; downstream soundness checks that read
 /// `data.fv` lose their guarantee.
-pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<u32>) {
+pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<i32>) {
     let fv = recexpr_fv(expr);
     let actual = fv.last().expect("non-empty RecExpr");
     assert_eq!(actual, expected, "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", actual, expected,);

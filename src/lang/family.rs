@@ -179,7 +179,7 @@ impl LanguageFamily for LambdaCalc {
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<LambdaCalcLanguage<OpWithVar<O>>>, head: Id, n: u32) -> Id {
         let mut current = head;
         for i in 0..n {
-            let var_op = OpWithVar::Node(O::make_db_var(i).expect("higher-order display needs a DB-var-bearing leaf op"));
+            let var_op = OpWithVar::Node(O::make_db_var(i as i32).expect("higher-order display needs a DB-var-bearing leaf op"));
             let var_id = recexpr.add(LambdaCalcLanguage::Leaf(var_op));
             current = recexpr.add(LambdaCalcLanguage::App([current, var_id]));
         }

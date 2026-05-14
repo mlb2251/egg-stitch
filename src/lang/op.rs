@@ -23,8 +23,11 @@ pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 
     }
     /// If this op is a De Bruijn variable leaf, returns its index. Whether the
     /// occurrence is *free* in some enclosing context is decided elsewhere — this
-    /// just reports the shape of the leaf.
-    fn de_bruijn_index(&self) -> Option<u32> {
+    /// just reports the shape of the leaf. Negative indices represent re-wrap
+    /// slots produced by the shifted-variants pass: a `$-k` leaf means "this
+    /// subtree needs `k` additional outer binders to be reinjected at a
+    /// shallower depth than where it originally appeared".
+    fn de_bruijn_index(&self) -> Option<i32> {
         None
     }
     /// True iff this op binds a fresh De Bruijn slot for its `j`th child — i.e.,
@@ -42,8 +45,9 @@ pub trait StitchOp: StitchDisc {
     /// Builds an op from its display name. Must succeed for every input string.
     fn from_name(s: &str) -> Self;
 
-    /// If this op type has a De Bruijn-var leaf, build it.
-    fn make_db_var(_n: u32) -> Option<Self> {
+    /// If this op type has a De Bruijn-var leaf, build it. Negative `n`
+    /// represents a re-wrap slot — see `StitchDisc::de_bruijn_index`.
+    fn make_db_var(_n: i32) -> Option<Self> {
         None
     }
 }

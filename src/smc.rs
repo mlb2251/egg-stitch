@@ -41,8 +41,8 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
 /// expansion step, identical patterns are deduplicated and their counts merged,
 /// so cost computation runs once per unique pattern instead of once per particle.
 #[allow(clippy::needless_range_loop)]
-pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
-    let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
+pub fn smc<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, shifted: crate::shifted::ShiftedVariants, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
+    let (shared, cost_cache, original_size) = setup_search(egraph, root, shifted, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let num_particles = args.num_particles;

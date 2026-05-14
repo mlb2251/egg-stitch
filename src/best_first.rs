@@ -105,8 +105,8 @@ struct Node<F: LanguageFamily, O: StitchOp> {
 /// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
 /// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
 /// improvement" just means we're grinding through a less promising branch.)
-pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, args: &crate::Args) -> BestFirstResult<F, O> {
-    let (shared, cost_cache, original_size) = setup_search(egraph, root, args);
+pub fn best_first<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: egg::Id, shifted: crate::shifted::ShiftedVariants, args: &crate::Args) -> BestFirstResult<F, O> {
+    let (shared, cost_cache, original_size) = setup_search(egraph, root, shifted, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let budget = args.num_steps;

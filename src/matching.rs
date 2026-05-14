@@ -28,5 +28,28 @@ impl MatchAtEClass {
 /// what we want.
 pub fn identity_matches<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id) -> Vec<MatchAtEClass> {
     let root = egraph.find(root);
-    egraph.classes().filter(|c| c.id != root).map(|c| MatchAtEClass::identity_match(c.id)).collect()
+    // Restrict to classes reachable from `root`. After build_shifted_variants
+    // the egraph carries synthetic re-indexings of real subterms — they're
+    // tools for the search, not corpus subterms to match against — so they
+    // must be kept out of the match-root set.
+    let reachable = reachable_from(egraph, root);
+    reachable.iter().filter(|&&id| id != root).map(|&id| MatchAtEClass::identity_match(id)).collect()
+}
+
+/// All e-class ids reachable from `start` via any enode child edge. Result ids
+/// are canonical.
+pub fn reachable_from<L: StitchLanguage>(egraph: &StitchEgraph<L>, start: egg::Id) -> rustc_hash::FxHashSet<egg::Id> {
+    let mut seen: rustc_hash::FxHashSet<egg::Id> = rustc_hash::FxHashSet::default();
+    let mut stack = vec![egraph.find(start)];
+    while let Some(id) = stack.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        for enode in &egraph[id].nodes {
+            for &child in enode.children() {
+                stack.push(egraph.find(child));
+            }
+        }
+    }
+    seen
 }
