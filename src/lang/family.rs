@@ -264,7 +264,8 @@ impl LanguageFamily for LambdaCalc {
                 // local lam depth. HO splice mirrors `wrap_pattern_with_db_apps`.
                 let head_idx = (arity as u32 - 1 - k as u32) + depth[i];
                 let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
-                for j in 0..ho_arity[k] {
+                // Splice in outer→inner order to match `wrap_pattern_with_db_apps`.
+                for j in (0..ho_arity[k]).rev() {
                     let arg_id = out.add(LambdaCalcLanguage::Leaf(db(j)));
                     current = out.add(LambdaCalcLanguage::App([current, arg_id]));
                 }
