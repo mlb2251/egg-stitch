@@ -4,9 +4,9 @@
     "domain": "nuts-bolts",
     "file": "nuts-bolts",
     "initial_cost": 19008,
-    "final_cost": 1418,
-    "compression_ratio": 13.404795486600847,
-    "elapsed_secs": 1.106786698,
+    "final_cost": 1415,
+    "compression_ratio": 13.43321554770318,
+    "elapsed_secs": 1.043147686,
     "library": [
       "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
       "fn_1: (T (T ?#0 (M 0.5 0 0 0)) (M 1 0 (* ?#1 (cos (/ pi 4))) (* ?#1 (sin (/ pi 4)))))",
@@ -26,8 +26,8 @@
       "fn_15: (C ?#0 (fn_6 3 ?#1))",
       "fn_16: (fn_4 (fn_0 8 4) ?#0)",
       "fn_17: (fn_4 (fn_5 6 4.25) ?#0)",
-      "fn_18: (fn_4 (fn_11 4) ?#0)",
-      "fn_19: (fn_2 2)"
+      "fn_18: (fn_4 (fn_2 4) ?#0)",
+      "fn_19: (fn_4 (fn_11 4) ?#0)"
     ],
     "egraph_min_term_size": null
   }
