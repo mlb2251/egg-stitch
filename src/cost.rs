@@ -557,6 +557,7 @@ pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
 ///   - `i ≥ d_k` (above-pattern free): replaced by `$(i - d_k + h)` — shifted
 ///     past the `h` wrap-lams so it continues referencing the call-site
 ///     binder it always did.
+///
 /// Bound leaves (`< initial_depth` at the current recursion depth) pass
 /// through unchanged.
 pub(crate) fn permuted_shift_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, d_k: u32, rank_map: &FxHashMap<u32, u32>, h: u32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32), Id>) -> Id {
