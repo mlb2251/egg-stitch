@@ -48,6 +48,18 @@ jobs:
       - name: SMC fv-crash regression sweep
         run: ./tests/smc_fv_crash_regression.sh
 
+  cross-depth-reuse-leaf-expand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: cross-depth-reuse-then-leaf-DB-var regression
+        run: ./tests/cross_depth_reuse_then_db_var_regression.sh
+
   # External equivalence-oracle checks. The checker is pure Python and lives
   # under `scripts/`; it reads each fixture's `original_programs` and
   # `rewritten_programs`, inlines library lambdas, and verifies β-equivalence
