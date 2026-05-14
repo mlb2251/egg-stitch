@@ -42,8 +42,8 @@ jobs:
         run: python3 scripts/check_all_outputs.py
 
   # Run the search end-to-end (both backends) on every problem in the
-  # physics/ and list/ corpora, then verify each rewritten corpus is
-  # equivalent to the input under the same oracle.
+  # physics/, list/, and cogsci/ corpora, then verify each rewritten corpus
+  # is equivalent to the input under the same oracle.
   search-and-check-domains:
     runs-on: ubuntu-latest
     steps:
@@ -59,3 +59,5 @@ jobs:
         run: python3 scripts/search_and_check_domain.py data/domains/physics -- --language lambda-calc --num-steps 2000
       - name: search-and-check list
         run: python3 scripts/search_and_check_domain.py data/domains/list -- --language lambda-calc --num-steps 2000
+      - name: search-and-check cogsci
+        run: python3 scripts/search_and_check_domain.py data/domains/cogsci -- --language lambda-calc --num-steps 2000
