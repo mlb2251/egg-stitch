@@ -126,10 +126,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Renders the abstraction body with HO apps spliced in: each occurrence
-    /// of `?#k` with `ho_arity[k] > 0` is wrapped as `(@ … (@ ?#k $0) … $(h-1))`.
-    /// Falls back to plain `to_string()` when `ho_arity` is all zeros.
-    pub fn display_with_ho(&self, ho_arity: &[u32]) -> String {
-        if ho_arity.iter().all(|&h| h == 0) {
+    /// of `?#k` with non-empty `variable_indices[k]` is wrapped as
+    /// `(@ … (@ ?#k $vis[h-1]) … $vis[0])`. Falls back to plain `to_string()`
+    /// when every slot is empty.
+    pub fn display_with_ho(&self, variable_indices: &[Vec<i32>]) -> String {
+        if variable_indices.iter().all(|v| v.is_empty()) {
             return self.to_string();
         }
         // RevExpr id → which metavar k (if any) lives at this position.
@@ -150,9 +151,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             let new_node = F::make(node.discriminant(), new_children);
             let mut new_id = out.add(new_node);
             if let Some(&k) = pos_to_k.get(&i)
-                && ho_arity[k] > 0
+                && !variable_indices[k].is_empty()
             {
-                let db_args: Vec<i32> = (0..ho_arity[k] as i32).rev().collect();
+                let vis = &variable_indices[k];
+                let db_args: Vec<i32> = (0..vis.len()).rev().map(|j| vis[j]).collect();
                 new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, &db_args);
             }
             id_map[i] = new_id;
