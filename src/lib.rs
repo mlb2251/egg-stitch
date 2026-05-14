@@ -301,6 +301,6 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
     let weights = egraph.analysis.weights;
-    let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file, weights);
+    let (fresh_egraph, fresh_root) = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
     (fresh_egraph, fresh_root, programs)
 }

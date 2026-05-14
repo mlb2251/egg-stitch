@@ -16,13 +16,13 @@ fn fixtures_present() -> bool {
 }
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
-    let (egraph, root, _, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
+    let (egraph, root, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), Weights::default());
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
     smc::smc(egraph, root, args, &mut rng)
 }
 
 fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
-    let (egraph, root, _, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
+    let (egraph, root, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), Weights::default());
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
     smc::smc(egraph, root, args, &mut rng)
 }

@@ -1,4 +1,4 @@
-use crate::lang::{StitchAnalysis, StitchEgraph, StitchLanguage, Weights};
+use crate::lang::{LanguageFamily, StitchAnalysis, StitchEgraph, StitchLanguage, StitchOp, Weights};
 use anyhow::anyhow;
 use egg::{Analysis, Pattern, Rewrite};
 use std::{fs, path::Path};
@@ -8,24 +8,24 @@ use std::{fs, path::Path};
 /// Returns the egraph, the root e-class Id of the programs node, the
 /// minimum AST cost of that root *before* any rewrites were applied, and
 /// the original program strings as parsed from the input file.
-pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<L>, egg::Id, usize, Vec<String>) {
+pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<F::Apply<O>>, egg::Id, usize, Vec<String>) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
     println!("Loaded {} programs", exprs.len());
 
-    let (egraph_before_rules, root) = programs_to_egraph::<L>(&exprs, weights);
+    let (egraph_before_rules, root) = programs_to_egraph::<F::Apply<O>>(&exprs, weights);
     println!("Egraph size: {}", egraph_before_rules.classes().len());
 
     let cost_before_rewrites = extract_root_size(&egraph_before_rules, root);
     println!("Weight of root node before rules: {}", cost_before_rewrites);
 
-    let rules: Vec<egg::Rewrite<L, StitchAnalysis>> = match rule_file {
+    let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {
         Some(rule_file) => from_file(rule_file).expect("Failed to parse rules file"),
         None => vec![],
     };
     println!("loaded {} rules", rules.len());
 
-    let mut runner: egg::Runner<L, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
+    let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
     runner = runner.with_egraph(egraph_before_rules).with_iter_limit(10).run(&rules);
     runner.egraph.rebuild();
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
@@ -37,13 +37,13 @@ pub fn load_egraph<L: StitchLanguage>(filename: &str, rule_file: Option<&str>, w
 ///
 /// Used between abstractions: the rewritten programs are extracted as strings and fed into a
 /// clean egraph, discarding all prior equivalences.
-pub fn egraph_from_programs<L: StitchLanguage>(programs: &[String], rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<L>, egg::Id) {
-    let (egraph, root) = programs_to_egraph::<L>(programs, weights);
-    let rules: Vec<egg::Rewrite<L, StitchAnalysis>> = match rule_file {
+pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<F::Apply<O>>, egg::Id) {
+    let (egraph, root) = programs_to_egraph::<F::Apply<O>>(programs, weights);
+    let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {
         Some(f) => from_file(f).expect("Failed to parse rules file"),
         None => vec![],
     };
-    let mut runner: egg::Runner<L, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
+    let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
     runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
     runner.egraph.rebuild();
     (runner.egraph, root)
