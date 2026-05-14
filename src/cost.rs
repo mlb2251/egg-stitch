@@ -20,7 +20,7 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
         for subst in &m.substs {
             for (k, &arg_id) in subst.vars.iter().enumerate() {
                 let d_k = var_depth[k];
-                let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i < d_k).map(|&i| i + 1).max().unwrap_or(0);
+                let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i >= 0 && (i as u32) < d_k).map(|&i| (i + 1) as u32).max().unwrap_or(0);
                 if needed > out[k] {
                     out[k] = needed;
                 }
@@ -50,7 +50,7 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     }
     // If no fv `≥ initial_depth` is present in this class, the shift is a no-op
     // — return the original eclass to preserve sharing.
-    if by == 0 || egraph[canonical].data.fv.iter().all(|&i| i < initial_depth) {
+    if by == 0 || egraph[canonical].data.fv.iter().all(|&i| i < initial_depth as i32) {
         memo.insert((canonical, initial_depth, by), canonical);
         return canonical;
     }
@@ -77,7 +77,8 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     if let Some(n) = disc.de_bruijn_index() {
         // Free DB-var leaf: rebuild with shifted index. (Bound vars `< initial_depth`
         // were already short-circuited by the fv check above.)
-        let shifted_n = u32::try_from(n as i32 + by).expect("shifted DB index underflowed; caller violated negative-shift precondition");
+        let shifted_n = n + by;
+        assert!(shifted_n >= 0, "shifted DB index underflowed; caller violated negative-shift precondition");
         let new_disc = F::map_discriminant(disc, |_| O::make_db_var(shifted_n).expect("higher-order capture requires a DB-var-bearing leaf op"));
         let new_id = egraph.add(F::make(new_disc, vec![]));
         memo.insert((canonical, initial_depth, by), new_id);
@@ -513,9 +514,9 @@ pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
 /// Computes the exact syntactic free-variable set at every position of `expr`,
 /// indexed by `usize::from(Id)`. Shares its per-enode rule with
 /// `StitchAnalysis::make` via `enode_fv`.
-pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
+pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<i32>> {
     let nodes: &[L] = expr.as_ref();
-    let mut fv: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); nodes.len()];
+    let mut fv: Vec<FxHashSet<i32>> = vec![FxHashSet::default(); nodes.len()];
     for (i, node) in nodes.iter().enumerate() {
         fv[i] = enode_fv(node, |c| &fv[usize::from(c)]);
     }
@@ -529,7 +530,7 @@ pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
 /// A mismatch in either direction means the assumption "min-size ⇒ min-fv"
 /// failed for this extraction; downstream soundness checks that read
 /// `data.fv` lose their guarantee.
-pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<u32>) {
+pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<i32>) {
     let fv = recexpr_fv(expr);
     let actual = fv.last().expect("non-empty RecExpr");
     assert_eq!(actual, expected, "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", actual, expected,);

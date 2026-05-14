@@ -58,7 +58,7 @@ fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
 where
     L::Discriminant: StitchDisc,
 {
-    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= d_k)
+    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= 0 && (i as u32) >= d_k)
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
@@ -186,7 +186,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     let min_depth = d_a.min(d_b);
                     let merged_depth = d_a.max(d_b);
                     let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-                    if kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) { Some(idx) } else { None }
+                    if kept_fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32) { Some(idx) } else { None }
                 })
                 .collect();
             if !reuse_candidates.is_empty() {
@@ -310,7 +310,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 return;
             }
             let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-            if !kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) {
+            if !kept_fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32) {
                 return;
             }
             let mut new_subst = subst.clone();

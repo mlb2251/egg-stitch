@@ -230,7 +230,7 @@ impl LanguageFamily for LambdaCalc {
         // `LanguageFamily::wrap_pattern_with_db_apps` for why this order matters.
         let mut current = head;
         for i in (0..n).rev() {
-            let var_op = OpWithVar::Node(O::make_db_var(i).expect("higher-order display needs a DB-var-bearing leaf op"));
+            let var_op = OpWithVar::Node(O::make_db_var(i as i32).expect("higher-order display needs a DB-var-bearing leaf op"));
             let var_id = recexpr.add(LambdaCalcLanguage::Leaf(var_op));
             current = recexpr.add(LambdaCalcLanguage::App([current, var_id]));
         }
@@ -255,7 +255,7 @@ impl LanguageFamily for LambdaCalc {
                 depth[usize::from(c)] = d + if disc.binds_child(j) { 1 } else { 0 };
             }
         }
-        let db = |n: u32| O::make_db_var(n).expect("LambdaCalc requires a DB-var-bearing leaf op");
+        let db = |n: u32| O::make_db_var(n as i32).expect("LambdaCalc requires a DB-var-bearing leaf op");
         let mut out: RecExpr<LambdaCalcLanguage<O>> = RecExpr::default();
         let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
         for i in (0..nodes.len()).rev() {

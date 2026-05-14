@@ -14,7 +14,7 @@ use super::{StitchDisc, StitchOp, Weights};
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum OpDB<O> {
     Node(O),
-    Var(u32),
+    Var(i32),
 }
 
 impl<O: Display> Display for OpDB<O> {
@@ -41,7 +41,7 @@ impl<O: StitchDisc> StitchDisc for OpDB<O> {
         }
     }
 
-    fn de_bruijn_index(&self) -> Option<u32> {
+    fn de_bruijn_index(&self) -> Option<i32> {
         match self {
             Self::Var(n) => Some(*n),
             Self::Node(o) => o.de_bruijn_index(),
@@ -50,11 +50,11 @@ impl<O: StitchDisc> StitchDisc for OpDB<O> {
 }
 
 impl<O: StitchOp> StitchOp for OpDB<O> {
-    /// Parses `"$<u32>"` as `Var(n)`; anything else (including `"$foo"` with a
+    /// Parses `"$<i32>"` as `Var(n)`; anything else (including `"$foo"` with a
     /// non-numeric suffix) is delegated to the inner op type.
     fn from_name(s: &str) -> Self {
         if let Some(rest) = s.strip_prefix('$')
-            && let Ok(n) = rest.parse::<u32>()
+            && let Ok(n) = rest.parse::<i32>()
         {
             Self::Var(n)
         } else {
@@ -62,7 +62,7 @@ impl<O: StitchOp> StitchOp for OpDB<O> {
         }
     }
 
-    fn make_db_var(n: u32) -> Option<Self> {
+    fn make_db_var(n: i32) -> Option<Self> {
         Some(Self::Var(n))
     }
 }
