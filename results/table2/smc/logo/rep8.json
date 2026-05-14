@@ -6,9 +6,9 @@
     "initial_cost": 737,
     "final_cost": 653,
     "compression_ratio": 1.1286370597243491,
-    "elapsed_secs": 0.082501783,
+    "elapsed_secs": 0.086378555,
     "library": [
-      "fn_0: (lam (logo_forLoop ?#0 (lam (lam (?#1 $0 $1 $0))) $0))"
+      "fn_0: (lam (logo_forLoop ?#0 (lam (lam (?#1 $1 $0 $0))) $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -19,9 +19,9 @@
     "initial_cost": 766,
     "final_cost": 726,
     "compression_ratio": 1.0550964187327823,
-    "elapsed_secs": 0.060673889,
+    "elapsed_secs": 0.050725549,
     "library": [
-      "fn_0: (lam (?#0 $0))"
+      "fn_82: (lam (?#0 $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -32,9 +32,9 @@
     "initial_cost": 870,
     "final_cost": 815,
     "compression_ratio": 1.0674846625766872,
-    "elapsed_secs": 0.053161388,
+    "elapsed_secs": 0.053796559,
     "library": [
-      "fn_0: (lam (logo_forLoop ?#0 ?#1 $0))"
+      "fn_90: (lam (logo_forLoop ?#0 ?#1 $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -45,9 +45,9 @@
     "initial_cost": 845,
     "final_cost": 796,
     "compression_ratio": 1.0615577889447236,
-    "elapsed_secs": 0.054031019,
+    "elapsed_secs": 0.053462964,
     "library": [
-      "fn_0: (lam (?#0 $0))"
+      "fn_99: (lam (?#0 $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -58,7 +58,7 @@
     "initial_cost": 841,
     "final_cost": 759,
     "compression_ratio": 1.1080368906455862,
-    "elapsed_secs": 0.093648543,
+    "elapsed_secs": 0.08622664,
     "library": [
       "fn_0: (lam (logo_FWRT ?#0 ?#1 $0))"
     ],
@@ -71,9 +71,9 @@
     "initial_cost": 944,
     "final_cost": 896,
     "compression_ratio": 1.0535714285714286,
-    "elapsed_secs": 0.058364979,
+    "elapsed_secs": 0.050339685,
     "library": [
-      "fn_0: (lam (?#0 $0))"
+      "fn_108: (lam (?#0 $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -84,9 +84,9 @@
     "initial_cost": 1145,
     "final_cost": 1021,
     "compression_ratio": 1.1214495592556317,
-    "elapsed_secs": 0.098438427,
+    "elapsed_secs": 0.092838894,
     "library": [
-      "fn_0: (lam (logo_forLoop ?#0 (lam (lam (?#1 $0 $1 $0))) $0))"
+      "fn_0: (lam (logo_forLoop ?#0 (lam (lam (?#1 $1 $0 $0))) $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -97,9 +97,9 @@
     "initial_cost": 1092,
     "final_cost": 1026,
     "compression_ratio": 1.064327485380117,
-    "elapsed_secs": 0.060752317,
+    "elapsed_secs": 0.056386648,
     "library": [
-      "fn_0: (lam (?#0 $0))"
+      "fn_115: (lam (?#0 $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -108,11 +108,11 @@
     "domain": "logo",
     "file": "logo_batch_50_1h_ellisk_2019-03-23T14.13.04__bench000_it0",
     "initial_cost": 602,
-    "final_cost": 545,
-    "compression_ratio": 1.1045871559633027,
-    "elapsed_secs": 0.08903101,
+    "final_cost": 538,
+    "compression_ratio": 1.1189591078066914,
+    "elapsed_secs": 0.084308914,
     "library": [
-      "fn_0: (logo_forLoop logo_IFTY (lam (lam (logo_FWRT ?#0 logo_epsA $0))))"
+      "fn_0: (lam (logo_FWRT ?#0 ?#1 $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -121,11 +121,11 @@
     "domain": "logo",
     "file": "logo_batch_50_1h_ellisk_2019-03-23T14.13.04__bench001_it8",
     "initial_cost": 1596,
-    "final_cost": 1496,
-    "compression_ratio": 1.0668449197860963,
-    "elapsed_secs": 0.093305118,
+    "final_cost": 1519,
+    "compression_ratio": 1.0506912442396312,
+    "elapsed_secs": 0.08269156,
     "library": [
-      "fn_0: (lam (logo_FWRT logo_ZL (fn_115 ?#0) (?#1 $0)))"
+      "fn_119: (logo_FWRT logo_ZL (fn_115 ?#0))"
     ],
     "egraph_min_term_size": null
   },
@@ -134,11 +134,11 @@
     "domain": "logo",
     "file": "logo_batch_50_1h_ellisk_2019-03-23T14.16.56__bench000_it0",
     "initial_cost": 844,
-    "final_cost": 747,
-    "compression_ratio": 1.1298527443105757,
-    "elapsed_secs": 0.101305816,
+    "final_cost": 768,
+    "compression_ratio": 1.0989583333333333,
+    "elapsed_secs": 0.084337557,
     "library": [
-      "fn_0: (lam (logo_FWRT ?#0 ?#1 $0))"
+      "fn_0: (lam (logo_forLoop ?#0 ?#1 $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -149,9 +149,9 @@
     "initial_cost": 934,
     "final_cost": 883,
     "compression_ratio": 1.057757644394111,
-    "elapsed_secs": 0.070223032,
+    "elapsed_secs": 0.052774903,
     "library": [
-      "fn_0: (lam (?#0 $0))"
+      "fn_127: (lam (?#0 $0))"
     ],
     "egraph_min_term_size": null
   }
