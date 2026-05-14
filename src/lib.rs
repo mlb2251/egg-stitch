@@ -1,7 +1,6 @@
 pub mod best_first;
 pub mod cost;
 pub mod debug_log;
-pub mod depth;
 pub mod follow;
 pub mod io;
 pub mod lang;

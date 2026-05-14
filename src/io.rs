@@ -32,7 +32,7 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
     let mut egraph = runner.egraph;
-    let shifted = build_shifted_variants::<F, O>(&mut egraph, root);
+    let shifted = build_shifted_variants::<F, O>(&mut egraph);
     println!("Egraph size after shifted-variant enrichment: {}", egraph.classes().len());
     (egraph, root, cost_before_rewrites, exprs, shifted)
 }
@@ -51,7 +51,7 @@ pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String],
     runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
     runner.egraph.rebuild();
     let mut egraph = runner.egraph;
-    let shifted = build_shifted_variants::<F, O>(&mut egraph, root);
+    let shifted = build_shifted_variants::<F, O>(&mut egraph);
     (egraph, root, shifted)
 }
 

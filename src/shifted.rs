@@ -1,5 +1,4 @@
 use crate::cost::shift_free_egraph;
-use crate::depth::max_depth_per_eclass;
 use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp};
 use egg::Id;
 use rustc_hash::FxHashMap;
@@ -31,29 +30,37 @@ impl ShiftedVariants {
     }
 }
 
-/// Builds the shifted-variants index for `egraph` rooted at `root`.
+/// Builds the shifted-variants index for `egraph`.
 ///
-/// For each e-class `C` with non-empty `data.fv` and observed max depth `d`
-/// under `root`, calls `shift_free_egraph(C, -s, 0, …)` for each `s ∈ 1..=d`
-/// and records the resulting e-class id under `map[C][s]`. A shared memo
-/// passed across all (C, s) calls keeps the work proportional to the number of
-/// distinct `(class, shift)` pairs reached, not their cross-product.
+/// For each e-class `C` whose `data.fv` has a non-negative maximum index `m`,
+/// calls `shift_free_egraph(C, -s, 0, …)` for each `s ∈ 1..=m+1` and records
+/// the resulting e-class id under `map[C][s]`. A shared memo across all
+/// `(C, s)` calls keeps the work proportional to the number of distinct
+/// `(class, shift)` pairs reached.
+///
+/// Why `m + 1` is the right upper bound: shifts in `1..=m` decrement every
+/// free index by `s`, keeping them non-negative; `s = m + 1` produces the
+/// first variant with `max(fv) = -1` ("first re-wrap"). Larger shifts only
+/// add more negative re-wrap slots, which the consumer can equivalently
+/// materialize as outer lams at extraction time — so they carry no new
+/// structural information. Classes with empty fv or all-negative fv get no
+/// entry (no shift would be useful).
 ///
 /// Mutates `egraph` (adds enodes for the shifted variants and calls
 /// `rebuild()`). Post-rebuild, the recorded ids are canonicalized so callers
 /// don't have to.
-pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, root: Id) -> ShiftedVariants {
-    let depths = max_depth_per_eclass(egraph, root);
+pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>) -> ShiftedVariants {
     let class_ids: Vec<Id> = egraph.classes().map(|c| c.id).collect();
     let mut memo: FxHashMap<(Id, u32, i32), Id> = FxHashMap::default();
     let mut map: FxHashMap<Id, FxHashMap<u32, Id>> = FxHashMap::default();
 
     for c in class_ids {
         let canonical = egraph.find(c);
-        let d = depths.get(&canonical).copied().unwrap_or(0);
-        if d == 0 || egraph[canonical].data.fv.is_empty() {
-            continue;
-        }
+        let max_fv = egraph[canonical].data.fv.iter().copied().max();
+        let d = match max_fv {
+            Some(m) if m >= 0 => (m as u32) + 1,
+            _ => continue,
+        };
         let mut per_class: FxHashMap<u32, Id> = FxHashMap::default();
         for s in 1..=d {
             let shifted_id = shift_free_egraph::<F, O>(egraph, canonical, -(s as i32), 0, &mut memo);
