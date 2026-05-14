@@ -6,8 +6,7 @@ pub struct AbstractionResult {
     pub pattern: String,
     /// Closed-lambda form of the abstraction: inlining a call site
     /// `(fn_N a_0 … a_{k-1})` against this and β-reducing recovers the original
-    /// captured term. For non-lambda families the `lam` wrappers and `$N` are
-    /// plain symbol leaves.
+    /// captured term.
     pub lambda: String,
     pub arity: usize,
     pub pattern_size: usize,
