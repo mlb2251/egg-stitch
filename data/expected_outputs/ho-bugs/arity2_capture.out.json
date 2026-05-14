@@ -7,6 +7,7 @@
     {
       "approx_cost": 8,
       "arity": 1,
+      "lambda": "(lam (F e (lam (lam (P $0 ($2 $0 $1 $1))))))",
       "num_matches": 3,
       "pattern": "fn_0: (F e (lam (lam (P $0 (?#0 $1 $0 $1)))))",
       "pattern_size": 17,
