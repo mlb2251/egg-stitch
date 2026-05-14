@@ -128,6 +128,26 @@ fn merge_intersects_fv() {
 // semantic fv. Soundness of using this for `inv_0` capture relies on
 // extraction (AstSize) picking the fv-minimal representative; see
 // `check_fvs_are_as_expected` for the runtime guard.
+// ---- Negative DB indices (re-wrap slots from shifted variants) ----
+//
+// `enode_fv` must let negative indices pass through a binder unchanged: a
+// `$-1` leaf denotes "needs one extra outer binder re-injected", and an
+// intervening `lam` neither captures it (it isn't index 0) nor decrements it.
+
+#[test]
+fn negative_db_leaf_carries_index() {
+    assert_eq!(fv::<LamLang>("$-1"), vec![-1]);
+    assert_eq!(fv::<LamLang>("$-3"), vec![-3]);
+}
+
+#[test]
+fn lam_does_not_capture_negative_index() {
+    // `lam` binds index 0 and decrements positives ≥ 1; `-1` passes through.
+    assert_eq!(fv::<LamLang>("(lam $-1)"), vec![-1]);
+    // Mixed: `$0` is bound away, `$2` decrements to `1`, `$-1` passes through.
+    assert_eq!(fv::<LamLang>("(lam (+ $0 $2 $-1))"), vec![-1, 1]);
+}
+
 #[test]
 fn merge_with_annihilator_should_not_inherit_dropped_fv() {
     let mut eg: egg::EGraph<LamLang, StitchAnalysis> = egg::EGraph::default();

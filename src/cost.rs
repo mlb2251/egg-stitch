@@ -36,6 +36,9 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
                 if !seen_per_slot[k].insert(arg_id) {
                     continue;
                 }
+                // `fv` is `i32`: negative indices are re-wrap slots from
+                // shifted variants (see `StitchDisc::de_bruijn_index`) and
+                // never contribute to ho-arity. Keep only `0 ≤ i < d_k`.
                 let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i >= 0 && (i as u32) < d_k).map(|&i| (i + 1) as u32).max().unwrap_or(0);
                 if needed > out[k] {
                     out[k] = needed;

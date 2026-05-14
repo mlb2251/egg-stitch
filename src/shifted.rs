@@ -12,53 +12,22 @@ use rustc_hash::FxHashMap;
 /// class is the class itself, so storing it is wasted indirection.
 ///
 /// Negative shifted indices (re-wrap slots) live inside these variant
-/// e-classes; consumers reach them via `nodes_with_shifts` rather than seeing
-/// them in the original class's enodes.
+/// e-classes; consumers reach them via `enodes_across_shifts` rather than
+/// seeing them in the original class's enodes.
 #[derive(Debug, Default, Clone)]
 pub struct ShiftedVariants {
-    pub map: FxHashMap<Id, FxHashMap<u32, Id>>,
+    pub(crate) map: FxHashMap<Id, FxHashMap<u32, Id>>,
 }
 
 impl ShiftedVariants {
     /// Returns the shifted variant of `eclass` by `s` (or `None` if none was
-    /// built — i.e. `s == 0`, `eclass` had empty fv, or `s` exceeds the
-    /// class's max observed depth).
+    /// built — i.e. `eclass` had empty fv or `s` exceeds the class's max
+    /// observed depth). `s == 0` returns `eclass` itself.
     pub fn get(&self, eclass: Id, s: u32) -> Option<Id> {
         if s == 0 {
             return Some(eclass);
         }
         self.map.get(&eclass).and_then(|m| m.get(&s)).copied()
-    }
-
-    /// Iterates `(shift, eclass_id)` pairs covering the original class
-    /// (`shift = 0`) and every shifted variant that was built. Useful for
-    /// search sites that want to walk enodes across all shift levels of a
-    /// target.
-    pub fn shifts_for<'a>(&'a self, eclass: Id) -> Box<dyn Iterator<Item = (u32, Id)> + 'a> {
-        match self.map.get(&eclass) {
-            Some(m) => Box::new(std::iter::once((0u32, eclass)).chain(m.iter().map(|(&s, &id)| (s, id)))),
-            None => Box::new(std::iter::once((0u32, eclass))),
-        }
-    }
-
-    /// Set of e-class ids that are *only* shifted variants (introduced by
-    /// `build_shifted_variants`, never appearing in a real program). Used to
-    /// keep them out of match-root enumeration and other "real subterm"
-    /// pipelines: they're alternative DB-indexings of other classes, not
-    /// independent corpus subterms.
-    pub fn variant_ids(&self) -> rustc_hash::FxHashSet<Id> {
-        let mut sources: rustc_hash::FxHashSet<Id> = rustc_hash::FxHashSet::default();
-        let mut variants: rustc_hash::FxHashSet<Id> = rustc_hash::FxHashSet::default();
-        for (&src, inner) in &self.map {
-            sources.insert(src);
-            for &v in inner.values() {
-                variants.insert(v);
-            }
-        }
-        // A class that's both a source (shifted from) and a variant (shifted
-        // into) is a real subterm too — keep it in the corpus.
-        variants.retain(|id| !sources.contains(id));
-        variants
     }
 }
 
@@ -112,9 +81,14 @@ pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
 /// Yields enodes from `eclass` and from every shifted-variant e-class of
 /// `eclass`. Used by search sites that must consider every shift level as a
 /// candidate for metavariable expansion or refinement. The original e-class is
-/// always yielded first; order of the shifted-variant enodes is unspecified.
+/// yielded first, then variants in ascending order of shift amount — the order
+/// is fully determined by the egraph + variant table so that RNG-seeded search
+/// is reproducible across runs (the underlying `FxHashMap` iteration order is
+/// stable for a given build but depends on insertion order and hash).
 pub fn enodes_across_shifts<'a, L: StitchLanguage>(egraph: &'a StitchEgraph<L>, shifted: &'a ShiftedVariants, eclass: Id) -> impl Iterator<Item = &'a L> + 'a {
     let canonical = egraph.find(eclass);
-    let extra = shifted.map.get(&canonical).into_iter().flat_map(move |m| m.values().flat_map(move |&sid| egraph[egraph.find(sid)].nodes.iter()));
+    let mut variants: Vec<(u32, Id)> = shifted.map.get(&canonical).into_iter().flat_map(|m| m.iter().map(|(&s, &id)| (s, id))).collect();
+    variants.sort_by_key(|&(s, _)| s);
+    let extra = variants.into_iter().flat_map(move |(_, sid)| egraph[egraph.find(sid)].nodes.iter());
     egraph[canonical].nodes.iter().chain(extra)
 }
