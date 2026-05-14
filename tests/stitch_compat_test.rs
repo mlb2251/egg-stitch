@@ -197,6 +197,15 @@ fn tmp_minimal() {
     check_fixture("data/domains/stitch/tmp_minimal.json", &[], true);
 }
 
+/// Exercises shifted-variant search under lambda-calc: the two programs share
+/// the subterm `(+ $0 3 4 (lam (+ $1 6 7)))` at different binding depths, so
+/// any abstraction that captures it as a single metavariable must use the
+/// shifted variant at the shallower occurrence.
+#[test]
+fn reuse_at_different_depths() {
+    check_fixture("data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"], true);
+}
+
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
 /// the `(+ _ (* _ _))` shape aligns across all five programs (the fifth,
 /// `(* 7 (* (- v) (- v)))`, gets a `(+ 0 _)`-wrapped representation in its
