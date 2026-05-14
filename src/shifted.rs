@@ -3,6 +3,24 @@ use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp};
 use egg::Id;
 use rustc_hash::FxHashMap;
 
+/// The trio that's threaded through every search entry point: the e-graph, its
+/// corpus root, and the side table of shifted-variant e-classes. Bundling them
+/// keeps signatures from sprouting three parallel parameters at every layer and
+/// reflects that they mutate together (e.g. `apply_abstraction` rebuilds all
+/// three from the rewritten programs of the previous round).
+#[derive(Debug, Clone)]
+pub struct SharedData<F: LanguageFamily, O: StitchOp> {
+    pub egraph: StitchEgraph<F::Apply<O>>,
+    pub root: Id,
+    pub shifted: ShiftedVariants,
+}
+
+impl<F: LanguageFamily, O: StitchOp> SharedData<F, O> {
+    pub fn new(egraph: StitchEgraph<F::Apply<O>>, root: Id, shifted: ShiftedVariants) -> Self {
+        Self { egraph, root, shifted }
+    }
+}
+
 /// Lookup of shifted versions of each e-class.
 ///
 /// `map[c][s]` is the e-class id of the version of `c` whose free DB indices

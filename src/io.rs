@@ -1,5 +1,5 @@
 use crate::lang::{LanguageFamily, StitchAnalysis, StitchEgraph, StitchLanguage, StitchOp, Weights};
-use crate::shifted::{ShiftedVariants, build_shifted_variants};
+use crate::shifted::{SharedData, build_shifted_variants};
 use anyhow::anyhow;
 use egg::{Analysis, Pattern, Rewrite};
 use std::{fs, path::Path};
@@ -9,7 +9,7 @@ use std::{fs, path::Path};
 /// Returns the egraph, the root e-class Id of the programs node, the
 /// minimum AST cost of that root *before* any rewrites were applied, and
 /// the original program strings as parsed from the input file.
-pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<F::Apply<O>>, egg::Id, usize, Vec<String>, ShiftedVariants) {
+pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, weights: Weights) -> (SharedData<F, O>, usize, Vec<String>) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
     println!("Loaded {} programs", exprs.len());
@@ -34,14 +34,14 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     let mut egraph = runner.egraph;
     let shifted = build_shifted_variants::<F, O>(&mut egraph);
     println!("Egraph size after shifted-variant enrichment: {}", egraph.classes().len());
-    (egraph, root, cost_before_rewrites, exprs, shifted)
+    (SharedData::new(egraph, root, shifted), cost_before_rewrites, exprs)
 }
 
 /// Builds a fresh egraph from program strings, applies rewrite rules, and returns it with its root.
 ///
 /// Used between abstractions: the rewritten programs are extracted as strings and fed into a
 /// clean egraph, discarding all prior equivalences.
-pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights) -> (StitchEgraph<F::Apply<O>>, egg::Id, ShiftedVariants) {
+pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights) -> SharedData<F, O> {
     let (egraph, root) = programs_to_egraph::<F::Apply<O>>(programs, weights);
     let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {
         Some(f) => from_file(f).expect("Failed to parse rules file"),
@@ -52,7 +52,7 @@ pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String],
     runner.egraph.rebuild();
     let mut egraph = runner.egraph;
     let shifted = build_shifted_variants::<F, O>(&mut egraph);
-    (egraph, root, shifted)
+    SharedData::new(egraph, root, shifted)
 }
 
 /// Parses a list of s-expression strings into a fresh egraph wrapped in a `(programs ...)` root.
