@@ -12,7 +12,6 @@ Exit 0 only when both runs complete and both pass the equivalence check.
 """
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys

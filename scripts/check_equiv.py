@@ -432,7 +432,8 @@ def extract_smallest(eg, eid, memo=None, in_progress=None):
         if best_size is None or size < best_size:
             best, best_size = term, size
     in_progress.discard(eid)
-    memo[eid] = best
+    if best is not None:
+        memo[eid] = best
     return best
 
 
