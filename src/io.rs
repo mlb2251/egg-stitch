@@ -32,9 +32,9 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
     let mut egraph = runner.egraph;
-    let shifted = build_shifted_variants::<F, O>(&mut egraph);
+    let (shifted, original_eclasses) = build_shifted_variants::<F, O>(&mut egraph);
     println!("Egraph size after shifted-variant enrichment: {}", egraph.classes().len());
-    (SharedData::new(egraph, root, shifted), cost_before_rewrites, exprs)
+    (SharedData::new(egraph, root, shifted, original_eclasses), cost_before_rewrites, exprs)
 }
 
 /// Builds a fresh egraph from program strings, applies rewrite rules, and returns it with its root.
@@ -51,8 +51,8 @@ pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String],
     runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
     runner.egraph.rebuild();
     let mut egraph = runner.egraph;
-    let shifted = build_shifted_variants::<F, O>(&mut egraph);
-    SharedData::new(egraph, root, shifted)
+    let (shifted, original_eclasses) = build_shifted_variants::<F, O>(&mut egraph);
+    SharedData::new(egraph, root, shifted, original_eclasses)
 }
 
 /// Parses a list of s-expression strings into a fresh egraph wrapped in a `(programs ...)` root.

@@ -275,7 +275,7 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// Returns the fresh egraph, its root id, the shifted-variant table built against
 /// that fresh egraph, and the rewritten program strings.
 fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shifted::SharedData<F, O>, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (shifted::SharedData<F, O>, Vec<String>) {
-    let shifted::SharedData { mut egraph, root, shifted: _ } = data;
+    let shifted::SharedData { mut egraph, root, .. } = data;
     // Mirrors `build_rewritten_egraph`: η-wrap captures whose fv reaches
     // into pattern-internal binders before passing them in.
     let var_depth = &state.pattern.var_depth;

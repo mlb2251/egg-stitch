@@ -133,8 +133,12 @@ pub struct CostCache {
 }
 
 impl CostCache {
-    /// Builds the cache from the egraph rooted at `root`.
-    pub fn new<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> Self {
+    /// Builds the cache from the egraph rooted at `root`. `original_eclasses`
+    /// is the set of canonical e-class ids that existed before
+    /// `build_shifted_variants` ran; it bounds dirty-bit propagation in
+    /// `solve()` so that shifted-variant e-classes (built post-hoc, not in
+    /// `visit_order`) don't get marked dirty and prevent settling.
+    pub fn new<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: Id, original_eclasses: &FxHashSet<Id>) -> Self {
         let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
         let mut postorder = vec![None; max_id + 1];
         let mut visit_order: Vec<Id> = Vec::new();
@@ -163,17 +167,16 @@ impl CostCache {
             }
         }
 
-        // Restrict parents_of to root-reachable classes. Otherwise `solve()`'s
-        // dirty-bit propagation through `set` would mark parents that don't
-        // appear in `visit_order` (e.g. shifted-variant e-classes built
-        // post-hoc), and `any_dirty()` would never settle.
-        let reachable: FxHashSet<Id> = visit_order.iter().copied().collect();
+        // Restrict parents_of to pre-shift e-classes. Otherwise `solve()`'s
+        // dirty-bit propagation through `set` would mark shifted-variant
+        // e-classes (built post-hoc, not in `visit_order`) and `any_dirty()`
+        // would never settle.
         let mut parents_of = FxHashMap::<Id, Vec<Id>>::default();
         for &cid in &visit_order {
             for enode in &egraph[cid].nodes {
                 for &child in enode.children() {
                     let child = egraph.find(child);
-                    if reachable.contains(&child) {
+                    if original_eclasses.contains(&child) {
                         parents_of.entry(child).or_default().push(cid);
                     }
                 }

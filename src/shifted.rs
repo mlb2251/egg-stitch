@@ -1,7 +1,7 @@
 use crate::cost::shift_free_egraph;
 use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp};
 use egg::Id;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// The trio that's threaded through every search entry point: the e-graph, its
 /// corpus root, and the side table of shifted-variant e-classes. Bundling them
@@ -13,11 +13,16 @@ pub struct SharedData<F: LanguageFamily, O: StitchOp> {
     pub egraph: StitchEgraph<F::Apply<O>>,
     pub root: Id,
     pub shifted: ShiftedVariants,
+    /// Canonical ids of the e-classes that existed *before*
+    /// `build_shifted_variants` enriched the e-graph. Consumers like
+    /// `CostCache` use this to exclude shifted-variant e-classes from
+    /// dirty-bit propagation without re-deriving the set via a from-root DFS.
+    pub original_eclasses: FxHashSet<Id>,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedData<F, O> {
-    pub fn new(egraph: StitchEgraph<F::Apply<O>>, root: Id, shifted: ShiftedVariants) -> Self {
-        Self { egraph, root, shifted }
+    pub fn new(egraph: StitchEgraph<F::Apply<O>>, root: Id, shifted: ShiftedVariants, original_eclasses: FxHashSet<Id>) -> Self {
+        Self { egraph, root, shifted, original_eclasses }
     }
 }
 
@@ -67,8 +72,9 @@ impl ShiftedVariants {
 /// Mutates `egraph` (adds enodes for the shifted variants and calls
 /// `rebuild()`). Post-rebuild, the recorded ids are canonicalized so callers
 /// don't have to.
-pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>) -> ShiftedVariants {
+pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>) -> (ShiftedVariants, FxHashSet<Id>) {
     let class_ids: Vec<Id> = egraph.classes().map(|c| c.id).collect();
+    let original_pre_rebuild = class_ids.clone();
     let mut memo: FxHashMap<(Id, u32, i32), Id> = FxHashMap::default();
     let mut map: FxHashMap<Id, FxHashMap<u32, Id>> = FxHashMap::default();
 
@@ -100,7 +106,8 @@ pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
         }
     }
 
-    ShiftedVariants { map: canonical_map }
+    let original_eclasses: FxHashSet<Id> = original_pre_rebuild.into_iter().map(|c| egraph.find(c)).collect();
+    (ShiftedVariants { map: canonical_map }, original_eclasses)
 }
 
 /// Yields enodes from `eclass` and from every shifted-variant e-class of

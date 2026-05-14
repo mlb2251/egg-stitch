@@ -138,14 +138,17 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// enodes for expansion, so a subtree captured deeper than the metavar
     /// slot can still be used via the appropriate shift.
     pub shifted: crate::shifted::ShiftedVariants,
+    /// Canonical pre-shift e-class ids; carried through so the outer loop can
+    /// reconstruct `SharedData` after a search round.
+    pub original_eclasses: FxHashSet<Id>,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
     /// Unwraps the search-specific fields and returns the underlying
-    /// e-graph + root + shifted-variants trio. Used by search drivers to
-    /// hand the e-graph back to the outer abstraction loop.
+    /// `SharedData`. Used by search drivers to hand the e-graph back to the
+    /// outer abstraction loop.
     pub fn into_data(self) -> SharedData<F, O> {
-        SharedData::new(self.egraph, self.root, self.shifted)
+        SharedData::new(self.egraph, self.root, self.shifted, self.original_eclasses)
     }
 }
 
@@ -481,7 +484,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
     let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
-    let SharedData { egraph, root, shifted } = data;
+    let SharedData { egraph, root, shifted, original_eclasses } = data;
+    let cache = crate::cost::CostCache::new(&egraph, root, &original_eclasses);
     let shared = SharedSearchData {
         egraph,
         root,
@@ -491,8 +495,8 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: SharedData<F, O>, args
         p_reuse: args.p_reuse,
         check_slow: args.check_slow,
         shifted,
+        original_eclasses,
     };
-    let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared);
     let initial_ho_arity = crate::cost::compute_ho_arity::<F, O>(&shared.egraph, &initial);
     let mut scratch = crate::cost::CostScratch::new(&shared.egraph);

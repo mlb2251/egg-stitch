@@ -34,7 +34,7 @@ fn no_variants_for_closed_term() {
     let mut eg: egg::EGraph<LamLang, StitchAnalysis> = egg::EGraph::default();
     let root = eg.add_expr(&LamLang::parse_program("(lam $0)").unwrap());
     eg.rebuild();
-    let v = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
     let root = eg.find(root);
     assert_eq!(v.get(root, 0), Some(root));
     assert_eq!(v.get(root, 1), None);
@@ -51,7 +51,7 @@ fn variants_built_up_to_max_fv() {
     eg.add_expr(&LamLang::parse_program("(lam $1)").unwrap());
     let leaf = eg.add_expr(&LamLang::parse_program("$1").unwrap());
     eg.rebuild();
-    let v = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
     let leaf = eg.find(leaf);
 
     assert_eq!(v.get(leaf, 0), Some(leaf));
@@ -68,7 +68,7 @@ fn fv_zero_only_gets_no_variants() {
     eg.add_expr(&LamLang::parse_program("(lam $0)").unwrap());
     let leaf = eg.add_expr(&LamLang::parse_program("$0").unwrap());
     eg.rebuild();
-    let v = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
     let leaf = eg.find(leaf);
     assert_eq!(eg[leaf].data.fv.iter().copied().collect::<Vec<_>>(), vec![0]);
     assert_eq!(v.get(leaf, 0), Some(leaf));
@@ -83,7 +83,7 @@ fn get_returns_canonical_id() {
     eg.add_expr(&LamLang::parse_program("(lam $1)").unwrap());
     let leaf = eg.add_expr(&LamLang::parse_program("$1").unwrap());
     eg.rebuild();
-    let v = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
     let leaf = eg.find(leaf);
     let s1 = v.get(leaf, 1).expect("shift by 1");
     assert_eq!(s1, eg.find(s1), "returned id must be canonical");
@@ -96,7 +96,7 @@ fn fv_empty_subclass_gets_no_entry() {
     let mut eg: egg::EGraph<LamLang, StitchAnalysis> = egg::EGraph::default();
     let root = eg.add_expr(&LamLang::parse_program("(lam $0)").unwrap());
     eg.rebuild();
-    let v = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
+    let (v, _) = build_shifted_variants::<LambdaCalc, OpDB<Op>>(&mut eg);
     let root = eg.find(root);
     assert!(eg[root].data.fv.is_empty());
     assert_eq!(v.get(root, 1), None);
