@@ -285,7 +285,12 @@ fn render_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], out: &
         return current;
     }
     let disc = nodes[i].discriminant();
-    let new_children: Vec<Id> = nodes[i].children().iter().enumerate().map(|(j, &c)| render_lambda::<O>(nodes, out, usize::from(c), depth + if disc.binds_child(j) { 1 } else { 0 }, pos_to_k, arity, variable_indices)).collect();
+    let new_children: Vec<Id> = nodes[i]
+        .children()
+        .iter()
+        .enumerate()
+        .map(|(j, &c)| render_lambda::<O>(nodes, out, usize::from(c), depth + if disc.binds_child(j) { 1 } else { 0 }, pos_to_k, arity, variable_indices))
+        .collect();
     let new_node = match &nodes[i] {
         LambdaCalcLanguage::Leaf(OpWithVar::Node(o)) => LambdaCalcLanguage::Leaf(o.clone()),
         LambdaCalcLanguage::Leaf(OpWithVar::Var(_)) => unreachable!("Var leaf at position not in pos_to_k"),
