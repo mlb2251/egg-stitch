@@ -1,0 +1,29 @@
+{
+  "compression_ratio": 1.0795454545454546,
+  "cost_after_rewrites": 95,
+  "final_cost": 88,
+  "initial_cost": 95,
+  "library": [
+    {
+      "approx_cost": 82,
+      "arity": 1,
+      "lambda": "(lam (fold $0 0. (lam (lam (+. $0 $1)))))",
+      "num_matches": 2,
+      "pattern": "fn_0: (fold ?#0 0. (lam (lam (+. $0 $1))))",
+      "pattern_size": 13,
+      "usage_matches": 2
+    }
+  ],
+  "original_programs": [
+    "(lam (lam (fold (zip $0 $1 (lam (lam (*. $0 $1)))) 0. (lam (lam (+. $0 $1))))))",
+    "(lam (fold $0 0. (lam (lam (+. $0 $1)))))",
+    "(lam (/. 1. (fold $0 0. (lam (lam (+. $0 (/. 1. $1)))))))",
+    "(lam (lam (/. $1 (/. (+. 1. 1.) (fold $0 0. (lam (lam (+. $0 (*. $1 $1)))))))))"
+  ],
+  "rewritten_programs": [
+    "(lam (lam (fn_0 (zip $0 $1 (lam (lam (*. $0 $1)))))))",
+    "(lam (fn_0 $0))",
+    "(lam (/. 1. (fold $0 0. (lam (lam (+. $0 (/. 1. $1)))))))",
+    "(lam (lam (/. $1 (/. (+. 1. 1.) (fold $0 0. (lam (lam (+. $0 (*. $1 $1)))))))))"
+  ]
+}

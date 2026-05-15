@@ -174,6 +174,19 @@ fn ho_arity2_capture() {
     check_fixture("data/domains/ho-bugs/arity2_capture.json", &["--language", "lambda-calc"], true);
 }
 
+/// Regression: `shift_free_egraph`'s memo is keyed by `(canonical, initial_depth)`,
+/// which is only valid within a single metavar slot's transformation. When two
+/// slots have different `(d_k, h, rank_map)` and share a captured-arg eclass
+/// (or a sub-eclass during recursion), the cache hit from one slot reused the
+/// other slot's permuted-shift result. Pre-fix the corpus below saw `$1`
+/// become `$0` in slot 0's wrapped arg because slot 1's `$1 → $0` mapping
+/// had been cached at the same `(canonical, initial_depth)` key. Fix: use a
+/// fresh memo per slot.
+#[test]
+fn cross_slot_shift_memo() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_slot_shift_memo.json", &["--language", "lambda-calc"], true);
+}
+
 /// Regression: the search picks `fn_{N+1}` (or higher) when the input already
 /// contains a leaf named `fn_N`, so re-running stitch on an already-abstracted
 /// corpus doesn't produce a name that aliases an existing symbol. The blessed
