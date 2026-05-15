@@ -467,12 +467,11 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
     let variable_indices = compute_variable_indices::<F, O>(egraph, search_state);
     let mut egraph = egraph.clone();
     let var_depth = &search_state.pattern.var_depth;
-    let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
     // See `apply_abstraction` for why unions are deferred.
     let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &search_state.matches {
         for subst in &m.substs {
-            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &variable_indices, var_depth, &mut shift_memo);
+            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &variable_indices, var_depth);
             let x = F::add_stub_application::<O>("inv_0", wrapped, &mut egraph);
             pending.push((x, m.root_eclass));
         }
@@ -492,7 +491,7 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
 /// free indices (`i ≥ d_k`) shift past the `h` wrap-lams. Used by both
 /// `build_rewritten_egraph` and `lib::apply_abstraction`; `shift_memo` is
 /// shared across calls so equivalent shifts are deduplicated.
-pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], variable_indices: &[Vec<i32>], var_depth: &[u32], shift_memo: &mut FxHashMap<(Id, u32), Id>) -> Vec<Id> {
+pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], variable_indices: &[Vec<i32>], var_depth: &[u32]) -> Vec<Id> {
     vars.iter()
         .enumerate()
         .map(|(k, &arg_id)| {
@@ -500,7 +499,11 @@ pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
             let h = vis.len() as u32;
             let d_k = var_depth[k];
             let rank_map: FxHashMap<i32, u32> = vis.iter().enumerate().map(|(r, &i)| (i, r as u32)).collect();
-            let shifted = shift_free_egraph::<F, O>(egraph, arg_id, d_k, &rank_map, h, 0, shift_memo);
+            // Memo is per-slot: keying by (canonical, initial_depth) is only
+            // valid for a single (d_k, h, rank_map) — sharing across slots
+            // would conflate transformations.
+            let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
+            let shifted = shift_free_egraph::<F, O>(egraph, arg_id, d_k, &rank_map, h, 0, &mut shift_memo);
             if h == 0 { shifted } else { F::wrap_lams::<O>(shifted, h, egraph) }
         })
         .collect()
