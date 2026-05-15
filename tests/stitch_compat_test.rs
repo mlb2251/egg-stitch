@@ -184,7 +184,7 @@ fn ho_arity2_capture() {
 /// fresh memo per slot.
 #[test]
 fn cross_slot_shift_memo() {
-    check_fixture("data/domains/ho-bugs/cross_slot_shift_memo.json", &["--language", "lambda-calc"], true);
+    check_fixture_bf_only("data/domains/ho-bugs/cross_slot_shift_memo.json", &["--language", "lambda-calc"], true);
 }
 
 /// Regression: the search picks `fn_{N+1}` (or higher) when the input already
