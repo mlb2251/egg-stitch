@@ -3,6 +3,11 @@ use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use egg::{Id, Language};
+use rand::Rng;
+use rand::rngs::StdRng;
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// Shift-aware equality of two captured e-class ids at depths `da` and `db`.
 /// Returns true when both captures represent the same underlying value at
@@ -54,10 +59,7 @@ fn shift_eq_struct<L: StitchLanguage>(egraph: &StitchEgraph<L>, deeper: Id, shal
         return r;
     }
     memo.insert((deeper, shallower, init_depth), true);
-    let result = egraph[deeper]
-        .nodes
-        .iter()
-        .any(|na| egraph[shallower].nodes.iter().any(|nb| enode_shift_eq::<L>(egraph, na, nb, s, init_depth, memo)));
+    let result = egraph[deeper].nodes.iter().any(|na| egraph[shallower].nodes.iter().any(|nb| enode_shift_eq::<L>(egraph, na, nb, s, init_depth, memo)));
     memo.insert((deeper, shallower, init_depth), result);
     result
 }
@@ -89,11 +91,6 @@ fn enode_shift_eq<L: StitchLanguage>(egraph: &StitchEgraph<L>, na: &L, nb: &L, s
     }
     true
 }
-use rand::Rng;
-use rand::rngs::StdRng;
-use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
