@@ -59,6 +59,7 @@ pub fn compute_variable_indices<F: LanguageFamily, O: StitchOp>(egraph: &StitchE
 ///   - `r ≥ d_k` (above-pattern free): replaced by `$(r - d_k + h)` — shifted
 ///     past the `h` wrap-lams so it continues referencing the call-site binder
 ///     it always did.
+///
 /// Bound leaves (`n < initial_depth`) pass through unchanged. Picks the
 /// size-minimal enode per visited eclass; memoized per `(eclass, initial_depth)`.
 pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, d_k: u32, rank_map: &FxHashMap<i32, u32>, h: u32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32), Id>) -> Id {
