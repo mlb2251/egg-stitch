@@ -1,0 +1,4 @@
+[
+    "(lam (fold $0 1 (lam (lam (* $0 $1)))))",
+    "(lam (fold (cdr $0) 1 (lam (lam (* (cdr $0) $1)))))"
+]

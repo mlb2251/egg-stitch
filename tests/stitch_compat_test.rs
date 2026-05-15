@@ -234,6 +234,27 @@ fn tmp_minimal() {
     check_fixture("data/domains/stitch/tmp_minimal.json", &[], true);
 }
 
+/// Exercises shifted-variant search under lambda-calc: the two programs share
+/// the subterm `(+ $0 3 4 (lam (+ $1 6 7)))` at different binding depths, so
+/// any abstraction that captures it as a single metavariable must use the
+/// shifted variant at the shallower occurrence.
+#[test]
+fn reuse_at_different_depths() {
+    check_fixture("data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"], true);
+}
+
+/// Regression: `shift_equal`'s `a == b` shortcut used to accept any same
+/// e-class as reuse-compatible at any pair of depths, but a non-closed leaf
+/// like `$0` at depths 0 and 2 references different binders. The unsound
+/// merge produced `fn_0: (fold ?#0 1 (lam (lam (* ?#0 $1))))` whose
+/// β-expansion replaced the inner `$0` with `$2` — see the matching list/
+/// CI failure. The fix requires empty fv when collapsing same-id captures
+/// across depths.
+#[test]
+fn same_leaf_different_depths_is_not_reused() {
+    check_fixture("data/domains/stitch/same-leaf-different-depths.json", &["--language", "lambda-calc"], true);
+}
+
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
 /// the `(+ _ (* _ _))` shape aligns across all five programs (the fifth,
 /// `(* 7 (* (- v) (- v)))`, gets a `(+ 0 _)`-wrapped representation in its
