@@ -20,6 +20,12 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
 pub fn compute_variable_indices<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<Vec<i32>> {
     let arity = search_state.pattern.var_depth.len();
     let var_depth = &search_state.pattern.var_depth;
+    // No slot can capture pattern-internal binders → result is all-empty.
+    // Skip the per-slot hashset allocations entirely; this is the common case
+    // for domains without lambda/DB-var ops (e.g. dials).
+    if var_depth.iter().all(|&d| d == 0) {
+        return vec![Vec::new(); arity];
+    }
     let mut sets: Vec<FxHashSet<i32>> = vec![FxHashSet::default(); arity];
     let mut seen_per_slot: Vec<FxHashSet<Id>> = vec![FxHashSet::default(); arity];
     for m in &search_state.matches {
