@@ -393,7 +393,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
     pub fn new(shared: &SharedSearchData<F, O>) -> Self {
-        let matches = identity_matches(&shared.egraph, shared.root);
+        let matches = identity_matches(&shared.egraph, shared.root, &shared.original_eclasses);
         let num_substs = total_substs(&matches);
         Self { pattern: Pattern::single_var(), matches, num_substs }
     }

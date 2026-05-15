@@ -114,4 +114,3 @@ pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
     let original_eclasses: FxHashSet<Id> = original_pre_rebuild.into_iter().map(|c| egraph.find(c)).collect();
     (ShiftedVariants { map: canonical_map }, original_eclasses)
 }
-
