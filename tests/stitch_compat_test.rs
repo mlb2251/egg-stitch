@@ -258,7 +258,10 @@ fn reuse_at_different_depths_must_reuse() {
         let library = v.get("library").and_then(|l| l.as_array()).unwrap_or_else(|| panic!("{search}: missing library"));
         assert_eq!(library.len(), 1, "{search}: expected exactly one abstraction, got {library:#?}");
         let arity = library[0].get("arity").and_then(|a| a.as_u64()).unwrap_or_else(|| panic!("{search}: arity missing"));
-        assert_eq!(arity, 1, "{search}: shifted-variant reuse must collapse both occurrences into a single metavar (arity 1), got arity {arity} — this regresses the whole point of the variables-at-multiple-depths branch");
+        assert_eq!(
+            arity, 1,
+            "{search}: shifted-variant reuse must collapse both occurrences into a single metavar (arity 1), got arity {arity} — this regresses the whole point of the variables-at-multiple-depths branch"
+        );
     }
 }
 
