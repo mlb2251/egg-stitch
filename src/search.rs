@@ -378,24 +378,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
         let deep_idx = if shallow_idx == var_idx { second_var_idx } else { var_idx };
-        let k = merged_depth - min_depth;
         self.update_matches(|subst, out| {
             let shallow_id = subst.vars[shallow_idx];
             let deep_id = subst.vars[deep_idx];
-            // Shift-aware equality:
-            // - Same e-class at different depths is sound when its fv
-            //   avoids the gap `[min_depth, merged_depth)`: fv `< min` is
-            //   η-wrappable at every site, fv `>= merged` is call-site
-            //   context at every site, fv in between can't be reconciled.
-            // - Distinct ids are sound when the deep side is the k-shift
-            //   variant of the shallow side; the kept shallow form shifts
-            //   back up via β-reduction at the deeper `?#k` site.
-            let equiv = if shallow_id == deep_id {
-                k == 0 || shared.egraph[shallow_id].data.fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32)
-            } else {
-                k > 0 && shared.shifted.get(deep_id, k) == Some(shallow_id)
-            };
-            if !equiv {
+            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.shifted, &shared.egraph) {
                 return;
             }
             let mut new_subst = subst.clone();
