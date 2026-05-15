@@ -251,45 +251,47 @@ impl LanguageFamily for LambdaCalc {
                 pos_to_k.insert(usize::from(id), k);
             }
         }
-        // Per-position lam depth. We need the *local* depth at each occurrence,
-        // not `var_depth[k]` (which is the max across occurrences after `reuse`).
-        let mut depth: Vec<u32> = vec![0; nodes.len()];
-        for i in 0..nodes.len() {
-            let d = depth[i];
-            let disc = nodes[i].discriminant();
-            for (j, &c) in nodes[i].children().iter().enumerate() {
-                depth[usize::from(c)] = d + if disc.binds_child(j) { 1 } else { 0 };
-            }
-        }
-        let db = |n: i32| O::make_db_var(n).expect("LambdaCalc requires a DB-var-bearing leaf op");
+        // Recursive top-down render: each *occurrence* gets a freshly-built
+        // output, so a `?#k` leaf that's shared across two parents at
+        // different depths emits two distinct head_idxes — one per
+        // occurrence's local depth. The previous id_map / per-node-depth
+        // approach kept only one depth per node, so the last visit
+        // overwrote earlier ones and the head_idx came out wrong wherever
+        // the leaf was deduplicated. The recursive walk doesn't dedupe,
+        // which is fine because patterns are small.
         let mut out: RecExpr<LambdaCalcLanguage<O>> = RecExpr::default();
-        let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
-        for i in (0..nodes.len()).rev() {
-            let new_id = if let Some(&k) = pos_to_k.get(&i) {
-                let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
-                let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
-                for dbidx in variable_indices[k].iter().rev() {
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx)));
-                    current = out.add(LambdaCalcLanguage::App([current, arg_id]));
-                }
-                current
-            } else {
-                let new_children: Vec<Id> = nodes[i].children().iter().map(|&c| id_map[usize::from(c)]).collect();
-                let new_node = match &nodes[i] {
-                    LambdaCalcLanguage::Leaf(OpWithVar::Node(o)) => LambdaCalcLanguage::Leaf(o.clone()),
-                    LambdaCalcLanguage::Leaf(OpWithVar::Var(_)) => unreachable!("Var leaf at position not in pos_to_k"),
-                    LambdaCalcLanguage::App(_) => LambdaCalcLanguage::App([new_children[0], new_children[1]]),
-                    LambdaCalcLanguage::Lam(_) => LambdaCalcLanguage::Lam([new_children[0]]),
-                    LambdaCalcLanguage::Programs(_) => LambdaCalcLanguage::Programs(new_children),
-                };
-                out.add(new_node)
-            };
-            id_map[i] = new_id;
-        }
-        let mut current = id_map[0];
+        let body_id = render_lambda::<O>(nodes, &mut out, 0, 0, &pos_to_k, arity as u32, variable_indices);
+        let mut current = body_id;
         for _ in 0..arity {
             current = out.add(LambdaCalcLanguage::Lam([current]));
         }
         <LambdaCalcLanguage<O> as StitchLanguage>::display_recexpr(&out)
     }
+}
+
+/// Recursive helper for `LambdaCalc::display_pattern_as_lambda`. Renders the
+/// pattern subtree at `nodes[i]` into `out` as if it sits at `depth` binders
+/// inside the arity-wrapped output. `?#k` positions emit
+/// `(@ … (@ $head $vis[h-1]) … $vis[0])` with `head_idx = (arity - 1 - k) + depth`.
+fn render_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], out: &mut RecExpr<LambdaCalcLanguage<O>>, i: usize, depth: u32, pos_to_k: &FxHashMap<usize, usize>, arity: u32, variable_indices: &[Vec<i32>]) -> Id {
+    let db = |n: i32| O::make_db_var(n).expect("LambdaCalc requires a DB-var-bearing leaf op");
+    if let Some(&k) = pos_to_k.get(&i) {
+        let head_idx = (arity - 1 - k as u32 + depth) as i32;
+        let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
+        for dbidx in variable_indices[k].iter().rev() {
+            let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx)));
+            current = out.add(LambdaCalcLanguage::App([current, arg_id]));
+        }
+        return current;
+    }
+    let disc = nodes[i].discriminant();
+    let new_children: Vec<Id> = nodes[i].children().iter().enumerate().map(|(j, &c)| render_lambda::<O>(nodes, out, usize::from(c), depth + if disc.binds_child(j) { 1 } else { 0 }, pos_to_k, arity, variable_indices)).collect();
+    let new_node = match &nodes[i] {
+        LambdaCalcLanguage::Leaf(OpWithVar::Node(o)) => LambdaCalcLanguage::Leaf(o.clone()),
+        LambdaCalcLanguage::Leaf(OpWithVar::Var(_)) => unreachable!("Var leaf at position not in pos_to_k"),
+        LambdaCalcLanguage::App(_) => LambdaCalcLanguage::App([new_children[0], new_children[1]]),
+        LambdaCalcLanguage::Lam(_) => LambdaCalcLanguage::Lam([new_children[0]]),
+        LambdaCalcLanguage::Programs(_) => LambdaCalcLanguage::Programs(new_children),
+    };
+    out.add(new_node)
 }

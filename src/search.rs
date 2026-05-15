@@ -15,15 +15,27 @@ use crate::shifted::ShiftedVariants;
 ///   original unsoundness lived (`tests/cross_depth_reuse_then_db_var_regression.sh`).
 /// - distinct ids where the deeper one is the depth-difference shift
 ///   variant of the shallower one.
-fn shift_equal<L: crate::lang::StitchLanguage>(a: Id, b: Id, da: u32, db: u32, shifted: &ShiftedVariants, _egraph: &StitchEgraph<L>) -> bool {
-    if a == b {
-        return true;
+fn shift_equal<L: crate::lang::StitchLanguage>(a: Id, b: Id, da: u32, db: u32, shifted: &ShiftedVariants, egraph: &StitchEgraph<L>) -> bool {
+    if da == db {
+        return a == b;
     }
-    match da.cmp(&db) {
-        std::cmp::Ordering::Greater => shifted.get(a, da - db) == Some(b),
-        std::cmp::Ordering::Less => shifted.get(b, db - da) == Some(a),
-        std::cmp::Ordering::Equal => false,
-    }
+    let min_d = da.min(db);
+    let max_d = da.max(db);
+    let shallow_id = if da <= db { a } else { b };
+    let shift_ok = if a == b {
+        true
+    } else {
+        match da.cmp(&db) {
+            std::cmp::Ordering::Greater => shifted.get(a, da - db) == Some(b),
+            std::cmp::Ordering::Less => shifted.get(b, db - da) == Some(a),
+            std::cmp::Ordering::Equal => unreachable!(),
+        }
+    };
+    // The kept (shallow) eclass's fv must skip `[min_d, max_d)` — indices
+    // in that gap are pattern-internal at the deep occurrence but
+    // call-site context at the shallow one, which the η-wrap can't
+    // reconcile across.
+    shift_ok && egraph[shallow_id].data.fv.iter().all(|&i| i < min_d as i32 || i >= max_d as i32)
 }
 use egg::{Id, Language};
 use rand::Rng;
@@ -377,19 +389,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let shallow_id = subst.vars[shallow_idx];
             let deep_id = subst.vars[deep_idx];
             // Shift-aware equality (mirror of `shift_equal`):
-            // - Same e-class at any depth pair is sound under HO substitution
-            //   — the apply-time η-app re-binds each occurrence's fv to the
-            //   local binder. Subsequent DB-var literal expansion of the
-            //   merged slot is blocked by `var_cross_depth` /
-            //   `invalid_literal_expansion`.
-            // - Distinct ids are sound when the deep side is the k-shift
-            //   variant of the shallow side; the kept shallow form shifts
-            //   back up via β-reduction at the deeper `?#k` site.
-            let equiv = if shallow_id == deep_id {
-                true
-            } else {
-                k > 0 && shared.shifted.get(deep_id, k) == Some(shallow_id)
-            };
+            // - Same-id same-depth is trivially OK.
+            // - Otherwise the kept (shallow) capture's fv must skip the
+            //   `[min_depth, merged_depth)` gap so its references are
+            //   pattern-internal at every occurrence.
+            // - For distinct ids, the deep side must additionally be the
+            //   k-shift variant of the shallow side.
+            let shift_ok = shallow_id == deep_id || (k > 0 && shared.shifted.get(deep_id, k) == Some(shallow_id));
+            let fv_ok = k == 0 || shared.egraph[shallow_id].data.fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32);
+            let equiv = shift_ok && fv_ok;
             if !equiv {
                 return;
             }

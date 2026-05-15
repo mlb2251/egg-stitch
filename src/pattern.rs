@@ -108,15 +108,19 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
-        // Merged metavar adopts the *min* depth so that `compute_ho_arity`
-        // sees `d_k = min` and returns 0 for shift-aware captures whose
-        // shallow-form fv lies in `[min, max)`. The lambda renderer's
-        // `head_idx = (arity-1-k) + depth[i]` then produces the correct
-        // deeper-form DB index at each `?#k` occurrence via β-reduction's
-        // natural index shift, recovering the corpus value at every depth
-        // without an η-wrap. Same-depth reuse has `min == max`, no change.
+        // Merged metavar adopts the *max* depth — the strictest pattern-
+        // internal context any of its captures must satisfy.
+        // `compute_variable_indices` then sees the deepest `d_k`, picks up
+        // every fv that lies in `[0, max)`, and `wrap_subst_args` wraps the
+        // captured arg with the matching η-args so each `?#k` occurrence's
+        // β at the call site rebinds the fv to the local binder there.
+        // `subset_matches_reuse` and `shift_equal` both gate cross-depth
+        // reuse on `max(fv) < min(d_a, d_b)`, ensuring the captures fit at
+        // every depth (otherwise the merge would have call-site-context fv
+        // at one occurrence and pattern-internal fv at another, which the
+        // recursive renderer cannot reconcile).
         let cross_depth = self.var_depth[keep_idx] != self.var_depth[drop_idx] || self.var_cross_depth[keep_idx] || self.var_cross_depth[drop_idx];
-        let merged_depth = self.var_depth[keep_idx].min(self.var_depth[drop_idx]);
+        let merged_depth = self.var_depth[keep_idx].max(self.var_depth[drop_idx]);
 
         let keep_name = var_node::<F, O>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
