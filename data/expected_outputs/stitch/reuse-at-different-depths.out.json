@@ -1,25 +1,52 @@
 {
-  "compression_ratio": 1.181818181818182,
-  "cost_after_rewrites": 39,
-  "final_cost": 33,
-  "initial_cost": 39,
-  "library": [
-    {
-      "approx_cost": 23,
-      "arity": 2,
-      "lambda": "(lam (lam (+ $1 3 4 (lam (+ $1 6 7)))))",
-      "num_matches": 1,
-      "pattern": "fn_0: (+ ?#0 3 4 (lam (+ ?#1 6 7)))",
-      "pattern_size": 16,
-      "usage_matches": 2
-    }
-  ],
-  "original_programs": [
-    "(lam (* 3 (+ $0 3 4 (lam (+ $1 6 7)))))",
-    "(lam (+ $0 3 4 (lam (+ $1 6 7))))"
-  ],
-  "rewritten_programs": [
-    "(lam (* 3 (fn_0 $0 $0)))",
-    "(lam (fn_0 $0 $0))"
-  ]
+  "best-first": {
+    "compression_ratio": 1.3448275862068966,
+    "cost_after_rewrites": 39,
+    "final_cost": 29,
+    "initial_cost": 39,
+    "library": [
+      {
+        "approx_cost": 23,
+        "arity": 1,
+        "lambda": "(lam (+ $0 3 4 (lam (+ $1 6 7))))",
+        "num_matches": 1,
+        "pattern": "fn_0: (+ ?#0 3 4 (lam (+ ?#0 6 7)))",
+        "pattern_size": 16,
+        "usage_matches": 2
+      }
+    ],
+    "original_programs": [
+      "(lam (* 3 (+ $0 3 4 (lam (+ $1 6 7)))))",
+      "(lam (+ $0 3 4 (lam (+ $1 6 7))))"
+    ],
+    "rewritten_programs": [
+      "(lam (* 3 (fn_0 $0)))",
+      "(lam (fn_0 $0))"
+    ]
+  },
+  "smc": {
+    "compression_ratio": 1.3448275862068966,
+    "cost_after_rewrites": 39,
+    "final_cost": 29,
+    "initial_cost": 39,
+    "library": [
+      {
+        "approx_cost": 27,
+        "arity": 1,
+        "lambda": "(lam ($0 3 4 (lam ($1 6 7))))",
+        "num_matches": 1,
+        "pattern": "fn_0: (?#0 3 4 (lam (?#0 6 7)))",
+        "pattern_size": 12,
+        "usage_matches": 2
+      }
+    ],
+    "original_programs": [
+      "(lam (* 3 (+ $0 3 4 (lam (+ $1 6 7)))))",
+      "(lam (+ $0 3 4 (lam (+ $1 6 7))))"
+    ],
+    "rewritten_programs": [
+      "(lam (* 3 (fn_0 (+ $0))))",
+      "(lam (fn_0 (+ $0)))"
+    ]
+  }
 }
