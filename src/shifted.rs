@@ -1,4 +1,4 @@
-use crate::cost::shift_free_egraph;
+use crate::cost::shift_free_egraph_uniform;
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
 use egg::Id;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -92,7 +92,7 @@ pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
         }
         let mut per_class: FxHashMap<u32, Id> = FxHashMap::default();
         for s in 1..=max_shift {
-            let shifted_id = shift_free_egraph::<F, O>(egraph, canonical, -(s as i32), 0, &mut memo);
+            let shifted_id = shift_free_egraph_uniform::<F, O>(egraph, canonical, -(s as i32), 0, &mut memo);
             per_class.insert(s, shifted_id);
         }
         map.insert(canonical, per_class);

@@ -142,13 +142,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Renders the abstraction body with HO apps spliced in: each occurrence
-    /// of `?#k` with non-empty `magnitudes[k]` is wrapped as
-    /// `(@ … (@ ?#k $(d_k - m_{h-1})) … $(d_k - m_0))` — the originals at
-    /// the call site that the wrap-lams' β-reduction recovers, with the
-    /// outermost η-arg corresponding to the largest magnitude.
-    /// Falls back to plain `to_string()` when every slot is empty.
-    pub fn display_with_ho(&self, magnitudes: &[Vec<u32>]) -> String {
-        if magnitudes.iter().all(|m| m.is_empty()) {
+    /// of `?#k` with non-empty `variable_indices[k]` is wrapped as
+    /// `(@ … (@ ?#k $vis[h-1]) … $vis[0])`. Falls back to plain `to_string()`
+    /// when every slot is empty.
+    pub fn display_with_ho(&self, variable_indices: &[Vec<i32>]) -> String {
+        if variable_indices.iter().all(|v| v.is_empty()) {
             return self.to_string();
         }
         // RevExpr id → which metavar k (if any) lives at this position.
@@ -169,12 +167,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             let new_node = F::make(node.discriminant(), new_children);
             let mut new_id = out.add(new_node);
             if let Some(&k) = pos_to_k.get(&i)
-                && !magnitudes[k].is_empty()
+                && !variable_indices[k].is_empty()
             {
-                let d_k = self.var_depth[k];
-                let mags = &magnitudes[k];
-                // Outer→inner: largest magnitude first → smallest local DB index.
-                let db_args: Vec<i32> = (0..mags.len()).rev().map(|j| d_k as i32 - mags[j] as i32).collect();
+                let vis = &variable_indices[k];
+                let db_args: Vec<i32> = vis.iter().rev().copied().collect();
                 new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, &db_args);
             }
             id_map[i] = new_id;
@@ -184,8 +180,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 
     /// Render this abstraction as a closed lambda term — see
     /// `LanguageFamily::display_pattern_as_lambda`.
-    pub fn display_as_lambda(&self, magnitudes: &[Vec<u32>]) -> String {
-        F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, magnitudes)
+    pub fn display_as_lambda(&self, variable_indices: &[Vec<i32>]) -> String {
+        F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, variable_indices)
     }
 }
 

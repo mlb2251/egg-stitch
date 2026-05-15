@@ -76,23 +76,20 @@ pub trait LanguageFamily: Clone + 'static {
     /// inside the body. For `n ≤ 1` the order is irrelevant; for `n ≥ 2` it
     /// matters (see `data/domains/ho-bugs/arity2_capture.json`).
     /// `db_args` lists the DB-var indices to apply to `head` in outer→inner
-    /// application order — that is, the first entry becomes the η-arg of the
+    /// application order — the first entry becomes the η-arg of the
     /// outermost `App`. Each entry is the local DB index at `head`'s position
-    /// that should bind one wrap-lam after β. For dense ho-arity (magnitudes
-    /// `[1..h]`) this is `[h-1, h-2, …, 0]`; for sparse magnitudes
-    /// `[m_0 < m_1 < … < m_{h-1}]` at depth `d_k` it's
-    /// `[d_k - m_{h-1}, d_k - m_{h-2}, …, d_k - m_0]`.
+    /// that one wrap-lam should rebind after β.
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id;
 
     /// Render an abstraction body as `(lam … (lam BODY))` with `vars.len()`
     /// binders, where each `?#k` becomes a de-Bruijn variable pointing at the
     /// `k`-th outer wrap-lam. Inlining a call site `(fn_N a_0 … a_{k-1})`
     /// against the result and β-reducing recovers the original captured term.
-    /// `magnitudes[k]` is the sorted (ascending) distinct re-wrap-slot
-    /// magnitude list for slot `k` (see `cost::compute_ho_magnitudes`). The
-    /// η-app at each `?#k` occurrence applies the slot's magnitudes mapped to
-    /// local-depth DB indices.
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], magnitudes: &[Vec<u32>]) -> String;
+    /// `variable_indices[k]` is the sorted-ascending list of distinct
+    /// pattern-internal DB indices any match's captured arg references at
+    /// slot `k` (see `cost::compute_variable_indices`). The η-app at each
+    /// `?#k` occurrence applies those indices in reverse (outer→inner).
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String;
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -139,7 +136,7 @@ impl LanguageFamily for OpChildren {
         panic!("OpChildren has no apps/binders; higher-order display is unreachable here");
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _magnitudes: &[Vec<u32>]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _variable_indices: &[Vec<i32>]) -> String {
         // OpChildren has no real binders, so `?#k` becomes a `$<arity-1-k>`
         // symbol leaf and the body is wrapped in `arity` `lam`-headed nodes.
         let arity = vars.len();
@@ -246,7 +243,7 @@ impl LanguageFamily for LambdaCalc {
         current
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], magnitudes: &[Vec<u32>]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
         let arity = vars.len();
         let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
         for (k, ids) in vars.iter().enumerate() {
@@ -269,19 +266,10 @@ impl LanguageFamily for LambdaCalc {
         let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
         for i in (0..nodes.len()).rev() {
             let new_id = if let Some(&k) = pos_to_k.get(&i) {
-                // `?#k` → DB var pointing at the k-th outer wrap-lam (the
-                // arity-1-k-th from the outermost), shifted by local lam depth.
                 let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
                 let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
-                // η-app args: for each magnitude m_j (sorted ascending), pass
-                // `$(depth[i] - m_j + 1 - 1) = $(depth[i] - m_j)` — the
-                // pattern-internal binder originally referenced by that
-                // re-wrap slot. Outer→inner applies largest magnitude first
-                // (= smallest local DB index).
-                let mags = &magnitudes[k];
-                for j in (0..mags.len()).rev() {
-                    let db_idx = depth[i] as i32 - mags[j] as i32;
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(db_idx)));
+                for dbidx in variable_indices[k].iter().rev() {
+                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx)));
                     current = out.add(LambdaCalcLanguage::App([current, arg_id]));
                 }
                 current
