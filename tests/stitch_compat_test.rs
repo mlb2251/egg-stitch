@@ -243,16 +243,15 @@ fn reuse_at_different_depths() {
     check_fixture("data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
-/// Two programs share a same-leaf subterm (`$0`) at different binding
-/// depths. The captures are syntactically the same e-class but reference
-/// different binders at the two sites; cross-depth reuse merges them anyway
-/// because the apply-time η-app at each `?#k` occurrence re-binds the
-/// captured fv to the local binder there. The unsound DB-var-literal
-/// concretization that would otherwise misuse the merge is blocked by
-/// `var_cross_depth` / `invalid_literal_expansion`
-/// (`tests/cross_depth_reuse_then_db_var_regression.sh`).
+/// Regression: `shift_equal`'s `a == b` shortcut used to accept any same
+/// e-class as reuse-compatible at any pair of depths, but a non-closed leaf
+/// like `$0` at depths 0 and 2 references different binders. The unsound
+/// merge produced `fn_0: (fold ?#0 1 (lam (lam (* ?#0 $1))))` whose
+/// β-expansion replaced the inner `$0` with `$2` — see the matching list/
+/// CI failure. The fix requires empty fv when collapsing same-id captures
+/// across depths.
 #[test]
-fn same_leaf_different_depths_reuse() {
+fn same_leaf_different_depths_is_not_reused() {
     check_fixture("data/domains/stitch/same-leaf-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
