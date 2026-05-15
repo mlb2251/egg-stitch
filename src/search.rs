@@ -7,14 +7,17 @@ use crate::shifted::ShiftedVariants;
 
 /// Shift-aware equality of two captured e-class ids at depths `da` and `db`.
 /// Two captures represent "the same value at different depths" when either:
-/// - same e-class at the same depth, or at different depths only if the
-///   class is closed (empty fv) — otherwise the same leaf `$k` references
-///   different binders in the two depths' contexts; or
+/// - same e-class at any pair of depths — the apply-time η-app at each `?#k`
+///   occurrence re-binds the captured fv to the local binder there, so a
+///   non-closed same-id capture is sound under HO substitution. The
+///   downstream `invalid_literal_expansion` rejects subsequent DB-var literal
+///   expansion of the merged slot (via `var_cross_depth`), which is where the
+///   original unsoundness lived (`tests/cross_depth_reuse_then_db_var_regression.sh`).
 /// - distinct ids where the deeper one is the depth-difference shift
 ///   variant of the shallower one.
-fn shift_equal<L: crate::lang::StitchLanguage>(a: Id, b: Id, da: u32, db: u32, shifted: &ShiftedVariants, egraph: &StitchEgraph<L>) -> bool {
+fn shift_equal<L: crate::lang::StitchLanguage>(a: Id, b: Id, da: u32, db: u32, shifted: &ShiftedVariants, _egraph: &StitchEgraph<L>) -> bool {
     if a == b {
-        return da == db || egraph[a].data.fv.is_empty();
+        return true;
     }
     match da.cmp(&db) {
         std::cmp::Ordering::Greater => shifted.get(a, da - db) == Some(b),
@@ -373,15 +376,17 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.update_matches(|subst, out| {
             let shallow_id = subst.vars[shallow_idx];
             let deep_id = subst.vars[deep_idx];
-            // Shift-aware equality:
-            // - Same e-class at different depths is sound only when closed
-            //   (empty fv) — otherwise the same `$k` leaf references
-            //   different binders in the two depths' contexts.
+            // Shift-aware equality (mirror of `shift_equal`):
+            // - Same e-class at any depth pair is sound under HO substitution
+            //   — the apply-time η-app re-binds each occurrence's fv to the
+            //   local binder. Subsequent DB-var literal expansion of the
+            //   merged slot is blocked by `var_cross_depth` /
+            //   `invalid_literal_expansion`.
             // - Distinct ids are sound when the deep side is the k-shift
             //   variant of the shallow side; the kept shallow form shifts
             //   back up via β-reduction at the deeper `?#k` site.
             let equiv = if shallow_id == deep_id {
-                k == 0 || shared.egraph[shallow_id].data.fv.is_empty()
+                true
             } else {
                 k > 0 && shared.shifted.get(deep_id, k) == Some(shallow_id)
             };
