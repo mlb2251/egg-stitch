@@ -154,7 +154,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
                 && !variable_indices[k].is_empty()
             {
                 let vis = &variable_indices[k];
-                let db_args: Vec<i32> = (0..vis.len()).rev().map(|j| vis[j]).collect();
+                let db_args: Vec<i32> = vis.iter().rev().copied().collect();
                 new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, &db_args);
             }
             id_map[i] = new_id;

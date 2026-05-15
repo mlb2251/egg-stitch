@@ -261,8 +261,8 @@ impl LanguageFamily for LambdaCalc {
                 let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
                 let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
                 let vis = &variable_indices[k];
-                for j in (0..vis.len()).rev() {
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(vis[j])));
+                for dbidx in vis {
+                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx)));
                     current = out.add(LambdaCalcLanguage::App([current, arg_id]));
                 }
                 current
