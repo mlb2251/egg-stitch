@@ -1,8 +1,94 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use egg::{Id, Language};
+
+/// Shift-aware equality of two captured e-class ids at depths `da` and `db`.
+/// Returns true when both captures represent the same underlying value at
+/// different binder contexts. Two cases:
+/// - **Same e-class.** A shared capture sits at both sites; safe to merge iff
+///   the captured fv avoids the depth gap `[min(da,db), max(da,db))` — fv in
+///   that gap is pattern-internal at the deep site but call-site context at
+///   the shallow one, which the η-wrap can't reconcile. fv `< min` is
+///   η-wrappable at every site (handled via `compute_variable_indices` with
+///   `merged_depth = min`); fv `≥ max` is call-site context at every site.
+/// - **Distinct e-classes.** The deeper one must be the `|da-db|`-shift-up
+///   variant of the shallow one: same structure with every free DB index
+///   increased by the gap. Checked recursively by `shift_eq_struct` — no
+///   precomputed table needed.
+fn shift_equal<L: StitchLanguage>(a: Id, b: Id, da: u32, db: u32, egraph: &StitchEgraph<L>) -> bool {
+    let a = egraph.find(a);
+    let b = egraph.find(b);
+    if a == b {
+        if da == db {
+            return true;
+        }
+        let (lo, hi) = (da.min(db), da.max(db));
+        return egraph[a].data.fv.iter().all(|&i| i < lo as i32 || i >= hi as i32);
+    }
+    if da == db {
+        return false;
+    }
+    let (deeper, shallower, s) = if da > db { (a, b, da - db) } else { (b, a, db - da) };
+    let mut memo: FxHashMap<(Id, Id, u32), bool> = FxHashMap::default();
+    shift_eq_struct(egraph, deeper, shallower, s, 0, &mut memo)
+}
+
+/// True iff there exist enodes `na ∈ deeper` and `nb ∈ shallower` such that
+/// `na` is the shift-up-by-`s` form of `nb`: same discriminant and arity,
+/// child eclasses recursively shift-equal at the appropriate child depths,
+/// and any free DB-var leaf in `nb` (index `≥ init_depth`) is replaced by an
+/// index `s` larger in `na`. Bound indices (`< init_depth`) must match
+/// exactly. Tentative-true memoization breaks cycles in the e-graph.
+fn shift_eq_struct<L: StitchLanguage>(egraph: &StitchEgraph<L>, deeper: Id, shallower: Id, s: u32, init_depth: u32, memo: &mut FxHashMap<(Id, Id, u32), bool>) -> bool {
+    let deeper = egraph.find(deeper);
+    let shallower = egraph.find(shallower);
+    if deeper == shallower {
+        // Same e-class viewed at different recursion depths is shift-equal
+        // iff its fv outside the binder-stack avoids the gap. Mirrors the
+        // top-level same-eclass check, just relative to the current frame.
+        return egraph[deeper].data.fv.iter().all(|&i| i < init_depth as i32 || i >= (init_depth + s) as i32);
+    }
+    if let Some(&r) = memo.get(&(deeper, shallower, init_depth)) {
+        return r;
+    }
+    memo.insert((deeper, shallower, init_depth), true);
+    let result = egraph[deeper]
+        .nodes
+        .iter()
+        .any(|na| egraph[shallower].nodes.iter().any(|nb| enode_shift_eq::<L>(egraph, na, nb, s, init_depth, memo)));
+    memo.insert((deeper, shallower, init_depth), result);
+    result
+}
+
+/// One-enode-pair step of `shift_eq_struct`: matches DB-var leaves modulo
+/// the `s`-shift on free indices, otherwise requires identical discriminant
+/// and structurally shift-equal children (with per-child binder bumps).
+fn enode_shift_eq<L: StitchLanguage>(egraph: &StitchEgraph<L>, na: &L, nb: &L, s: u32, init_depth: u32, memo: &mut FxHashMap<(Id, Id, u32), bool>) -> bool {
+    let da = na.discriminant();
+    let db = nb.discriminant();
+    match (da.de_bruijn_index(), db.de_bruijn_index()) {
+        (Some(i), Some(j)) => {
+            if j < init_depth as i32 {
+                return i == j;
+            }
+            return i == j + s as i32;
+        }
+        (None, None) => {}
+        _ => return false,
+    }
+    if da != db || na.children().len() != nb.children().len() {
+        return false;
+    }
+    for (k, (&ca, &cb)) in na.children().iter().zip(nb.children().iter()).enumerate() {
+        let new_depth = init_depth + if da.binds_child(k) { 1 } else { 0 };
+        if !shift_eq_struct(egraph, ca, cb, s, new_depth, memo) {
+            return false;
+        }
+    }
+    true
+}
 use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -53,21 +139,26 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     }
 }
 
-/// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
-fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
+/// True iff `target` is a DB-var leaf that can't be expanded to at a slot
+/// with depth `d_k` and cross-depth-merged flag `cross_depth`. Two cases:
+/// - `i ≥ d_k`: would escape the pattern's binders.
+/// - any `i` when `cross_depth` is set: cross-depth-merged slots can't admit
+///   any DB-var literal — the same literal references different binders at
+///   the merged occurrences.
+fn target_is_free_db_var<L: Language>(target: &L, d_k: u32, cross_depth: bool) -> bool
 where
     L::Discriminant: StitchDisc,
 {
-    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= 0 && (i as u32) >= d_k)
+    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= 0 && ((i as u32) >= d_k || cross_depth))
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
 /// Currently the only such case is a free DB-var leaf.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32, cross_depth: bool) -> bool
 where
     L::Discriminant: StitchDisc,
 {
-    target_is_free_db_var(target, depth)
+    target_is_free_db_var(target, depth, cross_depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -144,6 +235,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// state unchanged). The returned `Action` is also a hashable dedup key,
     /// so callers can collapse identical samples and apply each unique one once.
     pub fn sample_random_expansion(&self, shared: &SharedSearchData<F, O>, verbose: bool, rng: &mut StdRng) -> Option<Action<F::Discriminant<O>>> {
+        if self.matches.is_empty() {
+            return None;
+        }
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
@@ -186,16 +280,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 .iter()
                 .enumerate()
                 .filter_map(|(idx, id)| {
-                    if idx == var_idx || *id != target_id {
+                    if idx == var_idx {
                         return None;
                     }
-                    let keep_idx = idx.min(var_idx);
                     let d_a = self.pattern.var_depth[var_idx];
                     let d_b = self.pattern.var_depth[idx];
-                    let min_depth = d_a.min(d_b);
-                    let merged_depth = d_a.max(d_b);
-                    let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-                    if kept_fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32) { Some(idx) } else { None }
+                    if shift_equal(*id, target_id, d_b, d_a, &shared.egraph) { Some(idx) } else { None }
                 })
                 .collect();
             if !reuse_candidates.is_empty() {
@@ -207,9 +297,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
 
-        let target_eclass = &shared.egraph[target_id];
         let d_k = self.pattern.var_depth[var_idx];
-        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
+        let cross_depth = self.pattern.var_cross_depth[var_idx];
+        let target_eclass = &shared.egraph[target_id];
+        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k, cross_depth)).collect();
         if candidates.is_empty() {
             return None;
         }
@@ -254,8 +345,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // bound the cross-depth gap, but `pattern.reuse` collapses them.
         let d_a = self.pattern.var_depth[var_idx];
         let d_b = self.pattern.var_depth[second_var_idx];
+        let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
         self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx, d_a.min(d_b), d_a.max(d_b), shared);
+        self.subset_matches_reuse(var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared);
     }
 
     /// Updates all matches by transforming each substitution via the given closure,
@@ -311,18 +403,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// whose kept-eclass fv lands in `[min_depth, merged_depth)` are
     /// representable at the deep site but unbound at the shallow one — those
     /// are dropped. Same-depth reuse has an empty gap.
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) {
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shallow_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) {
         let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
+        let deep_idx = if shallow_idx == var_idx { second_var_idx } else { var_idx };
         self.update_matches(|subst, out| {
-            if subst.vars[var_idx] != subst.vars[second_var_idx] {
-                return;
-            }
-            let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-            if !kept_fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32) {
+            let shallow_id = subst.vars[shallow_idx];
+            let deep_id = subst.vars[deep_idx];
+            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph) {
                 return;
             }
             let mut new_subst = subst.clone();
+            new_subst.vars[keep_idx] = shallow_id;
             new_subst.vars.remove(drop_idx);
             out.push(new_subst);
         });
@@ -356,7 +448,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let n = self.pattern.vars.len();
         for i in 0..n {
             for j in (i + 1)..n {
-                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
+                let di = self.pattern.var_depth[i];
+                let dj = self.pattern.var_depth[j];
+                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)));
                 if !unifiable {
                     continue;
                 }
@@ -378,13 +472,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // Literal expansions.
         for var_idx in 0..self.pattern.vars.len() {
             let d_k = self.pattern.var_depth[var_idx];
+            let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
-                        if invalid_literal_expansion(node, d_k) {
+                        if invalid_literal_expansion(node, d_k, cross_depth) {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());
@@ -420,6 +515,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
+    let cache = crate::cost::CostCache::new(&egraph, root);
     let shared = SharedSearchData {
         egraph,
         root,
@@ -429,7 +525,6 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         p_reuse: args.p_reuse,
         check_slow: args.check_slow,
     };
-    let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared);
     let initial_ho_arity = crate::cost::compute_ho_arity::<F, O>(&shared.egraph, &initial);
     let mut scratch = crate::cost::CostScratch::new(&shared.egraph);

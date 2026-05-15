@@ -24,7 +24,13 @@ pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
     pub vars: Vec<Vec<Id>>,  // vars[k] = all RecExpr ids holding Var(k)
-    pub var_depth: Vec<u32>, // var_depth[k] = pattern-internal binders enclosing ?#k
+    pub var_depth: Vec<u32>, // var_depth[k] = pattern-internal binders enclosing ?#k (= min depth across occurrences after reuse)
+    /// True iff `?#k` has been cross-depth-merged (occurrences live at
+    /// different depths in the pattern). When set, no DB-var leaf expansion
+    /// is sound: the same literal can't simultaneously represent its
+    /// shift-equivalents at different binder contexts, so
+    /// `invalid_literal_expansion` rejects them.
+    pub var_cross_depth: Vec<bool>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -38,6 +44,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             pattern: RevExpr::new(vec![var_node::<F, O>(0)]),
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
+            var_cross_depth: vec![false],
         }
     }
 
@@ -52,6 +59,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
+        let parent_cross = self.var_cross_depth.remove(var_idx);
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
@@ -77,6 +85,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             self.vars.insert(var_idx + j, vec![new_id]);
             let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
             self.var_depth.insert(var_idx + j, child_depth);
+            // Children of a cross-depth-merged metavar inherit the property —
+            // the multi-depth ambiguity persists down the expansion tree until
+            // the slot is fully concretized.
+            self.var_cross_depth.insert(var_idx + j, parent_cross);
         }
         let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
@@ -96,13 +108,15 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
-        // Cross-depth reuse is OK under stitch's fv pruning: every captured
-        // subterm has fv ≥ d_k for its location's depth, so its meaning is
-        // independent of which pattern-internal lams enclose it. The merged
-        // metavar adopts the *max* depth — that's the strictest constraint
-        // its captures must satisfy (the corresponding subst-filter happens
-        // in `subset_matches_reuse`).
-        let merged_depth = self.var_depth[keep_idx].max(self.var_depth[drop_idx]);
+        // Merged metavar adopts the *min* depth so that `compute_ho_arity`
+        // sees `d_k = min` and returns 0 for shift-aware captures whose
+        // shallow-form fv lies in `[min, max)`. The lambda renderer's
+        // `head_idx = (arity-1-k) + depth[i]` then produces the correct
+        // deeper-form DB index at each `?#k` occurrence via β-reduction's
+        // natural index shift, recovering the corpus value at every depth
+        // without an η-wrap. Same-depth reuse has `min == max`, no change.
+        let cross_depth = self.var_depth[keep_idx] != self.var_depth[drop_idx] || self.var_cross_depth[keep_idx] || self.var_cross_depth[drop_idx];
+        let merged_depth = self.var_depth[keep_idx].min(self.var_depth[drop_idx]);
 
         let keep_name = var_node::<F, O>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
@@ -113,6 +127,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.vars.remove(drop_idx);
         self.var_depth.remove(drop_idx);
         self.var_depth[keep_idx] = merged_depth;
+        self.var_cross_depth.remove(drop_idx);
+        self.var_cross_depth[keep_idx] = cross_depth;
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {

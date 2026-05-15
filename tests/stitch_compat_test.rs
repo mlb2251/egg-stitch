@@ -243,15 +243,37 @@ fn reuse_at_different_depths() {
     check_fixture("data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
-/// Regression: `shift_equal`'s `a == b` shortcut used to accept any same
-/// e-class as reuse-compatible at any pair of depths, but a non-closed leaf
-/// like `$0` at depths 0 and 2 references different binders. The unsound
-/// merge produced `fn_0: (fold ?#0 1 (lam (lam (* ?#0 $1))))` whose
-/// β-expansion replaced the inner `$0` with `$2` — see the matching list/
-/// CI failure. The fix requires empty fv when collapsing same-id captures
-/// across depths.
+/// CRITICAL: this is the whole point of the `variables-at-multiple-depths`
+/// branch. The two programs share `(+ $0 3 4 (lam (+ $1 6 7)))` at depths
+/// that differ by one — `$0` and `$1` are shift-variants of the same value.
+/// A correct shift-aware reuse merges the two metavar occurrences into a
+/// single arity-1 abstraction; any future change that loses this and falls
+/// back to an arity-2 (non-reused) abstraction has reverted the branch's
+/// flagship behavior. Pin arity == 1 directly so the assertion survives
+/// re-blessing.
 #[test]
-fn same_leaf_different_depths_is_not_reused() {
+fn reuse_at_different_depths_must_reuse() {
+    for search in ["best-first", "smc"] {
+        let v = run_backend(search, "data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"]);
+        let library = v.get("library").and_then(|l| l.as_array()).unwrap_or_else(|| panic!("{search}: missing library"));
+        assert_eq!(library.len(), 1, "{search}: expected exactly one abstraction, got {library:#?}");
+        let arity = library[0].get("arity").and_then(|a| a.as_u64()).unwrap_or_else(|| panic!("{search}: arity missing"));
+        assert_eq!(
+            arity, 1,
+            "{search}: shifted-variant reuse must collapse both occurrences into a single metavar (arity 1), got arity {arity} — this regresses the whole point of the variables-at-multiple-depths branch"
+        );
+    }
+}
+
+/// Two programs share a same-leaf subterm (`$0`) at different binding
+/// depths. The shallow capture's fv `{0}` is `< min_depth`, so it sits in
+/// the η-wrappable region: `compute_variable_indices` collects it as an
+/// η-arg and each `?#0` occurrence renders as `(?#0 $0)`, where the local
+/// `$0` re-binds the captured fv to the right binder at every site. fv in
+/// the gap `[min_depth, merged_depth)` would not be reconcilable across
+/// depths and is rejected by the gap check in `shift_equal`.
+#[test]
+fn same_leaf_different_depths_reuse() {
     check_fixture("data/domains/stitch/same-leaf-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
