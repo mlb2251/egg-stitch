@@ -7,14 +7,23 @@ use crate::shifted::ShiftedVariants;
 
 /// Shift-aware equality of two captured e-class ids at depths `da` and `db`.
 /// Two captures represent "the same value at different depths" when either:
-/// - same e-class at the same depth, or at different depths only if the
-///   class is closed (empty fv) — otherwise the same leaf `$k` references
-///   different binders in the two depths' contexts; or
+/// - same e-class at the same depth (trivially); or
+/// - same e-class at different depths whose fv avoids the gap
+///   `[min(da,db), max(da,db))`. fv in that gap is pattern-internal at the
+///   deep site but call-site context at the shallow one — the η-wrap can't
+///   reconcile that. fv `< min` is η-wrappable at every site (captured by
+///   `compute_variable_indices` since `merged_depth = min`); fv `>= max` is
+///   call-site context at every site; or
 /// - distinct ids where the deeper one is the depth-difference shift
-///   variant of the shallower one.
+///   variant of the shallower one. For shift-variants the shallow side's
+///   fv lives in `[0, min)` by construction so no gap check is needed.
 fn shift_equal<L: crate::lang::StitchLanguage>(a: Id, b: Id, da: u32, db: u32, shifted: &ShiftedVariants, egraph: &StitchEgraph<L>) -> bool {
     if a == b {
-        return da == db || egraph[a].data.fv.is_empty();
+        if da == db {
+            return true;
+        }
+        let (lo, hi) = (da.min(db), da.max(db));
+        return egraph[a].data.fv.iter().all(|&i| i < lo as i32 || i >= hi as i32);
     }
     match da.cmp(&db) {
         std::cmp::Ordering::Greater => shifted.get(a, da - db) == Some(b),
@@ -374,14 +383,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let shallow_id = subst.vars[shallow_idx];
             let deep_id = subst.vars[deep_idx];
             // Shift-aware equality:
-            // - Same e-class at different depths is sound only when closed
-            //   (empty fv) — otherwise the same `$k` leaf references
-            //   different binders in the two depths' contexts.
+            // - Same e-class at different depths is sound when its fv
+            //   avoids the gap `[min_depth, merged_depth)`: fv `< min` is
+            //   η-wrappable at every site, fv `>= merged` is call-site
+            //   context at every site, fv in between can't be reconciled.
             // - Distinct ids are sound when the deep side is the k-shift
             //   variant of the shallow side; the kept shallow form shifts
             //   back up via β-reduction at the deeper `?#k` site.
             let equiv = if shallow_id == deep_id {
-                k == 0 || shared.egraph[shallow_id].data.fv.is_empty()
+                k == 0 || shared.egraph[shallow_id].data.fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32)
             } else {
                 k > 0 && shared.shifted.get(deep_id, k) == Some(shallow_id)
             };
