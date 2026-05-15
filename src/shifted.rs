@@ -11,8 +11,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// class is the class itself, so storing it is wasted indirection.
 ///
 /// Negative shifted indices (re-wrap slots) live inside these variant
-/// e-classes; consumers reach them via `enodes_across_shifts` rather than
-/// seeing them in the original class's enodes.
+/// e-classes; consumers walk them through `ShiftedVariants::get` rather
+/// than seeing them in the original class's enodes.
 #[derive(Debug, Default, Clone)]
 pub struct ShiftedVariants {
     pub(crate) map: FxHashMap<Id, FxHashMap<u32, Id>>,
@@ -115,29 +115,3 @@ pub fn build_shifted_variants<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
     (ShiftedVariants { map: canonical_map }, original_eclasses)
 }
 
-/// Yields enodes from `eclass` and from every shifted-variant e-class of
-/// `eclass`. Used by search sites that must consider every shift level as a
-/// candidate for metavariable expansion or refinement. The original e-class is
-/// yielded first, then variants in ascending order of shift amount — the order
-/// is fully determined by the egraph + variant table so that RNG-seeded search
-/// is reproducible across runs (the underlying `FxHashMap` iteration order is
-/// stable for a given build but depends on insertion order and hash).
-pub fn enodes_across_shifts<'a, L: StitchLanguage>(egraph: &'a StitchEgraph<L>, shifted: &'a ShiftedVariants, eclass: Id) -> impl Iterator<Item = &'a L> + 'a {
-    nodes_across_shifts(egraph, shifted, eclass).map(|(_, n)| n)
-}
-
-/// Like `enodes_across_shifts`, but also yields the canonical id of the source
-/// e-class each enode came from. Callers that need to distinguish "original
-/// class" from "variant class" matches (e.g. to reject leaf-specialization
-/// via a variant) use this; `enodes_across_shifts` is the convenience wrapper
-/// that discards the source id.
-pub fn nodes_across_shifts<'a, L: StitchLanguage>(egraph: &'a StitchEgraph<L>, shifted: &'a ShiftedVariants, eclass: Id) -> impl Iterator<Item = (Id, &'a L)> + 'a {
-    let canonical = egraph.find(eclass);
-    let mut variants: Vec<(u32, Id)> = shifted.map.get(&canonical).into_iter().flat_map(|m| m.iter().map(|(&s, &id)| (s, id))).collect();
-    variants.sort_by_key(|&(s, _)| s);
-    let extra = variants.into_iter().flat_map(move |(_, sid)| {
-        let cid = egraph.find(sid);
-        egraph[cid].nodes.iter().map(move |n| (cid, n))
-    });
-    egraph[canonical].nodes.iter().map(move |n| (canonical, n)).chain(extra)
-}
