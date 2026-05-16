@@ -244,17 +244,24 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// one child per shape. Children whose match set becomes empty after filtering
     /// are dropped.
     #[allow(clippy::type_complexity)]
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>)> {
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
         let mut out = Vec::new();
 
-        // Reuse pairs first — enables dominance short-circuit.
+        // Reuse pairs first — enables dominance short-circuit. `support` is the
+        // number of (match, subst) pairs in which vars i and j are shift-equal,
+        // which SMC uses as a sampling weight to recover the (m,s)-weighted
+        // distribution the old per-particle random sampler had.
         let n = self.pattern.vars.len();
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)));
-                if !unifiable {
+                let support: usize = self
+                    .matches
+                    .iter()
+                    .map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count())
+                    .sum();
+                if support == 0 {
                     continue;
                 }
                 let mut child = self.clone();
@@ -266,18 +273,20 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let is_dominant = child.num_substs == self.num_substs;
                 if opt_dominance_reuse && is_dominant {
                     *dominance_hits += 1;
-                    return vec![(action, child)];
+                    return vec![(action, child, support)];
                 }
-                out.push((action, child));
+                out.push((action, child, support));
             }
         }
 
-        // Literal expansions.
+        // Literal expansions. For each (var, shape), `support` counts the
+        // (match, subst) pairs whose bound eclass at that var contains a node
+        // of that shape — same role as reuse support above.
         for var_idx in 0..self.pattern.vars.len() {
             let d_k = self.pattern.var_depth[var_idx];
             let cross_depth = self.pattern.var_cross_depth[var_idx];
-            let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
-            let mut shapes: Vec<F::Apply<O>> = Vec::new();
+            let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
+            let mut shapes: Vec<(F::Apply<O>, usize)> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
@@ -286,13 +295,17 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());
-                        if seen.insert(key) {
-                            shapes.push(node.clone());
+                        match shape_idx.get(&key) {
+                            Some(&idx) => shapes[idx].1 += 1,
+                            None => {
+                                shape_idx.insert(key, shapes.len());
+                                shapes.push((node.clone(), 1));
+                            }
                         }
                     }
                 }
             }
-            for shape in shapes {
+            for (shape, support) in shapes {
                 let mut child = self.clone();
                 child.expand(var_idx, &shape, shared);
                 if !child.matches.is_empty() {
@@ -303,6 +316,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                             arity: shape.children().len(),
                         },
                         child,
+                        support,
                     ));
                 }
             }

@@ -182,7 +182,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
 
-        for (action, child_state) in successors {
+        for (action, child_state, _support) in successors {
             if let Some(ref follow) = shared.follow
                 && !child_state.matches_follow(follow)
             {
