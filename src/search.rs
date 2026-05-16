@@ -4,8 +4,6 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rand::Rng;
-use rand::rngs::StdRng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -100,12 +98,8 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// Follow pattern: particles whose pattern isn't a valid prefix get zero
     /// weight at the resample step.
     pub follow: Option<RevExpr<F::Apply<OpWithVar<O>>>>,
-    /// Probability of attempting variable reuse during expansion.
-    pub p_reuse: f64,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
-    /// Whether to weight match selection by usage count during expansion.
-    pub weight_by_usage: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
 }
@@ -136,104 +130,6 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
-    /// Randomly samples a single expansion or reuse step without mutating self.
-    /// Returns `None` when the chosen variable's e-class has no valid literal
-    /// expansion candidates (the caller treats this as a no-op leaving the
-    /// state unchanged). The returned `Action` is also a hashable dedup key,
-    /// so callers can collapse identical samples and apply each unique one once.
-    pub fn sample_random_expansion(&self, shared: &SharedSearchData<F, O>, verbose: bool, rng: &mut StdRng) -> Option<Action<F::Discriminant<O>>> {
-        if self.matches.is_empty() {
-            return None;
-        }
-        let match_idx = if shared.weight_by_usage {
-            let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
-            let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
-            crate::smc::weighted_choice(&weights_acc, rng)
-        } else {
-            rng.random_range(0..self.matches.len())
-        };
-        let m = &self.matches[match_idx];
-        let extractor = if verbose { Some(egg::Extractor::new(&shared.egraph, egg::AstSize)) } else { None };
-        if let Some(ref ext) = extractor {
-            let (_cost, minimal_term) = ext.find_best(m.root_eclass);
-            println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
-        }
-        let subst_idx = rng.random_range(0..m.substs.len());
-        let subst = &m.substs[subst_idx];
-
-        let var_idx = rng.random_range(0..self.pattern.vars.len());
-        if verbose {
-            println!("Expanding variable {:?} in pattern {}", self.pattern.vars[var_idx], self.pattern);
-        }
-        let target_id = subst.vars[var_idx];
-
-        if let Some(ref ext) = extractor {
-            println!("Target eclass is represented by minimal term {}", ext.find_best(target_id).1);
-        }
-
-        if rng.random_bool(shared.p_reuse) {
-            // Pre-filter reuse candidates so we only invoke `reuse` when at
-            // least one subst will survive `subset_matches_reuse`; otherwise
-            // we'd empty the match set and panic on the next call.
-            //
-            // Cross-depth reuse soundness: the merged metavar's HO arity
-            // must fit at *every* occurrence site, so its kept-eclass fv
-            // must avoid the gap `[min(d_a, d_b), max(d_a, d_b))` — fv in
-            // that range is η-wrappable at the deep site but unbound at
-            // the shallow one. Same-depth reuse has an empty gap, so the
-            // check is a no-op.
-            let reuse_candidates: Vec<usize> = subst
-                .vars
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, id)| {
-                    if idx == var_idx {
-                        return None;
-                    }
-                    let d_a = self.pattern.var_depth[var_idx];
-                    let d_b = self.pattern.var_depth[idx];
-                    if shift_equal(*id, target_id, d_b, d_a, &shared.egraph) { Some(idx) } else { None }
-                })
-                .collect();
-            if !reuse_candidates.is_empty() {
-                let second_var_idx = reuse_candidates[rng.random_range(0..reuse_candidates.len())];
-                return Some(Action::Reuse {
-                    keep: var_idx.min(second_var_idx),
-                    drop: var_idx.max(second_var_idx),
-                });
-            }
-        }
-
-        let d_k = self.pattern.var_depth[var_idx];
-        let cross_depth = self.pattern.var_cross_depth[var_idx];
-        let target_eclass = &shared.egraph[target_id];
-        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k, cross_depth)).collect();
-        if candidates.is_empty() {
-            return None;
-        }
-        let target = candidates[rng.random_range(0..candidates.len())];
-        Some(Action::Expand {
-            var_idx,
-            op: target.discriminant(),
-            arity: target.children().len(),
-        })
-    }
-
-    /// Applies a previously-sampled `Action` to this state. `expand` and
-    /// `subset_matches` only consult the target's discriminant and arity
-    /// (egg's `Language::matches` ignores child ids), so we synthesize a
-    /// placeholder node from `(op, arity)` via `F::make` instead of stashing
-    /// the original enode.
-    pub fn apply_action(&mut self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) {
-        match action {
-            Action::Expand { var_idx, op, arity } => {
-                let target = F::make(op.clone(), vec![Id::from(0); *arity]);
-                self.expand(*var_idx, &target, shared);
-            }
-            Action::Reuse { keep, drop } => self.reuse(*keep, *drop, shared),
-        }
-    }
-
     /// Check if this particle's pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
         let mut var_bindings = HashMap::new();
@@ -426,9 +322,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         egraph,
         root,
         follow: follow_expr,
-        weight_by_usage: args.weight_by_usage,
         usage_counts,
-        p_reuse: args.p_reuse,
         check_slow: args.check_slow,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);

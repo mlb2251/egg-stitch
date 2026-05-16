@@ -94,11 +94,10 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
 
-    /// Weight match selection by usage count during expansion.
-    #[arg(long, default_value_t = false)]
-    pub weight_by_usage: bool,
-
-    /// Probability of attempting variable reuse during expansion.
+    /// Sampling weight assigned to reuse actions vs literal expansions in SMC.
+    /// At each step, the enumerated successors are split: reuse actions
+    /// receive total mass `p_reuse`, expand actions receive `1 - p_reuse`,
+    /// uniformly within each kind. Ignored when only one kind is present.
     #[arg(long, default_value_t = 0.5)]
     pub p_reuse: f64,
 

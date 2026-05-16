@@ -61,31 +61,32 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared), num_particles)];
     let mut scratch = CostScratch::new(&shared.egraph);
+    let mut dominance_hits: usize = 0;
 
     for step in 0..num_steps {
-        // For each (state, mult) group, sample `mult` independent random
-        // expansions, dedupe samples by `ActionKey` (the canonical "same
-        // resulting state" key), then apply each unique sample once. Resulting
-        // patterns are then deduped globally across groups.
+        // For each (state, mult) group, enumerate every successor (same as
+        // best-first), then resample `mult` of them. Reuse vs expand actions
+        // are weighted to split at `p_reuse`; within each kind sampling is
+        // uniform. Resulting patterns are then deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
-            let mut action_counts: FxHashMap<Action<F::Discriminant<O>>, usize> = FxHashMap::default();
-            let mut noop_count: usize = 0;
+            let successors = state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
+            if successors.is_empty() {
+                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                continue;
+            }
+            let mut weights = action_weights_for_pruse(&successors, args.p_reuse);
+            let acc = normalize_and_accumulate(&mut weights);
+            let mut counts: Vec<usize> = vec![0; successors.len()];
             for _ in 0..mult {
-                match state.sample_random_expansion(&shared, false, rng) {
-                    Some(action) => *action_counts.entry(action).or_insert(0) += 1,
-                    None => noop_count += 1,
+                counts[weighted_choice(&acc, rng)] += 1;
+            }
+            for ((_, child), count) in successors.into_iter().zip(counts) {
+                if count > 0 {
+                    dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
                 }
-            }
-            for (action, count) in action_counts {
-                let mut s = state.clone();
-                s.apply_action(&action, &shared);
-                dedup_insert(s, count, &mut expanded, &mut mults, &mut dedup);
-            }
-            if noop_count > 0 {
-                dedup_insert(state, noop_count, &mut expanded, &mut mults, &mut dedup);
             }
         }
         drop(dedup);
@@ -166,6 +167,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         steps_run = step + 1;
     }
 
+    println!("\n{}", "═══ STATS ═══".blue().bold());
+    println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
+
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
         println!("{} {}", "best found at iteration:".dimmed(), iter.to_string().yellow());
@@ -192,6 +196,21 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         data: shared.into_data(),
         debug_log,
     }
+}
+
+/// Assigns sampling weights so the total mass on `Reuse` successors equals
+/// `p_reuse` (and on `Expand` successors equals `1 - p_reuse`), with uniform
+/// weights inside each kind. When only one kind is present, `p_reuse` is
+/// ignored — that kind absorbs the full mass.
+fn action_weights_for_pruse<D, S>(successors: &[(Action<D>, S)], p_reuse: f64) -> Vec<f64> {
+    let n_reuse = successors.iter().filter(|(a, _)| matches!(a, Action::Reuse { .. })).count();
+    let n_expand = successors.len() - n_reuse;
+    let (w_reuse, w_expand) = match (n_reuse, n_expand) {
+        (0, _) => (0.0, 1.0),
+        (_, 0) => (1.0, 0.0),
+        (r, e) => (p_reuse / r as f64, (1.0 - p_reuse) / e as f64),
+    };
+    successors.iter().map(|(a, _)| if matches!(a, Action::Reuse { .. }) { w_reuse } else { w_expand }).collect()
 }
 
 /// Samples an index from a normalized cumulative weight array.
