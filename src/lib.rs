@@ -94,12 +94,12 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
 
-    /// Sampling weight assigned to reuse actions vs literal expansions in SMC.
-    /// At each step, the enumerated successors are split: reuse actions
-    /// receive total mass `p_reuse`, expand actions receive `1 - p_reuse`,
-    /// uniformly within each kind. Ignored when only one kind is present.
-    #[arg(long, default_value_t = 0.5)]
-    pub p_reuse: f64,
+    /// Multiplicative boost applied to reuse-action sampling weights in SMC.
+    /// Each successor is weighted by its `(match, subst)` support count;
+    /// reuse-action weights are additionally multiplied by `boost_reuse_weight`,
+    /// while expand-action weights are left unscaled. Default 1.0 (no boost).
+    #[arg(long, default_value_t = 1.0)]
+    pub boost_reuse_weight: f64,
 
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]

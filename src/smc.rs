@@ -65,11 +65,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     for step in 0..num_steps {
         // For each (state, mult) group, enumerate every successor (same as
-        // best-first), then resample `mult` of them. Reuse vs expand actions
-        // are weighted to split at `p_reuse`; within each kind, each successor's
-        // sampling weight is proportional to its `(match, subst)` support count
-        // from `enumerate_successors` — this approximates the (m,s)-weighted
-        // distribution that per-particle random sampling produced before.
+        // best-first), then resample `mult` of them. Each successor's sampling
+        // weight is its `(match, subst)` support count from `enumerate_successors`;
+        // reuse-action weights are additionally multiplied by `boost_reuse_weight`.
         // Resulting patterns are then deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
@@ -80,7 +78,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
                 continue;
             }
-            let mut weights = action_weights_for_pruse(&successors, args.p_reuse);
+            let mut weights = action_weights_with_reuse_boost(&successors, args.boost_reuse_weight);
             let acc = normalize_and_accumulate(&mut weights);
             let mut counts: Vec<usize> = vec![0; successors.len()];
             for _ in 0..mult {
@@ -202,17 +200,14 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 }
 
 /// Weights each successor by its `(match, subst)` support count, with reuse
-/// supports scaled by `p_reuse` and expand supports by `1 - p_reuse`. This
-/// approximates the old per-particle sampler, which made one (m, s, v) pick
-/// then rolled `p_reuse` to decide reuse vs expand — so reuse and expand mass
-/// share a single normalization (no forced balance between kinds), and the
-/// effective P(reuse) tracks how common reusable peers are, not just whether
-/// any exist.
-fn action_weights_for_pruse<D, S>(successors: &[(Action<D>, S, usize)], p_reuse: f64) -> Vec<f64> {
+/// supports additionally multiplied by `boost_reuse_weight`. With a boost of
+/// 1.0 this is the pure support-weighted distribution; larger values bias
+/// sampling toward reuse actions, smaller values toward expansion.
+fn action_weights_with_reuse_boost<D, S>(successors: &[(Action<D>, S, usize)], boost_reuse_weight: f64) -> Vec<f64> {
     successors
         .iter()
         .map(|(a, _, support)| {
-            let kind_scale = if matches!(a, Action::Reuse { .. }) { p_reuse } else { 1.0 - p_reuse };
+            let kind_scale = if matches!(a, Action::Reuse { .. }) { boost_reuse_weight } else { 1.0 };
             kind_scale * (*support as f64)
         })
         .collect()
