@@ -15,7 +15,6 @@ Aggregation across files is *not* done here: ``run_method`` returns the raw
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -154,7 +153,6 @@ def run_method(
     *,
     rounds: int,
     use_dsrs: bool,
-    cache_path: Path,
 ) -> list[PerFileResult]:
     """Run ``runner`` on every input file of ``domain`` and return the per-file
     results unaggregated.
@@ -166,15 +164,9 @@ def run_method(
     (None when the runner isn't ours, or DSRs weren't used). Callers that
     need a domain-level number aggregate across the list themselves.
 
-    Results are loaded from ``cache_path`` when it exists and written to it
-    on miss. The caller is responsible for choosing a path that encodes
-    anything that should invalidate the cache (method, hyperparams, domain,
-    rep, …); delete the file to force a recompute.
+    Caching is the caller's responsibility — table runners and bench scripts
+    own their own cache files at coarser granularity.
     """
-    if cache_path.exists():
-        with open(cache_path) as f:
-            return [PerFileResult(**d) for d in json.load(f)]
-
     weighting = weighting_for(domain)
     rew = rewrites_path(domain) if use_dsrs else None
 
@@ -194,8 +186,4 @@ def run_method(
             library=[f"{a.name}: {a.body}" for a in b.abstractions],
             egraph_min_term_size=egraph_min_from_bench(b.cost_after_rewrites),
         ))
-
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(cache_path, "w") as f:
-        json.dump([r.to_dict() for r in out], f, indent=2)
     return out
