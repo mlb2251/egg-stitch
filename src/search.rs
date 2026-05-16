@@ -117,11 +117,7 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
 /// child (dominance pruning fired) or a list of `(action, support)` pairs the
 /// caller can sample from. SMC builds children lazily only for sampled actions.
 pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
-    Dominant {
-        action: Action<F::Discriminant<O>>,
-        child: SearchState<F, O>,
-        support: usize,
-    },
+    Dominant { action: Action<F::Discriminant<O>>, child: SearchState<F, O>, support: usize },
     All(Vec<(Action<F::Discriminant<O>>, usize)>),
 }
 
@@ -275,11 +271,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                let support: usize = self
-                    .matches
-                    .iter()
-                    .map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count())
-                    .sum();
+                let support: usize = self.matches.iter().map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count()).sum();
                 if support == 0 {
                     continue;
                 }
@@ -340,10 +332,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
         match self.enumerate_successor_actions(shared, opt_dominance_reuse, dominance_hits) {
             SuccessorEnum::Dominant { action, child, support } => vec![(action, child, support)],
-            SuccessorEnum::All(actions) => actions.into_iter().map(|(a, support)| {
-                let child = self.apply_action(&a, shared);
-                (a, child, support)
-            }).collect(),
+            SuccessorEnum::All(actions) => actions
+                .into_iter()
+                .map(|(a, support)| {
+                    let child = self.apply_action(&a, shared);
+                    (a, child, support)
+                })
+                .collect(),
         }
     }
 }
