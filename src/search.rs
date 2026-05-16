@@ -113,6 +113,18 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
     }
 }
 
+/// Result of `enumerate_successor_actions`: either a single pre-built dominant
+/// child (dominance pruning fired) or a list of `(action, support)` pairs the
+/// caller can sample from. SMC builds children lazily only for sampled actions.
+pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
+    Dominant {
+        action: Action<F::Discriminant<O>>,
+        child: SearchState<F, O>,
+        support: usize,
+    },
+    All(Vec<(Action<F::Discriminant<O>>, usize)>),
+}
+
 #[derive(Debug, Clone)]
 pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     pub pattern: Pattern<F, O>,
@@ -230,59 +242,62 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         Self { pattern: Pattern::single_var(), matches, num_substs }
     }
 
-    /// Enumerates every successor state reachable in one `expand` or `reuse` step.
-    ///
-    /// Reuse candidates are emitted first so the dominance short-circuit can fire:
-    /// when a reuse(i, j) preserves `num_substs` (every subst already had the two
-    /// vars equal), the resulting child match set is identical to the parent's
-    /// modulo the var-merge, so any successor of the parent is reachable via this
-    /// reuse — we can return it as the *only* successor and skip enumerating the
-    /// rest. Disabled by `--no-opt-dominance-reuse`.
-    ///
-    /// Expansion candidates: for each variable, collect every distinct `(op, arity)`
-    /// pair appearing as an enode in any bound e-class across all matches, then produce
-    /// one child per shape. Children whose match set becomes empty after filtering
-    /// are dropped.
-    #[allow(clippy::type_complexity)]
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
-        let mut out = Vec::new();
+    /// Applies an action to a clone of `self` and returns the resulting child.
+    /// Used by SMC after sampling so we don't materialise child states for
+    /// successors that don't get picked.
+    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) -> SearchState<F, O> {
+        let mut child = self.clone();
+        match action {
+            Action::Expand { var_idx, op, arity } => {
+                let target = F::make(op.clone(), vec![Id::from(0); *arity]);
+                child.expand(*var_idx, &target, shared);
+            }
+            Action::Reuse { keep, drop } => child.reuse(*keep, *drop, shared),
+        }
+        child
+    }
 
-        // Reuse pairs first — enables dominance short-circuit. `support` is the
-        // number of (match, subst) pairs in which vars i and j are shift-equal,
-        // which SMC uses as a sampling weight to recover the (m,s)-weighted
-        // distribution the old per-particle random sampler had.
+    /// Like `enumerate_successors` but returns only `(action, support)` pairs
+    /// without building child states. The caller materialises children for the
+    /// actions it picks via `apply_action`. When dominance pruning fires, the
+    /// single dominant child is built and returned via `SuccessorEnum::Dominant`,
+    /// matching the eager method's short-circuit.
+    ///
+    /// Dominance is detected directly from `support == self.num_substs` (every
+    /// subst already has the two vars unified) — no need to build the child to
+    /// check `num_substs`. Expand actions are emitted whenever `support > 0`;
+    /// `subset_matches` then guarantees the child's match set is non-empty.
+    #[allow(clippy::type_complexity)]
+    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
+        let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                let support: usize = self.matches.iter().map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count()).sum();
+                let support: usize = self
+                    .matches
+                    .iter()
+                    .map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count())
+                    .sum();
                 if support == 0 {
                     continue;
                 }
-                let mut child = self.clone();
-                child.reuse(i, j, shared);
-                if child.matches.is_empty() {
-                    continue;
-                }
                 let action = Action::Reuse { keep: i, drop: j };
-                let is_dominant = child.num_substs == self.num_substs;
-                if opt_dominance_reuse && is_dominant {
+                if opt_dominance_reuse && support == self.num_substs {
                     *dominance_hits += 1;
-                    return vec![(action, child, support)];
+                    let mut child = self.clone();
+                    child.reuse(i, j, shared);
+                    return SuccessorEnum::Dominant { action, child, support };
                 }
-                out.push((action, child, support));
+                out.push((action, support));
             }
         }
-
-        // Literal expansions. For each (var, shape), `support` counts the
-        // (match, subst) pairs whose bound eclass at that var contains a node
-        // of that shape — same role as reuse support above.
-        for var_idx in 0..self.pattern.vars.len() {
+        for var_idx in 0..n {
             let d_k = self.pattern.var_depth[var_idx];
             let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
-            let mut shapes: Vec<(F::Apply<O>, usize)> = Vec::new();
+            let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
@@ -294,31 +309,42 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         match shape_idx.get(&key) {
                             Some(&idx) => shapes[idx].1 += 1,
                             None => {
-                                shape_idx.insert(key, shapes.len());
-                                shapes.push((node.clone(), 1));
+                                shape_idx.insert(key.clone(), shapes.len());
+                                shapes.push((key, 1));
                             }
                         }
                     }
                 }
             }
-            for (shape, support) in shapes {
-                let mut child = self.clone();
-                child.expand(var_idx, &shape, shared);
-                if !child.matches.is_empty() {
-                    out.push((
-                        Action::Expand {
-                            var_idx,
-                            op: shape.discriminant(),
-                            arity: shape.children().len(),
-                        },
-                        child,
-                        support,
-                    ));
-                }
+            for ((op, arity), support) in shapes {
+                out.push((Action::Expand { var_idx, op, arity }, support));
             }
         }
+        SuccessorEnum::All(out)
+    }
 
-        out
+    /// Enumerates every successor state reachable in one `expand` or `reuse` step.
+    ///
+    /// Reuse candidates are emitted first so the dominance short-circuit can fire:
+    /// when a reuse(i, j) preserves `num_substs` (every subst already had the two
+    /// vars equal), the resulting child match set is identical to the parent's
+    /// modulo the var-merge, so any successor of the parent is reachable via this
+    /// reuse — we can return it as the *only* successor and skip enumerating the
+    /// rest. Disabled by `--no-opt-dominance-reuse`.
+    ///
+    /// Thin wrapper over `enumerate_successor_actions` that materialises every
+    /// successor's child state up front. Best-first needs all children to push
+    /// into the search frontier; SMC uses the lazy variant directly so it only
+    /// builds children for the actions it actually samples.
+    #[allow(clippy::type_complexity)]
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
+        match self.enumerate_successor_actions(shared, opt_dominance_reuse, dominance_hits) {
+            SuccessorEnum::Dominant { action, child, support } => vec![(action, child, support)],
+            SuccessorEnum::All(actions) => actions.into_iter().map(|(a, support)| {
+                let child = self.apply_action(&a, shared);
+                (a, child, support)
+            }).collect(),
+        }
     }
 }
 

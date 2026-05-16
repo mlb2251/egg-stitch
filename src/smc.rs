@@ -6,7 +6,7 @@ use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
-use crate::search::{Action, SearchState, setup_search};
+use crate::search::{Action, SearchState, SuccessorEnum, setup_search};
 use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
@@ -64,28 +64,37 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut dominance_hits: usize = 0;
 
     for step in 0..num_steps {
-        // For each (state, mult) group, enumerate every successor (same as
-        // best-first), then resample `mult` of them. Each successor's sampling
-        // weight is its `(match, subst)` support count from `enumerate_successors`;
-        // reuse-action weights are additionally multiplied by `boost_reuse_weight`.
-        // Resulting patterns are then deduped globally across groups.
+        // For each (state, mult) group, enumerate successor *actions* (no child
+        // states built up front), then resample `mult` of them. Each action's
+        // sampling weight is its `(match, subst)` support count; reuse-action
+        // weights are additionally multiplied by `boost_reuse_weight`. Child
+        // states are materialised only for sampled actions via `apply_action`,
+        // avoiding the per-shape `clone + expand` work for successors that
+        // win zero samples. Resulting patterns are deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
-            let successors = state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
-            if successors.is_empty() {
+            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, &mut dominance_hits) {
+                SuccessorEnum::Dominant { child, .. } => {
+                    dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                    continue;
+                }
+                SuccessorEnum::All(actions) => actions,
+            };
+            if actions.is_empty() {
                 dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
                 continue;
             }
-            let mut weights = action_weights_with_reuse_boost(&successors, args.boost_reuse_weight);
+            let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
             let acc = normalize_and_accumulate(&mut weights);
-            let mut counts: Vec<usize> = vec![0; successors.len()];
+            let mut counts: Vec<usize> = vec![0; actions.len()];
             for _ in 0..mult {
                 counts[weighted_choice(&acc, rng)] += 1;
             }
-            for ((_, child, _), count) in successors.into_iter().zip(counts) {
+            for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
+                    let child = state.apply_action(&action, &shared);
                     dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
                 }
             }
@@ -203,10 +212,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 /// supports additionally multiplied by `boost_reuse_weight`. With a boost of
 /// 1.0 this is the pure support-weighted distribution; larger values bias
 /// sampling toward reuse actions, smaller values toward expansion.
-fn action_weights_with_reuse_boost<D, S>(successors: &[(Action<D>, S, usize)], boost_reuse_weight: f64) -> Vec<f64> {
-    successors
+fn action_weights_with_reuse_boost<D>(actions: &[(Action<D>, usize)], boost_reuse_weight: f64) -> Vec<f64> {
+    actions
         .iter()
-        .map(|(a, _, support)| {
+        .map(|(a, support)| {
             let kind_scale = if matches!(a, Action::Reuse { .. }) { boost_reuse_weight } else { 1.0 };
             kind_scale * (*support as f64)
         })
