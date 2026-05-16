@@ -145,20 +145,24 @@ def rel_sem(xs: list[float]) -> float:
     return stdev(xs) / math.sqrt(len(xs)) / m
 
 
-def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str], num_reps: int) -> dict:
+def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str], reps_for: dict) -> dict:
     """Aggregate cached per-cell results (dropping rep 0 as warmup) into
     ``{domain: {method: {time, compression}}}``.
 
     Per-rep ``time`` sums elapsed_secs across files of a domain; the cell's
     reported ``time`` is the mean of those per-rep totals. ``compression``
     is the mean of every file's compression_ratio across the kept reps.
+    ``reps_for`` maps ``(dsr_label, domain, method) -> num_reps`` since
+    different cells may have run different rep counts under the adaptive
+    sampler.
     """
     out: dict = {}
     for domain in DOMAINS:
         out[domain] = {}
         for method in methods:
-            times = cell_per_rep_times(session, branch_label, dsr_label, method, domain, num_reps)
-            ratios = cell_compressions(session, branch_label, dsr_label, method, domain, num_reps)
+            n = reps_for[(dsr_label, domain, method)]
+            times = cell_per_rep_times(session, branch_label, dsr_label, method, domain, n)
+            ratios = cell_compressions(session, branch_label, dsr_label, method, domain, n)
             out[domain][method] = {
                 "time": mean(times),
                 "compression": mean(ratios),
@@ -260,56 +264,82 @@ def main() -> None:
             "smc": OursSmc(num_steps=smc_steps, num_particles=smc_parts, temperature=smc_temp),
         }
         conditions = [("with_dsrs", True), ("without_dsrs", False)]
-        cell_keys = list(product(conditions, DOMAINS, runners.items()))
+        # Each cell is keyed by (dsr_label, domain, method); runner + use_dsrs
+        # are recovered from these lookup tables.
+        runner_for = dict(runners.items())
+        use_dsrs_for = dict(conditions)
+        cell_keys = [(d, dom, m) for (d, _), dom, (m, _) in product(conditions, DOMAINS, runners.items())]
 
-        def run_rep(rep_idx: int) -> None:
-            """Run every (condition, domain, method) cell on base then PR back-to-back."""
-            tag = "warmup" if rep_idx == 0 else f"rep{rep_idx}"
-            pbar = tqdm.tqdm(cell_keys, desc=tag, unit="cell", leave=False)
-            for (dsr_label, use_dsrs), domain, (method, runner) in pbar:
-                pbar.set_postfix_str(f"{dsr_label} {domain} {method}")
-                time_cell(base_bin, runner, domain, use_dsrs,
-                          cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
-                time_cell(pr_bin, runner, domain, use_dsrs,
-                          cache_path_for(session, "pr", dsr_label, method, domain, rep_idx))
+        def run_rep_for(cell: tuple[str, str, str], rep_idx: int) -> None:
+            """Run one rep of one cell on base then PR back-to-back."""
+            dsr_label, domain, method = cell
+            runner = runner_for[method]
+            use_dsrs = use_dsrs_for[dsr_label]
+            time_cell(base_bin, runner, domain, use_dsrs,
+                      cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
+            time_cell(pr_bin, runner, domain, use_dsrs,
+                      cache_path_for(session, "pr", dsr_label, method, domain, rep_idx))
 
-        def worst_rel_sem(num_reps: int) -> tuple[float, str]:
-            """Largest rel-SEM across (branch, condition, method, domain) cells, with its label."""
-            worst = (-1.0, "")
-            for branch_label in ("base", "pr"):
-                for (dsr_label, _), domain, (method, _) in cell_keys:
-                    xs = cell_per_rep_times(session, branch_label, dsr_label, method, domain, num_reps)
-                    r = rel_sem(xs)
-                    if r > worst[0]:
-                        worst = (r, f"{branch_label}/{dsr_label}/{domain}/{method}")
-            return worst
+        def cell_rel_sem(cell: tuple[str, str, str], num_reps: int) -> float:
+            """Max rel-SEM across base & PR for one cell at num_reps."""
+            dsr_label, domain, method = cell
+            return max(
+                rel_sem(cell_per_rep_times(session, b, dsr_label, method, domain, num_reps))
+                for b in ("base", "pr")
+            )
 
-        # rep 0 is warmup (dropped by summarize); subsequent reps are timed.
-        # Within each cell we always run base then PR back-to-back so the two
-        # binaries see the most similar system state we can give them.
-        run_rep(0)
-        rep_idx = 0
+        # Phase 1: warmup + MIN_RUNS reps for every cell. Phase 2: keep
+        # adding reps only to cells whose paired rel-SEM (max of base/PR)
+        # is still above TARGET_REL_SEM, capped at MAX_RUNS per cell.
+        reps_done: dict[tuple[str, str, str], int] = {c: 0 for c in cell_keys}
+
+        def cell_done(cell: tuple[str, str, str]) -> bool:
+            n = reps_done[cell]
+            if n < MIN_RUNS:
+                return False
+            if n >= MAX_RUNS:
+                return True
+            return cell_rel_sem(cell, n) < TARGET_REL_SEM
+
+        # Warmup rep (rep 0) for every cell, in cell-key order.
+        wpbar = tqdm.tqdm(cell_keys, desc="warmup", unit="cell", leave=False)
+        for cell in wpbar:
+            wpbar.set_postfix_str("/".join(cell))
+            run_rep_for(cell, 0)
+
+        # Adaptive sampling: each outer iteration runs one more rep for
+        # every still-unconverged cell. Stop when no cell needs more reps.
+        round_idx = 0
         while True:
-            rep_idx += 1
-            run_rep(rep_idx)
-            if rep_idx < MIN_RUNS:
-                continue
-            worst, where = worst_rel_sem(rep_idx)
-            print(f"  after {rep_idx} reps: worst rel-SEM = {worst:.2%} ({where})", flush=True)
-            if worst < TARGET_REL_SEM or rep_idx >= MAX_RUNS:
-                if worst >= TARGET_REL_SEM:
-                    print(f"  hit MAX_RUNS={MAX_RUNS} before convergence (worst rel-SEM {worst:.2%})", flush=True)
+            pending = [c for c in cell_keys if not cell_done(c)]
+            if not pending:
                 break
-        num_reps = rep_idx
+            round_idx += 1
+            pbar = tqdm.tqdm(pending, desc=f"round {round_idx} ({len(pending)} cells)", unit="cell", leave=False)
+            for cell in pbar:
+                reps_done[cell] += 1
+                pbar.set_postfix_str(f"{'/'.join(cell)} rep{reps_done[cell]}")
+                run_rep_for(cell, reps_done[cell])
+            for cell in pending:
+                n = reps_done[cell]
+                r = cell_rel_sem(cell, n) if n >= 2 else float("inf")
+                print(f"  {'/'.join(cell)}: {n} reps, rel-SEM={r:.2%}{' ✓' if r < TARGET_REL_SEM else ''}", flush=True)
+
+        for cell, n in reps_done.items():
+            if n >= MAX_RUNS and cell_rel_sem(cell, n) >= TARGET_REL_SEM:
+                print(f"  WARN: {'/'.join(cell)} hit MAX_RUNS={MAX_RUNS} without converging "
+                      f"(rel-SEM {cell_rel_sem(cell, n):.2%})", flush=True)
 
         methods = list(runners.keys())
+        with_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("with_dsrs",) for dom in DOMAINS for m in methods}
+        without_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("without_dsrs",) for dom in DOMAINS for m in methods}
         with_md = fmt_table(base, pr,
-                            summarize(session, "base", "with_dsrs", methods, num_reps),
-                            summarize(session, "pr", "with_dsrs", methods, num_reps),
+                            summarize(session, "base", "with_dsrs", methods, with_reps),
+                            summarize(session, "pr", "with_dsrs", methods, with_reps),
                             "with DSRs")
         without_md = fmt_table(base, pr,
-                               summarize(session, "base", "without_dsrs", methods, num_reps),
-                               summarize(session, "pr", "without_dsrs", methods, num_reps),
+                               summarize(session, "base", "without_dsrs", methods, without_reps),
+                               summarize(session, "pr", "without_dsrs", methods, without_reps),
                                "without DSRs")
         timing_section = "## Timing\n\n" + with_md + "\n\n" + without_md + "\n"
         print()
