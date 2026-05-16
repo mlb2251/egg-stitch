@@ -256,11 +256,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                let support: usize = self
-                    .matches
-                    .iter()
-                    .map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count())
-                    .sum();
+                let support: usize = self.matches.iter().map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count()).sum();
                 if support == 0 {
                     continue;
                 }
