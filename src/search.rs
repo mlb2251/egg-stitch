@@ -119,10 +119,9 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
     }
 }
 
-/// Result of `enumerate_successor_actions`: either a single pre-built dominant
-/// child (dominance pruning fired) or a list of `(action, support)` pairs the
-/// caller can sample from. Lazy callers (e.g. SMC) materialise children only
-/// for the actions they pick via `apply_action`.
+/// Result of `enumerate_successor_actions`: a pre-built dominant child, or a
+/// list of `(action, support)` pairs callers materialise on demand via
+/// `apply_action`.
 pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
     Dominant { action: Action<F::Discriminant<O>>, child: SearchState<F, O>, support: usize },
     All(Vec<(Action<F::Discriminant<O>>, usize)>),
@@ -371,20 +370,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
-    /// Lazy variant of `enumerate_successors`: returns `(action, support)`
-    /// pairs without materialising child states, so callers that only consume
-    /// a sampled subset (e.g. SMC) skip the per-action `expand`/`reuse` work.
-    ///
-    /// Dominance is detected directly from `support == self.num_substs` — every
-    /// `(match, subst)` already has the two vars unified, so the reuse is a
-    /// strictly dominant successor; we build that single child and short-circuit
-    /// via `SuccessorEnum::Dominant`. Disabled by `--no-opt-dominance-reuse`.
-    ///
-    /// Reuse `support` counts `(match, subst)` pairs where vars `i`, `j` are
-    /// shift-equal; expand `support` counts pairs whose bound eclass at `var_idx`
-    /// contains a node of that shape. Both feed the (m,s)-weighted sampler in SMC.
-    /// `support > 0` implies the corresponding `subset_matches{_reuse}` would
-    /// keep at least one subst, so children built later are non-empty.
+    /// Lazy variant of `enumerate_successors`: returns `(action, support)` pairs
+    /// without building children, so samplers (e.g. SMC) skip work for unpicked
+    /// actions. `support` is the (m,s)-pair count feeding the SMC weighting; it
+    /// equals the surviving subst count, so `support > 0` ⇒ non-empty child.
+    /// `support == self.num_substs` ⇒ dominant reuse; short-circuited unless
+    /// disabled by `--no-opt-dominance-reuse`.
     #[allow(clippy::type_complexity)]
     pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
