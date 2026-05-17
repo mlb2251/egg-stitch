@@ -253,16 +253,19 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         child
     }
 
-    /// Like `enumerate_successors` but returns only `(action, support)` pairs
-    /// without building child states. The caller materialises children for the
-    /// actions it picks via `apply_action`. When dominance pruning fires, the
-    /// single dominant child is built and returned via `SuccessorEnum::Dominant`,
-    /// matching the eager method's short-circuit.
+    /// Lazy variant of `enumerate_successors`: returns `(action, support)` pairs
+    /// without building children, so samplers (e.g. SMC) skip work for unpicked
+    /// actions. The caller materialises children via `apply_action`. When
+    /// dominance pruning fires, the single dominant child is built and returned
+    /// via `SuccessorEnum::Dominant`, matching the eager method's short-circuit.
     ///
-    /// Dominance is detected directly from `support == self.num_substs` (every
-    /// subst already has the two vars unified) — no need to build the child to
-    /// check `num_substs`. Expand actions are emitted whenever `support > 0`;
-    /// `subset_matches` then guarantees the child's match set is non-empty.
+    /// `support` is the (m,s)-pair count feeding the SMC weighting; it equals
+    /// the surviving subst count, so `support > 0` ⇒ non-empty child.
+    /// `support == self.num_substs` ⇒ dominant reuse (every subst already has
+    /// the two vars unified); short-circuited unless disabled by
+    /// `--no-opt-dominance-reuse`. Expand actions are emitted whenever
+    /// `support > 0`; `subset_matches` then guarantees the child's match set is
+    /// non-empty.
     #[allow(clippy::type_complexity)]
     pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
