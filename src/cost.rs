@@ -12,41 +12,6 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
     compute_variable_indices::<F, O>(egraph, search_state).into_iter().map(|v| v.len() as u32).collect()
 }
 
-/// Per-subst `R_{m,s,k}` — the sorted set of pattern-internal DB indices
-/// (0 ≤ i < d_k) appearing in `fv(arg_{m,s,k})`. A subst is *compatible*
-/// with a candidate variable_indices tuple `S` iff `R^k ⊆ S_k` for all `k`.
-/// Returned shape: parallel to `search_state.matches`, then to `m.substs`.
-pub fn compute_subst_r<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<Vec<Vec<Vec<i32>>>> {
-    let var_depth = &search_state.pattern.var_depth;
-    let arity = var_depth.len();
-    search_state
-        .matches
-        .iter()
-        .map(|m| {
-            m.substs
-                .iter()
-                .map(|subst| {
-                    let mut r: Vec<Vec<i32>> = vec![Vec::new(); arity];
-                    for (k, &arg_id) in subst.vars.iter().enumerate() {
-                        let d_k = var_depth[k];
-                        if d_k == 0 {
-                            continue;
-                        }
-                        for &i in egraph[arg_id].data.fv.iter() {
-                            if i >= 0 && (i as u32) < d_k {
-                                r[k].push(i);
-                            }
-                        }
-                        r[k].sort();
-                        r[k].dedup();
-                    }
-                    r
-                })
-                .collect()
-        })
-        .collect()
-}
-
 /// Per-metavar sorted-ascending list of distinct pattern-internal DB indices
 /// referenced by any match's captured arg. `variable_indices[k][j]` is a free
 /// DB index `i` (0 ≤ i < d_k) appearing in `fv(arg_{m,k})` for some match `m`.
@@ -131,71 +96,104 @@ pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgrap
         let kept_substs: Vec<Vec<usize>> = search_state.matches.iter().map(|m| (0..m.substs.len()).collect()).collect();
         return vec![CostCandidate { variable_indices: vec![Vec::new(); arity], kept_substs }];
     }
-    let subst_r = compute_subst_r::<F, O>(egraph, search_state);
-    // Flat (match_idx, subst_idx) order parallel to a bitmask is too wide;
-    // we walk the cross-product over per-slot subsets instead.
     let slot_bits: Vec<u32> = v.iter().map(|vk| vk.len() as u32).collect();
     let total_bits: u32 = slot_bits.iter().sum();
-    // Cap: 2^20 is well past anything we'd see in practice; if a pattern
-    // ever exceeds it, fall back to the full-set candidate so the search
-    // still makes progress instead of timing out.
+    // Cap: if total_bits exceeds what fits in u64, or if the canonical
+    // OR-closure could blow up the candidate list past what's worth
+    // optimising over, fall back to the full-set candidate so search still
+    // makes progress.
     if total_bits > 20 {
         let kept_substs: Vec<Vec<usize>> = search_state.matches.iter().map(|m| (0..m.substs.len()).collect()).collect();
         return vec![CostCandidate { variable_indices: v, kept_substs }];
     }
-    let total: u64 = 1u64 << total_bits;
-    let mut out: Vec<CostCandidate> = Vec::new();
-    let mut seen: FxHashSet<Vec<Vec<i32>>> = FxHashSet::default();
-    for idx in 0..total {
-        // Decode `idx` into a per-slot subset `s` of `v`.
-        let mut s: Vec<Vec<i32>> = vec![Vec::new(); arity];
-        let mut rem = idx;
-        for (k, vk) in v.iter().enumerate() {
-            let n = vk.len();
-            if n == 0 {
-                continue;
-            }
-            let mask = rem & ((1u64 << n) - 1);
-            rem >>= n;
-            for (b, &i) in vk.iter().enumerate() {
-                if (mask >> b) & 1 == 1 {
-                    s[k].push(i);
-                }
-            }
-        }
-        // Find compatible substs and the induced minimal tuple.
-        let mut kept_substs: Vec<Vec<usize>> = vec![Vec::new(); search_state.matches.len()];
-        let mut induced: Vec<Vec<i32>> = vec![Vec::new(); arity];
-        let mut any = false;
-        for (mi, match_rs) in subst_r.iter().enumerate() {
-            for (si, r) in match_rs.iter().enumerate() {
-                let compat = (0..arity).all(|k| r[k].iter().all(|i| s[k].binary_search(i).is_ok()));
-                if !compat {
+    // Per-slot offset into a packed u64 mask. Bit `slot_offset[k] + b` is
+    // set in s_mask iff `v[k][b]` is selected.
+    let mut slot_offset: Vec<u32> = Vec::with_capacity(arity);
+    let mut off = 0u32;
+    for sb in &slot_bits {
+        slot_offset.push(off);
+        off += sb;
+    }
+    // Encode each subst's `R` as a u64 mask and bucket by mask. Walking
+    // distinct R-tuples (typically few) is cheaper than rewalking every
+    // subst per candidate, and the bucket records the (match, subst) pairs
+    // we'll attribute to any s ⊇ R.
+    let var_depth = &search_state.pattern.var_depth;
+    let mut bucket: FxHashMap<u64, Vec<(u32, u32)>> = FxHashMap::default();
+    for (mi, m) in search_state.matches.iter().enumerate() {
+        for (si, subst) in m.substs.iter().enumerate() {
+            let mut mask: u64 = 0;
+            for (k, &arg_id) in subst.vars.iter().enumerate() {
+                let d_k = var_depth[k];
+                if d_k == 0 {
                     continue;
                 }
-                kept_substs[mi].push(si);
-                any = true;
-                for k in 0..arity {
-                    for &i in &r[k] {
-                        if !induced[k].contains(&i) {
-                            induced[k].push(i);
-                        }
+                for &i in egraph[arg_id].data.fv.iter() {
+                    if i >= 0 && (i as u32) < d_k {
+                        // v[k] is sorted ascending; binary_search yields the bit position.
+                        let b = v[k].binary_search(&i).expect("subst R-value not in v[k]");
+                        mask |= 1u64 << (slot_offset[k] + b as u32);
                     }
+                }
+            }
+            bucket.entry(mask).or_default().push((mi as u32, si as u32));
+        }
+    }
+    let distinct: Vec<u64> = bucket.keys().copied().collect();
+    // Canonical s-masks are exactly the OR-closure of distinct R-masks:
+    // s is canonical iff s = OR{R ∈ distinct : R ⊆ s}, and any such s is
+    // itself an OR over its containing R-masks (closed under joins).
+    // Enumerate via BFS from 0; in practice the closure is far smaller than
+    // 2^total_bits since most R-masks share bits.
+    let mut canonical_masks: Vec<u64> = Vec::new();
+    let mut seen: FxHashSet<u64> = FxHashSet::default();
+    let mut frontier: Vec<u64> = Vec::new();
+    seen.insert(0);
+    frontier.push(0);
+    while let Some(cur) = frontier.pop() {
+        canonical_masks.push(cur);
+        for &rm in &distinct {
+            let new = cur | rm;
+            if seen.insert(new) {
+                frontier.push(new);
+            }
+        }
+    }
+    // Stable iteration order so candidate emission is deterministic across
+    // runs (the bucket HashMap doesn't promise order, and `compute_cost_and_select`
+    // picks the first candidate on ties).
+    canonical_masks.sort_unstable();
+    let n_matches = search_state.matches.len();
+    let mut out: Vec<CostCandidate> = Vec::with_capacity(canonical_masks.len());
+    for &s_mask in &canonical_masks {
+        // Collect kept substs from every R-bucket whose mask is ⊆ s_mask.
+        let mut kept_substs: Vec<Vec<usize>> = vec![Vec::new(); n_matches];
+        let mut any = false;
+        for (&rm, buck) in &bucket {
+            if rm | s_mask == s_mask {
+                for &(mi, si) in buck {
+                    kept_substs[mi as usize].push(si as usize);
+                    any = true;
                 }
             }
         }
         if !any {
+            // s_mask=0 with no all-empty-R subst falls through here.
             continue;
         }
-        for ik in &mut induced {
-            ik.sort();
+        for ks in &mut kept_substs {
+            ks.sort_unstable();
         }
-        if induced != s {
-            continue;
+        // Decode s_mask into per-slot Vec<i32> for the CostCandidate.
+        let mut variable_indices: Vec<Vec<i32>> = vec![Vec::new(); arity];
+        for k in 0..arity {
+            for (b, &i) in v[k].iter().enumerate() {
+                if (s_mask >> (slot_offset[k] + b as u32)) & 1 == 1 {
+                    variable_indices[k].push(i);
+                }
+            }
         }
-        if seen.insert(s.clone()) {
-            out.push(CostCandidate { variable_indices: s, kept_substs });
-        }
+        out.push(CostCandidate { variable_indices, kept_substs });
     }
     out
 }
