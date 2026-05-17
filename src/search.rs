@@ -449,7 +449,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let mut scratch = crate::cost::CostScratch::new(&shared.egraph);
     let initial_candidate = crate::cost::CostCandidate {
         variable_indices: vec![Vec::new(); initial.pattern.var_depth.len()],
-        kept_substs: initial.matches.iter().map(|m| (0..m.substs.len()).collect()).collect(),
+        kept_substs: None,
     };
     let original_size = crate::cost::compute_size_for_candidate(&shared.egraph, root, &cache, &mut scratch, &initial, shared.check_slow, &initial_candidate);
     (shared, cache, original_size)

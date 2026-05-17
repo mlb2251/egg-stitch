@@ -217,8 +217,13 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 let body_str = state.pattern.display_with_ho(variable_indices);
                 let lambda = state.pattern.display_as_lambda(variable_indices);
                 let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
-                let kept_matches: Vec<bool> = selection.candidate.kept_substs.iter().map(|k| !k.is_empty()).collect();
-                let usage_matches: usize = state.matches.iter().zip(&kept_matches).filter_map(|(m, &keep)| if keep { Some(usage_counts.get(&m.root_eclass).copied().unwrap_or(1)) } else { None }).sum();
+                // With the `None` sentinel every match keeps every subst, so every
+                // match contributes its usage count; otherwise count only matches
+                // whose kept list is non-empty.
+                let usage_matches: usize = match &selection.candidate.kept_substs {
+                    None => state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
+                    Some(k) => state.matches.iter().zip(k).filter(|(_, ks)| !ks.is_empty()).map(|(m, _)| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
+                };
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
                 let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, &state, &selection.candidate, &fn_name, args.rules.as_deref());
@@ -292,7 +297,11 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F,
     // read that stale fv and trip the intersection-fv assertion.
     let mut pending: Vec<(Id, Id)> = Vec::new();
     for (mi, m) in state.matches.iter().enumerate() {
-        for &si in &candidate.kept_substs[mi] {
+        let kept_iter: Box<dyn Iterator<Item = usize>> = match &candidate.kept_substs {
+            None => Box::new(0..m.substs.len()),
+            Some(k) => Box::new(k[mi].iter().copied()),
+        };
+        for si in kept_iter {
             let subst = &m.substs[si];
             let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, variable_indices, var_depth);
             let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
