@@ -253,6 +253,33 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         child
     }
 
+    /// Enumerates every successor state reachable in one `expand` or `reuse` step.
+    ///
+    /// Reuse candidates are emitted first so the dominance short-circuit can fire:
+    /// when a reuse(i, j) preserves `num_substs` (every subst already had the two
+    /// vars equal), the resulting child match set is identical to the parent's
+    /// modulo the var-merge, so any successor of the parent is reachable via this
+    /// reuse — we can return it as the *only* successor and skip enumerating the
+    /// rest. Disabled by `--no-opt-dominance-reuse`.
+    ///
+    /// Thin wrapper over `enumerate_successor_actions` that materialises every
+    /// successor's child state up front. Best-first needs all children to push
+    /// into the search frontier; SMC uses the lazy variant directly so it only
+    /// builds children for the actions it actually samples.
+    #[allow(clippy::type_complexity)]
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
+        match self.enumerate_successor_actions(shared, opt_dominance_reuse, dominance_hits) {
+            SuccessorEnum::Dominant { action, child, support } => vec![(action, child, support)],
+            SuccessorEnum::All(actions) => actions
+                .into_iter()
+                .map(|(a, support)| {
+                    let child = self.apply_action(&a, shared);
+                    (a, child, support)
+                })
+                .collect(),
+        }
+    }
+
     /// Lazy variant of `enumerate_successors`: returns `(action, support)` pairs
     /// without building children, so samplers (e.g. SMC) skip work for unpicked
     /// actions. The caller materialises children via `apply_action`. When
@@ -316,33 +343,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
         SuccessorEnum::All(out)
-    }
-
-    /// Enumerates every successor state reachable in one `expand` or `reuse` step.
-    ///
-    /// Reuse candidates are emitted first so the dominance short-circuit can fire:
-    /// when a reuse(i, j) preserves `num_substs` (every subst already had the two
-    /// vars equal), the resulting child match set is identical to the parent's
-    /// modulo the var-merge, so any successor of the parent is reachable via this
-    /// reuse — we can return it as the *only* successor and skip enumerating the
-    /// rest. Disabled by `--no-opt-dominance-reuse`.
-    ///
-    /// Thin wrapper over `enumerate_successor_actions` that materialises every
-    /// successor's child state up front. Best-first needs all children to push
-    /// into the search frontier; SMC uses the lazy variant directly so it only
-    /// builds children for the actions it actually samples.
-    #[allow(clippy::type_complexity)]
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
-        match self.enumerate_successor_actions(shared, opt_dominance_reuse, dominance_hits) {
-            SuccessorEnum::Dominant { action, child, support } => vec![(action, child, support)],
-            SuccessorEnum::All(actions) => actions
-                .into_iter()
-                .map(|(a, support)| {
-                    let child = self.apply_action(&a, shared);
-                    (a, child, support)
-                })
-                .collect(),
-        }
     }
 }
 
