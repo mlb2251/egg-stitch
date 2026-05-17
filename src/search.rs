@@ -119,6 +119,14 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
     }
 }
 
+/// Result of `enumerate_successor_actions`: a pre-built dominant child, or a
+/// list of `(action, support)` pairs callers materialise on demand via
+/// `apply_action`.
+pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
+    Dominant { action: Action<F::Discriminant<O>>, child: SearchState<F, O>, support: usize },
+    All(Vec<(Action<F::Discriminant<O>>, usize)>),
+}
+
 #[derive(Debug, Clone)]
 pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     pub pattern: Pattern<F, O>,
@@ -349,12 +357,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// are dropped.
     #[allow(clippy::type_complexity)]
     pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
-        let mut out = Vec::new();
+        match self.enumerate_successor_actions(shared, opt_dominance_reuse, dominance_hits) {
+            SuccessorEnum::Dominant { action, child, support } => vec![(action, child, support)],
+            SuccessorEnum::All(actions) => actions
+                .into_iter()
+                .map(|a| {
+                    let mut child = self.clone();
+                    child.apply_action(&a.0, shared);
+                    (a.0, child, a.1)
+                })
+                .collect(),
+        }
+    }
 
-        // Reuse pairs first — enables dominance short-circuit. `support` is the
-        // number of (match, subst) pairs in which vars i and j are shift-equal,
-        // exposed so weighted samplers (SMC) can recover the (m,s)-weighted
-        // distribution the old per-particle random sampler had.
+    /// Lazy variant of `enumerate_successors`: returns `(action, support)` pairs
+    /// without building children, so samplers (e.g. SMC) skip work for unpicked
+    /// actions. `support` is the (m,s)-pair count feeding the SMC weighting; it
+    /// equals the surviving subst count, so `support > 0` ⇒ non-empty child.
+    /// `support == self.num_substs` ⇒ dominant reuse; short-circuited unless
+    /// disabled by `--no-opt-dominance-reuse`.
+    #[allow(clippy::type_complexity)]
+    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
+        let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
         for i in 0..n {
             for j in (i + 1)..n {
@@ -364,29 +388,21 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 if support == 0 {
                     continue;
                 }
-                let mut child = self.clone();
-                child.reuse(i, j, shared);
-                if child.matches.is_empty() {
-                    continue;
-                }
                 let action = Action::Reuse { keep: i, drop: j };
-                let is_dominant = child.num_substs == self.num_substs;
-                if opt_dominance_reuse && is_dominant {
+                if opt_dominance_reuse && support == self.num_substs {
                     *dominance_hits += 1;
-                    return vec![(action, child, support)];
+                    let mut child = self.clone();
+                    child.reuse(i, j, shared);
+                    return SuccessorEnum::Dominant { action, child, support };
                 }
-                out.push((action, child, support));
+                out.push((action, support));
             }
         }
-
-        // Literal expansions. For each (var, shape), `support` counts the
-        // (match, subst) pairs whose bound eclass at that var contains a node
-        // of that shape — same role as reuse support above.
-        for var_idx in 0..self.pattern.vars.len() {
+        for var_idx in 0..n {
             let d_k = self.pattern.var_depth[var_idx];
             let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
-            let mut shapes: Vec<(F::Apply<O>, usize)> = Vec::new();
+            let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
@@ -398,31 +414,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         match shape_idx.get(&key) {
                             Some(&idx) => shapes[idx].1 += 1,
                             None => {
-                                shape_idx.insert(key, shapes.len());
-                                shapes.push((node.clone(), 1));
+                                shape_idx.insert(key.clone(), shapes.len());
+                                shapes.push((key, 1));
                             }
                         }
                     }
                 }
             }
-            for (shape, support) in shapes {
-                let mut child = self.clone();
-                child.expand(var_idx, &shape, shared);
-                if !child.matches.is_empty() {
-                    out.push((
-                        Action::Expand {
-                            var_idx,
-                            op: shape.discriminant(),
-                            arity: shape.children().len(),
-                        },
-                        child,
-                        support,
-                    ));
-                }
+            for ((op, arity), support) in shapes {
+                out.push((Action::Expand { var_idx, op, arity }, support));
             }
         }
-
-        out
+        SuccessorEnum::All(out)
     }
 }
 
