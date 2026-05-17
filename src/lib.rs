@@ -218,12 +218,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 let lambda = state.pattern.display_as_lambda(variable_indices);
                 let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
                 let kept_matches: Vec<bool> = selection.candidate.kept_substs.iter().map(|k| !k.is_empty()).collect();
-                let usage_matches: usize = state
-                    .matches
-                    .iter()
-                    .zip(&kept_matches)
-                    .filter_map(|(m, &keep)| if keep { Some(usage_counts.get(&m.root_eclass).copied().unwrap_or(1)) } else { None })
-                    .sum();
+                let usage_matches: usize = state.matches.iter().zip(&kept_matches).filter_map(|(m, &keep)| if keep { Some(usage_counts.get(&m.root_eclass).copied().unwrap_or(1)) } else { None }).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
                 let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, &state, &selection.candidate, &fn_name, args.rules.as_deref());
