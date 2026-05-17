@@ -22,6 +22,7 @@ Env overrides (defaults match the paper-table runner):
 """
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -30,7 +31,7 @@ import numpy as np
 import tqdm
 from itertools import product
 from pathlib import Path
-from statistics import mean
+from statistics import mean, stdev
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -42,7 +43,15 @@ from expts.runner import run_method  # noqa: E402
 DOMAINS = ["nuts-bolts", "dials", "list", "physics"]
 # DOMAINS = ["nuts-bolts", "dials"]
 
-NUM_RUNS = 15  # plus one warmup rep that gets discarded
+# Adaptive rep count: keep adding reps until every cell's relative SEM
+# (stdev / sqrt(n) / mean) is below TARGET_REL_SEM on both branches, or
+# until MAX_RUNS. We can't use a fixed seed across branches (RNG draws
+# don't have coherent meaning when search semantics change), so the only
+# honest way to make the comparison meaningful is to drive the per-cell
+# uncertainty down by sampling.
+MIN_RUNS = 5
+MAX_RUNS = 60
+TARGET_REL_SEM = 0.02
 
 
 def sh(cmd, *, cwd=None, **kw):
@@ -104,29 +113,59 @@ def cache_path_for(session: str, branch_label: str, dsr_label: str, method: str,
     )
 
 
-def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str]) -> dict:
+def cell_per_rep_times(session: str, branch_label: str, dsr_label: str, method: str, domain: str, num_reps: int) -> list[float]:
+    """Per-rep summed elapsed_secs for one cell (reps 1..num_reps; rep 0 is warmup)."""
+    out = []
+    for rep in range(1, num_reps + 1):
+        p = cache_path_for(session, branch_label, dsr_label, method, domain, rep)
+        with open(p) as f:
+            files = json.load(f)
+        out.append(sum(r["elapsed_secs"] for r in files))
+    return out
+
+
+def cell_compressions(session: str, branch_label: str, dsr_label: str, method: str, domain: str, num_reps: int) -> list[float]:
+    """Per-file compression ratios across reps 1..num_reps for one cell."""
+    out = []
+    for rep in range(1, num_reps + 1):
+        p = cache_path_for(session, branch_label, dsr_label, method, domain, rep)
+        with open(p) as f:
+            files = json.load(f)
+        out.extend(r["compression_ratio"] for r in files)
+    return out
+
+
+def rel_sem(xs: list[float]) -> float:
+    """stdev/sqrt(n)/mean — the SEM as a fraction of the mean. inf if mean=0 or n<2."""
+    if len(xs) < 2:
+        return float("inf")
+    m = mean(xs)
+    if m == 0:
+        return float("inf")
+    return stdev(xs) / math.sqrt(len(xs)) / m
+
+
+def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str], reps_for: dict) -> dict:
     """Aggregate cached per-cell results (dropping rep 0 as warmup) into
     ``{domain: {method: {time, compression}}}``.
 
     Per-rep ``time`` sums elapsed_secs across files of a domain; the cell's
     reported ``time`` is the mean of those per-rep totals. ``compression``
     is the mean of every file's compression_ratio across the kept reps.
+    ``reps_for`` maps ``(dsr_label, domain, method) -> num_reps`` since
+    different cells may have run different rep counts under the adaptive
+    sampler.
     """
     out: dict = {}
     for domain in DOMAINS:
         out[domain] = {}
         for method in methods:
-            per_run_time = []
-            all_ratios = []
-            for rep in range(1, NUM_RUNS + 1):  # rep 0 is warmup, dropped
-                p = cache_path_for(session, branch_label, dsr_label, method, domain, rep)
-                with open(p) as f:
-                    files = json.load(f)
-                per_run_time.append(sum(r["elapsed_secs"] for r in files))
-                all_ratios.extend(r["compression_ratio"] for r in files)
+            n = reps_for[(dsr_label, domain, method)]
+            times = cell_per_rep_times(session, branch_label, dsr_label, method, domain, n)
+            ratios = cell_compressions(session, branch_label, dsr_label, method, domain, n)
             out[domain][method] = {
-                "time": mean(per_run_time),
-                "compression": mean(all_ratios),
+                "time": mean(times),
+                "compression": mean(ratios),
             }
     return out
 
@@ -211,7 +250,7 @@ def main() -> None:
 
     check_clean_worktree()
 
-    print(f"base={base}  pr={pr}  NUM_RUNS={NUM_RUNS}+1warmup  smc=({smc_steps} steps, {smc_parts} particles, T={smc_temp})  enum_steps={enum_steps}  session={session}")
+    print(f"base={base}  pr={pr}  reps=adaptive(min={MIN_RUNS}, max={MAX_RUNS}, target rel-SEM<{TARGET_REL_SEM:.0%})+1warmup  smc=({smc_steps} steps, {smc_parts} particles, T={smc_temp})  enum_steps={enum_steps}  session={session}")
 
     wt_root = Path(f"/tmp/bench_pr_{session}")
     wt_base = wt_root / "base"
@@ -225,28 +264,82 @@ def main() -> None:
             "smc": OursSmc(num_steps=smc_steps, num_particles=smc_parts, temperature=smc_temp),
         }
         conditions = [("with_dsrs", True), ("without_dsrs", False)]
+        # Each cell is keyed by (dsr_label, domain, method); runner + use_dsrs
+        # are recovered from these lookup tables.
+        runner_for = dict(runners.items())
+        use_dsrs_for = dict(conditions)
+        cell_keys = [(d, dom, m) for (d, _), dom, (m, _) in product(conditions, DOMAINS, runners.items())]
 
-        # rep 0 is warmup (dropped by summarize); reps 1..NUM_RUNS are timed.
-        # Within each cell we always run base then PR back-to-back so the two
-        # binaries see the most similar system state we can give them.
-        cells = list(product(range(NUM_RUNS + 1), conditions, DOMAINS, runners.items()))
-        pbar = tqdm.tqdm(cells, desc="bench_pr", unit="cell")
-        for rep_idx, (dsr_label, use_dsrs), domain, (method, runner) in pbar:
-            tag = "warmup" if rep_idx == 0 else f"rep{rep_idx}"
-            pbar.set_postfix_str(f"{tag} {dsr_label} {domain} {method}")
+        def run_rep_for(cell: tuple[str, str, str], rep_idx: int) -> None:
+            """Run one rep of one cell on base then PR back-to-back."""
+            dsr_label, domain, method = cell
+            runner = runner_for[method]
+            use_dsrs = use_dsrs_for[dsr_label]
             time_cell(base_bin, runner, domain, use_dsrs,
                       cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
             time_cell(pr_bin, runner, domain, use_dsrs,
                       cache_path_for(session, "pr", dsr_label, method, domain, rep_idx))
 
+        def cell_rel_sem(cell: tuple[str, str, str], num_reps: int) -> float:
+            """Max rel-SEM across base & PR for one cell at num_reps."""
+            dsr_label, domain, method = cell
+            return max(
+                rel_sem(cell_per_rep_times(session, b, dsr_label, method, domain, num_reps))
+                for b in ("base", "pr")
+            )
+
+        # Phase 1: warmup + MIN_RUNS reps for every cell. Phase 2: keep
+        # adding reps only to cells whose paired rel-SEM (max of base/PR)
+        # is still above TARGET_REL_SEM, capped at MAX_RUNS per cell.
+        reps_done: dict[tuple[str, str, str], int] = {c: 0 for c in cell_keys}
+
+        def cell_done(cell: tuple[str, str, str]) -> bool:
+            n = reps_done[cell]
+            if n < MIN_RUNS:
+                return False
+            if n >= MAX_RUNS:
+                return True
+            return cell_rel_sem(cell, n) < TARGET_REL_SEM
+
+        # Warmup rep (rep 0) for every cell, in cell-key order.
+        wpbar = tqdm.tqdm(cell_keys, desc="warmup", unit="cell", leave=False)
+        for cell in wpbar:
+            wpbar.set_postfix_str("/".join(cell))
+            run_rep_for(cell, 0)
+
+        # Adaptive sampling: each outer iteration runs one more rep for
+        # every still-unconverged cell. Stop when no cell needs more reps.
+        round_idx = 0
+        while True:
+            pending = [c for c in cell_keys if not cell_done(c)]
+            if not pending:
+                break
+            round_idx += 1
+            pbar = tqdm.tqdm(pending, desc=f"round {round_idx} ({len(pending)} cells)", unit="cell", leave=False)
+            for cell in pbar:
+                reps_done[cell] += 1
+                pbar.set_postfix_str(f"{'/'.join(cell)} rep{reps_done[cell]}")
+                run_rep_for(cell, reps_done[cell])
+            for cell in pending:
+                n = reps_done[cell]
+                r = cell_rel_sem(cell, n) if n >= 2 else float("inf")
+                print(f"  {'/'.join(cell)}: {n} reps, rel-SEM={r:.2%}{' ✓' if r < TARGET_REL_SEM else ''}", flush=True)
+
+        for cell, n in reps_done.items():
+            if n >= MAX_RUNS and cell_rel_sem(cell, n) >= TARGET_REL_SEM:
+                print(f"  WARN: {'/'.join(cell)} hit MAX_RUNS={MAX_RUNS} without converging "
+                      f"(rel-SEM {cell_rel_sem(cell, n):.2%})", flush=True)
+
         methods = list(runners.keys())
+        with_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("with_dsrs",) for dom in DOMAINS for m in methods}
+        without_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("without_dsrs",) for dom in DOMAINS for m in methods}
         with_md = fmt_table(base, pr,
-                            summarize(session, "base", "with_dsrs", methods),
-                            summarize(session, "pr", "with_dsrs", methods),
+                            summarize(session, "base", "with_dsrs", methods, with_reps),
+                            summarize(session, "pr", "with_dsrs", methods, with_reps),
                             "with DSRs")
         without_md = fmt_table(base, pr,
-                               summarize(session, "base", "without_dsrs", methods),
-                               summarize(session, "pr", "without_dsrs", methods),
+                               summarize(session, "base", "without_dsrs", methods, without_reps),
+                               summarize(session, "pr", "without_dsrs", methods, without_reps),
                                "without DSRs")
         timing_section = "## Timing\n\n" + with_md + "\n\n" + without_md + "\n"
         print()
