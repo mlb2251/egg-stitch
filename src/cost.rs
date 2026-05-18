@@ -98,7 +98,10 @@ pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgrap
     // allocating the dense (0..len) index list — this fires every cost call
     // on lambda-free domains (and most calls everywhere).
     if v.iter().all(|vk| vk.is_empty()) {
-        return vec![CostCandidate { variable_indices: vec![Vec::new(); arity], kept_substs: None }];
+        return vec![CostCandidate {
+            variable_indices: vec![Vec::new(); arity],
+            kept_substs: None,
+        }];
     }
     let slot_bits: Vec<u32> = v.iter().map(|vk| vk.len() as u32).collect();
     let total_bits: u32 = slot_bits.iter().sum();
@@ -565,10 +568,7 @@ pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEg
     let pattern_size = compute_pattern_size::<F, O>(&search_state.pattern, weights);
     let per_app = weights.app_cost + weights.sym_var_cost;
     let var_occ: Vec<u32> = search_state.pattern.vars.iter().map(|vk| vk.len() as u32).collect();
-    let ho_arities: Vec<Vec<u32>> = candidates
-        .iter()
-        .map(|c| c.variable_indices.iter().map(|v| v.len() as u32).collect())
-        .collect();
+    let ho_arities: Vec<Vec<u32>> = candidates.iter().map(|c| c.variable_indices.iter().map(|v| v.len() as u32).collect()).collect();
     let bodies: Vec<usize> = ho_arities
         .iter()
         .map(|ho| {
