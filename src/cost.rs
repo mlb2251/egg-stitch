@@ -540,19 +540,66 @@ pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 /// downstream (`apply_abstraction`, `build_rewritten_egraph`) can use the
 /// same selection without redoing the optimisation.
 pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> CostSelection {
-    let candidates = enumerate_candidates::<F, O>(egraph, search_state);
+    let mut candidates = enumerate_candidates::<F, O>(egraph, search_state);
     let weights = &egraph.analysis.weights;
-    let mut best: Option<CostSelection> = None;
-    for candidate in candidates {
+    // Hoisted: fill once per cost call. `eclass_to_match_idx` depends only on
+    // `search_state.matches`, which is the same across every candidate, so
+    // repeating the fill per candidate was wasted work.
+    scratch.rewrite.fill(search_state);
+    // Single-candidate fast path: skip the sort/prune scaffolding and the
+    // precomputed body table — they're pure overhead when there's nothing to
+    // compare against. Fires on every cost call when the pattern has no
+    // pattern-internal-binder slots (lambda-free domains, and most calls
+    // elsewhere).
+    if candidates.len() == 1 {
+        let candidate = candidates.pop().unwrap();
         let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
-        let corpus = compute_size_for_candidate(egraph, root, cache, scratch, search_state, check_slow, &candidate);
+        let corpus = compute_size_for_candidate_prefilled(egraph, root, cache, scratch, search_state, check_slow, &candidate, &ho_arity);
         let body = compute_body_size_with_ho::<F, O>(&search_state.pattern, &ho_arity, weights);
-        let total = corpus + body;
-        if best.as_ref().is_none_or(|b| total < b.cost) {
-            best = Some(CostSelection { cost: total, candidate });
+        return CostSelection { cost: corpus + body, candidate };
+    }
+    // Precompute each candidate's body size (so we can sort + prune) and its
+    // ho_arity. Hoist the pattern-size computation out of the per-candidate
+    // loop — it clones the pattern into a RecExpr, which dominates the
+    // per-candidate cost if recomputed N times.
+    let pattern_size = compute_pattern_size::<F, O>(&search_state.pattern, weights);
+    let per_app = weights.app_cost + weights.sym_var_cost;
+    let var_occ: Vec<u32> = search_state.pattern.vars.iter().map(|vk| vk.len() as u32).collect();
+    let ho_arities: Vec<Vec<u32>> = candidates
+        .iter()
+        .map(|c| c.variable_indices.iter().map(|v| v.len() as u32).collect())
+        .collect();
+    let bodies: Vec<usize> = ho_arities
+        .iter()
+        .map(|ho| {
+            if ho.iter().all(|&h| h == 0) {
+                return pattern_size;
+            }
+            let ho_extra: u32 = var_occ.iter().zip(ho).map(|(&n, &h)| n * h * per_app).sum();
+            pattern_size + ho_extra as usize
+        })
+        .collect();
+    let mut order: Vec<usize> = (0..candidates.len()).collect();
+    order.sort_by_key(|&i| bodies[i]);
+    let mut best_idx: Option<usize> = None;
+    let mut best_cost: usize = usize::MAX;
+    for &idx in &order {
+        // Cheap lower-bound prune: corpus ≥ 0, so total ≥ body. Iterating in
+        // body-ascending order makes the first viable candidate establish a
+        // ceiling that larger-body candidates fall through.
+        if bodies[idx] >= best_cost {
+            continue;
+        }
+        let corpus = compute_size_for_candidate_prefilled(egraph, root, cache, scratch, search_state, check_slow, &candidates[idx], &ho_arities[idx]);
+        let total = corpus + bodies[idx];
+        if total < best_cost {
+            best_cost = total;
+            best_idx = Some(idx);
         }
     }
-    best.expect("enumerate_candidates returns at least one candidate")
+    let chosen = best_idx.expect("enumerate_candidates returns at least one candidate");
+    let candidate = candidates.swap_remove(chosen);
+    CostSelection { cost: best_cost, candidate }
 }
 
 /// Size of the abstraction's pattern body — the pattern AST counted under
@@ -592,12 +639,21 @@ pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, w
 /// the body size is implied by `candidate.variable_indices` and is *not*
 /// added here — callers add it via `compute_body_size_with_ho`.
 pub fn compute_size_for_candidate<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, candidate: &CostCandidate) -> usize {
-    let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
     scratch.rewrite.fill(search_state);
+    let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
+    compute_size_for_candidate_prefilled(egraph, root, cache, scratch, search_state, check_slow, candidate, &ho_arity)
+}
+
+/// Same as [`compute_size_for_candidate`] but assumes `scratch.rewrite` is
+/// already filled for the current `search_state` and the caller has already
+/// computed `ho_arity`. `compute_cost_and_select` hoists both to amortise
+/// across candidates.
+#[allow(clippy::too_many_arguments)]
+fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, candidate: &CostCandidate, ho_arity: &[u32]) -> usize {
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
-        ho_arity: &ho_arity,
+        ho_arity,
         kept_substs: candidate.kept_substs.as_deref(),
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);

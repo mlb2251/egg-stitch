@@ -163,6 +163,18 @@ fn identical() {
     check_fixture("data/domains/stitch/identical.json", &[], true);
 }
 
+/// Drop-fv regression with a divergent $0-bearing arm: three programs share
+/// `(lam (lam (+ _)))` over constants A/B/C, while the fourth uses a
+/// different head (`-`) over `$0`. The cost optimizer must pick the
+/// drop-fv candidate (S_0 = {}, keep the three `+`-constants, leave the
+/// `-`-arm unrewritten). Pinned through the planned cost-loop optimization
+/// so the lower-bound prune doesn't accidentally discard the drop-fv
+/// candidate.
+#[test]
+fn drop_fv_minus_arm() {
+    check_fixture_bf_only("data/domains/ho-bugs/drop_fv_minus.json", LAMBDA, true);
+}
+
 /// HO-arity-2 capture regression. The η-wrap convention in `wrap_subst_args`
 /// pairs with `wrap_pattern_with_db_apps`'s splice order. Pre-fix the splice
 /// ran `($0 $1)` while the wrap produced bodies assuming `($1 $0)`, so
