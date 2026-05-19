@@ -6,7 +6,7 @@ use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
-use crate::search::{Action, SearchState, setup_search};
+use crate::search::{Action, SearchState, SuccessorEnum, setup_search};
 use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
@@ -61,31 +61,42 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared), num_particles)];
     let mut scratch = CostScratch::new(&shared.egraph);
+    let mut dominance_hits: usize = 0;
 
     for step in 0..num_steps {
-        // For each (state, mult) group, sample `mult` independent random
-        // expansions, dedupe samples by `ActionKey` (the canonical "same
-        // resulting state" key), then apply each unique sample once. Resulting
-        // patterns are then deduped globally across groups.
+        // For each (state, mult) group, enumerate successor *actions* (no child
+        // states built up front), then resample `mult` of them. Each action's
+        // sampling weight is its `(match, subst)` support count; reuse-action
+        // weights are additionally multiplied by `boost_reuse_weight`. Child
+        // states are materialised only for sampled actions via `apply_action`,
+        // avoiding the per-shape `clone + expand` work for successors that
+        // win zero samples. Resulting patterns are deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
-            let mut action_counts: FxHashMap<Action<F::Discriminant<O>>, usize> = FxHashMap::default();
-            let mut noop_count: usize = 0;
-            for _ in 0..mult {
-                match state.sample_random_expansion(&shared, false, rng) {
-                    Some(action) => *action_counts.entry(action).or_insert(0) += 1,
-                    None => noop_count += 1,
+            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, &mut dominance_hits) {
+                SuccessorEnum::Dominant { child, .. } => {
+                    dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                    continue;
                 }
+                SuccessorEnum::All(actions) => actions,
+            };
+            if actions.is_empty() {
+                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                continue;
             }
-            for (action, count) in action_counts {
-                let mut s = state.clone();
-                s.apply_action(&action, &shared);
-                dedup_insert(s, count, &mut expanded, &mut mults, &mut dedup);
+            let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
+            let acc = normalize_and_accumulate(&mut weights);
+            let mut counts: Vec<usize> = vec![0; actions.len()];
+            for _ in 0..mult {
+                counts[weighted_choice(&acc, rng)] += 1;
             }
-            if noop_count > 0 {
-                dedup_insert(state, noop_count, &mut expanded, &mut mults, &mut dedup);
+            for ((action, _), count) in actions.into_iter().zip(counts) {
+                if count > 0 {
+                    let child = state.apply_action(&action, &shared);
+                    dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                }
             }
         }
         drop(dedup);
@@ -166,6 +177,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         steps_run = step + 1;
     }
 
+    println!("\n{}", "═══ STATS ═══".blue().bold());
+    println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
+
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
         println!("{} {}", "best found at iteration:".dimmed(), iter.to_string().yellow());
@@ -192,6 +206,20 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         data: shared.into_data(),
         debug_log,
     }
+}
+
+/// Weights each successor by its `(match, subst)` support count, with reuse
+/// supports additionally multiplied by `boost_reuse_weight`. With a boost of
+/// 1.0 this is the pure support-weighted distribution; larger values bias
+/// sampling toward reuse actions, smaller values toward expansion.
+fn action_weights_with_reuse_boost<D>(actions: &[(Action<D>, usize)], boost_reuse_weight: f64) -> Vec<f64> {
+    actions
+        .iter()
+        .map(|(a, support)| {
+            let kind_scale = if matches!(a, Action::Reuse { .. }) { boost_reuse_weight } else { 1.0 };
+            kind_scale * (*support as f64)
+        })
+        .collect()
 }
 
 /// Samples an index from a normalized cumulative weight array.
