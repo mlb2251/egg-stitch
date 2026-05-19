@@ -42,15 +42,8 @@ class PerFileResult:
     egraph_min_term_size: float | None
     """Raw ``cost_after_rewrites`` for this file under the DSRs, or None when
     the runner doesn't expose one (i.e. not ours, or DSRs weren't used).
-    Stored as None rather than NaN so JSON round-trips cleanly.
-
-    This is the AstSize of egg-stitch's wrapped root enode and so includes
-    the single synthetic ``(programs …)`` wrapper added by
-    ``programs_to_egraph`` (``src/io.rs``). ``initial_cost`` has no such
-    wrapper (it's summed in Python from raw per-program s-exprs by
-    ``ast_size`` in ``runner.py``), so renderers that compare the two
-    columns subtract 1 from this field — see
-    ``render_common.egraph_min_for_domain``."""
+    Stored as None rather than NaN so JSON round-trips cleanly. Includes the
+    ``(programs …)`` wrapper; renderers subtract 1 to match ``initial_cost``."""
 
     def to_dict(self) -> dict:
         """Plain-dict representation for JSON serialization."""
