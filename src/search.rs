@@ -1,9 +1,9 @@
-use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
-use egg::{ENodeOrVar, Id, Language, RecExpr};
+use egg::{Id, Language};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -349,15 +349,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
-    let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| {
-        // Parse via the language's user-facing flat-form parser, then lift the
-        // resulting `ENodeOrVar` AST into the internal `OpWithVar` shape. Going
-        // through `s.parse()` directly would invoke egg's per-token `from_op`,
-        // which can't represent multi-arity applications for languages like
-        // lambda-calc (it expects curried form, but `display_recexpr` emits flat).
-        let ast = <F::Apply<O> as StitchLanguage>::parse_pattern_ast(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e));
-        pattern_ast_to_revexpr::<F, O>(&ast)
-    });
+    // The follow pattern is whatever `display_recexpr` would emit for a
+    // pattern: flat-form sexps that may have a `?#k` variable head (e.g.
+    // `(?#0 a b c)`). egg's stock pattern parser rejects both shapes, so
+    // each family ships its own walker.
+    let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
     let shared = SharedSearchData {
@@ -400,22 +396,4 @@ pub fn compute_usage_counts<L: crate::lang::StitchLanguage>(egraph: &StitchEgrap
         }
     }
     counts
-}
-
-/// Lifts an egg pattern AST (`ENodeOrVar` with program-side leaves) into the
-/// internal pattern representation (`OpWithVar`-leaved nodes). `RecExpr` stores
-/// nodes in topological order, so child `Id`s remain valid index-for-index.
-fn pattern_ast_to_revexpr<F: LanguageFamily, O: StitchOp>(ast: &RecExpr<ENodeOrVar<F::Apply<O>>>) -> RevExpr<F::Apply<OpWithVar<O>>> {
-    let mut out: RecExpr<F::Apply<OpWithVar<O>>> = RecExpr::default();
-    for n in ast.as_ref() {
-        let lifted = match n {
-            ENodeOrVar::Var(v) => F::make_var::<O>(*v),
-            ENodeOrVar::ENode(node) => {
-                let disc = F::map_discriminant::<O, OpWithVar<O>>(node.discriminant(), OpWithVar::Node);
-                F::make::<OpWithVar<O>>(disc, node.children().to_vec())
-            }
-        };
-        out.add(lifted);
-    }
-    out.into()
 }

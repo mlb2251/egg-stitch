@@ -82,6 +82,17 @@ pub trait LanguageFamily: Clone + 'static {
     /// `k`-th outer wrap-lam. Inlining a call site `(fn_N a_0 … a_{k-1})`
     /// against the result and β-reducing recovers the original captured term.
     fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String;
+
+    /// Parse a `--follow` pattern string into the internal pattern shape.
+    /// Defaults to egg's stock `RecExpr` parser, which is fine for any flat
+    /// language whose `from_op` accepts arbitrary-arity nodes (e.g.
+    /// `OpChildren`). Languages with shape constraints (e.g. lambda-calc's
+    /// curried `App`) or that display var-headed forms `(?#k a b c)` must
+    /// override.
+    fn parse_follow_pattern<O: StitchOp>(s: &str) -> anyhow::Result<crate::revexpr::RevExpr<Self::Apply<OpWithVar<O>>>> {
+        let expr: egg::RecExpr<Self::Apply<OpWithVar<O>>> = s.parse().map_err(|e| anyhow::anyhow!("parse follow {s:?}: {e:?}"))?;
+        Ok(expr.into())
+    }
 }
 
 /// Marker for the `OpChildrenLanguage<_>` family.
@@ -283,5 +294,13 @@ impl LanguageFamily for LambdaCalc {
             current = out.add(LambdaCalcLanguage::Lam([current]));
         }
         <LambdaCalcLanguage<O> as StitchLanguage>::display_recexpr(&out)
+    }
+
+    fn parse_follow_pattern<O: StitchOp>(s: &str) -> anyhow::Result<crate::revexpr::RevExpr<LambdaCalcLanguage<OpWithVar<O>>>> {
+        // Reuse the program-side parser at `OpWithVar<O>`: `OpWithVar::from_name`
+        // already routes `?#k` atoms to `Var(v)`, so flat-form follow patterns
+        // (including var-headed apps like `(?#0 a b)`) appify correctly via the
+        // same curried-App handling.
+        Ok(LambdaCalcLanguage::<OpWithVar<O>>::parse_program(s)?.into())
     }
 }
