@@ -103,27 +103,45 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
 
-        for (i, cost) in costs.iter().enumerate() {
-            let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
-            let arity = expanded[i].pattern.vars.len();
-            if arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
-                best_so_far = Some((*cost, expanded[i].clone()));
-                best_found_at = Some(step);
-            }
-        }
-
         // log-space weights: logw_i = -cost_i / temperature
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
+
+        if let Some(ref follow) = shared.follow {
+            // Apply the follow filter before the zero-arity kill so that an
+            // arity-0 particle which exactly equals the follow target still
+            // counts as "alive" for the per-iteration pick below.
+            apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
+            // In follow mode the cost-based "new best" logic is the wrong
+            // criterion: the follow target may itself be more expensive than
+            // some shorter prefix the search has already crossed. Instead,
+            // each iteration record the cost-min particle that's still
+            // following the target. When all particles die, `best_so_far`
+            // retains the latest non-empty iteration's pick — i.e. the
+            // deepest the search managed to track the target.
+            if let Some((i, c)) = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| (i, costs[i])).min_by_key(|&(_, c)| c) {
+                let arity = expanded[i].pattern.vars.len();
+                if arity <= max_arity && !(no_zero_arity && arity == 0) {
+                    println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow pick: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
+                    best_so_far = Some((c, expanded[i].clone()));
+                    best_found_at = Some(step);
+                }
+            }
+        } else {
+            for (i, cost) in costs.iter().enumerate() {
+                let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
+                let arity = expanded[i].pattern.vars.len();
+                if arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat {
+                    println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
+                    best_so_far = Some((*cost, expanded[i].clone()));
+                    best_found_at = Some(step);
+                }
+            }
+        }
 
         for (i, s) in expanded.iter().enumerate() {
             if s.pattern.vars.is_empty() {
                 log_weights[i] = f64::NEG_INFINITY;
             }
-        }
-
-        if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
         }
 
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
