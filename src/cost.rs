@@ -393,17 +393,53 @@ pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F,
 }
 
 /// Total body size including HO-app wrapping: `compute_pattern_size` plus,
-/// for each occurrence of `?#k` with `ho_arity[k] > 0`, the cost of the
-/// `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
+/// for each *syntactic* occurrence of `?#k` with `ho_arity[k] > 0`, the cost
+/// of the `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
 /// `sym_var_cost` per binder, per occurrence.
+///
+/// Counts occurrences by walking the RecExpr from the root, so a DAG-shared
+/// `?#k` (one RecExpr id referenced by N parents) charges N times — matching
+/// `compute_pattern_size`'s syntactic-walk semantics. Counting `vars[k].len()`
+/// here would charge once per unique id and silently reward DAG-shared
+/// constructions, making the same final pattern cost less depending on the
+/// action sequence that built it.
 pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
     let pattern_size = compute_pattern_size::<F, O>(pattern, weights);
     if ho_arity.iter().all(|&h| h == 0) {
         return pattern_size;
     }
     let per_app = weights.app_cost + weights.sym_var_cost;
-    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.vars[k].len() as u32 * ho_arity[k] * per_app).sum();
+    let occurrences = count_var_occurrences::<F, O>(pattern);
+    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| occurrences[k] as u32 * ho_arity[k] * per_app).sum();
     pattern_size + ho_extra as usize
+}
+
+/// Number of syntactic occurrences of each metavar in `pattern`, computed by
+/// recursing from the root. DAG-shared positions are counted once per parent
+/// reference (mirroring `compute_recexpr_size`).
+fn count_var_occurrences<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>) -> Vec<usize> {
+    // RecExpr id → which metavar k lives at this position (vars are leaves and
+    // each is held at exactly one slot's `vars[k]` list).
+    let mut id_to_k: FxHashMap<usize, usize> = FxHashMap::default();
+    for (k, ids) in pattern.vars.iter().enumerate() {
+        for &id in ids {
+            id_to_k.insert(usize::from(id), k);
+        }
+    }
+    let mut counts = vec![0usize; pattern.vars.len()];
+    let root = Id::from(pattern.pattern.nodes.len() - 1);
+    walk_count::<F, O>(pattern, root, &id_to_k, &mut counts);
+    counts
+}
+
+fn walk_count<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, id: Id, id_to_k: &FxHashMap<usize, usize>, counts: &mut [usize]) {
+    if let Some(&k) = id_to_k.get(&usize::from(id)) {
+        counts[k] += 1;
+        return;
+    }
+    for &child in pattern.pattern[id].children() {
+        walk_count::<F, O>(pattern, child, id_to_k, counts);
+    }
 }
 
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {

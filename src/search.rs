@@ -4,7 +4,7 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -12,8 +12,13 @@ use std::time::{Duration, Instant};
 /// search. Accumulates hit count and time spent so the host loop can report
 /// stats. Wrap in `Option<…>` at the call site — `None` disables the check
 /// entirely (useful for measuring how much pruning the seen-set buys).
+/// Stores the *minimum* frozen_count ever seen per pattern. A repeat insertion
+/// at an equal-or-higher frozen_count is a hit (the prior visit was at least
+/// as flexible). A repeat at a strictly lower frozen_count overwrites and
+/// passes through, because the new visit unlocks expand actions the prior one
+/// had forbidden.
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
-    set: FxHashSet<Pattern<F, O>>,
+    map: FxHashMap<Pattern<F, O>, usize>,
     pub hits: usize,
     pub time: Duration,
 }
@@ -21,7 +26,7 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
 impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
     fn default() -> Self {
         Self {
-            set: FxHashSet::default(),
+            map: FxHashMap::default(),
             hits: 0,
             time: Duration::ZERO,
         }
@@ -34,21 +39,30 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     }
     /// Number of distinct patterns recorded.
     pub fn len(&self) -> usize {
-        self.set.len()
+        self.map.len()
     }
     pub fn is_empty(&self) -> bool {
-        self.set.is_empty()
+        self.map.is_empty()
     }
-    /// Records `pattern` if new; returns `true` if it was already present
-    /// (caller should skip this successor).
-    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>) -> bool {
+    /// Records `pattern` at `frozen_count` if this is the first visit or a
+    /// strictly-lower-frozen one; returns `true` (skip) if an equal-or-lower
+    /// frozen visit was already recorded — the prior visit was at least as
+    /// flexible, so all of this visit's reachable successors are already
+    /// reachable from it.
+    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen_count: usize) -> bool {
         let t = Instant::now();
-        let already_present = !self.set.insert(pattern);
+        let skip = match self.map.get(&pattern) {
+            Some(&existing) if existing <= frozen_count => true,
+            _ => {
+                self.map.insert(pattern, frozen_count);
+                false
+            }
+        };
         self.time += t.elapsed();
-        if already_present {
+        if skip {
             self.hits += 1;
         }
-        already_present
+        skip
     }
 }
 
@@ -130,6 +144,12 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// check in `enumerate_successors` to detect reuses that preserve the
     /// match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
+    /// Best-first canonical-ordering device: number of leading metavars
+    /// `?#0..?#(frozen_count-1)` that are committed to never being expanded.
+    /// Expanding `?#k` raises this to `k`; reusing-and-dropping a frozen
+    /// index decrements it. Best-first uses it to filter `Expand` actions;
+    /// SMC ignores it (it dedupes on the pattern's `RecExpr` directly).
+    pub frozen_count: usize,
 }
 
 /// Computes the total number of substitutions across all matches.
@@ -146,6 +166,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
+        // Commit to freezing every earlier var. `max` (rather than `=`) makes
+        // this monotone under SMC's freedom to expand any var.
+        self.frozen_count = self.frozen_count.max(var_idx);
         self.pattern.expand(var_idx, target);
         self.subset_matches(var_idx, target, shared);
     }
@@ -157,6 +180,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let d_a = self.pattern.var_depth[var_idx];
         let d_b = self.pattern.var_depth[second_var_idx];
         let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
+        // Dropping a frozen index shifts subsequent indices down by one, so
+        // the freeze count tracks that. Merging frozen-with-unfrozen keeps
+        // the frozen prefix length unchanged (the lower-indexed = frozen var
+        // is always kept by `Pattern::reuse`).
+        let drop_idx = var_idx.max(second_var_idx);
+        if drop_idx < self.frozen_count {
+            self.frozen_count -= 1;
+        }
         self.pattern.reuse(var_idx, second_var_idx);
         self.subset_matches_reuse(var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared);
     }
@@ -235,7 +266,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn new(shared: &SharedSearchData<F, O>) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
-        Self { pattern: Pattern::single_var(), matches, num_substs }
+        Self { pattern: Pattern::single_var(), matches, num_substs, frozen_count: 0 }
     }
 
     /// Applies an action to a clone of `self` and returns the resulting child.

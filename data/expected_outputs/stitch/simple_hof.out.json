@@ -1,16 +1,16 @@
 {
-  "compression_ratio": 1.250123823675087,
+  "compression_ratio": 1.3159541188738269,
   "cost_after_rewrites": 2524,
-  "final_cost": 2019,
+  "final_cost": 1918,
   "initial_cost": 49,
   "library": [
     {
-      "approx_cost": 1009,
+      "approx_cost": 1312,
       "arity": 1,
       "lambda": "(lam (a (lam ($1 $0 ($1 $0)))))",
       "num_matches": 4,
       "pattern": "fn_0: (a (lam (?#0 $0 (?#0 $0))))",
-      "pattern_size": 505,
+      "pattern_size": 404,
       "usage_matches": 4
     }
   ],

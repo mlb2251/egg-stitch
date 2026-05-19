@@ -28,12 +28,6 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// True iff `?#k` has been cross-depth-merged (occurrences live at
     /// different depths in the pattern).
     pub var_cross_depth: Vec<bool>,
-    /// Number of leading metavars `?#0..?#(frozen_count-1)` that are
-    /// committed to never being expanded. Best-first uses this as a
-    /// canonical-ordering device: expanding `?#k` freezes everything before
-    /// it, so each pattern has a unique reachable freeze state. SMC ignores
-    /// this field (it dedupes on the underlying `RecExpr`, not `Pattern`).
-    pub frozen_count: usize,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -48,7 +42,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
             var_cross_depth: vec![false],
-            frozen_count: 0,
         }
     }
 
@@ -61,10 +54,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// `target.discriminant().binds_child(j)` is true for that slot — i.e., a
     /// `Lam` body bumps the depth of the meta-var that lands inside it.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
-        // Expanding `?#k` commits to freezing `?#0..?#(k-1)`. Use `max` so
-        // SMC's freedom to expand any var doesn't accidentally regress the
-        // freeze count (which is monotone non-decreasing under expansion).
-        self.frozen_count = self.frozen_count.max(var_idx);
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_cross = self.var_cross_depth.remove(var_idx);
@@ -115,13 +104,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
-        // Dropping a frozen var shifts subsequent indices down by one, so the
-        // freeze count tracks that. Reuse never violates the freeze (it
-        // doesn't expand a frozen var; merging frozen with unfrozen keeps the
-        // frozen prefix length unchanged).
-        if drop_idx < self.frozen_count {
-            self.frozen_count -= 1;
-        }
 
         let cross_depth = self.var_depth[keep_idx] != self.var_depth[drop_idx] || self.var_cross_depth[keep_idx] || self.var_cross_depth[drop_idx];
         // Merged metavar adopts the *min* depth and we always track
@@ -225,7 +207,7 @@ fn hash_node<F: LanguageFamily, O: StitchOp, H: std::hash::Hasher>(expr: &Patter
 /// These impls recurse from the root (Id(0)) using canonical var names instead.
 impl<F: LanguageFamily, O: StitchOp> PartialEq for Pattern<F, O> {
     fn eq(&self, other: &Self) -> bool {
-        self.frozen_count == other.frozen_count && nodes_eq::<F, O>(&self.pattern, &other.pattern, Id::from(0), Id::from(0))
+        nodes_eq::<F, O>(&self.pattern, &other.pattern, Id::from(0), Id::from(0))
     }
 }
 
@@ -233,7 +215,6 @@ impl<F: LanguageFamily, O: StitchOp> Eq for Pattern<F, O> {}
 
 impl<F: LanguageFamily, O: StitchOp> std::hash::Hash for Pattern<F, O> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        std::hash::Hash::hash(&self.frozen_count, state);
         hash_node::<F, O, H>(&self.pattern, Id::from(0), state);
     }
 }

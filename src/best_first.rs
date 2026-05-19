@@ -139,7 +139,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
-        s.check_and_insert(initial_state.pattern.clone());
+        s.check_and_insert(initial_state.pattern.clone(), initial_state.frozen_count);
     }
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
@@ -181,7 +181,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
         let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
-        let parent_frozen = nodes[node_id].state.pattern.frozen_count;
+        let parent_frozen = nodes[node_id].state.frozen_count;
 
         for (action, child_state, _support) in successors {
             // Freezing rule: expanding `?#k` commits to never expanding any
@@ -199,7 +199,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.pattern.clone())
+                && s.check_and_insert(child_state.pattern.clone(), child_state.frozen_count)
             {
                 continue;
             }
