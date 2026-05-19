@@ -36,6 +36,7 @@ from statistics import mean, stdev
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from expts.result import PerFileResult  # noqa: E402
 from expts.run_models import OursBf, OursSmc  # noqa: E402
 from expts.run_models import ours as _ours_mod  # noqa: E402
 from expts.runner import run_method  # noqa: E402
@@ -101,8 +102,15 @@ def time_cell(binary_path: Path, runner, domain: str, use_dsrs: bool, cache_path
     invokes the requested binary; the rest of the pipeline (cwd, env,
     command-line construction) is shared between branches.
     """
+    if cache_path.exists():
+        with open(cache_path) as f:
+            return [PerFileResult(**d) for d in json.load(f)]
     _ours_mod.egg_stitch_bin = lambda: binary_path
-    return run_method(runner, domain, rounds=1, use_dsrs=use_dsrs, cache_path=cache_path)
+    out = run_method(runner, domain, rounds=1, use_dsrs=use_dsrs)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "w") as f:
+        json.dump([r.to_dict() for r in out], f, indent=2)
+    return out
 
 
 def cache_path_for(session: str, branch_label: str, dsr_label: str, method: str, domain: str, rep_idx: int) -> Path:
