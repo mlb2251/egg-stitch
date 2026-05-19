@@ -88,11 +88,14 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
     v
 }
 
-/// Strips the `pattern` field from every entry in `library` (in place). Used
-/// when SMC's chosen e-class representative is non-deterministic (e.g. once
-/// commutativity rewrites unify multiple equivalent pattern strings).
+/// Strips the `pattern` and `lambda` fields from every entry in `library` (in
+/// place). Used when SMC's chosen e-class representative is non-deterministic
+/// (e.g. once commutativity rewrites unify multiple equivalent pattern
+/// strings). The `lambda` field is derived from the pattern so it varies
+/// together — strip both to keep the comparison stable.
 fn strip_library_patterns(v: &mut Value) {
     strip_library_field(v, "pattern");
+    strip_library_field(v, "lambda");
 }
 
 /// Strips a named field from every entry in `library` (in place).
@@ -158,6 +161,40 @@ fn identical() {
     check_fixture("data/domains/stitch/identical.json", &[], true);
 }
 
+/// HO-arity-2 capture regression. The η-wrap convention in `wrap_subst_args`
+/// pairs with `wrap_pattern_with_db_apps`'s splice order. Pre-fix the splice
+/// ran `($0 $1)` while the wrap produced bodies assuming `($1 $0)`, so
+/// β-reducing a capture of local-$1 came out as local-$0. Identity at HO
+/// arity 1, so all earlier HO tests passed unchanged. The β-equivalence
+/// sweep in `scripts/check_all_outputs.py` catches the semantic version too.
+#[test]
+fn ho_arity2_capture() {
+    check_fixture("data/domains/ho-bugs/arity2_capture.json", &["--language", "lambda-calc"], true);
+}
+
+/// Regression: `shift_free_egraph`'s memo is keyed by `(canonical, initial_depth)`,
+/// which is only valid within a single metavar slot's transformation. When two
+/// slots have different `(d_k, h, rank_map)` and share a captured-arg eclass
+/// (or a sub-eclass during recursion), the cache hit from one slot reused the
+/// other slot's permuted-shift result. Pre-fix the corpus below saw `$1`
+/// become `$0` in slot 0's wrapped arg because slot 1's `$1 → $0` mapping
+/// had been cached at the same `(canonical, initial_depth)` key. Fix: use a
+/// fresh memo per slot.
+#[test]
+fn cross_slot_shift_memo() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_slot_shift_memo.json", &["--language", "lambda-calc"], true);
+}
+
+/// Regression: the search picks `fn_{N+1}` (or higher) when the input already
+/// contains a leaf named `fn_N`, so re-running stitch on an already-abstracted
+/// corpus doesn't produce a name that aliases an existing symbol. The blessed
+/// fixture pins the chosen index — pre-fix the new abstraction would have been
+/// named `fn_0`, collapsing onto the input's existing `fn_0` symbol.
+#[test]
+fn fn_name_collision() {
+    check_fixture("data/domains/ho-bugs/fn_name_collision.json", &[], true);
+}
+
 /// Diverges from Stitch.jl: Stitch.jl finds the arity-0 body
 /// `(a b c d e f g h (A B C) (A B C) (A B C) (A B C))`; egg-stitch's e-class
 /// equality unifies the four `(A B C)` subterms and picks the arity-1
@@ -193,6 +230,45 @@ fn simple3() {
 #[test]
 fn tmp_minimal() {
     check_fixture("data/domains/stitch/tmp_minimal.json", &[], true);
+}
+
+/// Exercises shifted-variant search under lambda-calc: the two programs share
+/// the subterm `(+ $0 3 4 (lam (+ $1 6 7)))` at different binding depths, so
+/// any abstraction that captures it as a single metavariable must use the
+/// shifted variant at the shallower occurrence.
+#[test]
+fn reuse_at_different_depths() {
+    check_fixture("data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"], true);
+    // CRITICAL: this is the whole point of the `variables-at-multiple-depths`
+    // branch. The two programs share `(+ $0 3 4 (lam (+ $1 6 7)))` at depths
+    // that differ by one — `$0` and `$1` are shift-variants of the same value.
+    // A correct shift-aware reuse merges the two metavar occurrences into a
+    // single arity-1 abstraction; any future change that loses this and falls
+    // back to an arity-2 (non-reused) abstraction has reverted the branch's
+    // flagship behavior. Pin arity == 1 directly so the assertion survives
+    // re-blessing.
+    for search in ["best-first", "smc"] {
+        let v = run_backend(search, "data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"]);
+        let library = v.get("library").and_then(|l| l.as_array()).unwrap_or_else(|| panic!("{search}: missing library"));
+        assert_eq!(library.len(), 1, "{search}: expected exactly one abstraction, got {library:#?}");
+        let arity = library[0].get("arity").and_then(|a| a.as_u64()).unwrap_or_else(|| panic!("{search}: arity missing"));
+        assert_eq!(
+            arity, 1,
+            "{search}: shifted-variant reuse must collapse both occurrences into a single metavar (arity 1), got arity {arity} — this regresses the whole point of the variables-at-multiple-depths branch"
+        );
+    }
+}
+
+/// Regression: `shift_equal`'s `a == b` shortcut used to accept any same
+/// e-class as reuse-compatible at any pair of depths, but a non-closed leaf
+/// like `$0` at depths 0 and 2 references different binders. The unsound
+/// merge produced `fn_0: (fold ?#0 1 (lam (lam (* ?#0 $1))))` whose
+/// β-expansion replaced the inner `$0` with `$2` — see the matching list/
+/// CI failure. The fix requires empty fv when collapsing same-id captures
+/// across depths.
+#[test]
+fn same_leaf_different_depths_is_not_reused() {
+    check_fixture("data/domains/stitch/same-leaf-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
@@ -265,7 +341,7 @@ fn rewritten_corpus(run: &Value, original: &[String]) -> Vec<String> {
 #[test]
 fn arith_rewrites() {
     let input = "data/domains/basic-apps/multi-arg-assoc.json";
-    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--language", "lambda-calc", "--max-arity", "0"];
+    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--language", "lambda-calc", "--max-arity", "0", "--seed", "0"];
     let bf = run_backend("best-first", input, extra_args);
     let smc = run_backend("smc", input, extra_args);
     let original: Vec<String> = serde_json::from_str(&fs::read_to_string(input).unwrap_or_else(|e| panic!("read {input}: {e}"))).unwrap_or_else(|e| panic!("parse {input}: {e}"));
@@ -416,6 +492,19 @@ fn fv_overapprox_annihilator() {
 #[test]
 fn stitch_simple_hof() {
     check_fixture_bf_only("data/domains/stitch/simple_hof.json", STITCH_LAMBDA_ARGS, true);
+}
+
+/// Two programs sharing `(+ 2 3 4 (lam (+ $1 6 7)))`; the inner `$1` would
+/// escape its `lam` if extracted into an abstraction body, so the lambda-calc
+/// fv check must reject any candidate that includes the inner `lam`.
+#[test]
+fn stitch_free_no_args() {
+    check_fixture_bf_only("data/domains/stitch/free-no-args.json", STITCH_LAMBDA_ARGS, true);
+}
+
+#[test]
+fn stitch_free_no_args_huge_lam_stack() {
+    check_fixture_bf_only("data/domains/stitch/free-no-args-huge-lam-stack.json", STITCH_LAMBDA_ARGS, true);
 }
 
 // === HO capture tests (formerly tests/higher_order_test.rs) ===

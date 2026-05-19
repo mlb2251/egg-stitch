@@ -10,12 +10,12 @@ use egg_stitch::lang::{LambdaCalcLanguage, Op, OpChildrenLanguage, OpDB, StitchA
 type LamLang = LambdaCalcLanguage<OpDB<Op>>;
 type OcLang = OpChildrenLanguage<OpDB<Op>>;
 
-fn fv<L: StitchLanguage>(prog: &str) -> Vec<u32> {
+fn fv<L: StitchLanguage>(prog: &str) -> Vec<i32> {
     let expr = L::parse_program(prog).unwrap();
     let mut eg: egg::EGraph<L, StitchAnalysis> = egg::EGraph::default();
     let id = eg.add_expr(&expr);
     eg.rebuild();
-    let mut v: Vec<u32> = eg[id].data.fv.iter().copied().collect();
+    let mut v: Vec<i32> = eg[id].data.fv.iter().copied().collect();
     v.sort();
     v
 }
@@ -39,7 +39,7 @@ fn oc_no_binders_so_fv_is_union() {
 
 #[test]
 fn oc_plain_symbols_have_empty_fv() {
-    assert_eq!(fv::<OcLang>("(+ 1 2)"), Vec::<u32>::new());
+    assert_eq!(fv::<OcLang>("(+ 1 2)"), Vec::<i32>::new());
 }
 
 // ---- LambdaCalcLanguage<OpDB<Op>>: binders + DB vars ----
@@ -52,9 +52,9 @@ fn lam_var_leaf_carries_index() {
 
 #[test]
 fn lam_binds_zero() {
-    assert_eq!(fv::<LamLang>("(lam $0)"), Vec::<u32>::new());
+    assert_eq!(fv::<LamLang>("(lam $0)"), Vec::<i32>::new());
     assert_eq!(fv::<LamLang>("(lam $1)"), vec![0]);
-    assert_eq!(fv::<LamLang>("(lam (lam $1))"), Vec::<u32>::new());
+    assert_eq!(fv::<LamLang>("(lam (lam $1))"), Vec::<i32>::new());
     assert_eq!(fv::<LamLang>("(lam (lam $2))"), vec![0]);
 }
 
@@ -72,7 +72,7 @@ fn lam_partial_binder_keeps_outer_free() {
 
 #[test]
 fn lam_plain_program_has_empty_fv() {
-    assert_eq!(fv::<LamLang>("(+ 1 2)"), Vec::<u32>::new());
+    assert_eq!(fv::<LamLang>("(+ 1 2)"), Vec::<i32>::new());
 }
 
 // ---- Plain Op (no DB-var slot) is unaffected ----
@@ -117,8 +117,8 @@ fn merge_intersects_fv() {
     eg.union(v0, v1);
     eg.rebuild();
     let merged: Id = eg.find(v0);
-    let got: Vec<u32> = eg[merged].data.fv.iter().copied().collect();
-    assert_eq!(got, Vec::<u32>::new());
+    let got: Vec<i32> = eg[merged].data.fv.iter().copied().collect();
+    assert_eq!(got, Vec::<i32>::new());
 }
 
 // ---- Annihilator: merging fv-dropping rewrites refines fv to the intersection ----
@@ -138,6 +138,6 @@ fn merge_with_annihilator_should_not_inherit_dropped_fv() {
     eg.union(zero, mul);
     eg.rebuild();
     let merged: Id = eg.find(zero);
-    let got: Vec<u32> = eg[merged].data.fv.iter().copied().collect();
-    assert_eq!(got, Vec::<u32>::new());
+    let got: Vec<i32> = eg[merged].data.fv.iter().copied().collect();
+    assert_eq!(got, Vec::<i32>::new());
 }

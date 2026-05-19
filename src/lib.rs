@@ -11,6 +11,8 @@ pub mod pattern;
 pub mod results;
 pub mod revexpr;
 pub mod search;
+pub mod shared;
+pub mod shift_equal;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
@@ -93,13 +95,12 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
 
-    /// Weight match selection by usage count during expansion.
-    #[arg(long, default_value_t = false)]
-    pub weight_by_usage: bool,
-
-    /// Probability of attempting variable reuse during expansion.
-    #[arg(long, default_value_t = 0.5)]
-    pub p_reuse: f64,
+    /// Multiplicative boost applied to reuse-action sampling weights in SMC.
+    /// Each successor is weighted by its `(match, subst)` support count;
+    /// reuse-action weights are additionally multiplied by `boost_reuse_weight`,
+    /// while expand-action weights are left unscaled. Default 1.0 (no boost).
+    #[arg(long, default_value_t = 1.0)]
+    pub boost_reuse_weight: f64,
 
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]
@@ -108,11 +109,6 @@ pub struct Args {
     /// Number of abstractions to find sequentially (each stacks on the previous).
     #[arg(long, default_value_t = 1)]
     pub num_abstractions: usize,
-
-    /// After each abstraction, rewrite programs to use it and rebuild the egraph from scratch,
-    /// rather than unioning fn_N enodes into the existing egraph.
-    #[arg(long, default_value_t = false)]
-    pub rebuild_egraph: bool,
 
     /// Disable the `seen` set in best-first search (skip dedup check and insert).
     #[arg(long, default_value_t = false)]
@@ -171,13 +167,11 @@ pub enum LanguageChoice {
 /// and the final rewritten corpus (`Some` once any abstraction has been applied,
 /// `None` if no abstraction was found).
 ///
-/// After each abstraction is found, `fn_N(args...)` enodes are added directly to the
-/// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
-/// serialising programs to strings and re-parsing. The eclass arguments already carry
-/// all DSR equivalences, so no re-saturation is needed.
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
-    let mut egraph = egraph;
-    let mut root = root;
+/// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
+/// their match roots, then the rewritten programs are extracted as strings and used to
+/// build a fresh egraph for the next round (DSR rules are re-applied there).
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
+    let mut data = data;
     let mut library = Vec::new();
     let mut original_size = 0;
     let mut final_cost = None;
@@ -187,15 +181,21 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
     let mut rng = StdRng::seed_from_u64(seed);
 
+    // Pick the first `fn_N` name that doesn't collide with any leaf already
+    // present in the input — otherwise rerunning the search on an already
+    // abstracted corpus (or any input that happens to use `fn_N` as a symbol)
+    // produces output that can't be inlined unambiguously.
+    let fn_name_base = first_free_fn_index::<F::Apply<O>>(&data.egraph);
+
     for abstraction_idx in 0..args.num_abstractions {
-        let (best, iter_original_size, best_found_at, num_steps_run, result_egraph, best_history) = match args.search {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history) = match args.search {
             SearchKind::Smc => {
-                let r = smc::smc::<F, O>(egraph, root, args, &mut rng);
-                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph, None)
+                let r = smc::smc::<F, O>(data, args, &mut rng);
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None)
             }
             SearchKind::BestFirst => {
-                let r = best_first::best_first(egraph, root, args);
-                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph, Some(r.best_history))
+                let r = best_first::best_first(data, args);
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history))
             }
         };
 
@@ -206,19 +206,22 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let ho_arity = cost::compute_ho_arity::<F, O>(&result_egraph, &state);
-                let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_egraph.analysis.weights);
-                let body_str = state.pattern.display_with_ho(&ho_arity);
-                let usage_counts = search::compute_usage_counts(&result_egraph, root);
+                let ho_arity = cost::compute_ho_arity::<F, O>(&result_data.egraph, &state);
+                let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_data.egraph.analysis.weights);
+                let variable_indices = cost::compute_variable_indices::<F, O>(&result_data.egraph, &state);
+                let body_str = state.pattern.display_with_ho(&variable_indices);
+                let lambda = state.pattern.display_as_lambda(&variable_indices);
+                let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
-                let fn_name = format!("fn_{abstraction_idx}");
-                let (next_egraph, next_root, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name, args.rebuild_egraph, args.rules.as_deref());
+                let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, &state, &fn_name, args.rules.as_deref());
 
                 final_cost = Some(best_cost);
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
+                    lambda,
                     arity: state.pattern.vars.len(),
                     pattern_size: pat_size,
                     num_matches: state.matches.len(),
@@ -231,8 +234,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
                 });
 
                 if abstraction_idx + 1 < args.num_abstractions {
-                    egraph = next_egraph;
-                    root = next_root;
+                    data = next_data;
                 } else {
                     break;
                 }
@@ -243,29 +245,49 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
     (library, original_size, final_cost, final_rewritten)
 }
 
-/// Applies an abstraction to the egraph by adding `fn_name(args...)` enodes for every
-/// match substitution and unioning each with its match root, then rebuilds.
+/// Smallest `k` such that no discriminant in `egraph` renders as `fn_k`,
+/// `fn_{k+1}`, … Used to avoid clashes between the search's chosen abstraction
+/// names and any `fn_*` symbol already present in the input (e.g. when
+/// re-running the search over a corpus that already contains stitch output).
 ///
-/// If `rebuild` is true, the rewritten program strings are extracted and used to build a
-/// fresh egraph (with DSR rules re-applied), discarding all prior equivalences.
-/// If `rebuild` is false, the existing egraph with unions is returned as-is.
+/// Scans the discriminant of every enode, not just leaves: in `OpChildren`
+/// languages a multi-arity head like `(fn_0 1 2)` lives in a single enode
+/// `(op=fn_0, children=[1,2])` whose op is what we'd collide with.
+fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
+    let mut max_existing: Option<usize> = None;
+    for class in egraph.classes() {
+        for enode in &class.nodes {
+            let name = enode.discriminant().to_string();
+            if let Some(rest) = name.strip_prefix("fn_")
+                && let Ok(idx) = rest.parse::<usize>()
+            {
+                max_existing = Some(max_existing.map_or(idx, |m| m.max(idx)));
+            }
+        }
+    }
+    max_existing.map_or(0, |m| m + 1)
+}
+
+/// Applies an abstraction to the egraph: adds `fn_name(args...)` enodes for every
+/// match substitution and unions each with its match root, rebuilds, extracts the
+/// rewritten programs as strings, and feeds them into a fresh egraph (with DSR
+/// rules re-applied).
 ///
-/// Returns the (possibly new) egraph, the root id within it, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, state: &search::SearchState<F, O>, fn_name: &str, rebuild: bool, rule_file: Option<&str>) -> (StitchEgraph<F::Apply<O>>, Id, Vec<String>) {
-    let mut egraph = egraph;
+/// Returns the fresh egraph, its root id, and the rewritten program strings.
+fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
+    let shared::SharedData { mut egraph, root } = data;
     // Mirrors `build_rewritten_egraph`: η-wrap captures whose fv reaches
     // into pattern-internal binders before passing them in.
     let var_depth = &state.pattern.var_depth;
-    let ho_arity = cost::compute_ho_arity::<F, O>(&egraph, state);
-    let mut shift_memo: rustc_hash::FxHashMap<(Id, u32), Id> = rustc_hash::FxHashMap::default();
+    let variable_indices = cost::compute_variable_indices::<F, O>(&egraph, state);
     // Defer unions until all shifts are done. A mid-loop `union` shrinks
     // `data.fv` on the unioned classes but leaves parent classes stale until
-    // `rebuild`, and the next iteration's `shift_free_egraph` would then read
-    // that stale fv and trip the intersection-fv assertion.
+    // `rebuild`, and the next iteration's `shift_free_egraph` would then
+    // read that stale fv and trip the intersection-fv assertion.
     let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &state.matches {
         for subst in &m.substs {
-            let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &ho_arity, var_depth, &mut shift_memo);
+            let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &variable_indices, var_depth);
             let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
             pending.push((x, m.root_eclass));
         }
@@ -278,11 +300,7 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
-    if rebuild {
-        let weights = egraph.analysis.weights;
-        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file, weights);
-        (fresh_egraph, fresh_root, programs)
-    } else {
-        (egraph, root, programs)
-    }
+    let weights = egraph.analysis.weights;
+    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
+    (fresh, programs)
 }

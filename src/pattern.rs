@@ -24,7 +24,10 @@ pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
     pub vars: Vec<Vec<Id>>,  // vars[k] = all RecExpr ids holding Var(k)
-    pub var_depth: Vec<u32>, // var_depth[k] = pattern-internal binders enclosing ?#k
+    pub var_depth: Vec<u32>, // var_depth[k] = pattern-internal binders enclosing ?#k (= min depth across occurrences after reuse)
+    /// True iff `?#k` has been cross-depth-merged (occurrences live at
+    /// different depths in the pattern).
+    pub var_cross_depth: Vec<bool>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -38,6 +41,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             pattern: RevExpr::new(vec![var_node::<F, O>(0)]),
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
+            var_cross_depth: vec![false],
         }
     }
 
@@ -52,6 +56,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
+        let parent_cross = self.var_cross_depth.remove(var_idx);
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
@@ -77,6 +82,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             self.vars.insert(var_idx + j, vec![new_id]);
             let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
             self.var_depth.insert(var_idx + j, child_depth);
+            // Children of a cross-depth-merged metavar inherit the property —
+            // the multi-depth ambiguity persists down the expansion tree until
+            // the slot is fully concretized.
+            self.var_cross_depth.insert(var_idx + j, parent_cross);
         }
         let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
@@ -96,13 +105,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
-        // Cross-depth reuse is OK under stitch's fv pruning: every captured
-        // subterm has fv ≥ d_k for its location's depth, so its meaning is
-        // independent of which pattern-internal lams enclose it. The merged
-        // metavar adopts the *max* depth — that's the strictest constraint
-        // its captures must satisfy (the corresponding subst-filter happens
-        // in `subset_matches_reuse`).
-        let merged_depth = self.var_depth[keep_idx].max(self.var_depth[drop_idx]);
+        let cross_depth = self.var_depth[keep_idx] != self.var_depth[drop_idx] || self.var_cross_depth[keep_idx] || self.var_cross_depth[drop_idx];
+        // Merged metavar adopts the *min* depth and we always track
+        // the e-class at the shallower depth. This convention being
+        // mantained means we can effectively ignore the deeper occurrences.
+        let merged_depth = self.var_depth[keep_idx].min(self.var_depth[drop_idx]);
 
         let keep_name = var_node::<F, O>(keep_idx as u32);
         for var_id in &self.vars[drop_idx] {
@@ -113,6 +120,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.vars.remove(drop_idx);
         self.var_depth.remove(drop_idx);
         self.var_depth[keep_idx] = merged_depth;
+        self.var_cross_depth.remove(drop_idx);
+        self.var_cross_depth[keep_idx] = cross_depth;
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -126,10 +135,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Renders the abstraction body with HO apps spliced in: each occurrence
-    /// of `?#k` with `ho_arity[k] > 0` is wrapped as `(@ … (@ ?#k $0) … $(h-1))`.
-    /// Falls back to plain `to_string()` when `ho_arity` is all zeros.
-    pub fn display_with_ho(&self, ho_arity: &[u32]) -> String {
-        if ho_arity.iter().all(|&h| h == 0) {
+    /// of `?#k` with non-empty `variable_indices[k]` is wrapped as
+    /// `(@ … (@ ?#k $vis[h-1]) … $vis[0])`. Falls back to plain `to_string()`
+    /// when every slot is empty.
+    pub fn display_with_ho(&self, variable_indices: &[Vec<i32>]) -> String {
+        if variable_indices.iter().all(|v| v.is_empty()) {
             return self.to_string();
         }
         // RevExpr id → which metavar k (if any) lives at this position.
@@ -150,13 +160,21 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             let new_node = F::make(node.discriminant(), new_children);
             let mut new_id = out.add(new_node);
             if let Some(&k) = pos_to_k.get(&i)
-                && ho_arity[k] > 0
+                && !variable_indices[k].is_empty()
             {
-                new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, ho_arity[k]);
+                let vis = &variable_indices[k];
+                let db_args: Vec<i32> = vis.iter().rev().copied().collect();
+                new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, &db_args);
             }
             id_map[i] = new_id;
         }
         <F::Apply<OpWithVar<O>> as StitchLanguage>::display_recexpr(&out)
+    }
+
+    /// Render this abstraction as a closed lambda term — see
+    /// `LanguageFamily::display_pattern_as_lambda`.
+    pub fn display_as_lambda(&self, variable_indices: &[Vec<i32>]) -> String {
+        F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, variable_indices)
     }
 }
 

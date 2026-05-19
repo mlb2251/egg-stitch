@@ -91,10 +91,14 @@ def initial_size_for_domain(runs: dict[str, list[list[dict]]]) -> float | None:
 
 def egraph_min_for_domain(runs: dict[str, list[list[dict]]]) -> float | None:
     """Geomean e-graph-min term size per input file. Uses any repeat whose
-    per-file records all have a non-None value; returns None otherwise."""
+    per-file records all have a non-None value; returns None otherwise.
+
+    Subtracts 1 per file to drop the synthetic ``(programs …)`` root that
+    egg-stitch wraps the corpus in; ``initial_size_for_domain`` has no
+    such wrapper."""
     for repeats in runs.values():
         for per_file in repeats:
             vals = [r.get("egraph_min_term_size") for r in per_file]
             if vals and all(v is not None for v in vals):
-                return _geomean(vals)
+                return _geomean([v - 1 for v in vals])
     return None

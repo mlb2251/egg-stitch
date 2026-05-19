@@ -89,7 +89,7 @@ pub struct StitchData {
     /// Minimum AST size among e-nodes in this e-class.
     pub size: u32,
     /// Free-variable set (intersection of members' free-var sets).
-    pub fv: FxHashSet<u32>,
+    pub fv: FxHashSet<i32>,
 }
 
 /// Egg analysis that tracks size and free-variable set of each e-class,
@@ -150,9 +150,9 @@ pub type StitchEgraph<L> = egg::EGraph<L, StitchAnalysis>;
 ///
 /// `fv(node) = {n | disc.de_bruijn_index() == Some(n)} ∪ ⋃_j shift_j(child_fv(c_j))`,
 /// where `shift_j` drops `0` and decrements ≥ 1 iff `disc.binds_child(j)`.
-pub fn enode_fv<'a, L: StitchLanguage>(node: &L, child_fv: impl Fn(Id) -> &'a FxHashSet<u32>) -> FxHashSet<u32> {
+pub fn enode_fv<'a, L: StitchLanguage>(node: &L, child_fv: impl Fn(Id) -> &'a FxHashSet<i32>) -> FxHashSet<i32> {
     let disc = node.discriminant();
-    let mut fv: FxHashSet<u32> = FxHashSet::default();
+    let mut fv: FxHashSet<i32> = FxHashSet::default();
     if let Some(n) = disc.de_bruijn_index() {
         fv.insert(n);
     }

@@ -1,7 +1,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{Op, OpChildren, Weights},
+    lang::{LambdaCalc, Op, OpChildren, OpDB, Weights},
     pattern::PatternRecExpr,
     smc,
 };
@@ -16,9 +16,15 @@ fn fixtures_present() -> bool {
 }
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
-    let (egraph, root, _, _) = io::load_egraph(&args.input, args.rules.as_deref(), Weights::default());
+    let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), Weights::default());
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
-    smc::smc(egraph, root, args, &mut rng)
+    smc::smc(data, args, &mut rng)
+}
+
+fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
+    let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), Weights::default());
+    let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
+    smc::smc(data, args, &mut rng)
 }
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
@@ -156,4 +162,81 @@ fn check_slow_high_arity_multi_abstr() {
     let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--num-abstractions", "2"]);
     let result = run(&args);
     assert!(result.best.is_some());
+}
+
+/// Regression: fast path under-counted when a match's wrapped operand
+/// resolved to another match-root eclass that itself had a cheaper rewrite.
+#[test]
+fn check_slow_lambda_calc_fast_slow_mismatch() {
+    let input = "data/domains/stitch/lambda-calc-fast-slow-mismatch.json";
+    if !std::path::Path::new(input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "1000", "--check-slow", "--language", "lambda-calc", "--seed", "145514431571737541"]);
+    let _ = run_lambda_calc(&args);
+}
+
+/// Regression: fast path needs to re-sum non-match parent eclasses (the
+/// Programs root above a match-root) after a match's rewrite shrinks the
+/// child's size.
+#[test]
+fn check_slow_intermediate_propagation() {
+    let input = "data/domains/stitch/intermediate-propagation.json";
+    if !std::path::Path::new(input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "1000", "--check-slow", "--language", "lambda-calc", "--seed", "888315200261588942"]);
+    let _ = run_lambda_calc(&args);
+}
+
+/// Exercises the lambda-calc fast/slow check against real physics corpora.
+/// One test per file so they parallelize and failures point at a specific input.
+fn check_slow_physics(name: &str) {
+    let input = format!("data/domains/physics/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "1000", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_physics_bench000_it0() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0.json");
+}
+#[test]
+fn check_slow_physics_bench001_it1() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1.json");
+}
+#[test]
+fn check_slow_physics_bench002_it2() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2.json");
+}
+#[test]
+fn check_slow_physics_bench003_it3() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3.json");
+}
+#[test]
+fn check_slow_physics_bench004_it4() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4.json");
+}
+#[test]
+fn check_slow_physics_18_09_34_bench000() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0.json");
+}
+#[test]
+fn check_slow_physics_18_09_34_bench001() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1.json");
+}
+#[test]
+fn check_slow_physics_18_09_34_bench002() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2.json");
+}
+#[test]
+fn check_slow_physics_18_09_34_bench003() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3.json");
+}
+#[test]
+fn check_slow_physics_18_09_34_bench004() {
+    check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json");
 }

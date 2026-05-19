@@ -40,9 +40,10 @@ class PerFileResult:
     (``"<name>: <body>"``); empty when the tool didn't learn any."""
 
     egraph_min_term_size: float | None
-    """``cost_after_rewrites`` for this file under the DSRs, or None when the
-    runner doesn't expose one (i.e. not ours, or DSRs weren't used). Stored as
-    None rather than NaN so JSON round-trips cleanly."""
+    """Raw ``cost_after_rewrites`` for this file under the DSRs, or None when
+    the runner doesn't expose one (i.e. not ours, or DSRs weren't used).
+    Stored as None rather than NaN so JSON round-trips cleanly. Includes the
+    ``(programs …)`` wrapper; renderers subtract 1 to match ``initial_cost``."""
 
     def to_dict(self) -> dict:
         """Plain-dict representation for JSON serialization."""

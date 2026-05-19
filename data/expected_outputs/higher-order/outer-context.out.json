@@ -7,6 +7,7 @@
     {
       "approx_cost": 27,
       "arity": 1,
+      "lambda": "(lam (+ a b c d e f (lam (foo (bar ($1 $0))))))",
       "num_matches": 5,
       "pattern": "fn_0: (+ a b c d e f (lam (foo (bar (?#0 $0)))))",
       "pattern_size": 22,

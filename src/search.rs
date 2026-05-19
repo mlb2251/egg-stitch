@@ -2,9 +2,8 @@ use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp}
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
+use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rand::Rng;
-use rand::rngs::StdRng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -54,20 +53,17 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
 }
 
 /// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
-fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
-where
-    L::Discriminant: StitchDisc,
-{
-    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= d_k)
+fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
+    (dbidx as u32) >= d_k
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
-/// Currently the only such case is a free DB-var leaf.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32, cross_depth: bool) -> bool
 where
     L::Discriminant: StitchDisc,
 {
-    target_is_free_db_var(target, depth)
+    let Some(dbidx) = target.discriminant().de_bruijn_index() else { return false };
+    cross_depth || target_is_free_db_var(dbidx, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -102,14 +98,27 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// Follow pattern: particles whose pattern isn't a valid prefix get zero
     /// weight at the resample step.
     pub follow: Option<RevExpr<F::Apply<OpWithVar<O>>>>,
-    /// Probability of attempting variable reuse during expansion.
-    pub p_reuse: f64,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
-    /// Whether to weight match selection by usage count during expansion.
-    pub weight_by_usage: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
+}
+
+impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
+    /// Unwraps the search-specific fields and returns the underlying
+    /// e-graph + root pair. Used by search drivers to hand the e-graph back
+    /// to the outer abstraction loop.
+    pub fn into_data(self) -> crate::shared::SharedData<F, O> {
+        crate::shared::SharedData::new(self.egraph, self.root)
+    }
+}
+
+/// Result of `enumerate_successor_actions`: either a single pre-built dominant
+/// child (dominance pruning fired) or a list of `(action, support)` pairs the
+/// caller can sample from. SMC builds children lazily only for sampled actions.
+pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
+    Dominant { action: Action<F::Discriminant<O>>, child: SearchState<F, O>, support: usize },
+    All(Vec<(Action<F::Discriminant<O>>, usize)>),
 }
 
 #[derive(Debug, Clone)]
@@ -129,104 +138,6 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
-    /// Randomly samples a single expansion or reuse step without mutating self.
-    /// Returns `None` when the chosen variable's e-class has no valid literal
-    /// expansion candidates (the caller treats this as a no-op leaving the
-    /// state unchanged). The returned `Action` is also a hashable dedup key,
-    /// so callers can collapse identical samples and apply each unique one once.
-    pub fn sample_random_expansion(&self, shared: &SharedSearchData<F, O>, verbose: bool, rng: &mut StdRng) -> Option<Action<F::Discriminant<O>>> {
-        let match_idx = if shared.weight_by_usage {
-            let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
-            let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
-            crate::smc::weighted_choice(&weights_acc, rng)
-        } else {
-            rng.random_range(0..self.matches.len())
-        };
-        let m = &self.matches[match_idx];
-        let extractor = if verbose { Some(egg::Extractor::new(&shared.egraph, egg::AstSize)) } else { None };
-        if let Some(ref ext) = extractor {
-            let (_cost, minimal_term) = ext.find_best(m.root_eclass);
-            println!("Expanding on match at eclass {} with pattern {}", minimal_term, self.pattern);
-        }
-        let subst_idx = rng.random_range(0..m.substs.len());
-        let subst = &m.substs[subst_idx];
-
-        let var_idx = rng.random_range(0..self.pattern.vars.len());
-        if verbose {
-            println!("Expanding variable {:?} in pattern {}", self.pattern.vars[var_idx], self.pattern);
-        }
-        let target_id = subst.vars[var_idx];
-
-        if let Some(ref ext) = extractor {
-            println!("Target eclass is represented by minimal term {}", ext.find_best(target_id).1);
-        }
-
-        if rng.random_bool(shared.p_reuse) {
-            // Pre-filter reuse candidates so we only invoke `reuse` when at
-            // least one subst will survive `subset_matches_reuse`; otherwise
-            // we'd empty the match set and panic on the next call.
-            //
-            // Cross-depth reuse soundness: the merged metavar's HO arity
-            // must fit at *every* occurrence site, so its kept-eclass fv
-            // must avoid the gap `[min(d_a, d_b), max(d_a, d_b))` — fv in
-            // that range is η-wrappable at the deep site but unbound at
-            // the shallow one. Same-depth reuse has an empty gap, so the
-            // check is a no-op.
-            let reuse_candidates: Vec<usize> = subst
-                .vars
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, id)| {
-                    if idx == var_idx || *id != target_id {
-                        return None;
-                    }
-                    let keep_idx = idx.min(var_idx);
-                    let d_a = self.pattern.var_depth[var_idx];
-                    let d_b = self.pattern.var_depth[idx];
-                    let min_depth = d_a.min(d_b);
-                    let merged_depth = d_a.max(d_b);
-                    let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-                    if kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) { Some(idx) } else { None }
-                })
-                .collect();
-            if !reuse_candidates.is_empty() {
-                let second_var_idx = reuse_candidates[rng.random_range(0..reuse_candidates.len())];
-                return Some(Action::Reuse {
-                    keep: var_idx.min(second_var_idx),
-                    drop: var_idx.max(second_var_idx),
-                });
-            }
-        }
-
-        let target_eclass = &shared.egraph[target_id];
-        let d_k = self.pattern.var_depth[var_idx];
-        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
-        if candidates.is_empty() {
-            return None;
-        }
-        let target = candidates[rng.random_range(0..candidates.len())];
-        Some(Action::Expand {
-            var_idx,
-            op: target.discriminant(),
-            arity: target.children().len(),
-        })
-    }
-
-    /// Applies a previously-sampled `Action` to this state. `expand` and
-    /// `subset_matches` only consult the target's discriminant and arity
-    /// (egg's `Language::matches` ignores child ids), so we synthesize a
-    /// placeholder node from `(op, arity)` via `F::make` instead of stashing
-    /// the original enode.
-    pub fn apply_action(&mut self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) {
-        match action {
-            Action::Expand { var_idx, op, arity } => {
-                let target = F::make(op.clone(), vec![Id::from(0); *arity]);
-                self.expand(*var_idx, &target, shared);
-            }
-            Action::Reuse { keep, drop } => self.reuse(*keep, *drop, shared),
-        }
-    }
-
     /// Check if this particle's pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
         let mut var_bindings = HashMap::new();
@@ -245,8 +156,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // bound the cross-depth gap, but `pattern.reuse` collapses them.
         let d_a = self.pattern.var_depth[var_idx];
         let d_b = self.pattern.var_depth[second_var_idx];
+        let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
         self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx, d_a.min(d_b), d_a.max(d_b), shared);
+        self.subset_matches_reuse(var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared);
     }
 
     /// Updates all matches by transforming each substitution via the given closure,
@@ -302,18 +214,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// whose kept-eclass fv lands in `[min_depth, merged_depth)` are
     /// representable at the deep site but unbound at the shallow one — those
     /// are dropped. Same-depth reuse has an empty gap.
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) {
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shallow_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) {
         let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
+        let deep_idx = if shallow_idx == var_idx { second_var_idx } else { var_idx };
         self.update_matches(|subst, out| {
-            if subst.vars[var_idx] != subst.vars[second_var_idx] {
-                return;
-            }
-            let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-            if !kept_fv.iter().all(|&i| i < min_depth || i >= merged_depth) {
+            let shallow_id = subst.vars[shallow_idx];
+            let deep_id = subst.vars[deep_idx];
+            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph) {
                 return;
             }
             let mut new_subst = subst.clone();
+            new_subst.vars[keep_idx] = shallow_id;
             new_subst.vars.remove(drop_idx);
             out.push(new_subst);
         });
@@ -326,6 +238,21 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         Self { pattern: Pattern::single_var(), matches, num_substs }
     }
 
+    /// Applies an action to a clone of `self` and returns the resulting child.
+    /// Used by SMC after sampling so we don't materialise child states for
+    /// successors that don't get picked.
+    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) -> SearchState<F, O> {
+        let mut child = self.clone();
+        match action {
+            Action::Expand { var_idx, op, arity } => {
+                let target = F::make(op.clone(), vec![Id::from(0); *arity]);
+                child.expand(*var_idx, &target, shared);
+            }
+            Action::Reuse { keep, drop } => child.reuse(*keep, *drop, shared),
+        }
+        child
+    }
+
     /// Enumerates every successor state reachable in one `expand` or `reuse` step.
     ///
     /// Reuse candidates are emitted first so the dominance short-circuit can fire:
@@ -335,88 +262,101 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// reuse — we can return it as the *only* successor and skip enumerating the
     /// rest. Disabled by `--no-opt-dominance-reuse`.
     ///
-    /// Expansion candidates: for each variable, collect every distinct `(op, arity)`
-    /// pair appearing as an enode in any bound e-class across all matches, then produce
-    /// one child per shape. Children whose match set becomes empty after filtering
-    /// are dropped.
+    /// Thin wrapper over `enumerate_successor_actions` that materialises every
+    /// successor's child state up front. Best-first needs all children to push
+    /// into the search frontier; SMC uses the lazy variant directly so it only
+    /// builds children for the actions it actually samples.
     #[allow(clippy::type_complexity)]
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>)> {
-        let mut out = Vec::new();
+    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
+        match self.enumerate_successor_actions(shared, opt_dominance_reuse, dominance_hits) {
+            SuccessorEnum::Dominant { action, child, support } => vec![(action, child, support)],
+            SuccessorEnum::All(actions) => actions
+                .into_iter()
+                .map(|(a, support)| {
+                    let child = self.apply_action(&a, shared);
+                    (a, child, support)
+                })
+                .collect(),
+        }
+    }
 
-        // Reuse pairs first — enables dominance short-circuit.
+    /// Lazy variant of `enumerate_successors`: returns `(action, support)` pairs
+    /// without building children, so samplers (e.g. SMC) skip work for unpicked
+    /// actions. The caller materialises children via `apply_action`. When
+    /// dominance pruning fires, the single dominant child is built and returned
+    /// via `SuccessorEnum::Dominant`, matching the eager method's short-circuit.
+    ///
+    /// `support` is the (m,s)-pair count feeding the SMC weighting; it equals
+    /// the surviving subst count, so `support > 0` ⇒ non-empty child.
+    /// `support == self.num_substs` ⇒ dominant reuse (every subst already has
+    /// the two vars unified); short-circuited unless disabled by
+    /// `--no-opt-dominance-reuse`. Expand actions are emitted whenever
+    /// `support > 0`; `subset_matches` then guarantees the child's match set is
+    /// non-empty.
+    #[allow(clippy::type_complexity)]
+    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
+        let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
         for i in 0..n {
             for j in (i + 1)..n {
-                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
-                if !unifiable {
-                    continue;
-                }
-                let mut child = self.clone();
-                child.reuse(i, j, shared);
-                if child.matches.is_empty() {
+                let di = self.pattern.var_depth[i];
+                let dj = self.pattern.var_depth[j];
+                let support: usize = self.matches.iter().map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count()).sum();
+                if support == 0 {
                     continue;
                 }
                 let action = Action::Reuse { keep: i, drop: j };
-                let is_dominant = child.num_substs == self.num_substs;
-                if opt_dominance_reuse && is_dominant {
+                if opt_dominance_reuse && support == self.num_substs {
                     *dominance_hits += 1;
-                    return vec![(action, child)];
+                    let mut child = self.clone();
+                    child.reuse(i, j, shared);
+                    return SuccessorEnum::Dominant { action, child, support };
                 }
-                out.push((action, child));
+                out.push((action, support));
             }
         }
-
-        // Literal expansions.
-        for var_idx in 0..self.pattern.vars.len() {
+        for var_idx in 0..n {
             let d_k = self.pattern.var_depth[var_idx];
-            let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
-            let mut shapes: Vec<F::Apply<O>> = Vec::new();
+            let cross_depth = self.pattern.var_cross_depth[var_idx];
+            let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
+            let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
-                        if invalid_literal_expansion(node, d_k) {
+                        if invalid_literal_expansion(node, d_k, cross_depth) {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());
-                        if seen.insert(key) {
-                            shapes.push(node.clone());
+                        match shape_idx.get(&key) {
+                            Some(&idx) => shapes[idx].1 += 1,
+                            None => {
+                                shape_idx.insert(key.clone(), shapes.len());
+                                shapes.push((key, 1));
+                            }
                         }
                     }
                 }
             }
-            for shape in shapes {
-                let mut child = self.clone();
-                child.expand(var_idx, &shape, shared);
-                if !child.matches.is_empty() {
-                    out.push((
-                        Action::Expand {
-                            var_idx,
-                            op: shape.discriminant(),
-                            arity: shape.children().len(),
-                        },
-                        child,
-                    ));
-                }
+            for ((op, arity), support) in shapes {
+                out.push((Action::Expand { var_idx, op, arity }, support));
             }
         }
-
-        out
+        SuccessorEnum::All(out)
     }
 }
 
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
-pub fn setup_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::Apply<O>>, root: Id, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
+pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
     let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
-    let usage_counts = compute_usage_counts(&egraph, root);
+    let usage_counts = compute_usage_counts(&data.egraph, data.root);
+    let crate::shared::SharedData { egraph, root } = data;
     let shared = SharedSearchData {
         egraph,
         root,
         follow: follow_expr,
-        weight_by_usage: args.weight_by_usage,
         usage_counts,
-        p_reuse: args.p_reuse,
         check_slow: args.check_slow,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
