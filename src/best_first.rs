@@ -181,8 +181,18 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
         let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
+        let parent_frozen = nodes[node_id].state.pattern.frozen_count;
 
         for (action, child_state, _support) in successors {
+            // Freezing rule: expanding `?#k` commits to never expanding any
+            // `?#j` with j < k. Also forbid expansions that would force the
+            // freeze count past `max_arity` (frozen vars persist, so they
+            // are a lower bound on final arity for any descendant).
+            if let Action::Expand { var_idx, .. } = &action
+                && (*var_idx < parent_frozen || *var_idx > max_arity)
+            {
+                continue;
+            }
             if let Some(ref follow) = shared.follow
                 && !child_state.matches_follow(follow)
             {
