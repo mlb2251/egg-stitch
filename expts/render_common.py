@@ -91,10 +91,20 @@ def initial_size_for_domain(runs: dict[str, list[list[dict]]]) -> float | None:
 
 def egraph_min_for_domain(runs: dict[str, list[list[dict]]]) -> float | None:
     """Geomean e-graph-min term size per input file. Uses any repeat whose
-    per-file records all have a non-None value; returns None otherwise."""
+    per-file records all have a non-None value; returns None otherwise.
+
+    Subtracts 1 from each stored ``egraph_min_term_size`` to drop the
+    synthetic ``(programs …)`` root that egg-stitch wraps the corpus in
+    (``programs_to_egraph`` in ``src/io.rs``). That wrapper adds an extra
+    enode to ``cost_after_rewrites`` (AstSize of the wrapped root) but is
+    absent from ``initial_size_for_domain``, which sums per-program AST
+    sizes from raw s-exprs with no wrapper. Without this adjustment, the
+    ``E-graph min`` column reads 1 larger than ``Original`` on domains
+    where the DSRs don't compress at all — e.g. Nuts & Bolts (19008 →
+    19009) and Physics (518 → 519) in table 3."""
     for repeats in runs.values():
         for per_file in repeats:
             vals = [r.get("egraph_min_term_size") for r in per_file]
             if vals and all(v is not None for v in vals):
-                return _geomean(vals)
+                return _geomean([v - 1 for v in vals])
     return None
