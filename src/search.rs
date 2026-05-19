@@ -266,7 +266,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn new(shared: &SharedSearchData<F, O>) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
-        Self { pattern: Pattern::single_var(), matches, num_substs, frozen_count: 0 }
+        Self {
+            pattern: Pattern::single_var(),
+            matches,
+            num_substs,
+            frozen_count: 0,
+        }
     }
 
     /// Applies an action to a clone of `self` and returns the resulting child.
