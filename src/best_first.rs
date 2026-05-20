@@ -119,9 +119,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let debug = args.debug_log;
     let strategy = args.priority;
 
-    let mut initial_state = SearchState::new(&shared);
-    // Enable the freeze-based canonical-ordering rule.
-    initial_state.frozen_count = Some(0);
+    let initial_state = SearchState::new(&shared, Some(0));
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow);
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());

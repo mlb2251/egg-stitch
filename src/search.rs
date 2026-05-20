@@ -264,14 +264,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
-    pub fn new(shared: &SharedSearchData<F, O>) -> Self {
+    /// `frozen_count` enables the freeze-based canonical-ordering rule when `Some(0)`;
+    /// pass `None` to disable the check (e.g. for SMC).
+    pub fn new(shared: &SharedSearchData<F, O>, frozen_count: Option<usize>) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
         Self {
             pattern: Pattern::single_var(),
             matches,
             num_substs,
-            frozen_count: None,
+            frozen_count,
         }
     }
 
@@ -397,7 +399,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         check_slow: args.check_slow,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
-    let initial = SearchState::new(&shared);
+    let initial = SearchState::new(&shared, None);
     let initial_ho_arity = crate::cost::compute_ho_arity::<F, O>(&shared.egraph, &initial);
     let mut scratch = crate::cost::CostScratch::new(&shared.egraph);
     let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &mut scratch, &initial, shared.check_slow, &initial_ho_arity);
