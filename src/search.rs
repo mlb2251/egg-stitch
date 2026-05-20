@@ -95,9 +95,12 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// Root e-class of the corpus (the `(programs ...)` wrapper). Excluded
     /// from the initial match set so patterns can't be rooted there.
     pub root: Id,
-    /// Follow pattern: particles whose pattern isn't a valid prefix get zero
-    /// weight at the resample step.
-    pub follow: Option<RevExpr<F::Apply<OpWithVar<O>>>>,
+    /// Follow targets: particles whose pattern isn't a valid prefix of *any*
+    /// variant get zero weight at the resample step. Multiple variants exist
+    /// because stitch's display ambiguously renders HO-applied metavars
+    /// `(?#k $i …)` and literal apps with the same syntax — see
+    /// `follow::follow_variants`.
+    pub follow: Option<Vec<RevExpr<F::Apply<OpWithVar<O>>>>>,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
@@ -138,17 +141,21 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
-    /// Check if this particle's pattern is a valid prefix of the follow target.
-    pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
-        let mut var_bindings = HashMap::new();
-        crate::follow::check_follow::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+    /// True iff this pattern is a valid prefix of *any* follow variant.
+    pub fn matches_follow(&self, follows: &[RevExpr<F::Apply<OpWithVar<O>>>]) -> bool {
+        follows.iter().any(|follow| {
+            let mut var_bindings = HashMap::new();
+            crate::follow::check_follow::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        })
     }
 
-    /// Check if this particle's pattern is alpha-equivalent to the follow target.
-    pub fn matches_follow_exactly(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
-        let mut p_to_f = HashMap::new();
-        let mut f_to_p = HashMap::new();
-        crate::follow::check_follow_exact::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut p_to_f, &mut f_to_p)
+    /// True iff this pattern is alpha-equivalent to *any* follow variant.
+    pub fn matches_follow_exactly(&self, follows: &[RevExpr<F::Apply<OpWithVar<O>>>]) -> bool {
+        follows.iter().any(|follow| {
+            let mut p_to_f = HashMap::new();
+            let mut f_to_p = HashMap::new();
+            crate::follow::check_follow_exact::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut p_to_f, &mut f_to_p)
+        })
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
@@ -372,7 +379,12 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     // pattern: flat-form sexps that may have a `?#k` variable head (e.g.
     // `(?#0 a b c)`). egg's stock pattern parser rejects both shapes, so
     // each family ships its own walker.
-    let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+    let follow_expr: Option<Vec<RevExpr<F::Apply<OpWithVar<O>>>>> = args.follow.as_deref().map(|s| {
+        crate::follow::follow_variants(s)
+            .into_iter()
+            .map(|v| F::parse_follow_pattern::<O>(&v).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", v, e)))
+            .collect()
+    });
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
     let shared = SharedSearchData {

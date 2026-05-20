@@ -112,61 +112,6 @@ def parse_sexp(s):
     return read()
 
 
-def render_sexp(x):
-    """Inverse of `parse_sexp`: render a parsed tree back to a string."""
-    if isinstance(x, str):
-        return x
-    return "(" + " ".join(render_sexp(y) for y in x) + ")"
-
-
-def _is_meta(x):
-    return isinstance(x, str) and x.startswith("?#")
-
-
-def _is_db(x):
-    return isinstance(x, str) and x.startswith("$") and x[1:].isdigit()
-
-
-def normalize_ho_metavars(target):
-    """Collapse `(?#k $a $b …)` (HO-applied metavar) → bare `?#k` throughout.
-    egg-stitch's `--follow` parser treats the surface form structurally, so a
-    discovered body like `(lam (map (?#0 $0) $0))` can be unreachable as
-    written even though `(lam (map ?#0 $0))` is the same slot.
-    """
-    def walk(x):
-        if isinstance(x, str):
-            return x
-        if x and _is_meta(x[0]) and all(_is_db(a) for a in x[1:]):
-            return x[0]
-        return tuple(walk(c) for c in x)
-
-    return render_sexp(walk(parse_sexp(target)))
-
-
-def strip_leading_ho_args(target):
-    """Strip *leading* db-var args from any metavar application — the
-    serialization quirk that adds `$i` HO-args to display arity. Keeps
-    structural (non-db-var) trailing args, so `(?#1 $1 (?#2 $0))` becomes
-    `(?#1 (?#2 $0))` rather than collapsing to `?#1`. This matches the
-    search-state's internal pattern, which is what SMC's exact-match check
-    actually compares against.
-    """
-    def walk(x):
-        if isinstance(x, str):
-            return x
-        if x and _is_meta(x[0]):
-            i = 1
-            while i < len(x) and _is_db(x[i]):
-                i += 1
-            kept = [walk(c) for c in x[i:]]
-            if not kept:
-                return x[0]
-            return (x[0], *kept)
-        return tuple(walk(c) for c in x)
-
-    return render_sexp(walk(parse_sexp(target)))
-
-
 def follow_equivalent(target, got):
     """Alpha-equivalence between two abstraction bodies, with the relaxation
     that `(?#k $a $b …)` (metavar HO-applied to De Bruijn vars) is equivalent
@@ -248,38 +193,21 @@ def main():
         #    `(?#k $a $b …)` (metavar HO-applied to bound vars) counts as
         #    equivalent to a bare `?#m`, since either form is an unrefined
         #    slot that the search can still specialise.
-        # Try the discovered body as written, then again with HO-applied
-        # metavars collapsed to bare slots — `(?#k $a $b …)` and `?#k` are
-        # the same slot semantically but parse to different structures, and
-        # only one form may be reachable in the corpus. A search passes if
-        # *either* form reaches an alpha-equivalent pattern.
-        # Three forms to try as the `--follow` argument: the discovered body
-        # as written; with leading HO-args stripped (matches the search-state
-        # internal pattern, since serialization re-attaches $i HO-args); and
-        # with HO-applied metas fully collapsed to bare slots. Only one form
-        # may be structurally reachable for any given corpus.
-        variants = [("raw", target)]
-        seen = {target}
-        for tag, fn in (("ho-stripped", strip_leading_ho_args), ("normalized", normalize_ho_metavars)):
-            v = fn(target)
-            if v not in seen:
-                variants.append((tag, v))
-                seen.add(v)
-
+        # egg-stitch internally tries multiple surface-form variants of the
+        # follow target (see `follow::follow_variants` in Rust), so the
+        # script passes the discovered body once and only checks the result.
         results = {}
         for search in ("best-first", "smc"):
-            ok = False
-            for tag, follow_str in variants:
-                out = outdir / f"{stem}.{search}.{tag}.follow.out.json"
-                print(f"\n=== {search} (follow, {tag}: {follow_str}) ===", file=sys.stderr)
-                if not run_egg_stitch(binary, search, args.input, args.rewrites, out, passthrough, follow=follow_str):
-                    print(f"{search} [{tag}]: search failed", file=sys.stderr)
-                    continue
-                got = pattern_body(json.loads(out.read_text()))
-                if got is not None and follow_equivalent(target, got):
-                    ok = True
-                    break
-                print(f"{search} [{tag}]: did not reach follow target", file=sys.stderr)
+            out = outdir / f"{stem}.{search}.follow.out.json"
+            print(f"\n=== {search} (follow) ===", file=sys.stderr)
+            if not run_egg_stitch(binary, search, args.input, args.rewrites, out, passthrough, follow=target):
+                print(f"{search}: search failed", file=sys.stderr)
+                results[search] = False
+                continue
+            got = pattern_body(json.loads(out.read_text()))
+            ok = got is not None and follow_equivalent(target, got)
+            if not ok:
+                print(f"{search}: did not reach follow target", file=sys.stderr)
                 print(f"  want: {target}", file=sys.stderr)
                 print(f"  got : {got}", file=sys.stderr)
             results[search] = ok

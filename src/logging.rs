@@ -8,7 +8,7 @@ use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 
 /// Sets the log weight of particles that don't match the follow pattern to -inf.
-pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchState<F, O>], log_weights: &mut [f64], follow: &crate::revexpr::RevExpr<F::Apply<OpWithVar<O>>>, shared: &SharedSearchData<F, O>, original_size: usize, costs: &[usize], verbose: bool) {
+pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchState<F, O>], log_weights: &mut [f64], follows: &[crate::revexpr::RevExpr<F::Apply<OpWithVar<O>>>], shared: &SharedSearchData<F, O>, original_size: usize, costs: &[usize], verbose: bool) {
     let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
 
     if verbose {
@@ -37,7 +37,7 @@ pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchS
 
     let mut found = false;
     for (i, state) in states.iter().enumerate() {
-        if !state.matches_follow(follow) {
+        if !state.matches_follow(follows) {
             log_weights[i] = f64::NEG_INFINITY;
         } else {
             found = true;

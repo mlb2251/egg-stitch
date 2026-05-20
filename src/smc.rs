@@ -106,7 +106,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // log-space weights: logw_i = -cost_i / temperature
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
 
-        if let Some(ref follow) = shared.follow {
+        if let Some(follow) = shared.follow.as_deref() {
             // Apply the follow filter before the zero-arity kill so that an
             // arity-0 particle which exactly equals the follow target still
             // counts as "alive" for the per-iteration pick below.
