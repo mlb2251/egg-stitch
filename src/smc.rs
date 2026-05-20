@@ -106,7 +106,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // log-space weights: logw_i = -cost_i / temperature
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
 
-        if let Some(follow) = shared.follow.as_deref() {
+        if let Some(ref follow) = shared.follow {
             // Apply the follow filter before the zero-arity kill so that an
             // arity-0 particle which exactly equals the follow target still
             // counts as "alive" for the per-iteration pick below.
@@ -129,7 +129,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             // If any surviving particle is alpha-equivalent to the follow target,
             // the search has reached the goal — pick the cheapest such particle
             // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
-            if let Some((i, c)) = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY && expanded[i].matches_follow_exactly(follow)).map(|i| (i, costs[i])).min_by_key(|&(_, c)| c) {
+            if let Some((i, c)) = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY && expanded[i].matches_follow_serialized(follow, &shared.egraph)).map(|i| (i, costs[i])).min_by_key(|&(_, c)| c) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
                 best_so_far = Some((c, expanded[i].clone()));
                 best_found_at = Some(step);
