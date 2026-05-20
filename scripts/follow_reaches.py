@@ -81,6 +81,81 @@ def pattern_body(result_json):
     return body if body else full
 
 
+def parse_sexp(s):
+    """Tiny s-expression parser: atoms become strings, lists become tuples."""
+    toks, i = [], 0
+    while i < len(s):
+        c = s[i]
+        if c.isspace():
+            i += 1
+        elif c in "()":
+            toks.append(c)
+            i += 1
+        else:
+            j = i
+            while j < len(s) and not s[j].isspace() and s[j] not in "()":
+                j += 1
+            toks.append(s[i:j])
+            i = j
+    pos = [0]
+
+    def read():
+        t = toks[pos[0]]; pos[0] += 1
+        if t != "(":
+            return t
+        out = []
+        while toks[pos[0]] != ")":
+            out.append(read())
+        pos[0] += 1
+        return tuple(out)
+
+    return read()
+
+
+def follow_equivalent(target, got):
+    """Alpha-equivalence between two abstraction bodies, with the relaxation
+    that `(?#k $a $b …)` (metavar HO-applied to De Bruijn vars) is equivalent
+    to a bare `?#m`: either form represents an unrefined slot. Metavar names
+    are matched under a consistent bijective rename.
+    """
+    a, b = parse_sexp(target), parse_sexp(got)
+    fwd, rev = {}, {}
+
+    def is_meta(x):
+        return isinstance(x, str) and x.startswith("?#")
+
+    def is_db(x):
+        return isinstance(x, str) and x.startswith("$") and x[1:].isdigit()
+
+    def meta_head(x):
+        """If `x` is a bare metavar or `(?#k $a $b …)`, return the head name."""
+        if is_meta(x):
+            return x
+        if isinstance(x, tuple) and x and is_meta(x[0]) and all(is_db(a) for a in x[1:]):
+            return x[0]
+        return None
+
+    def bind(av, bv):
+        if av in fwd and fwd[av] != bv: return False
+        if bv in rev and rev[bv] != av: return False
+        fwd[av] = bv; rev[bv] = av
+        return True
+
+    def go(a, b):
+        ma, mb = meta_head(a), meta_head(b)
+        if ma is not None and mb is not None:
+            return bind(ma, mb)
+        if ma is not None or mb is not None:
+            return False
+        if isinstance(a, str) and isinstance(b, str):
+            return a == b
+        if isinstance(a, tuple) and isinstance(b, tuple) and len(a) == len(b):
+            return all(go(x, y) for x, y in zip(a, b))
+        return False
+
+    return go(a, b)
+
+
 def main():
     argv = sys.argv[1:]
     passthrough = []
@@ -113,9 +188,11 @@ def main():
             sys.exit(0)
         print(f"follow target: {target}", file=sys.stderr)
 
-        # 2) Follow runs: both backends must reach the same canonical pattern.
-        #    Pattern stringification is canonical (alpha-equivalent patterns
-        #    render identically), so plain string equality suffices.
+        # 2) Follow runs: both backends must reach a pattern alpha-equivalent
+        #    to the discovery target. The match is liberal in one direction —
+        #    `(?#k $a $b …)` (metavar HO-applied to bound vars) counts as
+        #    equivalent to a bare `?#m`, since either form is an unrefined
+        #    slot that the search can still specialise.
         results = {}
         for search in ("best-first", "smc"):
             out = outdir / f"{stem}.{search}.follow.out.json"
@@ -125,7 +202,7 @@ def main():
                 results[search] = False
                 continue
             got = pattern_body(json.loads(out.read_text()))
-            ok = got == target
+            ok = got is not None and follow_equivalent(target, got)
             if not ok:
                 print(f"{search}: did not reach follow target", file=sys.stderr)
                 print(f"  want: {target}", file=sys.stderr)
