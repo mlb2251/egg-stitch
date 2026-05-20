@@ -22,6 +22,11 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 RUNNER = HERE / "follow_reaches.py"
 
+# Only these four cogsci corpora are flat s-exprs (op-children); the other
+# files under data/domains/cogsci/ (bridge, castle, city, house) are curried
+# lambda-calc, matching `expts/__init__.COGSCI_DOMAINS`.
+COGSCI_OP_CHILDREN = {"dials", "furniture", "nuts-bolts", "wheels"}
+
 
 def main():
     argv = sys.argv[1:]
@@ -49,9 +54,10 @@ def main():
         rel = inp.relative_to(REPO) if inp.is_absolute() and REPO in inp.parents else inp
         print(f"\n[{i}/{len(inputs)}] {rel}")
         # Match the benchmark convention (`expts/runner.py:weighting_for`):
-        # cogsci corpora are flat s-exprs → op-children; everything else is
+        # only the four canonical cogsci corpora are flat s-exprs → op-children;
+        # everything else (incl. bridge/castle/city/house under cogsci/) is
         # curried dreamcoder-style → lambda-calc.
-        language = "op-children" if inp.parent.name == "cogsci" else "lambda-calc"
+        language = "op-children" if inp.parent.name == "cogsci" and inp.stem in COGSCI_OP_CHILDREN else "lambda-calc"
         cmd = [sys.executable, str(RUNNER), str(inp), "--", "--language", language]
         if passthrough:
             cmd += [*passthrough]
