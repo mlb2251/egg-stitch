@@ -267,6 +267,48 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         });
     }
 
+    /// True iff some frozen variable `?#k` (k < frozen_count) is "useless":
+    /// every match's substitution maps `?#k` to the same e-class, and that
+    /// e-class has no above-pattern free DB indices (all `fv < d_k`). Such a
+    /// metavar adds no compression — its arg is invariant across sites, so the
+    /// abstraction could be specialised by inlining the arg.
+    ///
+    /// Stitch analog: `is_useless_abstract` (argument capture). We require fv
+    /// to lie strictly below `d_k`, which matches stitch's "shifted_id fv is
+    /// empty" check (the shift drops indices `< d_k`).
+    ///
+    /// Returns `false` when `frozen_count` is `None` (rule disabled) or when
+    /// the match set is empty.
+    pub fn is_useless_frozen(&self, shared: &SharedSearchData<F, O>) -> bool {
+        let Some(fc) = self.frozen_count else { return false };
+        for k in 0..fc {
+            let d_k = self.pattern.var_depth[k];
+            let mut first: Option<Id> = None;
+            let mut same = true;
+            'outer: for m in &self.matches {
+                for s in &m.substs {
+                    match first {
+                        None => first = Some(s.vars[k]),
+                        Some(f) if f == s.vars[k] => {}
+                        Some(_) => {
+                            same = false;
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+            if !same {
+                continue;
+            }
+            if let Some(id) = first
+                && shared.egraph[id].data.fv.iter().all(|&i| (i as u32) < d_k)
+            {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Creates the initial search state: a single-variable pattern matching every e-class.
     /// `frozen_count` enables the freeze-based canonical-ordering rule when `Some(0)`;
     /// pass `None` to disable the check (e.g. for SMC).

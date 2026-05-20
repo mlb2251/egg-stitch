@@ -119,6 +119,14 @@ pub struct Args {
     #[arg(long = "no-opt-dominance-reuse", action = clap::ArgAction::SetFalse)]
     pub opt_dominance_reuse: bool,
 
+    /// Disable the useless-frozen-variable check (on by default).
+    /// When a frozen metavar `?#k` is bound to the same e-class in every
+    /// match and that e-class has no above-pattern free vars, the state
+    /// is pruned — the abstraction adds no compression at that slot.
+    /// Stitch analog: "argument capture" / `is_useless_abstract`.
+    #[arg(long = "no-opt-useless-frozen", action = clap::ArgAction::SetFalse)]
+    pub opt_useless_frozen: bool,
+
     /// Disable lower-bound pruning of best-first children (on by default).
     /// Each child gets a `compute_lower_bound` estimate; if it already
     /// exceeds the current best, skip the full cost call. Bounds are also

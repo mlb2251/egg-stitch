@@ -152,6 +152,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut dominance_hits: usize = 0;
     let mut lower_bound_hits: usize = 0;
     let mut lower_bound_time: Duration = Duration::ZERO;
+    let mut useless_frozen_hits: usize = 0;
     let search_start = Instant::now();
 
     while let Some(Reverse((_prio, node_id))) = heap.pop() {
@@ -209,6 +210,14 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             if let Some(s) = seen.as_mut()
                 && s.check_and_insert(child_state.pattern.clone(), child_state.frozen_count.unwrap_or(0))
             {
+                continue;
+            }
+
+            // Useless-frozen pruning: a frozen metavar bound to the same
+            // (closed-under-pattern-binders) arg in every match adds no
+            // compression. Stitch analog: argument-capture pruning.
+            if args.opt_useless_frozen && child_state.is_useless_frozen(&shared) {
+                useless_frozen_hits += 1;
                 continue;
             }
 
@@ -283,6 +292,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     println!("{} {} {}", "lower-bound hits:".dimmed(), lower_bound_hits.to_string().bold(), format!("(time: {:.3}s)", lower_bound_time.as_secs_f64()).dimmed());
+    println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
