@@ -107,25 +107,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
 
         if let Some(ref follow) = shared.follow {
-            // Apply the follow filter before the zero-arity kill so that an
-            // arity-0 particle which exactly equals the follow target still
-            // counts as "alive" for the per-iteration pick below.
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
-            // In follow mode the cost-based "new best" logic is the wrong
-            // criterion: the follow target may itself be more expensive than
-            // some shorter prefix the search has already crossed. Instead,
-            // each iteration record the cost-min particle that's still
-            // following the target. When all particles die, `best_so_far`
-            // retains the latest non-empty iteration's pick — i.e. the
-            // deepest the search managed to track the target.
-            if let Some((i, c)) = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| (i, costs[i])).min_by_key(|&(_, c)| c) {
-                let arity = expanded[i].pattern.vars.len();
-                if arity <= max_arity && !(no_zero_arity && arity == 0) {
-                    println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow pick: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
-                    best_so_far = Some((c, expanded[i].clone()));
-                    best_found_at = Some(step);
-                }
-            }
             // If any surviving particle is alpha-equivalent to the follow target,
             // the search has reached the goal — pick the cheapest such particle
             // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
