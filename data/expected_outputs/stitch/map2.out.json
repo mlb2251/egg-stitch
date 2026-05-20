@@ -1,16 +1,16 @@
 {
-  "compression_ratio": 1.258702821546354,
+  "compression_ratio": 1.1727552065551383,
   "cost_after_rewrites": 3435,
-  "final_cost": 2729,
+  "final_cost": 2929,
   "initial_cost": 69,
   "library": [
     {
-      "approx_cost": 2121,
-      "arity": 2,
-      "lambda": "(lam (lam (Y (lam (lam (if (nil? $0) nil (cons ($3 $0 (car $0) ($2 $0)) (r (cdr $0)))))))))",
+      "approx_cost": 2323,
+      "arity": 1,
+      "lambda": "(lam (Y (lam (lam (if (nil? $0) nil (cons ($2 $0) (r (cdr $0))))))))",
       "num_matches": 2,
-      "pattern": "fn_0: (Y (lam (lam (if (nil? $0) nil (cons (?#0 $0 (car $0) (?#1 $0)) (r (cdr $0)))))))",
-      "pattern_size": 1314,
+      "pattern": "fn_0: (Y (lam (lam (if (nil? $0) nil (cons (?#0 $0) (r (cdr $0)))))))",
+      "pattern_size": 1112,
       "usage_matches": 2
     }
   ],
@@ -19,7 +19,7 @@
     "(Y (lam (lam (if (nil? $0) nil (cons (- (car $0) (car $0) 3 (car $0) 4) (r (cdr $0)))))))"
   ],
   "rewritten_programs": [
-    "(fn_0 (lam (+ 2)) (lam (car $0)))",
-    "(fn_0 (lam (- (car $0) (car $0) 3)) (lam 4))"
+    "(fn_0 (lam (+ 2 (car $0) (car $0))))",
+    "(fn_0 (lam (- (car $0) (car $0) 3 (car $0) 4)))"
   ]
 }
