@@ -437,7 +437,11 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
         // root. A mismatch means `wrap_subst_args` is shifting captured args
         // incorrectly and the abstraction's call site no longer agrees with the
         // original program on outer-scope references.
-        assert_eq!(egraph[root].data.fv, rewritten.egraph[rewritten.root].data.fv, "free-variable set diverges after rewrite: original {:?} != rewritten {:?}", egraph[root].data.fv, rewritten.egraph[rewritten.root].data.fv,);
+        assert_eq!(
+            egraph[root].data.fv, rewritten.egraph[rewritten.root].data.fv,
+            "free-variable set diverges after rewrite: original {:?} != rewritten {:?}",
+            egraph[root].data.fv, rewritten.egraph[rewritten.root].data.fv,
+        );
     }
     final_size as usize
 }
