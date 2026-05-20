@@ -144,6 +144,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         crate::follow::check_follow::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
     }
 
+    /// Check if this particle's pattern is alpha-equivalent to the follow target.
+    pub fn matches_follow_exactly(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
+        let mut p_to_f = HashMap::new();
+        let mut f_to_p = HashMap::new();
+        crate::follow::check_follow_exact::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut p_to_f, &mut f_to_p)
+    }
+
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
         self.pattern.expand(var_idx, target);

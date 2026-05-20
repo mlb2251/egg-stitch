@@ -37,3 +37,31 @@ pub fn check_follow<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<O
     }
     pn.matches(fn_) && pn.children().iter().zip(fn_.children().iter()).all(|(&pc, &fc)| check_follow::<F, O>(pattern, pc, follow, fc, var_bindings))
 }
+
+/// Checks whether `pattern` is alpha-equivalent to the follow target — i.e. the
+/// search has actually reached the goal, not just a prefix. Requires a bijection
+/// between pattern vars and follow vars, with identical structure elsewhere.
+pub fn check_follow_exact<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>>, pid: Id, follow: &RevExpr<F::Apply<OpWithVar<O>>>, fid: Id, p_to_f: &mut HashMap<egg::Var, egg::Var>, f_to_p: &mut HashMap<egg::Var, egg::Var>) -> bool {
+    let (pn, fn_) = (&pattern[pid], &follow[fid]);
+    match (pn.discriminant().as_var(), fn_.discriminant().as_var()) {
+        (Some(pv), Some(fv)) => {
+            let pf_ok = match p_to_f.entry(pv) {
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(fv);
+                    true
+                }
+                std::collections::hash_map::Entry::Occupied(e) => *e.get() == fv,
+            };
+            let fp_ok = match f_to_p.entry(fv) {
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(pv);
+                    true
+                }
+                std::collections::hash_map::Entry::Occupied(e) => *e.get() == pv,
+            };
+            pf_ok && fp_ok
+        }
+        (None, None) => pn.matches(fn_) && pn.children().iter().zip(fn_.children().iter()).all(|(&pc, &fc)| check_follow_exact::<F, O>(pattern, pc, follow, fc, p_to_f, f_to_p)),
+        _ => false,
+    }
+}

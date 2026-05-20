@@ -112,6 +112,37 @@ def parse_sexp(s):
     return read()
 
 
+def render_sexp(x):
+    """Inverse of `parse_sexp`: render a parsed tree back to a string."""
+    if isinstance(x, str):
+        return x
+    return "(" + " ".join(render_sexp(y) for y in x) + ")"
+
+
+def normalize_ho_metavars(target):
+    """Collapse `(?#k $a $b …)` (HO-applied metavar) → bare `?#k` throughout.
+    Mirrors the relaxation in `follow_equivalent`. egg-stitch's `--follow`
+    parser treats the surface form structurally, so a discovered body like
+    `(lam (map (?#0 $0) $0))` can be unreachable as written even though
+    `(lam (map ?#0 $0))` is the same slot — see `meta_head` below.
+    """
+    def is_meta(x):
+        return isinstance(x, str) and x.startswith("?#")
+
+    def is_db(x):
+        return isinstance(x, str) and x.startswith("$") and x[1:].isdigit()
+
+    def walk(x):
+        if isinstance(x, str):
+            return x
+        if x and is_meta(x[0]) and all(is_db(a) for a in x[1:]):
+            return x[0]
+        return tuple(walk(c) for c in x)
+
+    out = walk(parse_sexp(target))
+    return render_sexp(out)
+
+
 def follow_equivalent(target, got):
     """Alpha-equivalence between two abstraction bodies, with the relaxation
     that `(?#k $a $b …)` (metavar HO-applied to De Bruijn vars) is equivalent
@@ -193,18 +224,30 @@ def main():
         #    `(?#k $a $b …)` (metavar HO-applied to bound vars) counts as
         #    equivalent to a bare `?#m`, since either form is an unrefined
         #    slot that the search can still specialise.
+        # Try the discovered body as written, then again with HO-applied
+        # metavars collapsed to bare slots — `(?#k $a $b …)` and `?#k` are
+        # the same slot semantically but parse to different structures, and
+        # only one form may be reachable in the corpus. A search passes if
+        # *either* form reaches an alpha-equivalent pattern.
+        normalized = normalize_ho_metavars(target)
+        variants = [("raw", target)]
+        if normalized != target:
+            variants.append(("normalized", normalized))
+
         results = {}
         for search in ("best-first", "smc"):
-            out = outdir / f"{stem}.{search}.follow.out.json"
-            print(f"\n=== {search} (follow) ===", file=sys.stderr)
-            if not run_egg_stitch(binary, search, args.input, args.rewrites, out, passthrough, follow=target):
-                print(f"{search}: search failed", file=sys.stderr)
-                results[search] = False
-                continue
-            got = pattern_body(json.loads(out.read_text()))
-            ok = got is not None and follow_equivalent(target, got)
-            if not ok:
-                print(f"{search}: did not reach follow target", file=sys.stderr)
+            ok = False
+            for tag, follow_str in variants:
+                out = outdir / f"{stem}.{search}.{tag}.follow.out.json"
+                print(f"\n=== {search} (follow, {tag}: {follow_str}) ===", file=sys.stderr)
+                if not run_egg_stitch(binary, search, args.input, args.rewrites, out, passthrough, follow=follow_str):
+                    print(f"{search} [{tag}]: search failed", file=sys.stderr)
+                    continue
+                got = pattern_body(json.loads(out.read_text()))
+                if got is not None and follow_equivalent(target, got):
+                    ok = True
+                    break
+                print(f"{search} [{tag}]: did not reach follow target", file=sys.stderr)
                 print(f"  want: {target}", file=sys.stderr)
                 print(f"  got : {got}", file=sys.stderr)
             results[search] = ok
