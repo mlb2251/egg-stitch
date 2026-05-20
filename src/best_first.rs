@@ -189,7 +189,16 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // can't fire until both sides exist, which may require expanding
             // (and thus freezing) past one of the indices being merged.
             match &action {
-                Action::Expand { var_idx, .. } if *var_idx < parent_frozen || *var_idx > max_arity => continue,
+                Action::Expand { var_idx, .. }
+                    if (
+                        // variable is frozen, reject
+                        *var_idx < parent_frozen ||
+                        // this freezes max_arity+1 variables, reject
+                        *var_idx > max_arity
+                    ) =>
+                {
+                    continue;
+                }
                 _ => {}
             }
             if let Some(ref follow) = shared.follow
