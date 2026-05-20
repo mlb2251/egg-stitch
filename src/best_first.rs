@@ -154,7 +154,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut lower_bound_time: Duration = Duration::ZERO;
     let search_start = Instant::now();
 
-    while let Some(Reverse((_prio, node_id))) = heap.pop() {
+    'search: while let Some(Reverse((_prio, node_id))) = heap.pop() {
         if let Some(b) = budget
             && num_expansions >= b
         {
@@ -258,6 +258,13 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 });
             }
 
+            // Mirrors SMC's `follow exact match` exit (src/smc.rs:132): once
+            // a successor is alpha-equivalent to the follow target the search
+            // has reached the goal, and continuing risks overwriting `best`
+            // with a cheaper non-matching pattern that slipped past the prefix
+            // filter. Record this child as best and stop.
+            let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| child_state.matches_follow_serialized(f, &shared.egraph));
+
             nodes.push(Node {
                 parent: Some(node_id),
                 action: Some(action),
@@ -268,6 +275,21 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 lower_bound: child_lower_bound,
             });
             heap.push(Reverse((child_prio, child_id)));
+
+            if exact_follow_hit {
+                let elapsed = search_start.elapsed().as_secs_f64();
+                println!(
+                    "{} {} {} {}",
+                    format!("[expansion {}]", num_expansions).yellow().bold(),
+                    format!("follow exact match: {}", child_cost).green().bold(),
+                    nodes[child_id].state.pattern.to_string().cyan(),
+                    format!("(t={:.3}s)", elapsed).dimmed()
+                );
+                best = Some((child_cost, child_id));
+                best_found_at = Some(num_expansions);
+                num_expansions += 1;
+                break 'search;
+            }
         }
 
         num_expansions += 1;
