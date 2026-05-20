@@ -393,16 +393,23 @@ pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F,
 }
 
 /// Total body size including HO-app wrapping: `compute_pattern_size` plus,
-/// for each occurrence of `?#k` with `ho_arity[k] > 0`, the cost of the
-/// `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
+/// for each *syntactic* occurrence of `?#k` with `ho_arity[k] > 0`, the cost
+/// of the `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
 /// `sym_var_cost` per binder, per occurrence.
+///
+/// Uses `pattern.var_occurrences[k]`, which is maintained incrementally by
+/// `expand`/`reuse` and counts each parent reference (matching
+/// `compute_pattern_size`'s syntactic-walk semantics). Using `vars[k].len()`
+/// here would charge once per unique RecExpr id and silently reward DAG-shared
+/// constructions, making the same final pattern cost less depending on the
+/// action sequence that built it.
 pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
     let pattern_size = compute_pattern_size::<F, O>(pattern, weights);
     if ho_arity.iter().all(|&h| h == 0) {
         return pattern_size;
     }
     let per_app = weights.app_cost + weights.sym_var_cost;
-    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.vars[k].len() as u32 * ho_arity[k] * per_app).sum();
+    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.var_occurrences[k] as u32 * ho_arity[k] * per_app).sum();
     pattern_size + ho_extra as usize
 }
 

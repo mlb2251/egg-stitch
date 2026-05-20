@@ -59,7 +59,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
-    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared), num_particles)];
+    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared, None), num_particles)];
     let mut scratch = CostScratch::new(&shared.egraph);
     let mut dominance_hits: usize = 0;
 

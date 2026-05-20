@@ -4,7 +4,7 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -12,8 +12,13 @@ use std::time::{Duration, Instant};
 /// search. Accumulates hit count and time spent so the host loop can report
 /// stats. Wrap in `Option<…>` at the call site — `None` disables the check
 /// entirely (useful for measuring how much pruning the seen-set buys).
+/// Stores the *minimum* frozen_count ever seen per pattern. A repeat insertion
+/// at an equal-or-higher frozen_count is a hit (the prior visit was at least
+/// as flexible). A repeat at a strictly lower frozen_count overwrites and
+/// passes through, because the new visit unlocks expand actions the prior one
+/// had forbidden.
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
-    set: FxHashSet<Pattern<F, O>>,
+    map: FxHashMap<Pattern<F, O>, usize>,
     pub hits: usize,
     pub time: Duration,
 }
@@ -21,7 +26,7 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
 impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
     fn default() -> Self {
         Self {
-            set: FxHashSet::default(),
+            map: FxHashMap::default(),
             hits: 0,
             time: Duration::ZERO,
         }
@@ -34,21 +39,30 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     }
     /// Number of distinct patterns recorded.
     pub fn len(&self) -> usize {
-        self.set.len()
+        self.map.len()
     }
     pub fn is_empty(&self) -> bool {
-        self.set.is_empty()
+        self.map.is_empty()
     }
-    /// Records `pattern` if new; returns `true` if it was already present
-    /// (caller should skip this successor).
-    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>) -> bool {
+    /// Records `pattern` at `frozen_count` if this is the first visit or a
+    /// strictly-lower-frozen one; returns `true` (skip) if an equal-or-lower
+    /// frozen visit was already recorded — the prior visit was at least as
+    /// flexible, so all of this visit's reachable successors are already
+    /// reachable from it.
+    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen_count: usize) -> bool {
         let t = Instant::now();
-        let already_present = !self.set.insert(pattern);
+        let skip = match self.map.get(&pattern) {
+            Some(&existing) if existing <= frozen_count => true,
+            _ => {
+                self.map.insert(pattern, frozen_count);
+                false
+            }
+        };
         self.time += t.elapsed();
-        if already_present {
+        if skip {
             self.hits += 1;
         }
-        already_present
+        skip
     }
 }
 
@@ -133,6 +147,12 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// check in `enumerate_successors` to detect reuses that preserve the
     /// match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
+    /// Best-first canonical-ordering device: `Some(k)` means `?#0..?#(k-1)`
+    /// are committed to never being expanded *and* are forbidden from
+    /// participating in `Reuse`. Expanding `?#k` raises this to `Some(k)`.
+    /// `None` disables the rule entirely — SMC uses this so it can dedupe
+    /// purely on the pattern's `RecExpr`.
+    pub frozen_count: Option<usize>,
 }
 
 /// Computes the total number of substitutions across all matches.
@@ -165,6 +185,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
+        // Commit to freezing every earlier var. `max` (rather than `=`) keeps
+        // the count monotone even though best-first's filter already enforces
+        // non-decreasing expansion order.
+        if let Some(fc) = self.frozen_count.as_mut() {
+            *fc = (*fc).max(var_idx);
+        }
         self.pattern.expand(var_idx, target);
         self.subset_matches(var_idx, target, shared);
     }
@@ -176,6 +202,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let d_a = self.pattern.var_depth[var_idx];
         let d_b = self.pattern.var_depth[second_var_idx];
         let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
+        // Reuse is unconstrained by `frozen_count` (the freeze rule only
+        // restricts syntactic expansions). If reuse removes a var at index
+        // below `fc`, shift `fc` down so it still refers to the same
+        // expand-threshold position after the index shift in `pattern.reuse`.
+        if let Some(fc) = self.frozen_count.as_mut() {
+            let drop_idx = var_idx.max(second_var_idx);
+            if drop_idx < *fc {
+                *fc -= 1;
+            }
+        }
         self.pattern.reuse(var_idx, second_var_idx);
         self.subset_matches_reuse(var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared);
     }
@@ -251,10 +287,17 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
-    pub fn new(shared: &SharedSearchData<F, O>) -> Self {
+    /// `frozen_count` enables the freeze-based canonical-ordering rule when `Some(0)`;
+    /// pass `None` to disable the check (e.g. for SMC).
+    pub fn new(shared: &SharedSearchData<F, O>, frozen_count: Option<usize>) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
-        Self { pattern: Pattern::single_var(), matches, num_substs }
+        Self {
+            pattern: Pattern::single_var(),
+            matches,
+            num_substs,
+            frozen_count,
+        }
     }
 
     /// Applies an action to a clone of `self` and returns the resulting child.
@@ -395,7 +438,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         check_slow: args.check_slow,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
-    let initial = SearchState::new(&shared);
+    let initial = SearchState::new(&shared, None);
     let initial_ho_arity = crate::cost::compute_ho_arity::<F, O>(&shared.egraph, &initial);
     let mut scratch = crate::cost::CostScratch::new(&shared.egraph);
     let original_size = crate::cost::compute_size(&shared.egraph, root, &cache, &mut scratch, &initial, shared.check_slow, &initial_ho_arity);
