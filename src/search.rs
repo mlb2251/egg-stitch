@@ -340,16 +340,27 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
+        // Weight each (match, subst) contribution by how often that match's
+        // root e-class appears in the fully-expanded corpus, so popular
+        // root-positions sway the action distribution proportionally to the
+        // compression value they represent — not just their hash-consed
+        // distinctness. Without this, an abstraction that fires on a single
+        // eclass used thousands of times looks like the same support as one
+        // that fires on thousands of distinct one-off eclasses.
+        let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                let support: usize = self.matches.iter().map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count()).sum();
+                let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
+                    let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count();
+                    (s + usage(m.root_eclass) * c, r + c)
+                });
                 if support == 0 {
                     continue;
                 }
                 let action = Action::Reuse { keep: i, drop: j };
-                if opt_dominance_reuse && support == self.num_substs {
+                if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
                     let mut child = self.clone();
                     child.reuse(i, j, shared);
@@ -364,6 +375,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
             let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
             for m in &self.matches {
+                let w = usage(m.root_eclass);
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
@@ -372,10 +384,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         }
                         let key = (node.discriminant(), node.children().len());
                         match shape_idx.get(&key) {
-                            Some(&idx) => shapes[idx].1 += 1,
+                            Some(&idx) => shapes[idx].1 += w,
                             None => {
                                 shape_idx.insert(key.clone(), shapes.len());
-                                shapes.push((key, 1));
+                                shapes.push((key, w));
                             }
                         }
                     }
