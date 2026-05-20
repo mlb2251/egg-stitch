@@ -100,7 +100,7 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// because stitch's display ambiguously renders HO-applied metavars
     /// `(?#k $i …)` and literal apps with the same syntax — see
     /// `follow::follow_variants`.
-    pub follow: Option<Vec<RevExpr<F::Apply<OpWithVar<O>>>>>,
+    pub follow: Option<Vec<crate::pattern::PatternRecExpr<F, O>>>,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
@@ -379,7 +379,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     // pattern: flat-form sexps that may have a `?#k` variable head (e.g.
     // `(?#0 a b c)`). egg's stock pattern parser rejects both shapes, so
     // each family ships its own walker.
-    let follow_expr: Option<Vec<RevExpr<F::Apply<OpWithVar<O>>>>> = args.follow.as_deref().map(|s| {
+    let follow_expr: Option<Vec<crate::pattern::PatternRecExpr<F, O>>> = args.follow.as_deref().map(|s| {
         crate::follow::follow_variants(s)
             .into_iter()
             .map(|v| F::parse_follow_pattern::<O>(&v).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", v, e)))
