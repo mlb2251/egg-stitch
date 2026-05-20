@@ -12,67 +12,37 @@ pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F:
     compute_variable_indices::<F, O>(egraph, search_state).into_iter().map(|v| v.len() as u32).collect()
 }
 
-/// Per-(match, subst, slot) sorted-ascending list of pattern-internal DB
-/// indices referenced by that subst's captured arg at that slot. Indexed
-/// `[mi][si][k]`. This is the primitive both `compute_variable_indices`
-/// (per-slot union) and `enumerate_candidates` (per-subst R-mask buckets)
-/// derive from, so the egraph fv walk happens once.
-///
-/// Returns shape-preserving empties when `var_depth` is all zero (no slot can
-/// capture pattern-internal binders): each subst gets `vec![Vec::new(); arity]`
-/// without any fv lookups. Common case on lambda-free domains.
-pub fn compute_subst_variable_indices<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<Vec<Vec<Vec<i32>>>> {
-    let arity = search_state.pattern.var_depth.len();
-    let var_depth = &search_state.pattern.var_depth;
-    let all_zero = var_depth.iter().all(|&d| d == 0);
-    search_state
-        .matches
-        .iter()
-        .map(|m| {
-            m.substs
-                .iter()
-                .map(|subst| {
-                    if all_zero {
-                        return vec![Vec::new(); arity];
-                    }
-                    subst
-                        .vars
-                        .iter()
-                        .enumerate()
-                        .map(|(k, &arg_id)| {
-                            let d_k = var_depth[k];
-                            if d_k == 0 {
-                                return Vec::new();
-                            }
-                            let mut r: Vec<i32> = egraph[arg_id].data.fv.iter().copied().filter(|&i| i >= 0 && (i as u32) < d_k).collect();
-                            r.sort();
-                            r.dedup();
-                            r
-                        })
-                        .collect()
-                })
-                .collect()
-        })
-        .collect()
-}
-
 /// Per-metavar sorted-ascending list of distinct pattern-internal DB indices
 /// referenced by any match's captured arg. `variable_indices[k][j]` is a free
 /// DB index `i` (0 ≤ i < d_k) appearing in `fv(arg_{m,k})` for some match `m`.
 /// Symmetric to `compute_ho_arity` but returns the actual set of binder indices
 /// referenced, not just their count.
 pub fn compute_variable_indices<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<Vec<i32>> {
-    union_per_slot(&compute_subst_variable_indices::<F, O>(egraph, search_state), search_state.pattern.var_depth.len())
-}
-
-/// Per-slot union of a per-subst R-table (the output of
-/// `compute_subst_variable_indices`). Each output slot is sorted ascending.
-fn union_per_slot(per_subst: &[Vec<Vec<Vec<i32>>>], arity: usize) -> Vec<Vec<i32>> {
+    let arity = search_state.pattern.var_depth.len();
+    let var_depth = &search_state.pattern.var_depth;
+    // No slot can capture pattern-internal binders → result is all-empty.
+    // Skip the per-slot hashset allocations entirely; this is the common case
+    // for domains without lambda/DB-var ops (e.g. dials).
+    if var_depth.iter().all(|&d| d == 0) {
+        return vec![Vec::new(); arity];
+    }
     let mut sets: Vec<FxHashSet<i32>> = vec![FxHashSet::default(); arity];
-    for ms in per_subst {
-        for ss in ms {
-            for (k, r) in ss.iter().enumerate() {
-                sets[k].extend(r.iter().copied());
+    let mut seen_per_slot: Vec<FxHashSet<Id>> = vec![FxHashSet::default(); arity];
+    for m in &search_state.matches {
+        for subst in &m.substs {
+            for (k, &arg_id) in subst.vars.iter().enumerate() {
+                let d_k = var_depth[k];
+                if d_k == 0 {
+                    continue;
+                }
+                if !seen_per_slot[k].insert(arg_id) {
+                    continue;
+                }
+                for &i in egraph[arg_id].data.fv.iter() {
+                    if i >= 0 && (i as u32) < d_k {
+                        sets[k].insert(i);
+                    }
+                }
             }
         }
     }
@@ -122,8 +92,7 @@ pub struct CostSelection {
 /// with every subst kept.
 pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<CostCandidate> {
     let arity = search_state.pattern.var_depth.len();
-    let per_subst = compute_subst_variable_indices::<F, O>(egraph, search_state);
-    let v: Vec<Vec<i32>> = union_per_slot(&per_subst, arity);
+    let v: Vec<Vec<i32>> = compute_variable_indices::<F, O>(egraph, search_state);
     // Fast path: no slot can capture pattern-internal binders, so the only
     // candidate keeps every subst. Emit the `None` sentinel to skip
     // allocating the dense (0..len) index list — this fires every cost call
@@ -154,17 +123,23 @@ pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgrap
     // Encode each subst's `R` as a u64 mask and bucket by mask. Walking
     // distinct R-tuples (typically few) is cheaper than rewalking every
     // subst per candidate, and the bucket records the (match, subst) pairs
-    // we'll attribute to any s ⊇ R. We reuse `per_subst` here instead of
-    // re-walking egraph fv data — same R-values, already sorted+deduped.
+    // we'll attribute to any s ⊇ R.
+    let var_depth = &search_state.pattern.var_depth;
     let mut bucket: FxHashMap<u64, Vec<(u32, u32)>> = FxHashMap::default();
-    for (mi, ms) in per_subst.iter().enumerate() {
-        for (si, ss) in ms.iter().enumerate() {
+    for (mi, m) in search_state.matches.iter().enumerate() {
+        for (si, subst) in m.substs.iter().enumerate() {
             let mut mask: u64 = 0;
-            for (k, r) in ss.iter().enumerate() {
-                for &i in r {
-                    // v[k] is sorted ascending; binary_search yields the bit position.
-                    let b = v[k].binary_search(&i).expect("subst R-value not in v[k]");
-                    mask |= 1u64 << (slot_offset[k] + b as u32);
+            for (k, &arg_id) in subst.vars.iter().enumerate() {
+                let d_k = var_depth[k];
+                if d_k == 0 {
+                    continue;
+                }
+                for &i in egraph[arg_id].data.fv.iter() {
+                    if i >= 0 && (i as u32) < d_k {
+                        // v[k] is sorted ascending; binary_search yields the bit position.
+                        let b = v[k].binary_search(&i).expect("subst R-value not in v[k]");
+                        mask |= 1u64 << (slot_offset[k] + b as u32);
+                    }
                 }
             }
             bucket.entry(mask).or_default().push((mi as u32, si as u32));
