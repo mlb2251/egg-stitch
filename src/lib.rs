@@ -273,10 +273,10 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// rules re-applied).
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
-fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
+pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { mut egraph, root } = data;
-    // Mirrors `build_rewritten_egraph`: η-wrap captures whose fv reaches
-    // into pattern-internal binders before passing them in.
+    // η-wrap captures whose fv reaches into pattern-internal binders before
+    // passing them in.
     let var_depth = &state.pattern.var_depth;
     let variable_indices = cost::compute_variable_indices::<F, O>(&egraph, state);
     // Defer unions until all shifts are done. A mid-loop `union` shrinks
