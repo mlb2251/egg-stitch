@@ -119,28 +119,52 @@ def render_sexp(x):
     return "(" + " ".join(render_sexp(y) for y in x) + ")"
 
 
+def _is_meta(x):
+    return isinstance(x, str) and x.startswith("?#")
+
+
+def _is_db(x):
+    return isinstance(x, str) and x.startswith("$") and x[1:].isdigit()
+
+
 def normalize_ho_metavars(target):
     """Collapse `(?#k $a $b …)` (HO-applied metavar) → bare `?#k` throughout.
-    Mirrors the relaxation in `follow_equivalent`. egg-stitch's `--follow`
-    parser treats the surface form structurally, so a discovered body like
-    `(lam (map (?#0 $0) $0))` can be unreachable as written even though
-    `(lam (map ?#0 $0))` is the same slot — see `meta_head` below.
+    egg-stitch's `--follow` parser treats the surface form structurally, so a
+    discovered body like `(lam (map (?#0 $0) $0))` can be unreachable as
+    written even though `(lam (map ?#0 $0))` is the same slot.
     """
-    def is_meta(x):
-        return isinstance(x, str) and x.startswith("?#")
-
-    def is_db(x):
-        return isinstance(x, str) and x.startswith("$") and x[1:].isdigit()
-
     def walk(x):
         if isinstance(x, str):
             return x
-        if x and is_meta(x[0]) and all(is_db(a) for a in x[1:]):
+        if x and _is_meta(x[0]) and all(_is_db(a) for a in x[1:]):
             return x[0]
         return tuple(walk(c) for c in x)
 
-    out = walk(parse_sexp(target))
-    return render_sexp(out)
+    return render_sexp(walk(parse_sexp(target)))
+
+
+def strip_leading_ho_args(target):
+    """Strip *leading* db-var args from any metavar application — the
+    serialization quirk that adds `$i` HO-args to display arity. Keeps
+    structural (non-db-var) trailing args, so `(?#1 $1 (?#2 $0))` becomes
+    `(?#1 (?#2 $0))` rather than collapsing to `?#1`. This matches the
+    search-state's internal pattern, which is what SMC's exact-match check
+    actually compares against.
+    """
+    def walk(x):
+        if isinstance(x, str):
+            return x
+        if x and _is_meta(x[0]):
+            i = 1
+            while i < len(x) and _is_db(x[i]):
+                i += 1
+            kept = [walk(c) for c in x[i:]]
+            if not kept:
+                return x[0]
+            return (x[0], *kept)
+        return tuple(walk(c) for c in x)
+
+    return render_sexp(walk(parse_sexp(target)))
 
 
 def follow_equivalent(target, got):
@@ -229,10 +253,18 @@ def main():
         # the same slot semantically but parse to different structures, and
         # only one form may be reachable in the corpus. A search passes if
         # *either* form reaches an alpha-equivalent pattern.
-        normalized = normalize_ho_metavars(target)
+        # Three forms to try as the `--follow` argument: the discovered body
+        # as written; with leading HO-args stripped (matches the search-state
+        # internal pattern, since serialization re-attaches $i HO-args); and
+        # with HO-applied metas fully collapsed to bare slots. Only one form
+        # may be structurally reachable for any given corpus.
         variants = [("raw", target)]
-        if normalized != target:
-            variants.append(("normalized", normalized))
+        seen = {target}
+        for tag, fn in (("ho-stripped", strip_leading_ho_args), ("normalized", normalize_ho_metavars)):
+            v = fn(target)
+            if v not in seen:
+                variants.append((tag, v))
+                seen.add(v)
 
         results = {}
         for search in ("best-first", "smc"):
