@@ -119,7 +119,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let debug = args.debug_log;
     let strategy = args.priority;
 
-    let initial_state = SearchState::new(&shared);
+    let initial_state = SearchState::new(&shared, Some(0));
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow);
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
@@ -139,7 +139,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
-        s.check_and_insert(initial_state.pattern.clone());
+        s.check_and_insert(initial_state.pattern.clone(), initial_state.frozen_count.unwrap_or(0));
     }
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
@@ -181,15 +181,33 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
         let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
+        let parent_frozen = nodes[node_id].state.frozen_count.expect("best-first enables the freeze rule");
 
         for (action, child_state, _support) in successors {
+            // Freezing rule: expanding `?#k` commits to never expanding any
+            // `?#j` with j < k. Reuse is unrestricted — a cross-depth reuse
+            // can't fire until both sides exist, which may require expanding
+            // (and thus freezing) past one of the indices being merged.
+            match &action {
+                Action::Expand { var_idx, .. }
+                    if (
+                        // variable is frozen, reject
+                        *var_idx < parent_frozen ||
+                        // this freezes max_arity+1 variables, reject
+                        *var_idx > max_arity
+                    ) =>
+                {
+                    continue;
+                }
+                _ => {}
+            }
             if let Some(ref follow) = shared.follow
                 && !child_state.matches_follow(follow)
             {
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.pattern.clone())
+                && s.check_and_insert(child_state.pattern.clone(), child_state.frozen_count.unwrap_or(0))
             {
                 continue;
             }
