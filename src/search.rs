@@ -5,7 +5,6 @@ use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
@@ -163,24 +162,31 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// True iff this pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
-        let mut var_bindings = HashMap::new();
-        crate::follow::check_follow::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        crate::follow::follow_unify::<F, O>(&self.pattern.pattern, follow).is_some()
     }
 
-    /// True iff this state's HO-arity-decorated display (i.e., what stitch
-    /// writes into the library entry's `pattern` field) is alpha-equivalent
-    /// to the follow target. Used by SMC to terminate as soon as a candidate
-    /// would serialize identically to the discovery output — the bare
-    /// pattern's structural form differs from the target by the HO-arg
-    /// expansion stitch adds at display time, so a string-level comparison
-    /// requires the serialization round-trip.
+    /// True iff this state's HO-arity-decorated display is alpha-equivalent to
+    /// the follow target. SMC uses this to terminate as soon as a candidate
+    /// would serialize identically to the discovery output. Built on top of
+    /// `follow_unify`: alpha-equivalence is the case where every captured
+    /// follow subtree is itself a follow Var, η-wrapped by the state's
+    /// `variable_indices` de-Bruijn args, with the pattern→follow Var mapping
+    /// injective.
     pub fn matches_follow_serialized(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>, egraph: &crate::lang::StitchEgraph<F::Apply<O>>) -> bool {
+        let Some(bindings) = crate::follow::follow_unify::<F, O>(&self.pattern.pattern, follow) else { return false };
         let variable_indices = crate::cost::compute_variable_indices::<F, O>(egraph, self);
-        let serialized = self.pattern.display_with_ho(&variable_indices);
-        let Ok(re) = F::parse_follow_pattern::<O>(&serialized) else { return false };
-        let mut p_to_f = HashMap::new();
-        let mut f_to_p = HashMap::new();
-        crate::follow::check_follow_exact::<F, O>(&re, Id::from(0), follow, Id::from(0), &mut p_to_f, &mut f_to_p)
+        if bindings.len() != variable_indices.len() {
+            return false;
+        }
+        let mut seen = std::collections::HashSet::new();
+        for (k, vis) in variable_indices.iter().enumerate() {
+            let Some(&fid) = bindings.get(&egg::Var::from(k as u32)) else { return false };
+            let Some(fv) = crate::follow::binding_as_exact_var::<F, O>(follow, fid, vis) else { return false };
+            if !seen.insert(fv) {
+                return false;
+            }
+        }
+        true
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
