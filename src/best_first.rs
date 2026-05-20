@@ -185,13 +185,11 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
         for (action, child_state, _support) in successors {
             // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k, and forbids any later reuse touching a frozen
-            // index. Together these make `frozen_count` monotone
-            // non-decreasing in best-first, so it is a true lower bound on
-            // final arity — hence the `var_idx > max_arity` cutoff is sound.
+            // `?#j` with j < k. Reuse is unrestricted — a cross-depth reuse
+            // can't fire until both sides exist, which may require expanding
+            // (and thus freezing) past one of the indices being merged.
             match &action {
                 Action::Expand { var_idx, .. } if *var_idx < parent_frozen || *var_idx > max_arity => continue,
-                Action::Reuse { keep, .. } if *keep < parent_frozen => continue,
                 _ => {}
             }
             if let Some(ref follow) = shared.follow

@@ -183,11 +183,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let d_a = self.pattern.var_depth[var_idx];
         let d_b = self.pattern.var_depth[second_var_idx];
         let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
-        // When the freeze rule is active (best-first), reuse touching a
-        // frozen index is filtered out upstream, so this assertion holds.
-        // SMC leaves `frozen_count = None`, skipping the check entirely.
-        if let Some(fc) = self.frozen_count {
-            debug_assert!(var_idx.min(second_var_idx) >= fc);
+        // Reuse is unconstrained by `frozen_count` (the freeze rule only
+        // restricts syntactic expansions). If reuse removes a var at index
+        // below `fc`, shift `fc` down so it still refers to the same
+        // expand-threshold position after the index shift in `pattern.reuse`.
+        if let Some(fc) = self.frozen_count.as_mut() {
+            let drop_idx = var_idx.max(second_var_idx);
+            if drop_idx < *fc {
+                *fc -= 1;
+            }
         }
         self.pattern.reuse(var_idx, second_var_idx);
         self.subset_matches_reuse(var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared);
