@@ -150,4 +150,4 @@ jobs:
       - name: build release binary
         run: cargo build --release
       - name: follow-reaches ${{ matrix.domain }}
-        run: python3 scripts/follow_reaches_domain.py data/domains/${{ matrix.domain }} -- --language lambda-calc --num-steps 2000
+        run: python3 scripts/follow_reaches_domain.py data/domains/${{ matrix.domain }}

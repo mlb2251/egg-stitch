@@ -24,9 +24,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 
-# Mirror search_and_check.py: same defaults, same override behavior.
-SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]
-BF_DEFAULTS = ["--num-steps", "50000"]
+# Fixed at 2000 steps for both backends — the follow sweep is a CI diagnostic,
+# not a quality search, so we want uniform, bounded runtime per input.
+SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "2000", "--temperature", "1000"]
+BF_DEFAULTS = ["--num-steps", "2000"]
 
 
 def cargo_binary():

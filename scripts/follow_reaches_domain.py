@@ -48,9 +48,13 @@ def main():
     for i, inp in enumerate(inputs, 1):
         rel = inp.relative_to(REPO) if inp.is_absolute() and REPO in inp.parents else inp
         print(f"\n[{i}/{len(inputs)}] {rel}")
-        cmd = [sys.executable, str(RUNNER), str(inp)]
+        # Match the benchmark convention (`expts/runner.py:weighting_for`):
+        # cogsci corpora are flat s-exprs → op-children; everything else is
+        # curried dreamcoder-style → lambda-calc.
+        language = "op-children" if inp.parent.name == "cogsci" else "lambda-calc"
+        cmd = [sys.executable, str(RUNNER), str(inp), "--", "--language", language]
         if passthrough:
-            cmd += ["--", *passthrough]
+            cmd += [*passthrough]
         res = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True)
         if res.returncode != 0:
             failures.append(rel)
