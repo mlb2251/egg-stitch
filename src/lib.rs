@@ -23,7 +23,7 @@ use rand::{Rng, SeedableRng};
 
 pub use best_first::SearchPriority;
 
-use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -267,6 +267,24 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
     max_existing.map_or(0, |m| m + 1)
 }
 
+/// `egg::CostFunction` that mirrors `StitchAnalysis`'s weighted size:
+/// `intrinsic_size(weights) + Σ child costs`. Used by `apply_abstraction` so
+/// extraction picks the same representative the size analysis credits, rather
+/// than the unweighted `AstSize`-min — otherwise the round-tripped fresh
+/// egraph's root `data.size` can exceed the original union egraph's, breaking
+/// the `check_slow` upper-bound invariant under non-uniform weights.
+struct WeightedSize {
+    weights: Weights,
+}
+
+impl<L: StitchLanguage> egg::CostFunction<L> for WeightedSize {
+    type Cost = u64;
+    fn cost<C: FnMut(Id) -> Self::Cost>(&mut self, enode: &L, mut costs: C) -> Self::Cost {
+        let intrinsic = enode.discriminant().intrinsic_size(&self.weights) as u64;
+        enode.children().iter().map(|&c| costs(c)).sum::<u64>() + intrinsic
+    }
+}
+
 /// Applies an abstraction to the egraph: adds `fn_name(args...)` enodes for every
 /// match substitution and unions each with its match root, rebuilds, extracts the
 /// rewritten programs as strings, and feeds them into a fresh egraph (with DSR
@@ -295,7 +313,7 @@ pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedDat
         egraph.union(x, root_eclass);
     }
     egraph.rebuild();
-    let extractor = egg::Extractor::new(&egraph, egg::AstSize);
+    let extractor = egg::Extractor::new(&egraph, WeightedSize { weights: egraph.analysis.weights });
     let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
