@@ -144,12 +144,12 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// check in `enumerate_successors` to detect reuses that preserve the
     /// match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
-    /// Best-first canonical-ordering device: number of leading metavars
-    /// `?#0..?#(frozen_count-1)` that are committed to never being expanded.
-    /// Expanding `?#k` raises this to `k`; reusing-and-dropping a frozen
-    /// index decrements it. Best-first uses it to filter `Expand` actions;
-    /// SMC ignores it (it dedupes on the pattern's `RecExpr` directly).
-    pub frozen_count: usize,
+    /// Best-first canonical-ordering device: `Some(k)` means `?#0..?#(k-1)`
+    /// are committed to never being expanded *and* are forbidden from
+    /// participating in `Reuse`. Expanding `?#k` raises this to `Some(k)`.
+    /// `None` disables the rule entirely — SMC uses this so it can dedupe
+    /// purely on the pattern's `RecExpr`.
+    pub frozen_count: Option<usize>,
 }
 
 /// Computes the total number of substitutions across all matches.
@@ -166,9 +166,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
-        // Commit to freezing every earlier var. `max` (rather than `=`) makes
-        // this monotone under SMC's freedom to expand any var.
-        self.frozen_count = self.frozen_count.max(var_idx);
+        // Commit to freezing every earlier var. `max` (rather than `=`) keeps
+        // the count monotone even though best-first's filter already enforces
+        // non-decreasing expansion order.
+        if let Some(fc) = self.frozen_count.as_mut() {
+            *fc = (*fc).max(var_idx);
+        }
         self.pattern.expand(var_idx, target);
         self.subset_matches(var_idx, target, shared);
     }
@@ -180,13 +183,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let d_a = self.pattern.var_depth[var_idx];
         let d_b = self.pattern.var_depth[second_var_idx];
         let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
-        // Dropping a frozen index shifts subsequent indices down by one, so
-        // the freeze count tracks that. Merging frozen-with-unfrozen keeps
-        // the frozen prefix length unchanged (the lower-indexed = frozen var
-        // is always kept by `Pattern::reuse`).
-        let drop_idx = var_idx.max(second_var_idx);
-        if drop_idx < self.frozen_count {
-            self.frozen_count -= 1;
+        // When the freeze rule is active (best-first), reuse touching a
+        // frozen index is filtered out upstream, so this assertion holds.
+        // SMC leaves `frozen_count = None`, skipping the check entirely.
+        if let Some(fc) = self.frozen_count {
+            debug_assert!(var_idx.min(second_var_idx) >= fc);
         }
         self.pattern.reuse(var_idx, second_var_idx);
         self.subset_matches_reuse(var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared);
@@ -270,7 +271,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             pattern: Pattern::single_var(),
             matches,
             num_substs,
-            frozen_count: 0,
+            frozen_count: None,
         }
     }
 

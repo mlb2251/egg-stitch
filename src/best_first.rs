@@ -119,7 +119,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let debug = args.debug_log;
     let strategy = args.priority;
 
-    let initial_state = SearchState::new(&shared);
+    let mut initial_state = SearchState::new(&shared);
+    // Enable the freeze-based canonical-ordering rule.
+    initial_state.frozen_count = Some(0);
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow);
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
@@ -139,7 +141,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
-        s.check_and_insert(initial_state.pattern.clone(), initial_state.frozen_count);
+        s.check_and_insert(initial_state.pattern.clone(), initial_state.frozen_count.unwrap_or(0));
     }
 
     let mut best: Option<(usize, usize)> = None; // (cost, node_id)
@@ -181,17 +183,18 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
         let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
-        let parent_frozen = nodes[node_id].state.frozen_count;
+        let parent_frozen = nodes[node_id].state.frozen_count.expect("best-first enables the freeze rule");
 
         for (action, child_state, _support) in successors {
             // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k. Also forbid expansions that would force the
-            // freeze count past `max_arity` (frozen vars persist, so they
-            // are a lower bound on final arity for any descendant).
-            if let Action::Expand { var_idx, .. } = &action
-                && (*var_idx < parent_frozen || *var_idx > max_arity)
-            {
-                continue;
+            // `?#j` with j < k, and forbids any later reuse touching a frozen
+            // index. Together these make `frozen_count` monotone
+            // non-decreasing in best-first, so it is a true lower bound on
+            // final arity — hence the `var_idx > max_arity` cutoff is sound.
+            match &action {
+                Action::Expand { var_idx, .. } if *var_idx < parent_frozen || *var_idx > max_arity => continue,
+                Action::Reuse { keep, .. } if *keep < parent_frozen => continue,
+                _ => {}
             }
             if let Some(ref follow) = shared.follow
                 && !child_state.matches_follow(follow)
@@ -199,7 +202,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.pattern.clone(), child_state.frozen_count)
+                && s.check_and_insert(child_state.pattern.clone(), child_state.frozen_count.unwrap_or(0))
             {
                 continue;
             }
