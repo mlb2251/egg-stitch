@@ -3,8 +3,10 @@
 //! `RevExpr` parser (egg's `RecExpr` parser routes `?…` atoms through
 //! `OpWithVar::from_name`, which detects them as Vars).
 //!
-//! `bindings` flattens the returned `HashMap` to a `Vec<(Var, Id)>` sorted by
-//! the var name so assertions compare against an explicit ordered list.
+//! `bindings` flattens the returned `HashMap` to a `Vec<(Var, String)>` sorted
+//! by var name, with each captured subtree rendered back to its surface form
+//! so assertions read as `(?#0, "a")` rather than relying on RevExpr's
+//! internal id layout.
 
 use egg::Id;
 use egg_stitch::follow::follow_unify;
@@ -21,13 +23,26 @@ fn v(k: u32) -> egg::Var {
     egg::Var::from(k)
 }
 
-/// Run `follow_unify` and flatten the result to a `Vec<(Var, Id)>` sorted by
-/// the var's display name, so tests can `assert_eq!` against an ordered list.
-fn bindings(pat: &str, fol: &str) -> Option<Vec<(egg::Var, Id)>> {
+/// Render the subtree rooted at `id` in `tree` as a parenthesised sexp,
+/// matching the surface form the parser consumed.
+fn render(tree: &Tree, id: Id) -> String {
+    let n = &tree.nodes[usize::from(id)];
+    if n.children.is_empty() {
+        n.op.to_string()
+    } else {
+        let kids: Vec<String> = n.children.iter().map(|&c| render(tree, c)).collect();
+        format!("({} {})", n.op, kids.join(" "))
+    }
+}
+
+/// Run `follow_unify` and flatten the result to a `Vec<(Var, String)>` sorted
+/// by the var's display name, with each captured id replaced by the rendered
+/// subtree it points to.
+fn bindings(pat: &str, fol: &str) -> Option<Vec<(egg::Var, String)>> {
     let pat = parse(pat);
     let fol = parse(fol);
     follow_unify::<OpChildren, Op>(&pat, &fol).map(|m| {
-        let mut v: Vec<_> = m.into_iter().collect();
+        let mut v: Vec<_> = m.into_iter().map(|(k, id)| (k, render(&fol, id))).collect();
         v.sort_by_key(|(k, _)| k.to_string());
         v
     })
@@ -35,8 +50,7 @@ fn bindings(pat: &str, fol: &str) -> Option<Vec<(egg::Var, Id)>> {
 
 #[test]
 fn single_var_matches_any_subtree() {
-    // `?#0` captures the whole follow — root is RevExpr id 0.
-    assert_eq!(bindings("?#0", "(f a b)"), Some(vec![(v(0), Id::from(0))]));
+    assert_eq!(bindings("?#0", "(f a b)"), Some(vec![(v(0), "(f a b)".into())]));
 }
 
 #[test]
@@ -57,18 +71,15 @@ fn pattern_node_against_follow_var_fails() {
 
 #[test]
 fn pattern_var_at_inner_position_binds_subtree() {
-    // Fol `(f (g a))` reverses to [f([1]), g([2]), a] — `?#0` captures the `g`
-    // subtree at id 1.
-    assert_eq!(bindings("(f ?#0)", "(f (g a))"), Some(vec![(v(0), Id::from(1))]));
+    assert_eq!(bindings("(f ?#0)", "(f (g a))"), Some(vec![(v(0), "(g a)".into())]));
 }
 
 #[test]
 fn repeated_pattern_var_with_equal_subtrees_succeeds() {
-    // Fol `(f a a)` reverses to [f([2,1]), a, a]. The pattern's two `?#0`
-    // children land on fids 2 then 1; the second visit hits the
-    // `follow_subtrees_equal` branch and accepts because both `a` leaves are
-    // structurally equal. The recorded id is the first one bound (fid 2).
-    assert_eq!(bindings("(f ?#0 ?#0)", "(f a a)"), Some(vec![(v(0), Id::from(2))]));
+    // Both `?#0` occurrences see structurally-equal `a` leaves — distinct
+    // RevExpr ids, collapsed by `follow_subtrees_equal`. The recorded id is
+    // the first one bound, which renders as just `a`.
+    assert_eq!(bindings("(f ?#0 ?#0)", "(f a a)"), Some(vec![(v(0), "a".into())]));
 }
 
 #[test]
@@ -78,16 +89,14 @@ fn repeated_pattern_var_with_unequal_subtrees_fails() {
 
 #[test]
 fn distinct_pattern_vars_bind_independently() {
-    // Fol `(f a b)` reverses to [f([2,1]), b, a]. `?#0` lands at fid 2 (a),
-    // `?#1` lands at fid 1 (b).
-    assert_eq!(bindings("(f ?#0 ?#1)", "(f a b)"), Some(vec![(v(0), Id::from(2)), (v(1), Id::from(1))]));
+    assert_eq!(bindings("(f ?#0 ?#1)", "(f a b)"), Some(vec![(v(0), "a".into()), (v(1), "b".into())]));
 }
 
 #[test]
 fn distinct_pattern_vars_can_bind_equal_subtrees() {
     // `follow_unify` is a one-way prefix check, not injective on vars — both
-    // `?#0` and `?#1` are allowed to capture (different ids of) the same `a`.
-    assert_eq!(bindings("(f ?#0 ?#1)", "(f a a)"), Some(vec![(v(0), Id::from(2)), (v(1), Id::from(1))]));
+    // `?#0` and `?#1` may capture (different ids of) the same `a`.
+    assert_eq!(bindings("(f ?#0 ?#1)", "(f a a)"), Some(vec![(v(0), "a".into()), (v(1), "a".into())]));
 }
 
 #[test]
@@ -100,7 +109,6 @@ fn arity_mismatch_fails() {
 
 #[test]
 fn nested_var_binding() {
-    // `?#0` captures a multi-node subtree — fol `(f (g a b) c)` reverses to
-    // [f([2,1]), c, g([4,3]), b, a]; the `g` subtree sits at id 2.
-    assert_eq!(bindings("(f ?#0 c)", "(f (g a b) c)"), Some(vec![(v(0), Id::from(2))]));
+    // `?#0` captures a multi-node subtree.
+    assert_eq!(bindings("(f ?#0 c)", "(f (g a b) c)"), Some(vec![(v(0), "(g a b)".into())]));
 }
