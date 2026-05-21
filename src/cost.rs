@@ -489,11 +489,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
             let frozen = sizes.analysis.search_state.frozen_count.unwrap_or(0);
             let substs = &sizes.analysis.search_state.matches[i].substs;
-            if let Some(rewrite_size) = substs
-                .iter()
-                .map(|subst| 1 + subst.vars.iter().take(frozen).map(|&v| sizes.get(v)).sum::<i64>())
-                .min()
-            {
+            if let Some(rewrite_size) = substs.iter().map(|subst| 1 + subst.vars.iter().take(frozen).map(|&v| sizes.get(v)).sum::<i64>()).min() {
                 best = best.min(rewrite_size);
             }
         }
@@ -506,7 +502,10 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
 /// can no longer shrink via further expansion). Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
     scratch.rewrite.fill(search_state);
-    let analysis = LowerBoundAnalysis { search_state, eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx };
+    let analysis = LowerBoundAnalysis {
+        search_state,
+        eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+    };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for m in &search_state.matches {
         sizes.mark_dirty(m.root_eclass);
