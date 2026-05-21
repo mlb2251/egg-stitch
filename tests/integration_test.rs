@@ -1,7 +1,7 @@
 use clap::Parser;
 use egg_stitch::{
     Args, io,
-    lang::{LambdaCalc, Op, OpChildren, OpDB, Weights},
+    lang::{LambdaCalc, LanguageFamily, Op, OpChildren, OpDB, Weights},
     pattern::PatternRecExpr,
     smc,
 };
@@ -29,6 +29,15 @@ fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
     let follow: PatternRecExpr<OpChildren, Op> = follow_str.parse().expect("parse follow");
+    let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
+    assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
+}
+
+/// Lambda-calc variant: parses through `LambdaCalc::parse_follow_pattern` so
+/// var-headed apps (`(?#0 $0)`) and list-headed currying are handled the same
+/// way `setup_search` does it.
+fn assert_best_matches_follow_lambda(result: &smc::SmcResult<LambdaCalc, OpDB<Op>>, follow_str: &str) {
+    let follow = LambdaCalc::parse_follow_pattern::<OpDB<Op>>(follow_str).expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
     assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
 }
@@ -239,4 +248,47 @@ fn check_slow_physics_18_09_34_bench003() {
 #[test]
 fn check_slow_physics_18_09_34_bench004() {
     check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json");
+}
+
+// --- End-to-end --follow tests in the lambda-calc domain ---
+//
+// These exercise the LambdaCalc `parse_follow_pattern` override end-to-end:
+// the follow strings use shapes (flat n-ary apps, var-headed apps) that egg's
+// stock `RecExpr` parser rejects. parse_follow_pattern routes them through
+// `parse_program` at `OpWithVar<O>`.
+
+/// Follow string `(lam (app ?#0 (app ?#0 empty)))` uses flat n-ary form for
+/// `app` — egg's stock parser rejects `app` as an unknown op, so this only
+/// parses via the lambda-calc override. The follow is the abstraction SMC
+/// deterministically finds on `hof.json` at the default seed, so the prefix
+/// check passes.
+#[test]
+fn follow_lambda_calc_flat_nary_app() {
+    let input = "data/domains/stitch/hof.json";
+    if !std::path::Path::new(input).exists() {
+        return;
+    }
+    let follow = "(lam (app ?#0 (app ?#0 empty)))";
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "200", "--num-particles", "500", "--temperature", "1000", "--follow", follow, "--max-arity", "2", "--language", "lambda-calc"]);
+    let result = run_lambda_calc(&args);
+    assert_best_matches_follow_lambda(&result, follow);
+}
+
+/// Smoke test for a var-headed follow string `(?#0 (lam (?#0 ?#0)))` — `?#0`
+/// in head position is the shape only the lambda-calc override accepts.
+/// SMC may or may not reach the target on this tiny corpus; the test just
+/// guarantees parse + smc loop integration doesn't crash and any best found
+/// is a valid prefix.
+#[test]
+fn follow_lambda_calc_var_headed_smoke() {
+    let input = "data/domains/stitch/simple2.json";
+    if !std::path::Path::new(input).exists() {
+        return;
+    }
+    let follow = "(?#0 (lam (?#0 ?#0)))";
+    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "100", "--num-particles", "200", "--temperature", "1000", "--follow", follow, "--max-arity", "2", "--language", "lambda-calc"]);
+    let result = run_lambda_calc(&args);
+    if result.best.is_some() {
+        assert_best_matches_follow_lambda(&result, follow);
+    }
 }

@@ -1,8 +1,26 @@
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
 use crate::pattern::Pattern;
 use crate::search::SearchState;
-use egg::{Id, Language, RecExpr};
+use egg::{CostFunction, Id, Language, RecExpr};
 use rustc_hash::{FxHashMap, FxHashSet};
+
+/// `egg::CostFunction` that mirrors `StitchAnalysis`'s weighted size:
+/// `intrinsic_size(weights) + Σ child costs`. Use this rather than
+/// `egg::AstSize` whenever extracting from a `StitchEgraph` — under
+/// non-uniform `Weights` (e.g. `--sym-var-cost 100`) the AstSize-min term and
+/// the weighted-min term diverge, and any size compared against `data.size`
+/// (which is weighted) needs the extractor to agree.
+pub struct WeightedSize {
+    pub weights: Weights,
+}
+
+impl<L: StitchLanguage> CostFunction<L> for WeightedSize {
+    type Cost = u64;
+    fn cost<C: FnMut(Id) -> Self::Cost>(&mut self, enode: &L, mut costs: C) -> Self::Cost {
+        let intrinsic = enode.discriminant().intrinsic_size(&self.weights) as u64;
+        enode.children().iter().map(|&c| costs(c)).sum::<u64>() + intrinsic
+    }
+}
 
 /// Per-metavar higher-order arity. `ho_arity[k]` is the number of wrap-lams
 /// each captured arg gets at slot `k` — equivalently, the number of distinct
@@ -189,8 +207,8 @@ pub struct CostScratch {
 }
 
 impl CostScratch {
-    /// Builds the scratch space for a given egraph. The egraph's per-eclass AstSize
-    /// is captured into `runner.original` here and reused across all subsequent calls.
+    /// Builds the scratch space for a given egraph. The egraph's per-eclass weighted
+    /// size is captured into `runner.original` here and reused across all subsequent calls.
     pub fn new<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> Self {
         Self {
             runner: RunnerScratch::new(egraph),
@@ -201,8 +219,9 @@ impl CostScratch {
 
 /// Allocations owned by `StitchAnalysisRunner` itself (independent of the analysis).
 /// Two parallel dense vectors indexed by `usize::from(Id)`: `original` holds the
-/// un-rewritten AstSize per eclass (built once at construction), `overrides` is the
-/// working size table that `solve` relaxes downward. Both are sized to `max_id + 1`.
+/// un-rewritten weighted size per eclass (built once at construction), `overrides`
+/// is the working size table that `solve` relaxes downward. Both are sized to
+/// `max_id + 1`.
 pub struct RunnerScratch {
     original: Vec<i64>,
     overrides: Vec<i64>,
@@ -243,7 +262,7 @@ pub trait StitchAnalysis<L: StitchLanguage>: Sized {
     fn best(sizes: &StitchAnalysisRunner<L, Self>, eclass: Id) -> i64;
 }
 
-/// Dense per-eclass size table with a fallback to the unrewritten AstSize
+/// Dense per-eclass size table with a fallback to the unrewritten weighted size
 /// (`egraph[id].data.size`). An entry is set only when the rewritten size beats the default.
 pub struct StitchAnalysisRunner<'a, L: StitchLanguage, A: StitchAnalysis<L>> {
     egraph: &'a StitchEgraph<L>,
@@ -436,65 +455,63 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {
-        let rewritten = build_rewritten_egraph(egraph, search_state);
-        let slow_size = rewritten[root].data.size as i64;
+        let data = crate::shared::SharedData::new(egraph.clone(), root);
+        let (rewritten, _programs) = crate::apply_abstraction::<F, O>(data, search_state, "inv_0", None);
+        let slow_size = rewritten.egraph[rewritten.root].data.size as i64;
         F::check_fast_vs_slow(final_size, slow_size);
         // Semantic guard: rewriting must preserve the free-variable set at the
         // root. A mismatch means `wrap_subst_args` is shifting captured args
         // incorrectly and the abstraction's call site no longer agrees with the
         // original program on outer-scope references.
-        assert_eq!(egraph[root].data.fv, rewritten[root].data.fv, "free-variable set diverges after rewrite: original {:?} != rewritten {:?}", egraph[root].data.fv, rewritten[root].data.fv,);
+        assert_eq!(
+            egraph[root].data.fv, rewritten.egraph[rewritten.root].data.fv,
+            "free-variable set diverges after rewrite: original {:?} != rewritten {:?}",
+            egraph[root].data.fv, rewritten.egraph[rewritten.root].data.fv,
+        );
     }
     final_size as usize
 }
 
-/// Optimistic analysis producing a lower bound on achievable size. Match-root
-/// eclasses are seeded with size 1 directly into the runner's override table
-/// before `solve` runs, so `best` only needs to return the minimum enode size —
-/// the seeded `1`s persist because nothing improves on them.
-pub struct LowerBoundAnalysis;
-impl<L: StitchLanguage> StitchAnalysis<L> for LowerBoundAnalysis {
-    fn best(sizes: &StitchAnalysisRunner<L, Self>, eclass: Id) -> i64 {
-        sizes.min_enode_size(eclass)
+/// Optimistic analysis producing a lower bound on achievable size. At a match
+/// root, the rewrite collapses to a single stub node plus the captured
+/// arguments at frozen-var slots (`?#0..?#(frozen_count-1)`) — those holes are
+/// committed to staying, so their args appear verbatim at every call site and
+/// must be paid for. Non-frozen vars can still be expanded into the body, so
+/// they contribute nothing here. Min taken across substs.
+pub struct LowerBoundAnalysis<'a, F: LanguageFamily, O: StitchOp> {
+    pub search_state: &'a SearchState<F, O>,
+    pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
+}
+
+impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBoundAnalysis<'a, F, O> {
+    fn best(sizes: &StitchAnalysisRunner<F::Apply<O>, Self>, eclass: Id) -> i64 {
+        let mut best = sizes.min_enode_size(eclass);
+        if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
+            let frozen = sizes.analysis.search_state.frozen_count.unwrap_or(0);
+            let substs = &sizes.analysis.search_state.matches[i].substs;
+            if let Some(rewrite_size) = substs.iter().map(|subst| 1 + subst.vars.iter().take(frozen).map(|&v| sizes.get(v)).sum::<i64>()).min() {
+                best = best.min(rewrite_size);
+            }
+        }
+        best
     }
 }
 
-/// Computes an optimistic lower bound on corpus size by assuming every match collapses
-/// to a single node. Reuses allocations in `scratch` across calls.
+/// Computes an optimistic lower bound on corpus size. Each match contributes a
+/// 1-node stub plus the minimum total size of its frozen-var arguments (those
+/// can no longer shrink via further expansion). Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
-    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, LowerBoundAnalysis);
+    scratch.rewrite.fill(search_state);
+    let analysis = LowerBoundAnalysis {
+        search_state,
+        eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+    };
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for m in &search_state.matches {
-        sizes.set(m.root_eclass, 1);
+        sizes.mark_dirty(m.root_eclass);
     }
     sizes.solve();
     sizes.get(root) as usize
-}
-
-/// Clones the egraph and unions each match root with an `inv_0(args...)`
-/// node, then rebuilds. Source of truth for the rewrite — `compute_size`'s
-/// fast path is validated against this via `check_slow`.
-///
-/// Each captured eclass is fed through `shift_free_egraph` to re-index its
-/// pattern-internal fv onto wrap-lam slots and shift above-pattern fv past the
-/// wrap-lams, then wrapped under `vis[k].len()` λs before being passed in.
-pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> StitchEgraph<F::Apply<O>> {
-    let variable_indices = compute_variable_indices::<F, O>(egraph, search_state);
-    let mut egraph = egraph.clone();
-    let var_depth = &search_state.pattern.var_depth;
-    // See `apply_abstraction` for why unions are deferred.
-    let mut pending: Vec<(Id, Id)> = Vec::new();
-    for m in &search_state.matches {
-        for subst in &m.substs {
-            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &variable_indices, var_depth);
-            let x = F::add_stub_application::<O>("inv_0", wrapped, &mut egraph);
-            pending.push((x, m.root_eclass));
-        }
-    }
-    for (x, root_eclass) in pending {
-        egraph.union(x, root_eclass);
-    }
-    egraph.rebuild();
-    egraph
 }
 
 /// Per-subst HO wrapping: for each captured arg `arg_id` at metavar slot `k`,
@@ -503,8 +520,8 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
 /// re-indexed to the wrap-lam slot that the body's η-app at `?#k` will rebind
 /// it through, so β at the call site recovers the original `$i`. Above-pattern
 /// free indices (`i ≥ d_k`) shift past the `h` wrap-lams. Used by both
-/// `build_rewritten_egraph` and `lib::apply_abstraction`; `shift_memo` is
-/// shared across calls so equivalent shifts are deduplicated.
+/// `lib::apply_abstraction` and its `check_slow` validation path; `shift_memo`
+/// is shared across calls so equivalent shifts are deduplicated.
 pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], variable_indices: &[Vec<i32>], var_depth: &[u32]) -> Vec<Id> {
     vars.iter()
         .enumerate()
@@ -523,21 +540,6 @@ pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
         .collect()
 }
 
-/// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
-pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
-    let rewritten = build_rewritten_egraph(egraph, search_state);
-    let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0]
-        .children()
-        .iter()
-        .map(|&child| {
-            let (_, expr) = extractor.find_best(child);
-            check_fvs_are_as_expected::<F::Apply<O>>(&expr, &rewritten[child].data.fv);
-            <F::Apply<O> as StitchLanguage>::display_recexpr(&expr)
-        })
-        .collect()
-}
-
 /// Computes the exact syntactic free-variable set at every position of `expr`,
 /// indexed by `usize::from(Id)`. Shares its per-enode rule with
 /// `StitchAnalysis::make` via `enode_fv`.
@@ -551,7 +553,7 @@ pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<i32>> {
 }
 
 /// Asserts that the extracted term's actual syntactic fv matches the egraph
-/// analysis's recorded fv. Under intersection-fv semantics + AstSize
+/// analysis's recorded fv. Under intersection-fv semantics + WeightedSize
 /// extraction, the minimal-size representative is also the fv-minimal one,
 /// so its fv should equal the intersection across reps — i.e. `expected`.
 /// A mismatch in either direction means the assumption "min-size ⇒ min-fv"
