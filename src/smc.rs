@@ -130,7 +130,11 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             // If any surviving particle is alpha-equivalent to the follow target,
             // the search has reached the goal — pick the cheapest such particle
             // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
-            if let Some((i, c)) = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY && expanded[i].matches_follow_serialized(follow, &shared.egraph)).map(|i| (i, costs[i])).min_by_key(|&(_, c)| c) {
+            if let Some((i, c)) = (0..expanded.len())
+                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &shared.egraph))
+                .map(|i| (i, costs[i]))
+                .min_by_key(|&(_, c)| c)
+            {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
                 best_so_far = Some((c, expanded[i].clone()));
                 best_found_at = Some(step);

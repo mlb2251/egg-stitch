@@ -263,7 +263,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // has reached the goal, and continuing risks overwriting `best`
             // with a cheaper non-matching pattern that slipped past the prefix
             // filter. Record this child as best and stop.
-            let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| child_state.matches_follow_serialized(f, &shared.egraph));
+            let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
 
             nodes.push(Node {
                 parent: Some(node_id),
