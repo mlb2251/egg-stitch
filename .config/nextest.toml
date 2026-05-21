@@ -1,0 +1,7 @@
+[profile.default]
+slow-timeout = { period = "2m", terminate-after = 1 }
+fail-fast = false
+
+[[profile.default.overrides]]
+filter = "test(/check_slow/)"
+slow-timeout = "2m"
