@@ -253,7 +253,7 @@ def main() -> None:
     smc_steps = int(os.environ.get("SMC_STEPS", 100))
     smc_parts = int(os.environ.get("SMC_PARTICLES", 1000))
     smc_temp = float(os.environ.get("SMC_TEMP", 1000.0))
-    enum_steps = int(os.environ.get("ENUM_STEPS", 500))
+    enum_steps = int(os.environ.get("ENUM_STEPS", 5000))
     session = time.strftime("%Y-%m-%d_%H-%M-%S")
 
     check_clean_worktree()

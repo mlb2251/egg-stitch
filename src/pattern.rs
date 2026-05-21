@@ -28,6 +28,11 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// True iff `?#k` has been cross-depth-merged (occurrences live at
     /// different depths in the pattern).
     pub var_cross_depth: Vec<bool>,
+    /// Syntactic occurrence count of `?#k`: how many times a walk from the
+    /// root visits a node holding `Var(k)`. DAG-shared positions count once
+    /// per parent reference, matching `compute_recexpr_size`'s semantics.
+    /// Maintained incrementally by `expand`/`reuse`.
+    pub var_occurrences: Vec<usize>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -42,6 +47,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
             var_cross_depth: vec![false],
+            var_occurrences: vec![1],
         }
     }
 
@@ -57,6 +63,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_cross = self.var_cross_depth.remove(var_idx);
+        let parent_occ = self.var_occurrences.remove(var_idx);
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
@@ -86,6 +93,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             // the multi-depth ambiguity persists down the expansion tree until
             // the slot is fully concretized.
             self.var_cross_depth.insert(var_idx + j, parent_cross);
+            // Each new child meta-var lives at one slot of the new enode, and
+            // the new enode replaces every occurrence of the parent var — so
+            // the syntactic walk visits each new child exactly `parent_occ` times.
+            self.var_occurrences.insert(var_idx + j, parent_occ);
         }
         let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
@@ -122,6 +133,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         self.var_cross_depth.remove(drop_idx);
         self.var_cross_depth[keep_idx] = cross_depth;
+        let dropped_occ = self.var_occurrences.remove(drop_idx);
+        self.var_occurrences[keep_idx] += dropped_occ;
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -365,6 +378,9 @@ mod tests {
         // not one per tree occurrence.
         assert_eq!(p.vars[0].len(), 1);
         assert_eq!(p.vars[1].len(), 1);
+        // Syntactic occurrence count must reflect parent references (2), not
+        // the number of unique RecExpr ids (1) — see `compute_body_size_with_ho`.
+        assert_eq!(p.var_occurrences, vec![2, 2]);
     }
 
     #[test]

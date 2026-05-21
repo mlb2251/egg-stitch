@@ -66,11 +66,13 @@ fn programs_to_egraph<L: StitchLanguage>(programs: &[String], weights: Weights) 
     (egraph, root)
 }
 
-/// Returns the minimum AST size of the expression rooted at `root`.
+/// Returns the minimum weighted size of the expression rooted at `root`,
+/// using `WeightedSize` so the result matches the egraph's analysis-recorded
+/// `data.size` (rather than diverging under non-uniform `Weights`).
 fn extract_root_size<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id) -> usize {
-    let extractor = egg::Extractor::new(egraph, egg::AstSize);
-    let (expr, _) = extractor.find_best(root);
-    expr
+    let extractor = egg::Extractor::new(egraph, crate::cost::WeightedSize { weights: egraph.analysis.weights });
+    let (cost, _) = extractor.find_best(root);
+    cost as usize
 }
 
 /// Prints a programs term with each child on a new line.
