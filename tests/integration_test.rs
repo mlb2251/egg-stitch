@@ -257,15 +257,7 @@ fn check_slow_physics_18_09_34_bench004() {
 // stock `RecExpr` parser rejects. parse_follow_pattern routes them through
 // `parse_program` at `OpWithVar<O>`.
 
-/// Follow string `(lam (app (?#0 $0) (app (?#0 $0) empty)))` uses the
-/// η-wrapped `(?#0 $0)` form required for the alpha-equivalence stop to fire
-/// when the hole sits under a `lam` binder: every candidate subtree in this
-/// corpus references the bound `$0`, so the pattern var's `variable_indices`
-/// is `[0]` and `binding_as_exact_var` only accepts a follow that wraps the
-/// var with `$0`. The lambda-calc override is required to parse this — `$0`
-/// and `?#0` both appear inside curried apps where egg's stock `RecExpr`
-/// parser can't form the corpus-shape tree (literal `app` curried as a leaf).
-/// SMC hits the exact match at iteration 6 on `hof.json` at the default seed.
+/// Follow string `(lam (app (?#0 $0) (app (?#0 $0) empty)))`
 #[test]
 fn follow_lambda_calc_flat_nary_app() {
     let input = "data/domains/stitch/hof.json";
