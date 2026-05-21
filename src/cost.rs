@@ -472,23 +472,43 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     final_size as usize
 }
 
-/// Optimistic analysis producing a lower bound on achievable size. Match-root
-/// eclasses are seeded with size 1 directly into the runner's override table
-/// before `solve` runs, so `best` only needs to return the minimum enode size —
-/// the seeded `1`s persist because nothing improves on them.
-pub struct LowerBoundAnalysis;
-impl<L: StitchLanguage> StitchAnalysis<L> for LowerBoundAnalysis {
-    fn best(sizes: &StitchAnalysisRunner<L, Self>, eclass: Id) -> i64 {
-        sizes.min_enode_size(eclass)
+/// Optimistic analysis producing a lower bound on achievable size. At a match
+/// root, the rewrite collapses to a single stub node plus the captured
+/// arguments at frozen-var slots (`?#0..?#(frozen_count-1)`) — those holes are
+/// committed to staying, so their args appear verbatim at every call site and
+/// must be paid for. Non-frozen vars can still be expanded into the body, so
+/// they contribute nothing here. Min taken across substs.
+pub struct LowerBoundAnalysis<'a, F: LanguageFamily, O: StitchOp> {
+    pub search_state: &'a SearchState<F, O>,
+    pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
+}
+
+impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBoundAnalysis<'a, F, O> {
+    fn best(sizes: &StitchAnalysisRunner<F::Apply<O>, Self>, eclass: Id) -> i64 {
+        let mut best = sizes.min_enode_size(eclass);
+        if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
+            let frozen = sizes.analysis.search_state.frozen_count.unwrap_or(0);
+            let substs = &sizes.analysis.search_state.matches[i].substs;
+            if let Some(rewrite_size) = substs.iter().map(|subst| 1 + subst.vars.iter().take(frozen).map(|&v| sizes.get(v)).sum::<i64>()).min() {
+                best = best.min(rewrite_size);
+            }
+        }
+        best
     }
 }
 
-/// Computes an optimistic lower bound on corpus size by assuming every match collapses
-/// to a single node. Reuses allocations in `scratch` across calls.
+/// Computes an optimistic lower bound on corpus size. Each match contributes a
+/// 1-node stub plus the minimum total size of its frozen-var arguments (those
+/// can no longer shrink via further expansion). Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
-    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, LowerBoundAnalysis);
+    scratch.rewrite.fill(search_state);
+    let analysis = LowerBoundAnalysis {
+        search_state,
+        eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+    };
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for m in &search_state.matches {
-        sizes.set(m.root_eclass, 1);
+        sizes.mark_dirty(m.root_eclass);
     }
     sizes.solve();
     sizes.get(root) as usize
