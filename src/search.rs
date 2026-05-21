@@ -108,9 +108,12 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// Root e-class of the corpus (the `(programs ...)` wrapper). Excluded
     /// from the initial match set so patterns can't be rooted there.
     pub root: Id,
-    /// Follow pattern: particles whose pattern isn't a valid prefix get zero
-    /// weight at the resample step.
-    pub follow: Option<RevExpr<F::Apply<OpWithVar<O>>>>,
+    /// Follow target: particles whose pattern isn't a valid prefix get zero
+    /// weight at the resample step. Stored as the parsed surface form; the
+    /// exact-match check in SMC re-serializes candidate states with HO arity
+    /// applied before structurally comparing, since stitch's display adds
+    /// `(?#k $i …)` HO-args that the bare pattern doesn't carry.
+    pub follow: Option<crate::pattern::PatternRecExpr<F, O>>,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
@@ -160,6 +163,30 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// True iff this pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
         crate::follow::follow_unify::<F, O>(&self.pattern.pattern, follow).is_some()
+    }
+
+    /// True iff this state's HO-arity-decorated display is alpha-equivalent to
+    /// the follow target. SMC uses this to terminate as soon as a candidate
+    /// would serialize identically to the discovery output. Built on top of
+    /// `follow_unify`: alpha-equivalence is the case where every captured
+    /// follow subtree is itself a follow Var, η-wrapped by the state's
+    /// `variable_indices` de-Bruijn args, with the pattern→follow Var mapping
+    /// injective.
+    pub fn matches_follow_serialized(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>, egraph: &crate::lang::StitchEgraph<F::Apply<O>>) -> bool {
+        let Some(bindings) = crate::follow::follow_unify::<F, O>(&self.pattern.pattern, follow) else { return false };
+        let variable_indices = crate::cost::compute_variable_indices::<F, O>(egraph, self);
+        if bindings.len() != variable_indices.len() {
+            return false;
+        }
+        let mut seen = std::collections::HashSet::new();
+        for (k, vis) in variable_indices.iter().enumerate() {
+            let Some(&fid) = bindings.get(&egg::Var::from(k as u32)) else { return false };
+            let Some(fv) = crate::follow::binding_as_exact_var::<F, O>(follow, fid, vis) else { return false };
+            if !seen.insert(fv) {
+                return false;
+            }
+        }
+        true
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.

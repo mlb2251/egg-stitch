@@ -42,3 +42,47 @@ fn walk<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>
     }
     pn.matches(fn_) && pn.children().iter().zip(fn_.children().iter()).all(|(&pc, &fc)| walk::<F, O>(pattern, pc, follow, fc, bindings))
 }
+
+/// If `fid` in `follow` is structurally `wrap_pattern_with_db_apps(?v, vis)` —
+/// a follow Var, optionally η-applied to `vis`'s de-Bruijn args — returns `?v`.
+/// This is the per-binding witness that an `unify` result is alpha-equivalent
+/// to the follow, not merely a prefix.
+pub fn binding_as_exact_var<F: LanguageFamily, O: StitchOp>(follow: &RevExpr<F::Apply<OpWithVar<O>>>, fid: Id, vis: &[i32]) -> Option<egg::Var> {
+    if vis.is_empty() {
+        return follow[fid].discriminant().as_var();
+    }
+    // Materialize the expected wrap shape with a placeholder Var at the head;
+    // walking it against the follow lets us extract whatever Var the follow
+    // has at that head position. The placeholder's identity is irrelevant —
+    // `wrap_pattern_with_db_apps` inserts no other Var nodes, so any Var we
+    // encounter while walking `expected` is the placeholder.
+    let mut expected: egg::RecExpr<F::Apply<OpWithVar<O>>> = egg::RecExpr::default();
+    let head = expected.add(F::make_var::<O>(egg::Var::from(0u32)));
+    let db_args: Vec<i32> = vis.iter().rev().copied().collect();
+    let root = F::wrap_pattern_with_db_apps::<O>(&mut expected, head, &db_args);
+    match_with_hole::<F, O>(&expected, root, follow, fid).ok().flatten()
+}
+
+/// Walks `expected` against `follow[fid]`. The single Var in `expected` is a
+/// placeholder: the follow must have a Var there, and that Var is returned.
+/// Everything else must match structurally.
+fn match_with_hole<F: LanguageFamily, O: StitchOp>(expected: &egg::RecExpr<F::Apply<OpWithVar<O>>>, eid: Id, follow: &RevExpr<F::Apply<OpWithVar<O>>>, fid: Id) -> Result<Option<egg::Var>, ()> {
+    let en = &expected[eid];
+    let fn_ = &follow[fid];
+    if en.discriminant().as_var().is_some() {
+        return fn_.discriminant().as_var().map(Some).ok_or(());
+    }
+    if !en.matches(fn_) {
+        return Err(());
+    }
+    let mut captured = None;
+    for (&e, &f) in en.children().iter().zip(fn_.children().iter()) {
+        if let Some(v) = match_with_hole::<F, O>(expected, e, follow, f)? {
+            if captured.is_some() {
+                return Err(());
+            }
+            captured = Some(v);
+        }
+    }
+    Ok(captured)
+}
