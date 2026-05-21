@@ -5,7 +5,6 @@ use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
@@ -158,10 +157,9 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
-    /// Check if this particle's pattern is a valid prefix of the follow target.
+    /// True iff this pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
-        let mut var_bindings = HashMap::new();
-        crate::follow::check_follow::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        crate::follow::follow_unify::<F, O>(&self.pattern.pattern, follow).is_some()
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
@@ -382,16 +380,27 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
+        // Weight each (match, subst) contribution by how often that match's
+        // root e-class appears in the fully-expanded corpus, so popular
+        // root-positions sway the action distribution proportionally to the
+        // compression value they represent — not just their hash-consed
+        // distinctness. Without this, an abstraction that fires on a single
+        // eclass used thousands of times looks like the same support as one
+        // that fires on thousands of distinct one-off eclasses.
+        let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                let support: usize = self.matches.iter().map(|m| m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count()).sum();
+                let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
+                    let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count();
+                    (s + usage(m.root_eclass) * c, r + c)
+                });
                 if support == 0 {
                     continue;
                 }
                 let action = Action::Reuse { keep: i, drop: j };
-                if opt_dominance_reuse && support == self.num_substs {
+                if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
                     let mut child = self.clone();
                     child.reuse(i, j, shared);
@@ -406,6 +415,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
             let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
             for m in &self.matches {
+                let w = usage(m.root_eclass);
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
@@ -414,10 +424,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         }
                         let key = (node.discriminant(), node.children().len());
                         match shape_idx.get(&key) {
-                            Some(&idx) => shapes[idx].1 += 1,
+                            Some(&idx) => shapes[idx].1 += w,
                             None => {
                                 shape_idx.insert(key.clone(), shapes.len());
-                                shapes.push((key, 1));
+                                shapes.push((key, w));
                             }
                         }
                     }
@@ -434,7 +444,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
-    let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+    // The follow pattern is whatever `display_recexpr` would emit for a
+    // pattern: flat-form sexps that may have a `?#k` variable head (e.g.
+    // `(?#0 a b c)`). egg's stock pattern parser rejects both shapes, so
+    // each family ships its own walker.
+    let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
     let shared = SharedSearchData {
