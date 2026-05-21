@@ -5,7 +5,6 @@ use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
@@ -158,10 +157,9 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
-    /// Check if this particle's pattern is a valid prefix of the follow target.
+    /// True iff this pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
-        let mut var_bindings = HashMap::new();
-        crate::follow::check_follow::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        crate::follow::follow_unify::<F, O>(&self.pattern.pattern, follow).is_some()
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
