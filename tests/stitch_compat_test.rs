@@ -476,7 +476,7 @@ fn stitch_safe_ctx_thread_bug() {
 /// collapses to the same shape, and `(big (chain (of (g ?#0 (lam ?#0)))))`
 /// matches all three with ?#0 = `xx`, `yy`, `0`. For the third program ?#0
 /// captures the eclass `{0, (* 0 $0)}`; intersection fv reports `{}` so
-/// `subst_is_sound` accepts it and AstSize extraction picks `0`.
+/// `subst_is_sound` accepts it and WeightedSize extraction picks `0`.
 #[test]
 fn fv_overapprox_annihilator() {
     check_fixture_bf_only(

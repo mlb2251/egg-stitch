@@ -126,7 +126,7 @@ fn merge_intersects_fv() {
 // With the rule `(* 0 x) ↔ 0`, the eclass `{0, (* 0 $1)}` denotes 0
 // regardless of x. Intersection-based fv reports `{}`, matching the
 // semantic fv. Soundness of using this for `inv_0` capture relies on
-// extraction (AstSize) picking the fv-minimal representative; see
+// extraction (WeightedSize) picking the fv-minimal representative; see
 // `check_fvs_are_as_expected` for the runtime guard.
 #[test]
 fn merge_with_annihilator_should_not_inherit_dropped_fv() {
