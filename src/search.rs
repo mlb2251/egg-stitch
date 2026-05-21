@@ -5,7 +5,6 @@ use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
@@ -158,10 +157,9 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
-    /// Check if this particle's pattern is a valid prefix of the follow target.
+    /// True iff this pattern is a valid prefix of the follow target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
-        let mut var_bindings = HashMap::new();
-        crate::follow::check_follow::<F, O>(&self.pattern.pattern, Id::from(0), follow, Id::from(0), &mut var_bindings)
+        crate::follow::follow_unify::<F, O>(&self.pattern.pattern, follow).is_some()
     }
 
     /// Expands the pattern at `var_idx` with `target` and filters matches accordingly.
@@ -265,6 +263,48 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             new_subst.vars.remove(drop_idx);
             out.push(new_subst);
         });
+    }
+
+    /// True iff some frozen variable `?#k` (k < frozen_count) is "useless":
+    /// every match's substitution maps `?#k` to the same e-class, and that
+    /// e-class has no above-pattern free DB indices (all `fv < d_k`). Such a
+    /// metavar adds no compression — its arg is invariant across sites, so the
+    /// abstraction could be specialised by inlining the arg.
+    ///
+    /// Stitch analog: `is_useless_abstract` (argument capture). We require fv
+    /// to lie strictly below `d_k`, which matches stitch's "shifted_id fv is
+    /// empty" check (the shift drops indices `< d_k`).
+    ///
+    /// Returns `false` when `frozen_count` is `None` (rule disabled) or when
+    /// the match set is empty.
+    pub fn is_useless_frozen(&self, shared: &SharedSearchData<F, O>) -> bool {
+        let Some(fc) = self.frozen_count else { return false };
+        for k in 0..fc {
+            let d_k = self.pattern.var_depth[k];
+            let mut first: Option<Id> = None;
+            let mut same = true;
+            'outer: for m in &self.matches {
+                for s in &m.substs {
+                    match first {
+                        None => first = Some(s.vars[k]),
+                        Some(f) if f == s.vars[k] => {}
+                        Some(_) => {
+                            same = false;
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+            if !same {
+                continue;
+            }
+            if let Some(id) = first
+                && shared.egraph[id].data.fv.iter().all(|&i| (i as u32) < d_k)
+            {
+                return true;
+            }
+        }
+        false
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
@@ -404,7 +444,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
-    let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| s.parse().unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+    // The follow pattern is whatever `display_recexpr` would emit for a
+    // pattern: flat-form sexps that may have a `?#k` variable head (e.g.
+    // `(?#0 a b c)`). egg's stock pattern parser rejects both shapes, so
+    // each family ships its own walker.
+    let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
     let shared = SharedSearchData {
