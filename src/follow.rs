@@ -21,11 +21,6 @@ fn follow_subtrees_equal<F: LanguageFamily, O: StitchOp>(follow: &RevExpr<F::App
 /// makes the pattern a structural prefix of the follow — pattern Vars map to
 /// whatever follow subtree they cover; everything else must match exactly.
 /// `None` means the pattern is not a prefix of the follow.
-///
-/// The prefix check (`matches_follow`) is `is_some()`. The exact alpha-equivalence
-/// check (`matches_follow_serialized`) is this plus `binding_as_exact_var` on each
-/// binding: the captured subtree must itself be a follow Var, optionally η-wrapped
-/// with the state's `variable_indices` de-Bruijn args.
 pub fn follow_unify<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>>, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> Option<HashMap<egg::Var, Id>> {
     let mut bindings = HashMap::new();
     walk::<F, O>(pattern, Id::from(0), follow, Id::from(0), &mut bindings).then_some(bindings)
