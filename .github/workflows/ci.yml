@@ -36,8 +36,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo test (excluding check_slow)
-        run: cargo test --release -- --skip check_slow
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest (excluding check_slow)
+        run: cargo nextest run --release -E 'not test(/check_slow/)'
 
   test-check-slow:
     runs-on: ubuntu-latest
@@ -45,8 +46,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo test check_slow (excluding physics)
-        run: cargo test --release check_slow -- --skip check_slow_physics
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest check_slow (excluding physics)
+        run: cargo nextest run --release -E 'test(/check_slow/) and not test(/check_slow_physics/)'
 
   test-check-slow-physics:
     runs-on: ubuntu-latest
@@ -54,8 +56,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo test check_slow_physics
-        run: cargo test --release check_slow_physics
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest check_slow_physics
+        run: cargo nextest run --release -E 'test(/check_slow_physics/)'
 
   smc-fv-crash:
     runs-on: ubuntu-latest
