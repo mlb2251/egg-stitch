@@ -257,18 +257,14 @@ fn check_slow_physics_18_09_34_bench004() {
 // stock `RecExpr` parser rejects. parse_follow_pattern routes them through
 // `parse_program` at `OpWithVar<O>`.
 
-/// Follow string `(lam (app ?#0 (app ?#0 empty)))` uses flat n-ary form for
-/// `app` — egg's stock parser rejects `app` as an unknown op, so this only
-/// parses via the lambda-calc override. The follow is the abstraction SMC
-/// deterministically finds on `hof.json` at the default seed, so the prefix
-/// check passes.
+/// Follow string `(lam (app (?#0 $0) (app (?#0 $0) empty)))`
 #[test]
 fn follow_lambda_calc_flat_nary_app() {
     let input = "data/domains/stitch/hof.json";
     if !std::path::Path::new(input).exists() {
         return;
     }
-    let follow = "(lam (app ?#0 (app ?#0 empty)))";
+    let follow = "(lam (app (?#0 $0) (app (?#0 $0) empty)))";
     let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "200", "--num-particles", "500", "--temperature", "1000", "--follow", follow, "--max-arity", "2", "--language", "lambda-calc"]);
     let result = run_lambda_calc(&args);
     assert_best_matches_follow_lambda(&result, follow);
