@@ -103,8 +103,27 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
 
+        for (i, cost) in costs.iter().enumerate() {
+            let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
+            let arity = expanded[i].pattern.vars.len();
+            // In `--follow` mode the prefix filter lets cheaper non-matching
+            // particles through, so skip the prefix-best update — only the
+            // exact-match exit below promotes a particle to `best`.
+            if shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
+                best_so_far = Some((*cost, expanded[i].clone()));
+                best_found_at = Some(step);
+            }
+        }
+
         // log-space weights: logw_i = -cost_i / temperature
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
+
+        for (i, s) in expanded.iter().enumerate() {
+            if s.pattern.vars.is_empty() {
+                log_weights[i] = f64::NEG_INFINITY;
+            }
+        }
 
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
@@ -118,22 +137,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 steps_run = step + 1;
                 log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), &best_so_far, &[]);
                 break;
-            }
-        } else {
-            for (i, cost) in costs.iter().enumerate() {
-                let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
-                let arity = expanded[i].pattern.vars.len();
-                if arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat {
-                    println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
-                    best_so_far = Some((*cost, expanded[i].clone()));
-                    best_found_at = Some(step);
-                }
-            }
-        }
-
-        for (i, s) in expanded.iter().enumerate() {
-            if s.pattern.vars.is_empty() {
-                log_weights[i] = f64::NEG_INFINITY;
             }
         }
 
