@@ -269,7 +269,23 @@ fn follow_exact_match_exits_early_smc() {
     }
     let follow = "(lam (app (?#0 $0) (app (?#0 $0) empty)))";
     let budget = 2000;
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", &budget.to_string(), "--num-particles", "500", "--temperature", "1000", "--follow", follow, "--max-arity", "2", "--language", "lambda-calc"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--input",
+        input,
+        "--num-steps",
+        &budget.to_string(),
+        "--num-particles",
+        "500",
+        "--temperature",
+        "1000",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+        "--language",
+        "lambda-calc",
+    ]);
     let result = run_lambda_calc(&args);
     assert_best_matches_follow_lambda(&result, follow);
     assert!(result.num_steps_run < budget, "expected early exit before {} steps; ran {}", budget, result.num_steps_run);
