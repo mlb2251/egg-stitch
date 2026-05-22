@@ -4,7 +4,7 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
@@ -477,19 +477,42 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 
 /// Computes how many times each e-class appears in the fully-expanded corpus tree.
 /// Top-down pass: root gets count 1, then propagate to children of the best (first) enode.
+///
+/// Canonical eclass ids are not necessarily in topological order after unions
+/// (a parent's canonical id can be lower than a child's), so we explicitly
+/// derive a parents-before-children order via iterative DFS post-order from
+/// the root and propagate along it.
 pub fn compute_usage_counts<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> FxHashMap<Id, usize> {
-    let mut counts = FxHashMap::<Id, usize>::default();
-    counts.insert(egraph.find(root), 1);
-    let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
-    for i in (0..=max_id).rev() {
-        let id = Id::from(i);
-        if egraph.find(id) != id {
+    let root = egraph.find(root);
+    let mut order: Vec<Id> = Vec::new();
+    let mut seen: FxHashSet<Id> = FxHashSet::default();
+    let mut stack: Vec<(Id, bool)> = vec![(root, false)];
+    while let Some((id, post)) = stack.pop() {
+        if post {
+            order.push(id);
             continue;
         }
-        let count = match counts.get(&id) {
-            Some(&c) => c,
-            None => continue,
-        };
+        if !seen.insert(id) {
+            continue;
+        }
+        stack.push((id, true));
+        if let Some(enode) = egraph[id].nodes.first() {
+            for &child in enode.children() {
+                let child = egraph.find(child);
+                if !seen.contains(&child) {
+                    stack.push((child, false));
+                }
+            }
+        }
+    }
+    order.reverse();
+    let mut counts = FxHashMap::<Id, usize>::default();
+    counts.insert(root, 1);
+    for id in order {
+        let count = counts.get(&id).copied().unwrap_or(0);
+        if count == 0 {
+            continue;
+        }
         if let Some(enode) = egraph[id].nodes.first() {
             for &child in enode.children() {
                 *counts.entry(egraph.find(child)).or_insert(0) += count;
