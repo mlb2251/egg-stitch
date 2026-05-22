@@ -36,7 +36,13 @@ pub struct CanonicalChecker<F: LanguageFamily, O: StitchOp> {
 
 impl<F: LanguageFamily, O: StitchOp> CanonicalChecker<F, O> {
     pub fn new(rules: PatternRules<F, O>, weights: Weights) -> Self {
-        Self { rules, weights, memo: FxHashMap::default(), pruned: 0, memo_hits: 0 }
+        Self {
+            rules,
+            weights,
+            memo: FxHashMap::default(),
+            pruned: 0,
+            memo_hits: 0,
+        }
     }
 
     /// True when the user supplied no rule file: every pattern is trivially canonical.
@@ -205,4 +211,3 @@ fn build_class_strings<L: StitchLanguage>(egraph: &EGraph<L, StitchAnalysis>, we
     }
     memo
 }
-
