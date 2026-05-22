@@ -142,7 +142,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         None => Vec::new(),
     };
     let mut canonical_checker: CanonicalChecker<F, O> = CanonicalChecker::new(pattern_rules, shared.egraph.analysis.weights);
-    let mut canonical_seen: rustc_hash::FxHashMap<String, usize> = rustc_hash::FxHashMap::default();
+    let mut canonical_seen: rustc_hash::FxHashMap<u64, usize> = rustc_hash::FxHashMap::default();
     let mut canonical_hits: usize = 0;
 
     nodes.push(Node {
