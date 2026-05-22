@@ -7,6 +7,28 @@ use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
 use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 
+/// Formats a search state's ematches as `v=[[ids_at_loc_0], [ids_at_loc_1], ...], ...`,
+/// where `v` is the pattern variable index and each inner list collects the
+/// e-class ids that variable takes across the substs at that match location.
+pub fn format_ematches<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> String {
+    let num_vars = state.pattern.vars.len();
+    (0..num_vars)
+        .map(|v| {
+            let locs = state
+                .matches
+                .iter()
+                .map(|m| {
+                    let ids = m.substs.iter().map(|s| usize::from(s.vars[v]).to_string()).collect::<Vec<_>>().join(", ");
+                    format!("[{}]", ids)
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}=[{}]", v, locs)
+        })
+        .collect::<Vec<_>>()
+        .join("\n\t")
+}
+
 /// Sets the log weight of particles that don't match the follow pattern to -inf.
 pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchState<F, O>], log_weights: &mut [f64], follow: &crate::revexpr::RevExpr<F::Apply<OpWithVar<O>>>, shared: &SharedSearchData<F, O>, original_size: usize, costs: &[usize], verbose: bool) {
     let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
@@ -21,7 +43,7 @@ pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchS
             let pat_size = compute_pattern_size(&states[i].pattern, &shared.egraph.analysis.weights);
             let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
             println!(
-                "  {} {} cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
+                "  {} {} cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={} ematches={}",
                 format!("p{}:", i).dimmed(),
                 states[i].pattern.to_string().cyan(),
                 costs[i],
@@ -30,7 +52,8 @@ pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchS
                 states[i].matches.len(),
                 usage_matches,
                 pat_size,
-                appx_cost
+                appx_cost,
+                format_ematches(&states[i])
             );
         }
     }
@@ -65,14 +88,15 @@ pub fn print_top_particles<F: LanguageFamily, O: StitchOp>(states: &[SearchState
         let ratio = original_size as f64 / cost_i as f64;
         println!("  {} {}", format!("p{}:", i).dimmed(), states[i].pattern.to_string().cyan());
         println!(
-            "      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
+            "      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={} ematches={}",
             cost_i,
             ratio,
             weights[i],
             states[i].matches.len(),
             usage_matches,
             pat_size,
-            appx_cost
+            appx_cost,
+            format_ematches(&states[i])
         );
     }
 }

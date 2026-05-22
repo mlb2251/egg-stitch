@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use crate::cost::{CostScratch, compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchOp};
+use crate::logging::format_ematches;
 use crate::search::{Action, SearchState, SeenTracker, setup_search};
 
 /// How to order the best-first search heap.
@@ -181,7 +182,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         expansion_order.push(node_id);
 
         if args.verbose {
-            println!("{} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan());
+            println!("{} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "pattern before:".dimmed(), nodes[node_id].state.pattern.to_string().cyan());
+            println!("\t{}", format_ematches(&nodes[node_id].state).dimmed());
         }
 
         let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
@@ -249,6 +251,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             let child_depth = parent_depth + 1;
             let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
             let child_id = nodes.len();
+
+            if args.verbose && matches!(&action, Action::Expand { op, .. } if op.to_string() == "T") {
+                println!("  {} {}", "action:".dimmed(), action.to_string().yellow());
+                println!("{} {}", "  pattern after:".dimmed(), child_state.pattern.to_string().cyan());
+                println!("\t{}", format_ematches(&child_state).dimmed());
+            }
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _)| *c);
             let arity = child_state.pattern.vars.len();
