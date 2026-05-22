@@ -23,14 +23,15 @@ pub type PatternLang<F, O> = <F as LanguageFamily>::Apply<OpWithVar<O>>;
 pub type PatternRules<F, O> = Vec<Rewrite<PatternLang<F, O>, StitchAnalysis>>;
 
 /// Holds the rewrite rules (parsed against the pattern language) and a memo
-/// keyed by pattern serialization, so repeated check on the same pattern is O(1).
+/// from pattern serialization → canonical-form serialization. Used by
+/// best-first to dedupe patterns by *semantic* equivalence under the rules
+/// (not just syntactic equality): two patterns that saturate to the same
+/// eclass return the same canonical key, so the seen-set drops the second.
 pub struct CanonicalChecker<F: LanguageFamily, O: StitchOp> {
     rules: PatternRules<F, O>,
     weights: Weights,
-    memo: FxHashMap<String, bool>,
-    /// Number of times the check returned false (i.e. a candidate was pruned).
-    pub pruned: usize,
-    /// Memo hits (recomputed avoidance count).
+    memo: FxHashMap<String, String>,
+    /// Memo hits (saturation work avoided).
     pub memo_hits: usize,
 }
 
@@ -40,34 +41,31 @@ impl<F: LanguageFamily, O: StitchOp> CanonicalChecker<F, O> {
             rules,
             weights,
             memo: FxHashMap::default(),
-            pruned: 0,
             memo_hits: 0,
         }
     }
 
-    /// True when the user supplied no rule file: every pattern is trivially canonical.
+    /// True when the user supplied no rule file: canonical key == pattern key,
+    /// so the canonical step is a pass-through.
     pub fn trivial(&self) -> bool {
         self.rules.is_empty()
     }
 
-    /// True iff `pattern` equals the canonical extraction of its root eclass
-    /// after rule saturation.
-    pub fn is_canonical(&mut self, pattern: &RecExpr<PatternLang<F, O>>) -> bool {
+    /// Returns the canonical-form serialization of `pattern`'s eclass after
+    /// rule saturation. Patterns in the same equivalence class return identical
+    /// strings; with no rules, just returns the pattern's own serialization.
+    pub fn canonical_key(&mut self, pattern: &RecExpr<PatternLang<F, O>>) -> String {
+        let pkey = serialize_recexpr::<PatternLang<F, O>>(pattern);
         if self.rules.is_empty() {
-            return true;
+            return pkey;
         }
-        let key = serialize_recexpr::<PatternLang<F, O>>(pattern);
-        if let Some(&v) = self.memo.get(&key) {
+        if let Some(v) = self.memo.get(&pkey) {
             self.memo_hits += 1;
-            return v;
+            return v.clone();
         }
         let canonical = canonical_string::<F, O>(pattern, &self.rules, self.weights);
-        let result = canonical == key;
-        if !result {
-            self.pruned += 1;
-        }
-        self.memo.insert(key, result);
-        result
+        self.memo.insert(pkey, canonical.clone());
+        canonical
     }
 }
 
