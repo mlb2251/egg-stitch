@@ -162,7 +162,7 @@ impl CostCache {
         for class in egraph.classes() {
             for enode in &class.nodes {
                 for &child in enode.children() {
-                    parents_of.entry(child).or_default().push(class.id);
+                    parents_of.entry(egraph.find(child)).or_default().push(class.id);
                 }
             }
         }
@@ -171,7 +171,7 @@ impl CostCache {
         let mut postorder = vec![None; max_id + 1];
         let mut visit_order: Vec<Id> = Vec::new();
         let mut order: u32 = 0;
-        let mut stack: Vec<Result<Id, Id>> = vec![Err(root)]; // Err=enter, Ok=exit
+        let mut stack: Vec<Result<Id, Id>> = vec![Err(egraph.find(root))]; // Err=enter, Ok=exit
         let mut on_stack = FxHashSet::<Id>::default();
         while let Some(state) = stack.pop() {
             match state {
@@ -182,7 +182,7 @@ impl CostCache {
                     stack.push(Ok(id));
                     for enode in &egraph[id].nodes {
                         for &child in enode.children() {
-                            stack.push(Err(child));
+                            stack.push(Err(egraph.find(child)));
                         }
                     }
                 }
