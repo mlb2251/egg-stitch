@@ -238,24 +238,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
 
-            // Canonical-form seen-set: dedupe patterns equivalent under the
-            // rewrite rules. Mirrors SeenTracker's frozen-count semantics —
-            // a prior visit at lower-or-equal frozen_count subsumes this one.
-            if !canonical_checker.trivial() {
-                let recexpr: RecExpr<_> = child_state.pattern.pattern.clone().into();
-                let key = canonical_checker.canonical_key(&recexpr);
-                let frozen = child_state.frozen_count.unwrap_or(0);
-                match canonical_seen.get(&key) {
-                    Some(&existing) if existing <= frozen => {
-                        canonical_hits += 1;
-                        continue;
-                    }
-                    _ => {
-                        canonical_seen.insert(key, frozen);
-                    }
-                }
-            }
-
             // Useless-frozen pruning: a frozen metavar bound to the same
             // (closed-under-pattern-binders) arg in every match adds no
             // compression. Stitch analog: argument-capture pruning.
@@ -280,6 +262,26 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             } else {
                 None
             };
+
+            // Canonical-form seen-set: dedupe patterns equivalent under the
+            // rewrite rules. Mirrors SeenTracker's frozen-count semantics —
+            // a prior visit at lower-or-equal frozen_count subsumes this one.
+            // Placed *after* the cheap pruners (useless-frozen, lower-bound)
+            // since per-pattern saturation is the most expensive check here.
+            if !canonical_checker.trivial() {
+                let recexpr: RecExpr<_> = child_state.pattern.pattern.clone().into();
+                let key = canonical_checker.canonical_key(&recexpr);
+                let frozen = child_state.frozen_count.unwrap_or(0);
+                match canonical_seen.get(&key) {
+                    Some(&existing) if existing <= frozen => {
+                        canonical_hits += 1;
+                        continue;
+                    }
+                    _ => {
+                        canonical_seen.insert(key, frozen);
+                    }
+                }
+            }
 
             let cost_t = Instant::now();
             let child_cost = compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, shared.check_slow);
