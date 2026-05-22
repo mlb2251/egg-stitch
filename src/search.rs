@@ -285,9 +285,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let mut same = true;
             'outer: for m in &self.matches {
                 for s in &m.substs {
+                    let id = shared.egraph.find(s.vars[k]);
                     match first {
-                        None => first = Some(s.vars[k]),
-                        Some(f) if f == s.vars[k] => {}
+                        None => first = Some(id),
+                        Some(f) if f == id => {}
                         Some(_) => {
                             same = false;
                             break 'outer;
@@ -476,17 +477,20 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 /// Top-down pass: root gets count 1, then propagate to children of the best (first) enode.
 pub fn compute_usage_counts<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> FxHashMap<Id, usize> {
     let mut counts = FxHashMap::<Id, usize>::default();
-    counts.insert(root, 1);
+    counts.insert(egraph.find(root), 1);
     let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
     for i in (0..=max_id).rev() {
         let id = Id::from(i);
+        if egraph.find(id) != id {
+            continue;
+        }
         let count = match counts.get(&id) {
             Some(&c) => c,
             None => continue,
         };
         if let Some(enode) = egraph[id].nodes.first() {
             for &child in enode.children() {
-                *counts.entry(child).or_insert(0) += count;
+                *counts.entry(egraph.find(child)).or_insert(0) += count;
             }
         }
     }

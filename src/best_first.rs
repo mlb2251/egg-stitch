@@ -192,6 +192,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
+        if args.verbose {
+            println!("{} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan());
+        }
+
         let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
         let parent_frozen = nodes[node_id].state.frozen_count.expect("best-first enables the freeze rule");
