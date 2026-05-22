@@ -222,13 +222,22 @@ fn action_weights_with_reuse_boost<D>(actions: &[(Action<D>, usize)], boost_reus
         .collect()
 }
 
+/// Finds the index `i` such that `r` falls into the half-open interval
+/// `(acc_weights[i-1], acc_weights[i]]` (treating the implicit prefix as 0).
+///
+/// Uses `partition_point` so that zero-weight prefixes (entries whose
+/// cumulative value equals a previous one) are skipped, and clamps to the
+/// last index to defend against float round-off leaving the final
+/// accumulator slightly below 1.0.
+pub fn index_from_cumulative(acc_weights: &[f64], r: f64) -> usize {
+    let idx = acc_weights.partition_point(|&w| w <= r);
+    idx.min(acc_weights.len() - 1)
+}
+
 /// Samples an index from a normalized cumulative weight array.
 pub fn weighted_choice(acc_weights: &[f64], rng: &mut StdRng) -> usize {
     let r: f64 = rng.random_range(0.0..1.0);
-    match acc_weights.binary_search_by(|&w| w.partial_cmp(&r).unwrap()) {
-        Ok(idx) => idx,
-        Err(idx) => idx,
-    }
+    index_from_cumulative(acc_weights, r)
 }
 
 /// Normalizes weights in-place and returns a separate cumulative distribution.
@@ -247,4 +256,43 @@ pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
         weights_acc.push(accum);
     }
     weights_acc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::index_from_cumulative;
+
+    #[test]
+    fn picks_interval_containing_r() {
+        let acc = vec![0.3, 0.7, 1.0];
+        assert_eq!(index_from_cumulative(&acc, 0.0), 0);
+        assert_eq!(index_from_cumulative(&acc, 0.2), 0);
+        assert_eq!(index_from_cumulative(&acc, 0.5), 1);
+        assert_eq!(index_from_cumulative(&acc, 0.9), 2);
+    }
+
+    #[test]
+    fn skips_zero_weight_prefix() {
+        // Two leading zero-weight entries, then one with all the mass.
+        let acc = vec![0.0, 0.0, 1.0];
+        assert_eq!(index_from_cumulative(&acc, 0.0), 2);
+        assert_eq!(index_from_cumulative(&acc, 0.5), 2);
+    }
+
+    #[test]
+    fn skips_zero_weight_in_middle() {
+        // Middle entry has zero weight; should never be picked.
+        let acc = vec![0.3, 0.3, 1.0];
+        for i in 0..1000 {
+            let r = i as f64 / 1000.0;
+            assert_ne!(index_from_cumulative(&acc, r), 1);
+        }
+    }
+
+    #[test]
+    fn clamps_when_r_exceeds_last_accumulator() {
+        // Simulates float roundoff where the final cumulative drifts below 1.0.
+        let acc = vec![0.3, 0.7, 0.9999999];
+        assert_eq!(index_from_cumulative(&acc, 0.99999995), 2);
+    }
 }
