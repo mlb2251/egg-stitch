@@ -79,11 +79,7 @@ fn canonical_string<F: LanguageFamily, O: StitchOp>(pattern: &RecExpr<PatternLan
     // pattern explored by best-first (which can be thousands). AC rule sets
     // (commut+assoc) saturate explosively; without these caps a single check
     // can hang the whole search.
-    let mut runner: Runner<PatternLang<F, O>, StitchAnalysis> = Runner::new(StitchAnalysis::new(weights))
-        .with_egraph(egraph)
-        .with_iter_limit(4)
-        .with_node_limit(2_000)
-        .with_time_limit(std::time::Duration::from_millis(50));
+    let mut runner: Runner<PatternLang<F, O>, StitchAnalysis> = Runner::new(StitchAnalysis::new(weights)).with_egraph(egraph).with_iter_limit(4).with_node_limit(2_000).with_time_limit(std::time::Duration::from_millis(50));
     runner = runner.run(rules);
     runner.egraph.rebuild();
     let root = runner.egraph.find(root);
