@@ -1,4 +1,5 @@
 pub mod best_first;
+pub mod canonical;
 pub mod cost;
 pub mod debug_log;
 pub mod follow;

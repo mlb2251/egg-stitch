@@ -5,10 +5,12 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::{Duration, Instant};
 
+use crate::canonical::CanonicalChecker;
 use crate::cost::{CostScratch, compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::search::{Action, SearchState, SeenTracker, setup_search};
+use egg::RecExpr;
 
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -128,6 +130,16 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = (!args.no_seen).then(SeenTracker::new);
 
+    // Canonical-pattern pruning: re-parse the rule file (if any) under the
+    // pattern language (F::Apply<OpWithVar<O>>) and use it to skip children
+    // whose pattern body isn't the canonical (lex-min over min-cost enodes)
+    // representative of its saturated eclass. Empty rule list → no-op check.
+    let pattern_rules: crate::canonical::PatternRules<F, O> = match args.rules.as_deref() {
+        Some(path) => crate::io::from_file(path).expect("failed to re-parse rules under pattern language for canonical check"),
+        None => Vec::new(),
+    };
+    let mut canonical_checker: CanonicalChecker<F, O> = CanonicalChecker::new(pattern_rules, shared.egraph.analysis.weights);
+
     nodes.push(Node {
         parent: None,
         action: None,
@@ -213,6 +225,16 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
 
+            // Canonical-pattern pruning: drop children whose pattern body
+            // isn't the lex-min min-cost rep of its eclass under rule
+            // saturation. No-op when no rule file was supplied.
+            if !canonical_checker.trivial() {
+                let recexpr: RecExpr<_> = child_state.pattern.pattern.clone().into();
+                if !canonical_checker.is_canonical(&recexpr) {
+                    continue;
+                }
+            }
+
             // Useless-frozen pruning: a frozen metavar bound to the same
             // (closed-under-pattern-binders) arg in every match adds no
             // compression. Stitch analog: argument-capture pruning.
@@ -293,6 +315,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     println!("{} {} {}", "lower-bound hits:".dimmed(), lower_bound_hits.to_string().bold(), format!("(time: {:.3}s)", lower_bound_time.as_secs_f64()).dimmed());
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
+    if !canonical_checker.trivial() {
+        println!("{} {} {}", "canonical-pruned:".dimmed(), canonical_checker.pruned.to_string().bold(), format!("(memo hits: {})", canonical_checker.memo_hits).dimmed());
+    }
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
