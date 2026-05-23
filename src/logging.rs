@@ -55,9 +55,11 @@ pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchS
     }
 }
 
-/// Prints summary info for the top particles (up to 5).
+/// Prints summary info for the top particles (up to 5), ordered by descending weight.
 pub fn print_top_particles<F: LanguageFamily, O: StitchOp>(states: &[SearchState<F, O>], weights: &[f64], shared: &SharedSearchData<F, O>, original_size: usize, get_cost: impl Fn(usize) -> usize) {
-    for i in 0..min(5, states.len()) {
+    let mut sorted_idx: Vec<usize> = (0..states.len()).collect();
+    sorted_idx.sort_by(|&a, &b| weights[b].partial_cmp(&weights[a]).unwrap_or(std::cmp::Ordering::Equal));
+    for &i in sorted_idx.iter().take(min(5, states.len())) {
         let usage_matches: usize = states[i].matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
         let pat_size = compute_pattern_size(&states[i].pattern, &shared.egraph.analysis.weights);
         let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);

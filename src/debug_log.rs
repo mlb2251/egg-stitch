@@ -29,8 +29,6 @@ pub struct SearchTreeLog {
 pub struct TreeNodeLog {
     pub id: usize,
     pub parent: Option<usize>,
-    /// Human-readable label for the move that produced this node from its parent.
-    pub action: Option<String>,
     pub pattern: String,
     pub arity: usize,
     pub pattern_size: usize,

@@ -9,7 +9,7 @@ use crate::canonical::CanonicalChecker;
 use crate::cost::{CostScratch, compute_cost, compute_lower_bound, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchOp};
-use crate::search::{Action, SearchState, SeenTracker, setup_search};
+use crate::search::{SearchState, SeenTracker, SuccessorEnum, setup_search};
 use egg::RecExpr;
 
 /// How to order the best-first search heap.
@@ -89,7 +89,6 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
 /// and for the optional serialized debug log.
 struct Node<F: LanguageFamily, O: StitchOp> {
     parent: Option<usize>,
-    action: Option<Action<F::Discriminant<O>>>,
     state: SearchState<F, O>,
     cost: usize,
     depth: usize,
@@ -147,7 +146,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
     nodes.push(Node {
         parent: None,
-        action: None,
         state: initial_state.clone(),
         cost: initial_cost,
         depth: 0,
@@ -176,7 +174,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut useless_frozen_hits: usize = 0;
     let search_start = Instant::now();
 
-    while let Some(Reverse((_prio, node_id))) = heap.pop() {
+    'search: while let Some(Reverse((_prio, node_id))) = heap.pop() {
         if let Some(b) = budget
             && num_expansions >= b
         {
@@ -205,28 +203,13 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             println!("{} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan());
         }
 
-        let successors = nodes[node_id].state.enumerate_successors(&shared, args.opt_dominance_reuse, &mut dominance_hits);
         let parent_depth = nodes[node_id].depth;
-        let parent_frozen = nodes[node_id].state.frozen_count.expect("best-first enables the freeze rule");
+        let successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, max_arity, &mut dominance_hits) {
+            SuccessorEnum::Dominant { child, .. } => vec![child],
+            SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
+        };
 
-        for (action, child_state, _support) in successors {
-            // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k. Reuse is unrestricted — a cross-depth reuse
-            // can't fire until both sides exist, which may require expanding
-            // (and thus freezing) past one of the indices being merged.
-            match &action {
-                Action::Expand { var_idx, .. }
-                    if (
-                        // variable is frozen, reject
-                        *var_idx < parent_frozen ||
-                        // this freezes max_arity+1 variables, reject
-                        *var_idx > max_arity
-                    ) =>
-                {
-                    continue;
-                }
-                _ => {}
-            }
+        for child_state in successors {
             if let Some(ref follow) = shared.follow
                 && !child_state.matches_follow(follow)
             {
@@ -293,7 +276,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _)| *c);
             let arity = child_state.pattern.vars.len();
-            if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat {
+            if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat && !child_state.has_useless_var(&shared) {
                 let elapsed = search_start.elapsed().as_secs_f64();
                 println!(
                     "{} {} {} {}",
@@ -312,9 +295,15 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 });
             }
 
+            // Mirrors SMC's `follow exact match` exit (src/smc.rs:132): once
+            // a successor is alpha-equivalent to the follow target the search
+            // has reached the goal, and continuing risks overwriting `best`
+            // with a cheaper non-matching pattern that slipped past the prefix
+            // filter. Record this child as best and stop.
+            let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
+
             nodes.push(Node {
                 parent: Some(node_id),
-                action: Some(action),
                 state: child_state,
                 cost: child_cost,
                 depth: child_depth,
@@ -322,6 +311,21 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 lower_bound: child_lower_bound,
             });
             heap.push(Reverse((child_prio, child_id)));
+
+            if exact_follow_hit {
+                let elapsed = search_start.elapsed().as_secs_f64();
+                println!(
+                    "{} {} {} {}",
+                    format!("[expansion {}]", num_expansions).yellow().bold(),
+                    format!("follow exact match: {}", child_cost).green().bold(),
+                    nodes[child_id].state.pattern.to_string().cyan(),
+                    format!("(t={:.3}s)", elapsed).dimmed()
+                );
+                best = Some((child_cost, child_id));
+                best_found_at = Some(num_expansions);
+                num_expansions += 1;
+                break 'search;
+            }
         }
 
         num_expansions += 1;
@@ -365,7 +369,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 .map(|(id, n)| TreeNodeLog {
                     id,
                     parent: n.parent,
-                    action: n.action.as_ref().map(|a| a.to_string()),
                     pattern: n.state.pattern.to_string(),
                     arity: n.state.pattern.vars.len(),
                     pattern_size: compute_pattern_size(&n.state.pattern, &weights),

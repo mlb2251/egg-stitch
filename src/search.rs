@@ -4,7 +4,7 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
@@ -108,9 +108,12 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// Root e-class of the corpus (the `(programs ...)` wrapper). Excluded
     /// from the initial match set so patterns can't be rooted there.
     pub root: Id,
-    /// Follow pattern: particles whose pattern isn't a valid prefix get zero
-    /// weight at the resample step.
-    pub follow: Option<RevExpr<F::Apply<OpWithVar<O>>>>,
+    /// Follow target: particles whose pattern isn't a valid prefix get zero
+    /// weight at the resample step. Stored as the parsed surface form; the
+    /// exact-match check in SMC re-serializes candidate states with HO arity
+    /// applied before structurally comparing, since stitch's display adds
+    /// `(?#k $i …)` HO-args that the bare pattern doesn't carry.
+    pub follow: Option<crate::pattern::PatternRecExpr<F, O>>,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
@@ -130,7 +133,7 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
 /// child (dominance pruning fired) or a list of `(action, support)` pairs the
 /// caller can sample from. SMC builds children lazily only for sampled actions.
 pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
-    Dominant { action: Action<F::Discriminant<O>>, child: SearchState<F, O>, support: usize },
+    Dominant { child: SearchState<F, O>, support: usize },
     All(Vec<(Action<F::Discriminant<O>>, usize)>),
 }
 
@@ -265,47 +268,46 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         });
     }
 
-    /// True iff some frozen variable `?#k` (k < frozen_count) is "useless":
-    /// every match's substitution maps `?#k` to the same e-class, and that
-    /// e-class has no above-pattern free DB indices (all `fv < d_k`). Such a
-    /// metavar adds no compression — its arg is invariant across sites, so the
-    /// abstraction could be specialised by inlining the arg.
+    /// True iff metavar `?#k` is "useless": every match's substitution maps
+    /// `?#k` to the same e-class, and that e-class has no above-pattern free
+    /// DB indices (all `fv < d_k`). Such a metavar adds no compression — its
+    /// arg is invariant across sites, so the abstraction could be specialised
+    /// by inlining the arg.
     ///
-    /// Stitch analog: `is_useless_abstract` (argument capture). We require fv
-    /// to lie strictly below `d_k`, which matches stitch's "shifted_id fv is
-    /// empty" check (the shift drops indices `< d_k`).
-    ///
-    /// Returns `false` when `frozen_count` is `None` (rule disabled) or when
-    /// the match set is empty.
-    pub fn is_useless_frozen(&self, shared: &SharedSearchData<F, O>) -> bool {
-        let Some(fc) = self.frozen_count else { return false };
-        for k in 0..fc {
-            let d_k = self.pattern.var_depth[k];
-            let mut first: Option<Id> = None;
-            let mut same = true;
-            'outer: for m in &self.matches {
-                for s in &m.substs {
-                    let id = shared.egraph.find(s.vars[k]);
-                    match first {
-                        None => first = Some(id),
-                        Some(f) if f == id => {}
-                        Some(_) => {
-                            same = false;
-                            break 'outer;
-                        }
-                    }
+    /// Stitch analog: `is_useless_abstract` (argument capture). The fv bound
+    /// matches stitch's "shifted_id fv is empty" check (the shift drops
+    /// indices `< d_k`).
+    fn is_useless_var(&self, k: usize, shared: &SharedSearchData<F, O>) -> bool {
+        let d_k = self.pattern.var_depth[k];
+        let mut first: Option<Id> = None;
+        for m in &self.matches {
+            for s in &m.substs {
+                let id = shared.egraph.find(s.vars[k]);
+                match first {
+                    None => first = Some(id),
+                    Some(f) if f == id => {}
+                    Some(_) => return false,
                 }
             }
-            if !same {
-                continue;
-            }
-            if let Some(id) = first
-                && shared.egraph[id].data.fv.iter().all(|&i| (i as u32) < d_k)
-            {
-                return true;
-            }
         }
-        false
+        first.is_some_and(|id| shared.egraph[id].data.fv.iter().all(|&i| (i as u32) < d_k))
+    }
+
+    /// True iff some frozen variable (k < frozen_count) is useless. Used as a
+    /// search-time pruning rule during enumeration; returns `false` when
+    /// `frozen_count` is `None` (rule disabled) or when the match set is empty.
+    pub fn is_useless_frozen(&self, shared: &SharedSearchData<F, O>) -> bool {
+        let Some(fc) = self.frozen_count else { return false };
+        (0..fc).any(|k| self.is_useless_var(k, shared))
+    }
+
+    /// True iff any metavar in the pattern is useless. Unlike
+    /// `is_useless_frozen`, this checks *all* vars and ignores `frozen_count`
+    /// — used as a hard rejection gate on candidate result patterns so we
+    /// never return an abstraction whose body could be specialised by
+    /// inlining a constant arg.
+    pub fn has_useless_var(&self, shared: &SharedSearchData<F, O>) -> bool {
+        (0..self.pattern.vars.len()).any(|k| self.is_useless_var(k, shared))
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
@@ -337,38 +339,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         child
     }
 
-    /// Enumerates every successor state reachable in one `expand` or `reuse` step.
+    /// Returns the enumerable successors of `self`. When dominance pruning
+    /// fires, the single dominant child is built and returned via
+    /// `SuccessorEnum::Dominant`; otherwise `SuccessorEnum::All` lists every
+    /// `(action, support)` pair without building children, so samplers (e.g.
+    /// SMC) skip work for unpicked actions. The caller materialises children
+    /// for `All` via `apply_action`.
     ///
-    /// Reuse candidates are emitted first so the dominance short-circuit can fire:
-    /// when a reuse(i, j) preserves `num_substs` (every subst already had the two
-    /// vars equal), the resulting child match set is identical to the parent's
-    /// modulo the var-merge, so any successor of the parent is reachable via this
-    /// reuse — we can return it as the *only* successor and skip enumerating the
-    /// rest. Disabled by `--no-opt-dominance-reuse`.
-    ///
-    /// Thin wrapper over `enumerate_successor_actions` that materialises every
-    /// successor's child state up front. Best-first needs all children to push
-    /// into the search frontier; SMC uses the lazy variant directly so it only
-    /// builds children for the actions it actually samples.
-    #[allow(clippy::type_complexity)]
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
-        match self.enumerate_successor_actions(shared, opt_dominance_reuse, dominance_hits) {
-            SuccessorEnum::Dominant { action, child, support } => vec![(action, child, support)],
-            SuccessorEnum::All(actions) => actions
-                .into_iter()
-                .map(|(a, support)| {
-                    let child = self.apply_action(&a, shared);
-                    (a, child, support)
-                })
-                .collect(),
-        }
-    }
-
-    /// Lazy variant of `enumerate_successors`: returns `(action, support)` pairs
-    /// without building children, so samplers (e.g. SMC) skip work for unpicked
-    /// actions. The caller materialises children via `apply_action`. When
-    /// dominance pruning fires, the single dominant child is built and returned
-    /// via `SuccessorEnum::Dominant`, matching the eager method's short-circuit.
+    /// Expand actions are filtered against best-first's canonical-ordering
+    /// rule: any `var_idx < self.frozen_count` or `var_idx > max_arity` is
+    /// skipped before the action is even constructed. SMC passes
+    /// `max_arity = usize::MAX` and starts with `frozen_count = None`, so the
+    /// filter is a no-op for it.
     ///
     /// `support` is the (m,s)-pair count feeding the SMC weighting; it equals
     /// the surviving subst count, so `support > 0` ⇒ non-empty child.
@@ -378,7 +360,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `support > 0`; `subset_matches` then guarantees the child's match set is
     /// non-empty.
     #[allow(clippy::type_complexity)]
-    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
+    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, max_arity: usize, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
         // Weight each (match, subst) contribution by how often that match's
@@ -400,17 +382,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 if support == 0 {
                     continue;
                 }
-                let action = Action::Reuse { keep: i, drop: j };
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
                     let mut child = self.clone();
                     child.reuse(i, j, shared);
-                    return SuccessorEnum::Dominant { action, child, support };
+                    return SuccessorEnum::Dominant { child, support };
                 }
-                out.push((action, support));
+                out.push((Action::Reuse { keep: i, drop: j }, support));
             }
         }
         for var_idx in 0..n {
+            // Freezing rule: expanding `?#k` commits to never expanding any
+            // `?#j` with j < k; `max_arity` caps how many vars best-first will
+            // create. Both checks are no-ops for SMC (frozen_count = None,
+            // max_arity = usize::MAX).
+            if var_idx > max_arity {
+                continue;
+            }
+            if let Some(fc) = self.frozen_count
+                && var_idx < fc
+            {
+                continue;
+            }
             let d_k = self.pattern.var_depth[var_idx];
             let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
@@ -449,7 +442,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     // pattern: flat-form sexps that may have a `?#k` variable head (e.g.
     // `(?#0 a b c)`). egg's stock pattern parser rejects both shapes, so
     // each family ships its own walker.
-    let follow_expr: Option<RevExpr<F::Apply<OpWithVar<O>>>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
+    let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
     let shared = SharedSearchData {
@@ -475,19 +468,42 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 
 /// Computes how many times each e-class appears in the fully-expanded corpus tree.
 /// Top-down pass: root gets count 1, then propagate to children of the best (first) enode.
+///
+/// Canonical eclass ids are not necessarily in topological order after unions
+/// (a parent's canonical id can be lower than a child's), so we explicitly
+/// derive a parents-before-children order via iterative DFS post-order from
+/// the root and propagate along it.
 pub fn compute_usage_counts<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> FxHashMap<Id, usize> {
-    let mut counts = FxHashMap::<Id, usize>::default();
-    counts.insert(egraph.find(root), 1);
-    let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
-    for i in (0..=max_id).rev() {
-        let id = Id::from(i);
-        if egraph.find(id) != id {
+    let root = egraph.find(root);
+    let mut order: Vec<Id> = Vec::new();
+    let mut seen: FxHashSet<Id> = FxHashSet::default();
+    let mut stack: Vec<(Id, bool)> = vec![(root, false)];
+    while let Some((id, post)) = stack.pop() {
+        if post {
+            order.push(id);
             continue;
         }
-        let count = match counts.get(&id) {
-            Some(&c) => c,
-            None => continue,
-        };
+        if !seen.insert(id) {
+            continue;
+        }
+        stack.push((id, true));
+        if let Some(enode) = egraph[id].nodes.first() {
+            for &child in enode.children() {
+                let child = egraph.find(child);
+                if !seen.contains(&child) {
+                    stack.push((child, false));
+                }
+            }
+        }
+    }
+    order.reverse();
+    let mut counts = FxHashMap::<Id, usize>::default();
+    counts.insert(root, 1);
+    for id in order {
+        let count = counts.get(&id).copied().unwrap_or(0);
+        if count == 0 {
+            continue;
+        }
         if let Some(enode) = egraph[id].nodes.first() {
             for &child in enode.children() {
                 *counts.entry(egraph.find(child)).or_insert(0) += count;

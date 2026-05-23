@@ -42,3 +42,17 @@ fn walk<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>
     }
     pn.matches(fn_) && pn.children().iter().zip(fn_.children().iter()).all(|(&pc, &fc)| walk::<F, O>(pattern, pc, follow, fc, bindings))
 }
+
+/// True iff the state's HO-arity-decorated body is alpha-equivalent to the
+/// follow target. Equivalent to: η-wrap the pattern with `variable_indices` so
+/// it has the same surface shape the search displays, then `follow_unify`
+/// against the follow; alpha-equivalence is the case where every captured
+/// binding is a bare follow Var and the pattern→follow Var mapping is
+/// injective.
+pub fn matches_follow_serialized<F: LanguageFamily, O: StitchOp>(state: &crate::search::SearchState<F, O>, follow: &RevExpr<F::Apply<OpWithVar<O>>>, egraph: &crate::lang::StitchEgraph<F::Apply<O>>) -> bool {
+    let vis = crate::cost::compute_variable_indices::<F, O>(egraph, state);
+    let wrapped: RevExpr<F::Apply<OpWithVar<O>>> = state.pattern.build_with_ho(&vis).into();
+    let Some(bindings) = follow_unify::<F, O>(&wrapped, follow) else { return false };
+    let mut seen = std::collections::HashSet::new();
+    bindings.values().all(|&fid| follow[fid].discriminant().as_var().is_some_and(|v| seen.insert(v)))
+}

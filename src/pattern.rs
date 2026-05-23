@@ -147,14 +147,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 }
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
-    /// Renders the abstraction body with HO apps spliced in: each occurrence
-    /// of `?#k` with non-empty `variable_indices[k]` is wrapped as
-    /// `(@ … (@ ?#k $vis[h-1]) … $vis[0])`. Falls back to plain `to_string()`
-    /// when every slot is empty.
-    pub fn display_with_ho(&self, variable_indices: &[Vec<i32>]) -> String {
-        if variable_indices.iter().all(|v| v.is_empty()) {
-            return self.to_string();
-        }
+    /// Builds the abstraction body with HO apps spliced in: each occurrence of
+    /// `?#k` with non-empty `variable_indices[k]` is wrapped as
+    /// `(@ … (@ ?#k $vis[h-1]) … $vis[0])`. Other positions copy through
+    /// unchanged.
+    pub fn build_with_ho(&self, variable_indices: &[Vec<i32>]) -> RecExpr<F::Apply<OpWithVar<O>>> {
         // RevExpr id → which metavar k (if any) lives at this position.
         let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
         for (k, ids) in self.vars.iter().enumerate() {
@@ -181,7 +178,16 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
             id_map[i] = new_id;
         }
-        <F::Apply<OpWithVar<O>> as StitchLanguage>::display_recexpr(&out)
+        out
+    }
+
+    /// String form of `build_with_ho`. Short-circuits to `to_string()` when no
+    /// wrapping is needed.
+    pub fn display_with_ho(&self, variable_indices: &[Vec<i32>]) -> String {
+        if variable_indices.iter().all(|v| v.is_empty()) {
+            return self.to_string();
+        }
+        <F::Apply<OpWithVar<O>> as StitchLanguage>::display_recexpr(&self.build_with_ho(variable_indices))
     }
 
     /// Render this abstraction as a closed lambda term — see

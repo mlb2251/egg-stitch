@@ -55,6 +55,13 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     let mut best_so_far: Option<(usize, SearchState<F, O>)> = None;
     let mut best_found_at = None;
+    // In --follow mode, the `new best` update is gated off (the prefix filter
+    // lets cheaper non-matching particles through), so `best_found_at` would
+    // otherwise stay None until the exact-match exit fires — and the
+    // dead-runs check would kill long-running follow searches prematurely.
+    // Track prefix progress (max RecExpr node count among prefix-passing
+    // particles) and bump `best_found_at` when it grows.
+    let mut best_prefix_progress: usize = 0;
     let mut steps_run = 0;
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
@@ -75,7 +82,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut mults: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
-            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, &mut dominance_hits) {
+            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, usize::MAX, &mut dominance_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
                     dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
                     continue;
@@ -106,7 +113,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         for (i, cost) in costs.iter().enumerate() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
             let arity = expanded[i].pattern.vars.len();
-            if arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat {
+            // In `--follow` mode the prefix filter lets cheaper non-matching
+            // particles through, so skip the prefix-best update — only the
+            // exact-match exit below promotes a particle to `best`.
+            if shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat && !expanded[i].has_useless_var(&shared) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, expanded[i].clone()));
                 best_found_at = Some(step);
@@ -116,14 +126,38 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // log-space weights: logw_i = -cost_i / temperature
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
 
+        if let Some(ref follow) = shared.follow {
+            apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
+            // Prefix progress: a deeper RecExpr means the particle has expanded
+            // further into the follow target's shape. When this grows, count it
+            // as improvement so the dead-runs check doesn't abort searches that
+            // are making progress but haven't yet reached exact match.
+            let step_progress: usize = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| expanded[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
+            if step_progress > best_prefix_progress {
+                best_prefix_progress = step_progress;
+                best_found_at = Some(step);
+            }
+            // If any surviving particle is alpha-equivalent to the follow target,
+            // the search has reached the goal — pick the cheapest such particle
+            // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
+            if let Some((i, c)) = (0..expanded.len())
+                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &shared.egraph))
+                .map(|i| (i, costs[i]))
+                .min_by_key(|&(_, c)| c)
+            {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
+                best_so_far = Some((c, expanded[i].clone()));
+                best_found_at = Some(step);
+                steps_run = step + 1;
+                log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), &best_so_far, &[]);
+                break;
+            }
+        }
+
         for (i, s) in expanded.iter().enumerate() {
             if s.pattern.vars.is_empty() {
                 log_weights[i] = f64::NEG_INFINITY;
             }
-        }
-
-        if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
         }
 
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
@@ -135,7 +169,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
-        if best_found_at.is_some_and(|bf| (step as i64) - (bf as i64) > dead_runs as i64) {
+        // Steps since last improvement; if no improvement yet, measure from step 0
+        // so a fully stuck search still aborts after `dead_runs`.
+        if (step as i64) - (best_found_at.unwrap_or(0) as i64) > dead_runs as i64 {
             log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
@@ -222,17 +258,28 @@ fn action_weights_with_reuse_boost<D>(actions: &[(Action<D>, usize)], boost_reus
         .collect()
 }
 
+/// Finds the index `i` such that `r` falls into the half-open interval
+/// `(acc_weights[i-1], acc_weights[i]]` (treating the implicit prefix as 0).
+///
+/// Uses `partition_point` so that zero-weight prefixes (entries whose
+/// cumulative value equals a previous one) are skipped, and clamps to the
+/// last index to defend against float round-off leaving the final
+/// accumulator slightly below 1.0.
+pub fn index_from_cumulative(acc_weights: &[f64], r: f64) -> usize {
+    assert!(!acc_weights.is_empty(), "index_from_cumulative requires a non-empty slice");
+    let idx = acc_weights.partition_point(|&w| w <= r);
+    idx.min(acc_weights.len() - 1)
+}
+
 /// Samples an index from a normalized cumulative weight array.
 pub fn weighted_choice(acc_weights: &[f64], rng: &mut StdRng) -> usize {
     let r: f64 = rng.random_range(0.0..1.0);
-    match acc_weights.binary_search_by(|&w| w.partial_cmp(&r).unwrap()) {
-        Ok(idx) => idx,
-        Err(idx) => idx,
-    }
+    index_from_cumulative(acc_weights, r)
 }
 
 /// Normalizes weights in-place and returns a separate cumulative distribution.
 pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
+    assert!(!weights.is_empty(), "normalize_and_accumulate requires a non-empty slice");
     let weight_sum = weights.iter().sum::<f64>();
     if weight_sum == 0.0 {
         let len = weights.len();
@@ -247,4 +294,43 @@ pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
         weights_acc.push(accum);
     }
     weights_acc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::index_from_cumulative;
+
+    #[test]
+    fn picks_interval_containing_r() {
+        let acc = vec![0.3, 0.7, 1.0];
+        assert_eq!(index_from_cumulative(&acc, 0.0), 0);
+        assert_eq!(index_from_cumulative(&acc, 0.2), 0);
+        assert_eq!(index_from_cumulative(&acc, 0.5), 1);
+        assert_eq!(index_from_cumulative(&acc, 0.9), 2);
+    }
+
+    #[test]
+    fn skips_zero_weight_prefix() {
+        // Two leading zero-weight entries, then one with all the mass.
+        let acc = vec![0.0, 0.0, 1.0];
+        assert_eq!(index_from_cumulative(&acc, 0.0), 2);
+        assert_eq!(index_from_cumulative(&acc, 0.5), 2);
+    }
+
+    #[test]
+    fn skips_zero_weight_in_middle() {
+        // Middle entry has zero weight; should never be picked.
+        let acc = vec![0.3, 0.3, 1.0];
+        for i in 0..1000 {
+            let r = i as f64 / 1000.0;
+            assert_ne!(index_from_cumulative(&acc, r), 1);
+        }
+    }
+
+    #[test]
+    fn clamps_when_r_exceeds_last_accumulator() {
+        // Simulates float roundoff where the final cumulative drifts below 1.0.
+        let acc = vec![0.3, 0.7, 0.9999999];
+        assert_eq!(index_from_cumulative(&acc, 0.99999995), 2);
+    }
 }

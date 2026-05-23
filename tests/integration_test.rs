@@ -257,6 +257,40 @@ fn check_slow_physics_18_09_34_bench004() {
 // stock `RecExpr` parser rejects. parse_follow_pattern routes them through
 // `parse_program` at `OpWithVar<O>`.
 
+/// When SMC reaches a particle alpha-equivalent to the follow target, it
+/// should exit immediately rather than burn the remaining step budget. We
+/// give it a generous budget; if the exact-match exit fires, `num_steps_run`
+/// will be a small fraction of it.
+#[test]
+fn follow_exact_match_exits_early_smc() {
+    let input = "data/domains/stitch/hof.json";
+    if !std::path::Path::new(input).exists() {
+        return;
+    }
+    let follow = "(lam (app (?#0 $0) (app (?#0 $0) empty)))";
+    let budget = 2000;
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--input",
+        input,
+        "--num-steps",
+        &budget.to_string(),
+        "--num-particles",
+        "500",
+        "--temperature",
+        "1000",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+        "--language",
+        "lambda-calc",
+    ]);
+    let result = run_lambda_calc(&args);
+    assert_best_matches_follow_lambda(&result, follow);
+    assert!(result.num_steps_run < budget, "expected early exit before {} steps; ran {}", budget, result.num_steps_run);
+}
+
 /// Follow string `(lam (app (?#0 $0) (app (?#0 $0) empty)))`
 #[test]
 fn follow_lambda_calc_flat_nary_app() {
