@@ -558,3 +558,23 @@ fn ho_minimal_lam_varying_head() {
 fn ho_shared_lam_with_outer_context() {
     check_fixture_bf_only("data/domains/higher-order/outer-context.json", LAMBDA, true);
 }
+
+/// Regression: `inline_useless_nonfrozen` must skip cross-depth-reused
+/// metavars. When `?#k` is shared between a shallow occurrence at `d_a` and a
+/// deep one at `d_b > d_a` via `subset_matches_reuse`, `shift_equal` can
+/// accept the reuse purely on a context-fv check — but a single literal at
+/// both sites would mean different binders. Pre-fix the search reached
+/// `(lam (map (lam (?#0 ?#1)) ?#1))` (cross-depth `?#1`), then the dominant
+/// inline collapsed `?#1` to literal `$0`, producing
+/// `(lam (map (lam (?#0 fn_55 $0)) $0))`. The match set still claimed to
+/// match `(lam (map (lam (index fn_55 $1)) $0))`, whose deep `$1` references
+/// the *outer* binder — so the rewrite came out as `(fn_57 index)` and
+/// β-reduced to a program with `$0` in place of the original `$1`. The fixture
+/// pins the post-fix output (the inline is skipped, search settles on an
+/// arity-1 mod-pattern at cost 457). This is the smallest list-domain corpus
+/// that exhibits the bug; smaller hand-crafted inputs lose the corpus pressure
+/// that pushes best-first onto the cross-depth-reuse path.
+#[test]
+fn cross_depth_useless_inline() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_useless_inline.json", LAMBDA, true);
+}

@@ -268,16 +268,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         });
     }
 
-    /// True iff metavar `?#k` is "useless": every match's substitution maps
-    /// `?#k` to the same e-class, and that e-class has no above-pattern free
-    /// DB indices (all `fv < d_k`). Such a metavar adds no compression — its
-    /// arg is invariant across sites, so the abstraction could be specialised
-    /// by inlining the arg.
-    ///
-    /// Stitch analog: `is_useless_abstract` (argument capture). The fv bound
-    /// matches stitch's "shifted_id fv is empty" check (the shift drops
-    /// indices `< d_k`).
-    fn is_useless_var(&self, k: usize, shared: &SharedSearchData<F, O>) -> bool {
+    /// If `?#k` is useless, returns the (canonical) e-class id it's bound to in
+    /// every match; otherwise `None`. "Useless" = every match maps `?#k` to the
+    /// same e-class with no above-pattern free DB indices (all `fv < d_k`),
+    /// matching stitch's `is_useless_abstract` / argument-capture check.
+    fn useless_var_eclass(&self, k: usize, shared: &SharedSearchData<F, O>) -> Option<Id> {
         let d_k = self.pattern.var_depth[k];
         let mut first: Option<Id> = None;
         for m in &self.matches {
@@ -286,11 +281,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 match first {
                     None => first = Some(id),
                     Some(f) if f == id => {}
-                    Some(_) => return false,
+                    Some(_) => return None,
                 }
             }
         }
-        first.is_some_and(|id| shared.egraph[id].data.fv.iter().all(|&i| (i as u32) < d_k))
+        first.filter(|&id| shared.egraph[id].data.fv.iter().all(|&i| (i as u32) < d_k))
+    }
+
+    /// True iff metavar `?#k` is "useless" (see [`useless_var_eclass`]).
+    fn is_useless_var(&self, k: usize, shared: &SharedSearchData<F, O>) -> bool {
+        self.useless_var_eclass(k, shared).is_some()
     }
 
     /// True iff some frozen variable (k < frozen_count) is useless. Used as a
@@ -308,6 +308,57 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// inlining a constant arg.
     pub fn has_useless_var(&self, shared: &SharedSearchData<F, O>) -> bool {
         (0..self.pattern.vars.len()).any(|k| self.is_useless_var(k, shared))
+    }
+
+    /// Builds a child state by fully concretizing every useless *non-frozen*
+    /// metavar (`k >= frozen_count.unwrap_or(0)`) to the size-minimal
+    /// extraction of the e-class it's bound to. Returns `None` when no such
+    /// var exists. The child preserves the parent's `frozen_count` — this is a
+    /// dominating short-circuit that runs "before" any normal expand in the
+    /// canonical order, so it shouldn't bump the freeze cursor.
+    ///
+    /// Concretizations are applied in descending `var_idx` order so earlier
+    /// indices don't shift mid-loop. Cross-depth-reused vars are skipped:
+    /// their occurrences live at different pattern depths, so a single
+    /// DB-bearing literal can't be sound at every site — `shift_equal` may
+    /// accept the reuse purely on a context-fv check, so even a `useless`
+    /// reading here doesn't license collapsing both sites to one literal.
+    pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
+        let start = self.frozen_count.unwrap_or(0);
+        let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter(|&k| !self.pattern.var_cross_depth[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
+        if targets.is_empty() {
+            return None;
+        }
+        targets.sort_by_key(|t| std::cmp::Reverse(t.0));
+        let mut child = self.clone();
+        for (k, eclass) in &targets {
+            child.concretize(*k, *eclass, shared);
+        }
+        Some(child)
+    }
+
+    /// Concretizes `?#var_idx` by splicing in the size-minimal extraction of
+    /// `eclass`: pattern slot and subst slot both go away, no new metavars
+    /// introduced. Caller must guarantee the var is useless — every subst
+    /// already maps `vars[var_idx]` to `eclass`, and the eclass's fv is bound
+    /// under the enclosing pattern binders (`fv < var_depth[var_idx]`).
+    /// `useless_var_eclass` returns the eclass id iff these hold.
+    ///
+    /// `frozen_count` is left untouched: callers concretize only non-frozen
+    /// vars (`var_idx >= frozen_count`), so removing that slot doesn't shift
+    /// any frozen-position index.
+    pub fn concretize(&mut self, var_idx: usize, eclass: Id, shared: &SharedSearchData<F, O>) {
+        let mut extraction: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
+        let mut memo: FxHashMap<Id, Id> = FxHashMap::default();
+        let root = build_size_minimal_extraction::<F, O>(&shared.egraph, eclass, &mut extraction, &mut memo);
+        self.pattern.concretize(var_idx, &extraction, root);
+        // Every surviving subst already maps vars[var_idx] to `eclass` by the
+        // useless precondition, so we just drop the slot — no support changes.
+        for m in &mut self.matches {
+            for subst in &mut m.substs {
+                subst.vars.remove(var_idx);
+            }
+        }
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
@@ -346,7 +397,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// SMC) skip work for unpicked actions. The caller materialises children
     /// for `All` via `apply_action`.
     ///
-    /// Expand actions are filtered against best-first's canonical-ordering
+    /// Reuse candidates are emitted first so the dominance short-circuit can fire:
+    /// when a reuse(i, j) preserves `num_substs` (every subst already had the two
+    /// vars equal), the resulting child match set is identical to the parent's
+    /// modulo the var-merge, so any successor of the parent is reachable via this
+    /// reuse — we can return it as the *only* successor and skip enumerating the
+    /// rest. Disabled by `--no-opt-dominance-reuse`.
+    ///
+    /// Expand actions are filtered against the best-first canonical-ordering
     /// rule: any `var_idx < self.frozen_count` or `var_idx > max_arity` is
     /// skipped before the action is even constructed. SMC passes
     /// `max_arity = usize::MAX` and starts with `frozen_count = None`, so the
@@ -360,7 +418,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `support > 0`; `subset_matches` then guarantees the child's match set is
     /// non-empty.
     #[allow(clippy::type_complexity)]
-    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, max_arity: usize, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
+    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, opt_useless_inline: bool, max_arity: usize, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> SuccessorEnum<F, O> {
+        // Useless-non-frozen inlining is a strictly dominating short-circuit:
+        // a constant arg adds no compression, so specialising the body by
+        // inlining its size-minimal extraction can only improve cost. Runs
+        // before reuse/expand enumeration in the canonical order.
+        if opt_useless_inline && let Some(child) = self.inline_useless_nonfrozen(shared) {
+            *useless_inline_hits += 1;
+            let support = child.num_substs;
+            return SuccessorEnum::Dominant { child, support };
+        }
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
         // Weight each (match, subst) contribution by how often that match's
@@ -433,6 +500,34 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         SuccessorEnum::All(out)
     }
+}
+
+/// Walks `eclass` picking the size-minimal enode at each step (same cost
+/// rule as `extract_root_size`: intrinsic node weight + sum of child eclass
+/// sizes), appending each enode in postorder to `out` with its children
+/// remapped to the appended positions. `memo` shares any eclass visited
+/// twice in the walk, so the result is DAG-shared rather than tree-expanded.
+/// Returns the root's index in `out`. Discriminants are lifted into the
+/// pattern leaf-op via `OpWithVar::Node` so the result splices into a
+/// `Pattern<F, O>::pattern` directly.
+fn build_size_minimal_extraction<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, eclass: Id, out: &mut Vec<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>) -> Id {
+    let canonical = egraph.find(eclass);
+    if let Some(&id) = memo.get(&canonical) {
+        return id;
+    }
+    let weights = egraph.analysis.weights;
+    let rep = egraph[canonical]
+        .nodes
+        .iter()
+        .min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>())
+        .expect("non-empty eclass")
+        .clone();
+    let children: Vec<Id> = rep.children().iter().map(|&c| build_size_minimal_extraction::<F, O>(egraph, c, out, memo)).collect();
+    let node = F::make(F::map_discriminant(rep.discriminant(), OpWithVar::Node), children);
+    out.push(node);
+    let id = Id::from(out.len() - 1);
+    memo.insert(canonical, id);
+    id
 }
 
 /// Parses the shared-context fields out of CLI args, computes usage counts, and

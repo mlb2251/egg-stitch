@@ -144,6 +144,64 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
     }
+
+    /// Splices a fully-concrete subtree in for every occurrence of `?#var_idx`
+    /// and removes the var slot. The subtree is `extraction`, a postorder node
+    /// list with `root` at its last index (children referenced by lower
+    /// indices). Soundness wrt enclosing pattern binders — i.e. that every DB
+    /// index in `extraction` is bound at the splice site — is the caller's
+    /// responsibility; the typical caller obtains `extraction` from a
+    /// size-minimal eclass walk gated by a `fv < var_depth[var_idx]` check.
+    ///
+    /// Multi-position vars (from prior `reuse`) get the root node cloned into
+    /// each position; the subtree's internal nodes are appended once, so the
+    /// pattern DAG is shared across positions. Trailing var names shift down
+    /// by one to keep the canonical-form invariant.
+    pub fn concretize(&mut self, var_idx: usize, extraction: &[F::Apply<OpWithVar<O>>], root: Id) {
+        let var_positions = self.vars.remove(var_idx);
+        self.var_depth.remove(var_idx);
+        self.var_cross_depth.remove(var_idx);
+        self.var_occurrences.remove(var_idx);
+
+        for p in var_idx..self.vars.len() {
+            let shifted = var_node::<F, O>(p as u32);
+            for &id in &self.vars[p] {
+                self.pattern[id] = shifted.clone();
+            }
+        }
+
+        // `extraction` is postorder (root at the last index, children at
+        // strictly lower indices). `self.pattern` is a `RevExpr`, which
+        // requires *parents* at lower indices than their children — so we
+        // append the non-root nodes in reverse extraction order, remapping
+        // each old extraction index `i ∈ [0, n-1)` to pattern position
+        // `base + (n - 2 - i)`. The root gets cloned (with the same remap)
+        // into every var position; since var positions sit at indices `< base`
+        // and remapped children at indices `>= base`, root↦children references
+        // go strictly forward in pattern indices.
+        let n = extraction.len();
+        debug_assert_eq!(usize::from(root), n - 1, "concretize: root must be the last extraction node");
+        let base = self.pattern.nodes.len();
+        let remap = |c: Id| {
+            let i = usize::from(c);
+            debug_assert!(i < n - 1, "concretize: extraction child references must skip the root");
+            Id::from(base + n - 2 - i)
+        };
+        for i in (0..n - 1).rev() {
+            let mut clone = extraction[i].clone();
+            for c in clone.children_mut() {
+                *c = remap(*c);
+            }
+            self.pattern.nodes.push(clone);
+        }
+        let mut root_node = extraction[n - 1].clone();
+        for c in root_node.children_mut() {
+            *c = remap(*c);
+        }
+        for var_id in var_positions {
+            self.pattern[var_id] = root_node.clone();
+        }
+    }
 }
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {

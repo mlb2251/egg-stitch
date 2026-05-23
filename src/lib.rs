@@ -128,6 +128,17 @@ pub struct Args {
     #[arg(long = "no-opt-useless-frozen", action = clap::ArgAction::SetFalse)]
     pub opt_useless_frozen: bool,
 
+    /// Disable the useless-non-frozen inlining short-circuit (on by default).
+    /// When a non-frozen metavar `?#k` is bound to the same e-class in every
+    /// match (and that e-class has no above-pattern free vars), this emits a
+    /// single dominant successor that one-step expands `?#k` (and any other
+    /// such non-frozen vars) to the size-minimal enode shape of its e-class —
+    /// inlining a constant arg specialises the body without giving up matches.
+    /// `frozen_count` is preserved since the move runs "before" any normal
+    /// expand in the canonical order.
+    #[arg(long = "no-opt-useless-inline", action = clap::ArgAction::SetFalse)]
+    pub opt_useless_inline: bool,
+
     /// Disable lower-bound pruning of best-first children (on by default).
     /// Each child gets a `compute_lower_bound` estimate; if it already
     /// exceeds the current best, skip the full cost call. Bounds are also

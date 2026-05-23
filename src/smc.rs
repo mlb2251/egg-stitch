@@ -69,6 +69,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared, None), num_particles)];
     let mut scratch = CostScratch::new(&shared.egraph);
     let mut dominance_hits: usize = 0;
+    let mut useless_inline_hits: usize = 0;
 
     for step in 0..num_steps {
         // For each (state, mult) group, enumerate successor *actions* (no child
@@ -82,7 +83,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut mults: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
-            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, usize::MAX, &mut dominance_hits) {
+            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
                     dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
                     continue;
@@ -215,6 +216,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     println!("\n{}", "═══ STATS ═══".blue().bold());
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
+    println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
