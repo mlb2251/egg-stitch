@@ -9,7 +9,7 @@ pub struct MatchAtEClass {
 }
 
 /// One assignment of pattern variables to e-class ids.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Subst {
     pub vars: Vec<Id>,
 }

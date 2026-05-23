@@ -223,21 +223,36 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// (see `compute_ho_arity` and `shift_free_egraph`), so the match set
     /// stays permissive and search keeps exploring those branches.
     pub fn subset_matches(&mut self, var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) {
-        self.update_matches(|subst, out| {
-            let var_id = subst.vars[var_idx];
-            let var_eclass = &shared.egraph[var_id];
-            for node in &var_eclass.nodes {
-                if !node.matches(target) {
-                    continue;
+        // Per-match dedup: distinct enodes in the same eclass can match
+        // `target` with identical canonical child ids (e.g. after congruence
+        // merges), producing duplicate substs that would inflate `num_substs`
+        // without contributing match information. Scoped to the whole match's
+        // post-expansion subst list, not just one input subst, since two
+        // different input substs can also collapse to the same output.
+        for m in &mut self.matches {
+            let mut seen: FxHashSet<Vec<Id>> = FxHashSet::default();
+            let mut new_substs: Vec<Subst> = Vec::new();
+            for subst in &m.substs {
+                let var_id = subst.vars[var_idx];
+                let var_eclass = &shared.egraph[var_id];
+                for node in &var_eclass.nodes {
+                    if !node.matches(target) {
+                        continue;
+                    }
+                    let mut new_subst = subst.clone();
+                    new_subst.vars.remove(var_idx);
+                    for (j, child_id) in node.children().iter().enumerate() {
+                        new_subst.vars.insert(var_idx + j, *child_id);
+                    }
+                    if seen.insert(new_subst.vars.clone()) {
+                        new_substs.push(new_subst);
+                    }
                 }
-                let mut new_subst = subst.clone();
-                new_subst.vars.remove(var_idx);
-                for (j, child_id) in node.children().iter().enumerate() {
-                    new_subst.vars.insert(var_idx + j, *child_id);
-                }
-                out.push(new_subst);
             }
-        });
+            m.substs = new_substs;
+        }
+        self.matches.retain(|m| !m.substs.is_empty());
+        self.num_substs = total_substs(&self.matches);
     }
 
     /// Filters matches to those where `var_idx` and `second_var_idx` point to the same e-class.
