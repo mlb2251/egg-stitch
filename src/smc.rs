@@ -153,7 +153,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
-        if best_found_at.is_some_and(|bf| (step as i64) - (bf as i64) > dead_runs as i64) {
+        // Steps since last improvement; if no improvement yet, measure from step 0
+        // so a fully stuck search still aborts after `dead_runs`.
+        if (step as i64) - (best_found_at.unwrap_or(0) as i64) > dead_runs as i64 {
             log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
