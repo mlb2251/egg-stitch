@@ -585,7 +585,9 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
             let frozen = sizes.analysis.search_state.frozen_count.unwrap_or(0);
             let substs = &sizes.analysis.search_state.matches[i].substs;
-            if let Some(rewrite_size) = substs.iter().map(|subst| 1 + subst.vars.iter().take(frozen).map(|&v| sizes.get(sizes.egraph.find(v))).sum::<i64>()).min() {
+            let weights = sizes.weights();
+            let stub_size = F::stub_application_size::<O>("inv_0", frozen, weights) as i64;
+            if let Some(rewrite_size) = substs.iter().map(|subst| stub_size + subst.vars.iter().take(frozen).map(|&v| sizes.get(sizes.egraph.find(v))).sum::<i64>()).min() {
                 best = best.min(rewrite_size);
             }
         }
