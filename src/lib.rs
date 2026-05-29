@@ -112,15 +112,13 @@ pub struct Args {
     #[arg(long, default_value_t = 1)]
     pub num_abstractions: usize,
 
-    /// Enable the `seen` set in best-first search (canonical-pattern dedup).
-    /// Off by default: the canonical-ordering rule (`frozen_count`) and the
-    /// dominance/useless-inline short-circuits already eliminate most
-    /// duplicates, so the seen-set typically catches only a few percent of
-    /// states while costing a clone+hash on every successor. Empirically
-    /// disabling it is ~2× faster on cogsci-scale runs and ~15% faster on
-    /// small lambda-calc runs, with the same final cost (a few percent more
-    /// expansions but cheaper per-expansion overall).
-    #[arg(long = "opt-seen", default_value_t = false)]
+    /// Disable the `seen` set in best-first search (on by default).
+    /// The seen-set dedupes successors by `DedupKey` (per-variable depths +
+    /// match set), skipping states whose reachable successors a prior visit
+    /// already covers. Disable to measure how much pruning the seen-set buys
+    /// (the canonical-ordering rule and the dominance/useless-inline
+    /// short-circuits still eliminate many duplicates on their own).
+    #[arg(long = "no-opt-seen", action = clap::ArgAction::SetFalse)]
     pub opt_seen: bool,
 
     /// Disable dominance pruning for the reuse branch (on by default).
