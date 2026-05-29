@@ -1,11 +1,12 @@
 use colored::Colorize;
 
-use crate::cost::{CostScratch, compute_cost};
+use crate::cost::{CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
+use crate::lang::{LanguageFamily, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
+use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::math::logaddexp;
-use crate::revexpr::RevExpr;
+use crate::pattern::Pattern;
 use crate::search::{Action, SearchState, SuccessorEnum, setup_search};
 use rand::Rng;
 use rand::rngs::StdRng;
@@ -13,12 +14,12 @@ use rustc_hash::FxHashMap;
 
 /// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
 /// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize>) {
-    match dedup.get(&s.pattern.pattern) {
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
+    match dedup.get(&s.pattern) {
         Some(&idx) => mults[idx] += count,
         None => {
             let idx = states.len();
-            dedup.insert(s.pattern.pattern.clone(), idx);
+            dedup.insert(s.pattern.clone(), idx);
             states.push(s);
             mults.push(count);
         }
@@ -27,7 +28,10 @@ fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usi
 
 /// Output of a completed SMC run.
 pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
-    pub best: Option<(usize, SearchState<F, O>)>,
+    /// `(cost, winning state + the cost selection the optimiser picked for it)`.
+    /// Threading the selection out saves `multiple_step_search` from re-running
+    /// `compute_cost_and_select` just to recover it.
+    pub best: Option<(usize, SearchStateWithCostSelection<F, O>)>,
     pub original_size: usize,
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
@@ -53,7 +57,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let no_zero_arity = args.no_zero_arity;
     let verbose = args.verbose;
 
-    let mut best_so_far: Option<(usize, SearchState<F, O>)> = None;
+    let mut best_so_far: Option<(usize, SearchStateWithCostSelection<F, O>)> = None;
     let mut best_found_at = None;
     // In --follow mode, the `new best` update is gated off (the prefix filter
     // lets cheaper non-matching particles through), so `best_found_at` would
@@ -70,6 +74,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut scratch = CostScratch::new(&shared.egraph);
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
+    let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
 
     for step in 0..num_steps {
         // For each (state, mult) group, enumerate successor *actions* (no child
@@ -81,7 +86,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // win zero samples. Resulting patterns are deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
-        let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
+        let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
@@ -109,23 +114,36 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         }
         drop(dedup);
 
-        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
-
-        for (i, cost) in costs.iter().enumerate() {
+        // Per-particle: optional lower-bound prune, else full cost; running
+        // `best_so_far` update inline so later particles in the same step can
+        // benefit from a tighter `cost_to_beat`.
+        let mut costs: Vec<usize> = Vec::with_capacity(expanded.len());
+        let mut pruned: Vec<bool> = Vec::with_capacity(expanded.len());
+        for s in expanded.iter() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
-            let arity = expanded[i].pattern.vars.len();
+            if let PruneResult::Pruned = lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, cost_to_beat) {
+                costs.push(cost_to_beat);
+                pruned.push(true);
+                continue;
+            }
+            let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow);
+            let cost = selection.cost;
+            let arity = s.pattern.vars.len();
             // In `--follow` mode the prefix filter lets cheaper non-matching
             // particles through, so skip the prefix-best update — only the
             // exact-match exit below promotes a particle to `best`.
-            if shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat && !expanded[i].has_useless_var(&shared) {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
-                best_so_far = Some((*cost, expanded[i].clone()));
+            if shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && !s.has_useless_var(&shared) {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
+                best_so_far = Some((cost, SearchStateWithCostSelection { state: s.clone(), selection }));
                 best_found_at = Some(step);
             }
+            costs.push(cost);
+            pruned.push(false);
         }
 
-        // log-space weights: logw_i = -cost_i / temperature
-        let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
+        // log-space weights: logw_i = -cost_i / temperature; pruned particles
+        // (lb >= best) are dead since no descendant can beat the current best.
+        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
 
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
@@ -147,7 +165,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 .min_by_key(|&(_, c)| c)
             {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
-                best_so_far = Some((c, expanded[i].clone()));
+                // Re-derive the selection for this particle: we didn't keep
+                // selections in `costs`, and exact-match fires at most once.
+                let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &expanded[i], shared.check_slow);
+                best_so_far = Some((c, SearchStateWithCostSelection { state: expanded[i].clone(), selection }));
                 best_found_at = Some(step);
                 steps_run = step + 1;
                 log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), &best_so_far, &[]);
@@ -200,7 +221,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 particles: build_particle_logs(&expanded, &costs, &weights),
                 resample_indices,
                 best_cost: best_so_far.as_ref().map(|(c, _)| *c),
-                best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
+                best_pattern: best_so_far.as_ref().map(|(_, b)| b.state.pattern.to_string()),
             });
         }
 
@@ -217,9 +238,11 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     println!("\n{}", "═══ STATS ═══".blue().bold());
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
+    lower_bound_pruner.print_stats();
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
-    if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
+    if let (Some(iter), Some((cost, best))) = (best_found_at, best_so_far.as_ref()) {
+        let state = &best.state;
         println!("{} {}", "best found at iteration:".dimmed(), iter.to_string().yellow());
         println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
         println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());

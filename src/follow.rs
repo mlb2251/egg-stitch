@@ -43,16 +43,25 @@ fn walk<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>
     pn.matches(fn_) && pn.children().iter().zip(fn_.children().iter()).all(|(&pc, &fc)| walk::<F, O>(pattern, pc, follow, fc, bindings))
 }
 
-/// True iff the state's HO-arity-decorated body is alpha-equivalent to the
-/// follow target. Equivalent to: η-wrap the pattern with `variable_indices` so
-/// it has the same surface shape the search displays, then `follow_unify`
-/// against the follow; alpha-equivalence is the case where every captured
-/// binding is a bare follow Var and the pattern→follow Var mapping is
-/// injective.
-pub fn matches_follow_serialized<F: LanguageFamily, O: StitchOp>(state: &crate::search::SearchState<F, O>, follow: &RevExpr<F::Apply<OpWithVar<O>>>, egraph: &crate::lang::StitchEgraph<F::Apply<O>>) -> bool {
-    let vis = crate::cost::compute_variable_indices::<F, O>(egraph, state);
-    let wrapped: RevExpr<F::Apply<OpWithVar<O>>> = state.pattern.build_with_ho(&vis).into();
-    let Some(bindings) = follow_unify::<F, O>(&wrapped, follow) else { return false };
+/// True iff the state's bare pattern is alpha-equivalent to the follow target
+/// modulo η-wrap of metavar slots. Unifies `state.pattern.pattern` directly
+/// against the follow, then accepts each `?#k → fid` binding whose follow
+/// subtree either *is* a metavar leaf or is the η-wrap shape rendered by
+/// [`LanguageFamily::wrap_pattern_with_db_apps`] (`(@ … (@ ?#m $0) … $h-1)` in
+/// lambda-calc) — in either case the inner metavar is the one we bind to.
+///
+/// Comparing the bare pattern instead of the displayer's η-wrapped form
+/// sidesteps the candidate-selection mismatch: discovery may pick
+/// `variable_indices` that drop fv-bearing substs to display a bare `?#k`
+/// where another candidate would emit `(?#k $0 …)`, and the follow target
+/// inherits whatever the optimiser chose; collapsing both sides through
+/// `unwrap_pattern_db_apps` makes the check candidate-independent so the
+/// search can stop on any state that prints to either form.
+pub fn matches_follow_serialized<F: LanguageFamily, O: StitchOp>(state: &crate::search::SearchState<F, O>, follow: &RevExpr<F::Apply<OpWithVar<O>>>, _egraph: &crate::lang::StitchEgraph<F::Apply<O>>) -> bool {
+    let Some(bindings) = follow_unify::<F, O>(&state.pattern.pattern, follow) else { return false };
     let mut seen = std::collections::HashSet::new();
-    bindings.values().all(|&fid| follow[fid].discriminant().as_var().is_some_and(|v| seen.insert(v)))
+    bindings.values().all(|&fid| {
+        let head = F::unwrap_pattern_db_apps::<O>(&follow.nodes, fid);
+        follow[head].discriminant().as_var().is_some_and(|v| seen.insert(v))
+    })
 }

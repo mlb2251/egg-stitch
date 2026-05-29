@@ -1,10 +1,12 @@
 pub mod best_first;
+pub mod candidates;
 pub mod cost;
 pub mod debug_log;
 pub mod follow;
 pub mod io;
 pub mod lang;
 pub mod logging;
+pub mod lower_bound;
 pub mod matching;
 pub mod math;
 pub mod pattern;
@@ -12,12 +14,13 @@ pub mod results;
 pub mod revexpr;
 pub mod search;
 pub mod shared;
+pub mod shift;
 pub mod shift_equal;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
-use egg::{Id, Language};
+use egg::Language;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -109,9 +112,16 @@ pub struct Args {
     #[arg(long, default_value_t = 1)]
     pub num_abstractions: usize,
 
-    /// Disable the `seen` set in best-first search (skip dedup check and insert).
-    #[arg(long, default_value_t = false)]
-    pub no_seen: bool,
+    /// Enable the `seen` set in best-first search (canonical-pattern dedup).
+    /// Off by default: the canonical-ordering rule (`frozen_count`) and the
+    /// dominance/useless-inline short-circuits already eliminate most
+    /// duplicates, so the seen-set typically catches only a few percent of
+    /// states while costing a clone+hash on every successor. Empirically
+    /// disabling it is ~2× faster on cogsci-scale runs and ~15% faster on
+    /// small lambda-calc runs, with the same final cost (a few percent more
+    /// expansions but cheaper per-expansion overall).
+    #[arg(long = "opt-seen", default_value_t = false)]
+    pub opt_seen: bool,
 
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
@@ -223,19 +233,35 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
 
         match best {
             None => break,
-            Some((best_cost, state)) => {
-                let ho_arity = cost::compute_ho_arity::<F, O>(&result_data.egraph, &state);
+            Some((best_cost, best)) => {
+                // The search already chose this candidate when it scored `state`,
+                // and threaded it back via `best` — no need to redo the
+                // optimisation here.
+                let state = &best.state;
+                let candidate = &best.selection.candidate;
+                let variable_indices = &candidate.variable_indices;
+                let ho_arity: Vec<u32> = variable_indices.iter().map(|v| v.len() as u32).collect();
                 let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_data.egraph.analysis.weights);
-                let variable_indices = cost::compute_variable_indices::<F, O>(&result_data.egraph, &state);
-                let body_str = state.pattern.display_with_ho(&variable_indices);
-                let lambda = state.pattern.display_as_lambda(&variable_indices);
+                let body_str = state.pattern.display_with_ho(variable_indices);
+                let lambda = state.pattern.display_as_lambda(variable_indices);
                 let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
-                let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
+                // With the `None` sentinel every match keeps every subst, so every
+                // match contributes its usage count; otherwise count only matches
+                // whose kept list is non-empty.
+                let usage_matches: usize = match &candidate.kept_substs {
+                    None => state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
+                    Some(k) => state.matches.iter().zip(k).filter(|(_, ks)| !ks.is_empty()).map(|(m, _)| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
+                };
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, &state, &fn_name, args.rules.as_deref());
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, args.rules.as_deref());
 
-                final_cost = Some(best_cost);
+                // `best_cost` is the search's score for this iteration: rewritten
+                // corpus + this abstraction's body. Earlier iterations rewrote the
+                // corpus into `fn_K(...)` call sites only — their bodies live in
+                // the library and must be added separately.
+                let prev_bodies: usize = library.iter().map(|a: &results::AbstractionResult| a.pattern_size).sum();
+                final_cost = Some(best_cost + prev_bodies);
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
@@ -292,32 +318,12 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// rules re-applied).
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
-pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
-    let shared::SharedData { mut egraph, root } = data;
-    // η-wrap captures whose fv reaches into pattern-internal binders before
-    // passing them in.
-    let var_depth = &state.pattern.var_depth;
-    let variable_indices = cost::compute_variable_indices::<F, O>(&egraph, state);
-    // Defer unions until all shifts are done. A mid-loop `union` shrinks
-    // `data.fv` on the unioned classes but leaves parent classes stale until
-    // `rebuild`, and the next iteration's `shift_free_egraph` would then
-    // read that stale fv and trip the intersection-fv assertion.
-    let mut pending: Vec<(Id, Id)> = Vec::new();
-    for m in &state.matches {
-        for subst in &m.substs {
-            let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, &variable_indices, var_depth);
-            let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
-            pending.push((x, m.root_eclass));
-        }
-    }
-    for (x, root_eclass) in pending {
-        egraph.union(x, root_eclass);
-    }
-    egraph.rebuild();
+pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
+    let shared::SharedData { egraph, root } = data;
+    let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
     let extractor = egg::Extractor::new(&egraph, cost::WeightedSize { weights: egraph.analysis.weights });
     let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
-
     let weights = egraph.analysis.weights;
     let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
     (fresh, programs)

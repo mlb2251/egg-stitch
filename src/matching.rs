@@ -2,6 +2,7 @@ use crate::lang::{StitchEgraph, StitchLanguage};
 use egg::Id;
 
 /// All the ways the current pattern can match at a specific e-class.
+/// Invariant: `root_eclass` and all `Subst.vars` ids are canonical (egraph isn't unioned during search).
 #[derive(Debug, Clone)]
 pub struct MatchAtEClass {
     pub root_eclass: egg::Id,

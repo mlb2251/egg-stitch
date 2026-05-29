@@ -16,6 +16,7 @@ impl<L: egg::Language> RevExpr<L> {
 
 /// Reverses the nodes in the vector of nodes and updates the children ids to point to the correct nodes
 fn rev_nodes<L: egg::Language>(nodes: &mut Vec<L>) {
+    assert!(!nodes.is_empty(), "rev_nodes: node list is empty; a RevExpr must contain at least a root node. An empty expression has no valid representation.");
     nodes.reverse();
     let max_id = nodes.len() - 1;
     for node in nodes {

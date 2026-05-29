@@ -30,7 +30,7 @@ fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
     let follow: PatternRecExpr<OpChildren, Op> = follow_str.parse().expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
-    assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
+    assert!(best.state.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.state.pattern, follow_str,);
 }
 
 /// Lambda-calc variant: parses through `LambdaCalc::parse_follow_pattern` so
@@ -39,7 +39,7 @@ fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_st
 fn assert_best_matches_follow_lambda(result: &smc::SmcResult<LambdaCalc, OpDB<Op>>, follow_str: &str) {
     let follow = LambdaCalc::parse_follow_pattern::<OpDB<Op>>(follow_str).expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
-    assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
+    assert!(best.state.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.state.pattern, follow_str,);
 }
 
 const DIALS_FULL_FOLLOW: &str = "(T (T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0)) (M 1 0 (* ?#0 (* 0.5 (cos (/ pi 4)))) (* ?#0 (* 0.5 (sin (/ pi 4))))))";

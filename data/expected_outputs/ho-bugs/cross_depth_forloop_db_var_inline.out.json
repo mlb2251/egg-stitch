@@ -1,0 +1,27 @@
+{
+  "compression_ratio": 1.108695652173913,
+  "cost_after_rewrites": 102,
+  "final_cost": 92,
+  "initial_cost": 102,
+  "library": [
+    {
+      "approx_cost": 82,
+      "arity": 2,
+      "lambda": "(lam (lam (lam (logo_forLoop $2 (lam (lam (logo_FWRT $3 (logo_DIVA logo_UA 4) $0))) $0))))",
+      "num_matches": 2,
+      "pattern": "fn_0: (lam (logo_forLoop ?#0 (lam (lam (logo_FWRT ?#1 (logo_DIVA logo_UA 4) $0))) $0))",
+      "pattern_size": 20,
+      "usage_matches": 2
+    }
+  ],
+  "original_programs": [
+    "(lam (logo_forLoop logo_IFTY (lam (lam (logo_FWRT logo_ZL logo_epsA $0))) (logo_forLoop logo_IFTY (lam (lam (logo_FWRT (logo_MULL logo_epsL $1) (logo_MULA logo_epsA 4) $0))) $0)))",
+    "(lam (logo_forLoop 4 (lam (lam (logo_GETSET (lam (logo_forLoop 7 (lam (lam (logo_FWRT logo_UL (logo_DIVA logo_UA 4) $0))) $0)) (logo_FWRT logo_UL logo_ZA $0)))) $0))",
+    "(lam (logo_forLoop 4 (lam (lam (logo_FWRT (logo_MULL logo_UL 3) (logo_DIVA logo_UA 4) $0))) $0))"
+  ],
+  "rewritten_programs": [
+    "(lam (logo_forLoop logo_IFTY (lam (lam (logo_FWRT logo_ZL logo_epsA $0))) (logo_forLoop logo_IFTY (lam (lam (logo_FWRT (logo_MULL logo_epsL $1) (logo_MULA logo_epsA 4) $0))) $0)))",
+    "(lam (logo_forLoop 4 (lam (lam (logo_GETSET (fn_0 7 logo_UL) (logo_FWRT logo_UL logo_ZA $0)))) $0))",
+    "(fn_0 4 (logo_MULL logo_UL 3))"
+  ]
+}

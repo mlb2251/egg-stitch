@@ -136,6 +136,23 @@ def follow_equivalent(target, got):
             return x[0]
         return None
 
+    def split_meta_ho(x):
+        """If `x` is `(?#k $a $b … rest …)` — leading metavar, then one or more
+        bound-var args (the HO-wrap of slot `k`), then any number of non-DB
+        siblings — return `(?#k, rest…)`. Folds the HO-wrap so an η-applied
+        slot is alpha-equivalent to a bare metavar followed by its siblings.
+        Returns None when the shape doesn't match (no HO prefix, or any
+        non-trailing non-DB arg).
+        """
+        if not (isinstance(x, tuple) and len(x) >= 2 and is_meta(x[0])):
+            return None
+        i = 1
+        while i < len(x) and is_db(x[i]):
+            i += 1
+        if i == 1:
+            return None
+        return (x[0],) + tuple(x[i:])
+
     def bind(av, bv):
         if av in fwd and fwd[av] != bv: return False
         if bv in rev and rev[bv] != av: return False
@@ -143,11 +160,21 @@ def follow_equivalent(target, got):
         return True
 
     def go(a, b):
+        # Try the bare/HO-wrap collapse first — `(?#k $0)` ≡ `?#k` and
+        # `(?#k $0 ?#j)` ≡ `(?#k ?#j)`, etc.
         ma, mb = meta_head(a), meta_head(b)
         if ma is not None and mb is not None:
             return bind(ma, mb)
         if ma is not None or mb is not None:
             return False
+        # Also try stripping *both* sides — discovery and follow may render the
+        # same metavar slot with different DB sequences (`($1 $0)` vs `($0 $1)`)
+        # whenever the optimiser picks different `vis` orderings, so a strict
+        # element-wise compare on the raw tuples would reject the alpha-equal
+        # form even though the post-strip skeletons agree.
+        sa, sb = split_meta_ho(a) or a, split_meta_ho(b) or b
+        if (sa is not a or sb is not b) and isinstance(sa, tuple) and isinstance(sb, tuple) and len(sa) == len(sb):
+            return go(sa, sb)
         if isinstance(a, str) and isinstance(b, str):
             return a == b
         if isinstance(a, tuple) and isinstance(b, tuple) and len(a) == len(b):

@@ -1,5 +1,6 @@
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchLanguage, StitchOp};
 use crate::revexpr::RevExpr;
+use crate::shift::{shift_db_disc, shift_extraction};
 use egg::{Id, Language, RecExpr};
 use rustc_hash::FxHashMap;
 
@@ -25,14 +26,18 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
     pub vars: Vec<Vec<Id>>,  // vars[k] = all RecExpr ids holding Var(k)
     pub var_depth: Vec<u32>, // var_depth[k] = pattern-internal binders enclosing ?#k (= min depth across occurrences after reuse)
-    /// True iff `?#k` has been cross-depth-merged (occurrences live at
-    /// different depths in the pattern).
-    pub var_cross_depth: Vec<bool>,
     /// Syntactic occurrence count of `?#k`: how many times a walk from the
-    /// root visits a node holding `Var(k)`. DAG-shared positions count once
-    /// per parent reference, matching `compute_recexpr_size`'s semantics.
-    /// Maintained incrementally by `expand`/`reuse`.
+    /// root visits a node holding `Var(k)`. The pattern is a pure tree (no node
+    /// sharing), so this equals `vars[k].len()`; it is still tracked explicitly
+    /// because cost accounting reads it on the hot path. Maintained incrementally
+    /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
+    /// True iff `?#k` is in the freshest cohort. `expand` flips all
+    /// pre-existing vars to false and inserts new children as true; `reuse`
+    /// flips `0..drop_idx` to false (including the kept slot). Search skips
+    /// `Reuse(i, j)` only when *both* are false — that pair would re-merge
+    /// cohorts a prior action already committed to (duplicate canonical).
+    pub var_reusable: Vec<bool>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -46,8 +51,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             pattern: RevExpr::new(vec![var_node::<F, O>(0)]),
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
-            var_cross_depth: vec![false],
             var_occurrences: vec![1],
+            var_reusable: vec![true],
         }
     }
 
@@ -59,11 +64,25 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Each new child meta-var inherits the parent's binder depth, plus one if
     /// `target.discriminant().binds_child(j)` is true for that slot — i.e., a
     /// `Lam` body bumps the depth of the meta-var that lands inside it.
+    ///
+    /// When `?#var_idx` occupies multiple positions (from a prior `reuse`), every
+    /// occurrence is expanded *independently*: each gets its own copy of the new
+    /// enode and its own freshly-created child nodes. The pattern stays a pure
+    /// tree — no node is shared between occurrences — so `vars[var_idx+j]` ends up
+    /// with one id per occurrence rather than a single DAG-shared id.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
+        // Per-occurrence structural depths, snapshotted before any mutation.
+        let depths = self.occurrence_depths();
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
-        let parent_cross = self.var_cross_depth.remove(var_idx);
         let parent_occ = self.var_occurrences.remove(var_idx);
+        self.var_reusable.remove(var_idx);
+        // Any expansion flips every *previously existing* var to non-reusable;
+        // only the children we insert below start out reusable. See
+        // `var_reusable` docs.
+        for r in &mut self.var_reusable {
+            *r = false;
+        }
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
@@ -80,31 +99,36 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
 
-        // Build the new enode with freshly-named Var children at positions var_idx..var_idx+k.
-        let mut new_children = Vec::with_capacity(num_children);
+        // Insert the `num_children` new var slots (names var_idx..var_idx+k).
+        // Positions are filled in below — one freshly-created node per occurrence
+        // of the expanded var, since we never share nodes across occurrences.
         for j in 0..num_children {
-            self.pattern.nodes.push(var_node::<F, O>((var_idx + j) as u32));
-            let new_id = Id::from(self.pattern.nodes.len() - 1);
-            new_children.push(new_id);
-            self.vars.insert(var_idx + j, vec![new_id]);
+            self.vars.insert(var_idx + j, Vec::with_capacity(var_positions.len()));
             let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
             self.var_depth.insert(var_idx + j, child_depth);
-            // Children of a cross-depth-merged metavar inherit the property —
-            // the multi-depth ambiguity persists down the expansion tree until
-            // the slot is fully concretized.
-            self.var_cross_depth.insert(var_idx + j, parent_cross);
-            // Each new child meta-var lives at one slot of the new enode, and
-            // the new enode replaces every occurrence of the parent var — so
-            // the syntactic walk visits each new child exactly `parent_occ` times.
+            // The new enode replaces every occurrence of the parent var, so the
+            // syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
+            self.var_reusable.insert(var_idx + j, true);
         }
-        let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
-        // Replace each position of the expanded var with the new enode. If the var
-        // had multiple positions (from a prior reuse), all parents share the same
-        // children via the RecExpr DAG.
+        // Expand each occurrence of the var independently: build its own enode
+        // with its own freshly-named Var children. No node is shared between
+        // occurrences, so a reused var deepens every copy separately and the
+        // pattern remains a pure tree. A DB-var leaf is shifted to each
+        // occurrence's depth — a no-op unless it's a cross-depth shift-variant.
         for var_id in var_positions {
-            self.pattern[var_id] = new_node.clone();
+            let delta = depths[usize::from(var_id)] as i32 - parent_depth as i32;
+            let disc = shift_db_disc::<F, O>(target_disc.clone(), delta);
+            let mut new_children = Vec::with_capacity(num_children);
+            for j in 0..num_children {
+                self.pattern.nodes.push(var_node::<F, O>((var_idx + j) as u32));
+                let new_id = Id::from(self.pattern.nodes.len() - 1);
+                new_children.push(new_id);
+                self.vars[var_idx + j].push(new_id);
+            }
+            let new_node = F::make(F::map_discriminant(disc, OpWithVar::Node), new_children);
+            self.pattern[var_id] = new_node;
         }
     }
 
@@ -116,10 +140,9 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
 
-        let cross_depth = self.var_depth[keep_idx] != self.var_depth[drop_idx] || self.var_cross_depth[keep_idx] || self.var_cross_depth[drop_idx];
-        // Merged metavar adopts the *min* depth and we always track
-        // the e-class at the shallower depth. This convention being
-        // mantained means we can effectively ignore the deeper occurrences.
+        // Merged metavar adopts the *min* depth; deeper occurrences are
+        // recovered by shifting concrete content to their depth in
+        // `expand`/`concretize`.
         let merged_depth = self.var_depth[keep_idx].min(self.var_depth[drop_idx]);
 
         let keep_name = var_node::<F, O>(keep_idx as u32);
@@ -131,10 +154,16 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.vars.remove(drop_idx);
         self.var_depth.remove(drop_idx);
         self.var_depth[keep_idx] = merged_depth;
-        self.var_cross_depth.remove(drop_idx);
-        self.var_cross_depth[keep_idx] = cross_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
+        // Reusing (i, j) commits to a canonical order: any var strictly below
+        // the *higher* of the two participating indices becomes non-reusable,
+        // so future reuses must involve indices ≥ drop_idx (including the
+        // kept slot itself, since we've moved past it).
+        for r in &mut self.var_reusable[..drop_idx] {
+            *r = false;
+        }
+        self.var_reusable.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -153,15 +182,17 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// responsibility; the typical caller obtains `extraction` from a
     /// size-minimal eclass walk gated by a `fv < var_depth[var_idx]` check.
     ///
-    /// Multi-position vars (from prior `reuse`) get the root node cloned into
-    /// each position; the subtree's internal nodes are appended once, so the
-    /// pattern DAG is shared across positions. Trailing var names shift down
-    /// by one to keep the canonical-form invariant.
+    /// Multi-position vars (from prior `reuse`) get an independent copy of the
+    /// extraction per occurrence (pure tree — no sharing), free DB indices
+    /// shifted up to that occurrence's depth (identity for same-depth ones).
+    /// Trailing var names shift down by one to keep the canonical-form invariant.
     pub fn concretize(&mut self, var_idx: usize, extraction: &[F::Apply<OpWithVar<O>>], root: Id) {
+        let depths = self.occurrence_depths();
+        let ref_depth = self.var_depth[var_idx];
         let var_positions = self.vars.remove(var_idx);
         self.var_depth.remove(var_idx);
-        self.var_cross_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
+        self.var_reusable.remove(var_idx);
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);
@@ -170,21 +201,26 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
 
-        // `extraction` is postorder (root at the last index, children at
-        // strictly lower indices). `self.pattern` is a `RevExpr`, which
-        // requires *parents* at lower indices than their children — so we
-        // append the non-root nodes in reverse extraction order, remapping
-        // each old extraction index `i ∈ [0, n-1)` to pattern position
-        // `base + (n - 2 - i)`. The root gets cloned (with the same remap)
-        // into every var position; since var positions sit at indices `< base`
-        // and remapped children at indices `>= base`, root↦children references
-        // go strictly forward in pattern indices.
+        debug_assert_eq!(usize::from(root), extraction.len() - 1, "concretize: root must be the last extraction node");
+        for &var_id in &var_positions {
+            let delta = depths[usize::from(var_id)] as i32 - ref_depth as i32;
+            let (shifted, shifted_root) = shift_extraction::<F, O>(extraction, root, delta);
+            self.splice_extraction_at(var_id, &shifted, shifted_root);
+        }
+    }
+
+    /// Appends one copy of postorder `extraction` and writes its remapped root
+    /// into `var_id` — one (shifted) copy per occurrence (no sharing).
+    fn splice_extraction_at(&mut self, var_id: Id, extraction: &[F::Apply<OpWithVar<O>>], root: Id) {
         let n = extraction.len();
-        debug_assert_eq!(usize::from(root), n - 1, "concretize: root must be the last extraction node");
+        debug_assert_eq!(usize::from(root), n - 1, "splice_extraction_at: root must be the last node");
         let base = self.pattern.nodes.len();
+        // `remap` is only invoked when traversing child references; n == 1
+        // means a single leaf root with no children, so the closure body
+        // (which would underflow `n - 2`) is never reached.
         let remap = |c: Id| {
             let i = usize::from(c);
-            debug_assert!(i < n - 1, "concretize: extraction child references must skip the root");
+            debug_assert!(i + 1 < n, "splice_extraction_at: extraction child references must skip the root");
             Id::from(base + n - 2 - i)
         };
         for i in (0..n - 1).rev() {
@@ -198,9 +234,23 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         for c in root_node.children_mut() {
             *c = remap(*c);
         }
-        for var_id in var_positions {
-            self.pattern[var_id] = root_node.clone();
+        self.pattern[var_id] = root_node;
+    }
+
+    /// Per-node structural binder depth: `depth[id]` = enclosing pattern binders.
+    /// Parents-before-children walk (a `RevExpr` keeps parents below children);
+    /// unambiguous since the pattern is a pure tree (one parent per id).
+    fn occurrence_depths(&self) -> Vec<u32> {
+        let nodes = &self.pattern.nodes;
+        let mut depth = vec![0u32; nodes.len()];
+        for i in 0..nodes.len() {
+            let d = depth[i];
+            let disc = nodes[i].discriminant();
+            for (j, &c) in nodes[i].children().iter().enumerate() {
+                depth[usize::from(c)] = d + if disc.binds_child(j) { 1 } else { 0 };
+            }
         }
+        depth
     }
 }
 
@@ -428,7 +478,7 @@ mod tests {
     }
 
     #[test]
-    fn expand_reused_var_preserves_dag_sharing() {
+    fn expand_reused_var_duplicates_subtree() {
         let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.reuse(0, 1); // (+ ?#0 ?#0)
@@ -438,12 +488,15 @@ mod tests {
         assert_eq!(p.vars.len(), 2);
         assert_vars_canonical(&p);
 
-        // The two new vars must each have a single RecExpr slot (DAG sharing),
-        // not one per tree occurrence.
-        assert_eq!(p.vars[0].len(), 1);
-        assert_eq!(p.vars[1].len(), 1);
-        // Syntactic occurrence count must reflect parent references (2), not
-        // the number of unique RecExpr ids (1) — see `compute_body_size_with_ho`.
+        // Each occurrence of the expanded var got its own copy of the new
+        // subtree, so each new var now has one RecExpr slot per tree occurrence
+        // (no DAG sharing).
+        assert_eq!(p.vars[0].len(), 2);
+        assert_eq!(p.vars[1].len(), 2);
+        // The new ids must be distinct nodes, not a single shared one.
+        assert_ne!(p.vars[0][0], p.vars[0][1]);
+        assert_ne!(p.vars[1][0], p.vars[1][1]);
+        // Syntactic occurrence count matches the number of positions (2 each).
         assert_eq!(p.var_occurrences, vec![2, 2]);
     }
 
