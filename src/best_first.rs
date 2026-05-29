@@ -124,6 +124,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
     let initial_state = SearchState::new(&shared, Some(0));
     let mut scratch = CostScratch::new(&shared.egraph);
+    let weights = shared.egraph.analysis.weights;
     let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
 
@@ -141,7 +142,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
-        s.check_and_insert(initial_state.dedup_key(), initial_state.frozen_count.unwrap_or(0));
+        s.check_and_insert(initial_state.dedup_key(), initial_state.frozen_count.unwrap_or(0), compute_pattern_size(&initial_state.pattern, &weights));
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -199,7 +200,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.dedup_key(), child_state.frozen_count.unwrap_or(0))
+                && s.check_and_insert(child_state.dedup_key(), child_state.frozen_count.unwrap_or(0), compute_pattern_size(&child_state.pattern, &weights))
             {
                 continue;
             }

@@ -1,8 +1,8 @@
 use colored::Colorize;
 
-use crate::cost::{CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
+use crate::cost::{CostScratch, SearchStateWithCostSelection, compute_cost_and_select, compute_pattern_size};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
-use crate::lang::{LanguageFamily, StitchOp};
+use crate::lang::{LanguageFamily, StitchOp, Weights};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::math::logaddexp;
@@ -11,18 +11,29 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults)
+/// Inserts a freshly-expanded state into the parallel (states, mults, sizes)
 /// buffer deduped by [`DedupKey`] (per-variable depths + match set), either
-/// bumping the multiplicity of an existing group by `count` or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<DedupKey, usize>) {
+/// bumping the multiplicity of an existing group by `count` or pushing a new
+/// one. On a key collision the two states achieve identical compression (same
+/// match set), so cost differs only by pattern size — keep the smaller-pattern
+/// (cheaper) representative.
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, sizes: &mut Vec<usize>, dedup: &mut FxHashMap<DedupKey, usize>, weights: &Weights) {
     let key = s.dedup_key();
+    let size = compute_pattern_size(&s.pattern, weights);
     match dedup.get(&key) {
-        Some(&idx) => mults[idx] += count,
+        Some(&idx) => {
+            mults[idx] += count;
+            if size < sizes[idx] {
+                states[idx] = s;
+                sizes[idx] = size;
+            }
+        }
         None => {
             let idx = states.len();
             dedup.insert(key, idx);
             states.push(s);
             mults.push(count);
+            sizes.push(size);
         }
     }
 }
@@ -74,6 +85,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared, None), num_particles)];
     let mut scratch = CostScratch::new(&shared.egraph);
+    let pattern_weights = shared.egraph.analysis.weights;
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
@@ -89,17 +101,18 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // by `DedupKey` (per-variable depths + match set).
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
+        let mut sizes: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<DedupKey, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
-                    dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                    dedup_insert(child, mult, &mut expanded, &mut mults, &mut sizes, &mut dedup, &pattern_weights);
                     continue;
                 }
                 SuccessorEnum::All(actions) => actions,
             };
             if actions.is_empty() {
-                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                dedup_insert(state, mult, &mut expanded, &mut mults, &mut sizes, &mut dedup, &pattern_weights);
                 continue;
             }
             let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
@@ -111,7 +124,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
                     let child = state.apply_action(&action, &shared);
-                    dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                    dedup_insert(child, count, &mut expanded, &mut mults, &mut sizes, &mut dedup, &pattern_weights);
                 }
             }
         }

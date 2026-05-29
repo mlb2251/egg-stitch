@@ -382,7 +382,7 @@ fn arith_rewrites() {
         assert!(bodies.len() == 1, "expected exactly one abstraction");
         let abstr = all_symbols_hack(&bodies[0]);
         if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
-            panic!("bad abstr: {:?}", abstr);
+            panic!("bad abstr: {:?}; derived from body {:?}", abstr, bodies);
         }
         let rewr = rewritten_corpus(r, &original).iter().map(|x| all_symbols_hack(x)).collect::<Vec<_>>();
         let rewr = rewr.iter().map(|x| x.iter().filter(|x| **x != <&str as Into<String>>::into("+")).collect::<Vec<_>>()).collect::<Vec<_>>();

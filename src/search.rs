@@ -19,14 +19,19 @@ pub type DedupKey = (Vec<u32>, Vec<(Id, Vec<Vec<Id>>)>);
 /// search. Accumulates hit count and time spent so the host loop can report
 /// stats. Wrap in `Option<…>` at the call site — `None` disables the check
 /// entirely (useful for measuring how much pruning the seen-set buys).
-/// Stores the *minimum* frozen_count ever seen per key. A repeat insertion
-/// at an equal-or-higher frozen_count is a hit (the prior visit was at least
-/// as flexible). A repeat at a strictly lower frozen_count overwrites and
-/// passes through, because the new visit unlocks expand actions the prior one
-/// had forbidden.
+///
+/// Stores, per key, the *minimum* `frozen_count` and the *minimum* pattern size
+/// ever seen. A repeat visit is a hit (skip) only when a prior visit was no
+/// worse on *both* axes: a lower-or-equal `frozen_count` is at least as flexible
+/// (its reachable successors cover this visit's), and a no-larger pattern size
+/// is no more costly (states sharing a key achieve identical compression, so
+/// this visit can't yield a cheaper `best`). A visit that improves either axis
+/// passes through — a lower `frozen_count` unlocks forbidden expands, a smaller
+/// pattern is a strictly cheaper representative of the same abstraction — and
+/// tightens the stored minima.
 #[derive(Default)]
 pub struct SeenTracker {
-    map: FxHashMap<DedupKey, usize>,
+    map: FxHashMap<DedupKey, (usize, usize)>,
     pub hits: usize,
     pub time: Duration,
 }
@@ -42,17 +47,18 @@ impl SeenTracker {
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
-    /// Records `key` at `frozen_count` if this is the first visit or a
-    /// strictly-lower-frozen one; returns `true` (skip) if an equal-or-lower
-    /// frozen visit was already recorded — the prior visit was at least as
-    /// flexible, so all of this visit's reachable successors are already
-    /// reachable from it.
-    pub fn check_and_insert(&mut self, key: DedupKey, frozen_count: usize) -> bool {
+    /// Records `(frozen_count, pattern_size)` for `key`, returning `true` (skip)
+    /// iff a prior visit already dominates it on both axes. See the type docs.
+    pub fn check_and_insert(&mut self, key: DedupKey, frozen_count: usize, pattern_size: usize) -> bool {
         let t = Instant::now();
         let skip = match self.map.get(&key) {
-            Some(&existing) if existing <= frozen_count => true,
-            _ => {
-                self.map.insert(key, frozen_count);
+            Some(&(f, sz)) if f <= frozen_count && sz <= pattern_size => true,
+            Some(&(f, sz)) => {
+                self.map.insert(key, (f.min(frozen_count), sz.min(pattern_size)));
+                false
+            }
+            None => {
+                self.map.insert(key, (frozen_count, pattern_size));
                 false
             }
         };
