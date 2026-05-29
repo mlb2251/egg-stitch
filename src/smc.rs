@@ -6,20 +6,21 @@ use crate::lang::{LanguageFamily, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::math::logaddexp;
-use crate::pattern::Pattern;
-use crate::search::{Action, SearchState, SuccessorEnum, setup_search};
+use crate::search::{Action, DedupKey, SearchState, SuccessorEnum, setup_search};
 use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
-/// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
-    match dedup.get(&s.pattern) {
+/// Inserts a freshly-expanded state into the parallel (states, mults)
+/// buffer deduped by [`DedupKey`] (per-variable depths + match set), either
+/// bumping the multiplicity of an existing group by `count` or pushing a new one.
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<DedupKey, usize>) {
+    let key = s.dedup_key();
+    match dedup.get(&key) {
         Some(&idx) => mults[idx] += count,
         None => {
             let idx = states.len();
-            dedup.insert(s.pattern.clone(), idx);
+            dedup.insert(key, idx);
             states.push(s);
             mults.push(count);
         }
@@ -42,8 +43,9 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
 ///
 /// Particles are stored as `(SearchState, multiplicity)` pairs. After each
-/// expansion step, identical patterns are deduplicated and their counts merged,
-/// so cost computation runs once per unique pattern instead of once per particle.
+/// expansion step, states sharing a `DedupKey` (per-variable depths + match
+/// set) are deduplicated and their counts merged, so cost computation runs once
+/// per unique key instead of once per particle.
 #[allow(clippy::needless_range_loop)]
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
@@ -83,10 +85,11 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // weights are additionally multiplied by `boost_reuse_weight`. Child
         // states are materialised only for sampled actions via `apply_action`,
         // avoiding the per-shape `clone + expand` work for successors that
-        // win zero samples. Resulting patterns are deduped globally across groups.
+        // win zero samples. Resulting states are deduped globally across groups
+        // by `DedupKey` (per-variable depths + match set).
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
-        let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
+        let mut dedup: FxHashMap<DedupKey, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {

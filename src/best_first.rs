@@ -129,7 +129,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
-    let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
+    let mut seen: Option<SeenTracker> = args.opt_seen.then(SeenTracker::new);
 
     nodes.push(Node {
         parent: None,
@@ -141,7 +141,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
-        s.check_and_insert(initial_state.pattern.clone(), initial_state.frozen_count.unwrap_or(0));
+        s.check_and_insert(initial_state.dedup_key(), initial_state.frozen_count.unwrap_or(0));
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -199,7 +199,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.pattern.clone(), child_state.frozen_count.unwrap_or(0))
+                && s.check_and_insert(child_state.dedup_key(), child_state.frozen_count.unwrap_or(0))
             {
                 continue;
             }

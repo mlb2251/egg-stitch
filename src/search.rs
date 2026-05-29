@@ -7,53 +7,52 @@ use egg::{Id, Language};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::time::{Duration, Instant};
 
-/// Tracks already-explored canonical patterns to dedupe successors during
+/// Dedup key identifying states that produce identical successors. Two states
+/// with the same per-variable binder depths and the same match set (each
+/// match's root e-class plus its variable bindings) enumerate the same actions
+/// and achieve the same compression, regardless of their fixed pattern
+/// skeleton — so they can be merged. Matches and their substs are sorted so the
+/// key is canonical (independent of the order operations were applied in).
+pub type DedupKey = (Vec<u32>, Vec<(Id, Vec<Vec<Id>>)>);
+
+/// Tracks already-explored states (by [`DedupKey`]) to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
 /// stats. Wrap in `Option<…>` at the call site — `None` disables the check
 /// entirely (useful for measuring how much pruning the seen-set buys).
-/// Stores the *minimum* frozen_count ever seen per pattern. A repeat insertion
+/// Stores the *minimum* frozen_count ever seen per key. A repeat insertion
 /// at an equal-or-higher frozen_count is a hit (the prior visit was at least
 /// as flexible). A repeat at a strictly lower frozen_count overwrites and
 /// passes through, because the new visit unlocks expand actions the prior one
 /// had forbidden.
-pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
-    map: FxHashMap<Pattern<F, O>, usize>,
+#[derive(Default)]
+pub struct SeenTracker {
+    map: FxHashMap<DedupKey, usize>,
     pub hits: usize,
     pub time: Duration,
 }
 
-impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
-    fn default() -> Self {
-        Self {
-            map: FxHashMap::default(),
-            hits: 0,
-            time: Duration::ZERO,
-        }
-    }
-}
-
-impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
+impl SeenTracker {
     pub fn new() -> Self {
         Self::default()
     }
-    /// Number of distinct patterns recorded.
+    /// Number of distinct keys recorded.
     pub fn len(&self) -> usize {
         self.map.len()
     }
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
-    /// Records `pattern` at `frozen_count` if this is the first visit or a
+    /// Records `key` at `frozen_count` if this is the first visit or a
     /// strictly-lower-frozen one; returns `true` (skip) if an equal-or-lower
     /// frozen visit was already recorded — the prior visit was at least as
     /// flexible, so all of this visit's reachable successors are already
     /// reachable from it.
-    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen_count: usize) -> bool {
+    pub fn check_and_insert(&mut self, key: DedupKey, frozen_count: usize) -> bool {
         let t = Instant::now();
-        let skip = match self.map.get(&pattern) {
+        let skip = match self.map.get(&key) {
             Some(&existing) if existing <= frozen_count => true,
             _ => {
-                self.map.insert(pattern, frozen_count);
+                self.map.insert(key, frozen_count);
                 false
             }
         };
@@ -149,8 +148,8 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// Best-first canonical-ordering device: `Some(k)` means `?#0..?#(k-1)`
     /// are committed to never being expanded *and* are forbidden from
     /// participating in `Reuse`. Expanding `?#k` raises this to `Some(k)`.
-    /// `None` disables the rule entirely — SMC uses this so it can dedupe
-    /// purely on the pattern's `RecExpr`.
+    /// `None` disables the rule entirely (SMC), leaving reuse/expand
+    /// enumeration unrestricted and dedup driven purely by the [`DedupKey`].
     pub frozen_count: Option<usize>,
 }
 
@@ -346,6 +345,23 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             num_substs,
             frozen_count,
         }
+    }
+
+    /// Builds the canonical [`DedupKey`] for this state: its per-variable
+    /// binder depths plus its match set, with matches and their substs sorted
+    /// so two states reached via different operation orders hash identically.
+    pub fn dedup_key(&self) -> DedupKey {
+        let mut matches: Vec<(Id, Vec<Vec<Id>>)> = self
+            .matches
+            .iter()
+            .map(|m| {
+                let mut substs: Vec<Vec<Id>> = m.substs.iter().map(|s| s.vars.clone()).collect();
+                substs.sort();
+                (m.root_eclass, substs)
+            })
+            .collect();
+        matches.sort();
+        (self.pattern.var_depth.clone(), matches)
     }
 
     /// Applies an action to `self` and returns the resulting child without
