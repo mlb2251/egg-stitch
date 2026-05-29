@@ -1,16 +1,16 @@
 {
-  "compression_ratio": 1.9523809523809523,
+  "compression_ratio": 1.7826086956521738,
   "cost_after_rewrites": 41,
-  "final_cost": 21,
+  "final_cost": 23,
   "initial_cost": 41,
   "library": [
     {
-      "approx_cost": 29,
-      "arity": 1,
-      "lambda": "(lam (a b c d e f g h $0 $0 $0 $0))",
+      "approx_cost": 21,
+      "arity": 0,
+      "lambda": "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
       "num_matches": 1,
-      "pattern": "fn_0: (a b c d e f g h ?#0 ?#0 ?#0 ?#0)",
-      "pattern_size": 12,
+      "pattern": "fn_0: (a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
+      "pattern_size": 20,
       "usage_matches": 2
     }
   ],
@@ -19,7 +19,7 @@
     "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))"
   ],
   "rewritten_programs": [
-    "(fn_0 (A B C))",
-    "(fn_0 (A B C))"
+    "fn_0",
+    "fn_0"
   ]
 }

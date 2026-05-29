@@ -30,7 +30,7 @@ fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
     let follow: PatternRecExpr<OpChildren, Op> = follow_str.parse().expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
-    assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
+    assert!(best.state.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.state.pattern, follow_str,);
 }
 
 /// Lambda-calc variant: parses through `LambdaCalc::parse_follow_pattern` so
@@ -39,7 +39,7 @@ fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_st
 fn assert_best_matches_follow_lambda(result: &smc::SmcResult<LambdaCalc, OpDB<Op>>, follow_str: &str) {
     let follow = LambdaCalc::parse_follow_pattern::<OpDB<Op>>(follow_str).expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
-    assert!(best.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.pattern, follow_str,);
+    assert!(best.state.matches_follow(&follow), "best pattern (cost={}, pattern={}) should match follow {}", cost, best.state.pattern, follow_str,);
 }
 
 const DIALS_FULL_FOLLOW: &str = "(T (T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0)) (M 1 0 (* ?#0 (* 0.5 (cos (/ pi 4)))) (* ?#0 (* 0.5 (sin (/ pi 4))))))";
@@ -256,6 +256,40 @@ fn check_slow_physics_18_09_34_bench004() {
 // the follow strings use shapes (flat n-ary apps, var-headed apps) that egg's
 // stock `RecExpr` parser rejects. parse_follow_pattern routes them through
 // `parse_program` at `OpWithVar<O>`.
+
+/// When SMC reaches a particle alpha-equivalent to the follow target, it
+/// should exit immediately rather than burn the remaining step budget. We
+/// give it a generous budget; if the exact-match exit fires, `num_steps_run`
+/// will be a small fraction of it.
+#[test]
+fn follow_exact_match_exits_early_smc() {
+    let input = "data/domains/stitch/hof.json";
+    if !std::path::Path::new(input).exists() {
+        return;
+    }
+    let follow = "(lam (app (?#0 $0) (app (?#0 $0) empty)))";
+    let budget = 2000;
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--input",
+        input,
+        "--num-steps",
+        &budget.to_string(),
+        "--num-particles",
+        "500",
+        "--temperature",
+        "1000",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+        "--language",
+        "lambda-calc",
+    ]);
+    let result = run_lambda_calc(&args);
+    assert_best_matches_follow_lambda(&result, follow);
+    assert!(result.num_steps_run < budget, "expected early exit before {} steps; ran {}", budget, result.num_steps_run);
+}
 
 /// Follow string `(lam (app (?#0 $0) (app (?#0 $0) empty)))`
 #[test]

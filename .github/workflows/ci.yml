@@ -131,3 +131,26 @@ jobs:
         run: cargo build --release
       - name: search-and-check ${{ matrix.domain }}
         run: python3 scripts/search_and_check_domain.py data/domains/${{ matrix.domain }} -- --language lambda-calc --num-steps 2000
+
+  # For each input in each domain: run best-first to discover an abstraction,
+  # then re-run both backends with `--follow` on that pattern and assert each
+  # reaches it. Guards against regressions where follow mode can no longer
+  # reproduce the abstraction stitch itself finds.
+  follow-reaches-domains:
+    needs: list-domains
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        domain: ${{ fromJson(needs.list-domains.outputs.domains) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: build release binary
+        run: cargo build --release
+      - name: follow-reaches ${{ matrix.domain }}
+        run: python3 scripts/follow_reaches_domain.py data/domains/${{ matrix.domain }}

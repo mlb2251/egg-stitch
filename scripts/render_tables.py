@@ -50,7 +50,7 @@ METHODS = ["enum", "smc", "babble", "stitch"]
 METHOD_LABELS = {"enum": "Enum", "smc": "SMC", "babble": "babble", "stitch": "Stitch"}
 # The single sweep point each base method contributes to the table cells.
 # Plots use the full sweep regardless.
-TABLE_BFS_STEPS = 5000
+TABLE_BFS_STEPS = 10000
 TABLE_SMC_PARTICLES = 1000
 TABLE_DATA_KEYS = {
     "enum": f"enum-{TABLE_BFS_STEPS}",

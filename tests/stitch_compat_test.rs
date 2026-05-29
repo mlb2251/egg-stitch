@@ -161,6 +161,29 @@ fn identical() {
     check_fixture("data/domains/stitch/identical.json", &[], true);
 }
 
+/// Drop-fv regression with a divergent $0-bearing arm: three programs share
+/// `(lam (lam (+ _)))` over constants A/B/C, while the fourth uses a
+/// different head (`-`) over `$0`. The cost optimizer must pick the
+/// drop-fv candidate (S_0 = {}, keep the three `+`-constants, leave the
+/// `-`-arm unrewritten). Pinned through the planned cost-loop optimization
+/// so the lower-bound prune doesn't accidentally discard the drop-fv
+/// candidate.
+#[test]
+fn drop_fv_minus_arm() {
+    check_fixture_bf_only("data/domains/ho-bugs/drop_fv_minus.json", LAMBDA, true);
+}
+
+/// Same shape as `drop_fv_minus_arm` but the divergent arm shares the `+`
+/// head, so all four programs unify under `(lam (lam (+ ?#0)))`. The fourth
+/// arm's `?#0 → $0` has fv `[0]`, forcing the optimizer to choose between
+/// dropping that subst (drop-fv) or paying the wrap-lam cost. Head-based
+/// pattern discrimination — which let `drop_fv_minus_arm` collapse on main
+/// without the drop-fv mechanism — isn't available here.
+#[test]
+fn drop_fv_plus_arm() {
+    check_fixture_bf_only("data/domains/ho-bugs/drop_fv_plus.json", LAMBDA, true);
+}
+
 /// HO-arity-2 capture regression. The η-wrap convention in `wrap_subst_args`
 /// pairs with `wrap_pattern_with_db_apps`'s splice order. Pre-fix the splice
 /// ran `($0 $1)` while the wrap produced bodies assuming `($1 $0)`, so
@@ -195,10 +218,13 @@ fn fn_name_collision() {
     check_fixture("data/domains/ho-bugs/fn_name_collision.json", &[], true);
 }
 
-/// Diverges from Stitch.jl: Stitch.jl finds the arity-0 body
-/// `(a b c d e f g h (A B C) (A B C) (A B C) (A B C))`; egg-stitch's e-class
-/// equality unifies the four `(A B C)` subterms and picks the arity-1
-/// `(a b c d e f g h #0 #0 #0 #0)` instead.
+/// Stitch.jl finds the arity-0 body
+/// `(a b c d e f g h (A B C) (A B C) (A B C) (A B C))`. Pre-fix, egg-stitch's
+/// e-class equality unified the four `(A B C)` subterms and picked the
+/// arity-1 `(a b c d e f g h #0 #0 #0 #0)` — but that metavar is useless
+/// (every match maps `?#0` to the same closed e-class), so the
+/// `has_useless_var` result gate now rejects it and the arity-0 answer is
+/// returned instead.
 #[test]
 fn cex() {
     check_fixture("data/domains/stitch/cex.json", &[], true);
@@ -287,9 +313,13 @@ fn arithmetic_aplusbplusc() {
     check_fixture("data/domains/simple-arithmetic/aplusbplusc.json", &["-r", ARITH_RULES], false);
 }
 
+/// SMC-only: with 1000 particles / patience 50, SMC occasionally settles into
+/// the arity-1 saddle `(+ ?#0 (* 1 2 3 4))` (cost 30) at iteration 5 and runs
+/// out the patience window before discovering the arity-2 cost-28 answer. Best-
+/// first finds the optimum deterministically, so pin only that.
 #[test]
 fn arithmetic_aplusbplus1234() {
-    check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES], false);
+    check_fixture_bf_only("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES], false);
 }
 
 #[test]
@@ -548,4 +578,43 @@ fn ho_minimal_lam_varying_head() {
 #[test]
 fn ho_shared_lam_with_outer_context() {
     check_fixture_bf_only("data/domains/higher-order/outer-context.json", LAMBDA, true);
+}
+
+/// Regression: `inline_useless_nonfrozen` must skip cross-depth-reused
+/// metavars. When `?#k` is shared between a shallow occurrence at `d_a` and a
+/// deep one at `d_b > d_a` via `subset_matches_reuse`, `shift_equal` can
+/// accept the reuse purely on a context-fv check — but a single literal at
+/// both sites would mean different binders. Pre-fix the search reached
+/// `(lam (map (lam (?#0 ?#1)) ?#1))` (cross-depth `?#1`), then the dominant
+/// inline collapsed `?#1` to literal `$0`, producing
+/// `(lam (map (lam (?#0 fn_55 $0)) $0))`. The match set still claimed to
+/// match `(lam (map (lam (index fn_55 $1)) $0))`, whose deep `$1` references
+/// the *outer* binder — so the rewrite came out as `(fn_57 index)` and
+/// β-reduced to a program with `$0` in place of the original `$1`. The fixture
+/// pins the post-fix output (the inline is skipped, search settles on an
+/// arity-1 mod-pattern at cost 457). This is the smallest list-domain corpus
+/// that exhibits the bug; smaller hand-crafted inputs lose the corpus pressure
+/// that pushes best-first onto the cross-depth-reuse path.
+#[test]
+fn cross_depth_useless_inline() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_useless_inline.json", LAMBDA, true);
+}
+
+/// Regression (minimised from the `logo` domain): a cross-depth reuse that
+/// over-shifts a concrete DB-var leaf on inline. The three programs share the
+/// skeleton `(lam (logo_forLoop ?N (lam (lam (logo_FWRT ?A ?B $0))) $0))`,
+/// where the inner-loop accumulator `$0` (deep, binder depth 3) and the
+/// `logo_forLoop` init `$0` (shallow, binder depth 1) hash-cons to the *same*
+/// `$0` e-class. `shift_equal`'s `a == b` shortcut accepts merging them
+/// cross-depth (their fv `{0}` sits *below* the gap `[1, 3)`), even though the
+/// two `$0`s reference different binders. Best-first then dominance-reuses the
+/// two slots and inlines the merged (useless) var: the deep occurrence is
+/// shifted to `$2`, yielding the unsound
+/// `(lam (logo_forLoop ?#0 (lam (lam (logo_FWRT ?#1 (logo_DIVA logo_UA 4) $2))) $0))`.
+/// β-reduced, the abstraction puts `$2` where every original program has `$0`,
+/// so `check_equiv` rejects it. The fixture pins the *sound* output (deep `$0`);
+/// until the reuse is fixed this test fails on the `$2` mismatch.
+#[test]
+fn cross_depth_forloop_db_var_inline() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_forloop_db_var_inline.json", LAMBDA, true);
 }

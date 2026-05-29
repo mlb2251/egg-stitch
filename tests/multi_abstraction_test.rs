@@ -72,7 +72,9 @@ fn two_abstractions() {
     }
 
     assert_eq!(original_size, 43);
-    assert_eq!(final_cost, Some(34));
+    // 34 = rewritten corpus + fn_1 body (the last search's score); +5 for fn_0's
+    // body, which earlier iterations don't fold into best_cost.
+    assert_eq!(final_cost, Some(39));
     assert_eq!(library.len(), 2);
 
     let first = &library[0];

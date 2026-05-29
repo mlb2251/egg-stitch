@@ -77,6 +77,21 @@ pub trait LanguageFamily: Clone + 'static {
     /// matters (see `data/domains/ho-bugs/arity2_capture.json`).
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<Self::Apply<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id;
 
+    /// Inverse of [`wrap_pattern_with_db_apps`]: if `recexpr[id]` is the η-wrap
+    /// shape this language renders for `?#k` with `ho_arity > 0` — `db_args` in
+    /// the same `(n-1, n-2, …, 0)` reverse order produced by the wrapper — peel
+    /// it off and return the inner head id. Returns `id` unchanged when the
+    /// subtree isn't an η-wrap. Used by follow-mode matching to collapse the
+    /// optimiser's display-vi choice (bare `?#k` vs `(?#k $0 …)`) so the check
+    /// doesn't care which candidate the displayer happened to select.
+    ///
+    /// Default treats every subtree as un-wrapped; languages whose
+    /// `wrap_pattern_with_db_apps` is a no-op (no binders → no HO display) can
+    /// inherit it directly.
+    fn unwrap_pattern_db_apps<O: StitchOp>(_nodes: &[Self::Apply<OpWithVar<O>>], id: Id) -> Id {
+        id
+    }
+
     /// Render an abstraction body as `(lam … (lam BODY))` with `vars.len()`
     /// binders, where each `?#k` becomes a de-Bruijn variable pointing at the
     /// `k`-th outer wrap-lam. Inlining a call site `(fn_N a_0 … a_{k-1})`
@@ -244,6 +259,28 @@ impl LanguageFamily for LambdaCalc {
             current = recexpr.add(LambdaCalcLanguage::App([current, var_id]));
         }
         current
+    }
+
+    /// Peel left-leaning `App([X, $n])` apps whose right children are DB-var
+    /// leaves with *strictly ascending* indices read outer-to-inner — exactly
+    /// the shape `wrap_pattern_with_db_apps` produces from `vis.iter().rev()`
+    /// for any sorted-ascending `vis`. Commits to the unwrap only when the
+    /// inner head is a metavar leaf, so genuine binary-op chains like
+    /// `(f $0 $1)` (whose head isn't a metavar) pass through unchanged.
+    fn unwrap_pattern_db_apps<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], id: Id) -> Id {
+        let mut cur = id;
+        let mut last_db: Option<i32> = None;
+        while let LambdaCalcLanguage::App([left, right]) = nodes[usize::from(cur)] {
+            let Some(db) = nodes[usize::from(right)].discriminant().de_bruijn_index() else { break };
+            if let Some(prev) = last_db
+                && db <= prev
+            {
+                break;
+            }
+            last_db = Some(db);
+            cur = left;
+        }
+        if last_db.is_some() && nodes[usize::from(cur)].discriminant().as_var().is_some() { cur } else { id }
     }
 
     fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {

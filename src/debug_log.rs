@@ -29,8 +29,6 @@ pub struct SearchTreeLog {
 pub struct TreeNodeLog {
     pub id: usize,
     pub parent: Option<usize>,
-    /// Human-readable label for the move that produced this node from its parent.
-    pub action: Option<String>,
     pub pattern: String,
     pub arity: usize,
     pub pattern_size: usize,
@@ -77,7 +75,7 @@ pub fn build_particle_logs<F: LanguageFamily, O: StitchOp>(states: &[SearchState
 
 /// Appends a debug step log if debug mode is on.
 #[allow(clippy::too_many_arguments)]
-pub fn log_debug_step<F: LanguageFamily, O: StitchOp>(debug: bool, steps: &mut Vec<StepLog>, step: usize, states: &[SearchState<F, O>], costs: &[usize], weights: &[f64], best: &Option<(usize, SearchState<F, O>)>, resample_indices: &[usize]) {
+pub fn log_debug_step<F: LanguageFamily, O: StitchOp>(debug: bool, steps: &mut Vec<StepLog>, step: usize, states: &[SearchState<F, O>], costs: &[usize], weights: &[f64], best: &Option<(usize, crate::cost::SearchStateWithCostSelection<F, O>)>, resample_indices: &[usize]) {
     if !debug {
         return;
     }
@@ -86,6 +84,6 @@ pub fn log_debug_step<F: LanguageFamily, O: StitchOp>(debug: bool, steps: &mut V
         particles: build_particle_logs(states, costs, weights),
         resample_indices: resample_indices.to_vec(),
         best_cost: best.as_ref().map(|(c, _)| *c),
-        best_pattern: best.as_ref().map(|(_, s)| s.pattern.to_string()),
+        best_pattern: best.as_ref().map(|(_, b)| b.state.pattern.to_string()),
     });
 }
