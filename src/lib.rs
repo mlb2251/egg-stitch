@@ -112,6 +112,15 @@ pub struct Args {
     #[arg(long, default_value_t = 1)]
     pub num_abstractions: usize,
 
+    /// Roll the egraph over between abstractions instead of extracting the
+    /// rewritten programs and rebuilding a fresh egraph. When set, the rewritten
+    /// egraph (original nodes + the new `fn_N(...)` applications unioned into
+    /// their match roots) is reused directly for the next abstraction round,
+    /// preserving every accumulated equivalence. Default: off (extract the
+    /// rewritten programs and rebuild a clean egraph, re-applying DSR rules).
+    #[arg(long, default_value_t = false)]
+    pub roll_over: bool,
+
     /// Enable the `seen` set in best-first search (canonical-pattern dedup).
     /// Off by default: the canonical-ordering rule (`frozen_count`) and the
     /// dominance/useless-inline short-circuits already eliminate most
@@ -196,8 +205,10 @@ pub enum LanguageChoice {
 /// `None` if no abstraction was found).
 ///
 /// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
-/// their match roots, then the rewritten programs are extracted as strings and used to
-/// build a fresh egraph for the next round (DSR rules are re-applied there).
+/// their match roots, then the rewritten programs are extracted as strings. By default
+/// those strings build a fresh egraph for the next round (DSR rules are re-applied
+/// there); with `--roll-over` the rewritten egraph is instead reused directly, carrying
+/// all accumulated equivalences into the next round.
 pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
     let mut data = data;
     let mut library = Vec::new();
@@ -254,7 +265,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 };
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, args.rules.as_deref());
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, args.rules.as_deref(), args.roll_over);
 
                 // `best_cost` is the search's score for this iteration: rewritten
                 // corpus + this abstraction's body. Earlier iterations rewrote the
@@ -313,18 +324,29 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 }
 
 /// Applies an abstraction to the egraph: adds `fn_name(args...)` enodes for every
-/// match substitution and unions each with its match root, rebuilds, extracts the
-/// rewritten programs as strings, and feeds them into a fresh egraph (with DSR
-/// rules re-applied).
+/// match substitution and unions each with its match root, rebuilds, then extracts
+/// the rewritten programs as strings.
 ///
-/// Returns the fresh egraph, its root id, and the rewritten program strings.
-pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
+/// `roll_over` chooses what egraph the next abstraction round searches over:
+/// - `false` (default): the extracted programs are fed into a *fresh* egraph (with
+///   DSR rules re-applied), discarding all prior equivalences.
+/// - `true`: the rewritten egraph is reused directly, rolling every accumulated
+///   equivalence (and the new `fn_N(...)` applications) forward into the next round.
+///
+/// Either way the extracted program strings are returned for reporting.
+pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, roll_over: bool) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { egraph, root } = data;
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
-    let extractor = egg::Extractor::new(&egraph, cost::WeightedSize { weights: egraph.analysis.weights });
-    let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
-    let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
-    let weights = egraph.analysis.weights;
-    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
-    (fresh, programs)
+    let programs: Vec<String> = {
+        let extractor = egg::Extractor::new(&egraph, cost::WeightedSize { weights: egraph.analysis.weights });
+        let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
+        programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect()
+    };
+    let next_data = if roll_over {
+        shared::SharedData::new(egraph, root)
+    } else {
+        let weights = egraph.analysis.weights;
+        io::egraph_from_programs::<F, O>(&programs, rule_file, weights)
+    };
+    (next_data, programs)
 }
