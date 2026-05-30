@@ -45,7 +45,7 @@ pub trait LanguageFamily: Clone + 'static {
     /// Structural cost (sum of node costs over all enodes added by
     /// `add_stub_application`) of an `arity`-arg stub application — the
     /// head plus any spine nodes (e.g. curried `App`s) the family inserts.
-    fn stub_application_size<O: StitchOp>(name: &str, arity: usize, weights: &Weights) -> u32;
+    fn stub_application_size(arity: usize, weights: &Weights) -> u32;
 
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
@@ -130,8 +130,9 @@ impl LanguageFamily for OpChildren {
         egraph.add(Self::make(O::from_name(name), children))
     }
 
-    fn stub_application_size<O: StitchOp>(name: &str, _arity: usize, weights: &Weights) -> u32 {
-        O::from_name(name).intrinsic_size(weights)
+    fn stub_application_size(_arity: usize, weights: &Weights) -> u32 {
+        // OpChildren has no application spine: a stub is a single leaf node.
+        weights.sym_var_cost
     }
 
     fn check_fast_vs_slow(fast: i64, slow: i64) {
@@ -227,8 +228,9 @@ impl LanguageFamily for LambdaCalc {
         current
     }
 
-    fn stub_application_size<O: StitchOp>(name: &str, arity: usize, weights: &Weights) -> u32 {
-        LambdaCalcDisc::Leaf(O::from_name(name)).intrinsic_size(weights) + arity as u32 * weights.app_cost
+    fn stub_application_size(arity: usize, weights: &Weights) -> u32 {
+        // Leaf head plus one curried `App` per argument.
+        weights.sym_var_cost + arity as u32 * weights.app_cost
     }
 
     fn check_fast_vs_slow(fast: i64, slow: i64) {
