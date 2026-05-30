@@ -199,12 +199,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             {
                 continue;
             }
-            if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.dedup_key(), child_state.frozen_count.unwrap_or(0), compute_pattern_size(&child_state.pattern, &weights))
-            {
-                continue;
-            }
-
             // Useless-frozen pruning: a frozen metavar bound to the same
             // (closed-under-pattern-binders) arg in every match adds no
             // compression. Stitch analog: argument-capture pruning.
@@ -222,6 +216,19 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 PruneResult::Keep(lb) => Some(lb),
                 PruneResult::Disabled => None,
             };
+
+            // Seen-set dedup runs last among the pre-cost filters: building the
+            // `dedup_key` (clone + sort of the whole match set) is the most
+            // expensive check here, so we only pay it for children that already
+            // survived the cheaper useless-frozen and lower-bound prunes. The
+            // seen-set is a pure optimization — skipping a pruned child here
+            // (rather than recording it) can only cost a future re-evaluation,
+            // never a wrong result.
+            if let Some(s) = seen.as_mut()
+                && s.check_and_insert(child_state.dedup_key(), child_state.frozen_count.unwrap_or(0), compute_pattern_size(&child_state.pattern, &weights))
+            {
+                continue;
+            }
 
             let cost_t = Instant::now();
             // Capture the selection here so updates to `best` can stash it

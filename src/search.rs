@@ -11,9 +11,21 @@ use std::time::{Duration, Instant};
 /// with the same per-variable binder depths and the same match set (each
 /// match's root e-class plus its variable bindings) enumerate the same actions
 /// and achieve the same compression, regardless of their fixed pattern
-/// skeleton — so they can be merged. Matches and their substs are sorted so the
-/// key is canonical (independent of the order operations were applied in).
-pub type DedupKey = (Vec<u32>, Vec<(Id, Vec<Vec<Id>>)>);
+/// skeleton — so they can be merged.
+///
+/// A 128-bit structural fingerprint (see [`SearchState::dedup_key`]). The match
+/// set is reduced to a [`SearchState::match_fp`] that is maintained
+/// incrementally as states are constructed, so producing the key is O(arity)
+/// (fold the tiny `var_depth` into the stored fingerprint) rather than a fresh
+/// scan-and-sort of the whole match set. Earlier revisions used the literal
+/// `(Vec<u32>, Vec<(Id, Vec<Vec<Id>>)>)` contents and paid a clone + sort on
+/// every successor; profiling showed that dominated saturated-e-graph runs.
+///
+/// The tradeoff is that dedup is probabilistic: a 128-bit collision would
+/// wrongly merge two distinct states. At search scale (~10⁵ states) that
+/// probability is negligible, and the seen-set is a heuristic pruner regardless
+/// — a miss costs at most a re-evaluation, never a wrong result.
+pub type DedupKey = u128;
 
 /// Tracks already-explored states (by [`DedupKey`]) to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
@@ -157,11 +169,60 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// `None` disables the rule entirely (SMC), leaving reuse/expand
     /// enumeration unrestricted and dedup driven purely by the [`DedupKey`].
     pub frozen_count: Option<usize>,
+    /// Two-lane 128-bit fingerprint of the match set (sum over every
+    /// `(match, subst)` of [`subst_fp`]). Maintained incrementally by
+    /// `build_matches`/`new`/`concretize` — every site that builds or mutates
+    /// `matches` updates it — so [`dedup_key`](SearchState::dedup_key) reads it
+    /// in O(arity) instead of re-scanning the whole match set. See [`DedupKey`]
+    /// for the probabilistic-dedup tradeoff.
+    pub match_fp: (u64, u64),
 }
 
 /// Computes the total number of substitutions across all matches.
 fn total_substs(matches: &[MatchAtEClass]) -> usize {
     matches.iter().map(|m| m.substs.len()).sum()
+}
+
+/// splitmix64 finalizer: scrambles a `u64` so that *summing* per-subst hashes
+/// (a commutative combine) doesn't expose the additive structure of the raw
+/// FNV values feeding it.
+#[inline]
+fn mix64(mut x: u64) -> u64 {
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
+}
+
+/// Two-lane 128-bit contribution of one subst rooted at `root`: an FNV-1a fold
+/// over the (positional) `vars`, bound to `root`, then split through two
+/// finalizers. Callers sum these across all `(match, subst)` pairs; the sum is
+/// commutative, so the match-set fingerprint is independent of the order
+/// `build_matches` happened to emit matches and substs in — no sort required.
+#[inline]
+fn subst_fp(root: Id, vars: &[Id]) -> (u64, u64) {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &v in vars {
+        h = (h ^ usize::from(v) as u64).wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    let r = usize::from(root) as u64;
+    let bound = mix64(r.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ h);
+    (bound, mix64(bound ^ r.rotate_left(32)))
+}
+
+/// Full match-set fingerprint, summed over every `(match, subst)` pair. Used at
+/// the wholesale construction points (`SearchState::new`, `concretize`);
+/// `build_matches` accumulates the identical value incrementally while it builds
+/// the substs, so the common path never re-scans the match set.
+fn match_set_fp(matches: &[MatchAtEClass]) -> (u64, u64) {
+    let (mut a, mut b) = (0u64, 0u64);
+    for m in matches {
+        for s in &m.substs {
+            let (ca, cb) = subst_fp(m.root_eclass, &s.vars);
+            a = a.wrapping_add(ca);
+            b = b.wrapping_add(cb);
+        }
+    }
+    (a, b)
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
@@ -175,19 +236,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Drops matches whose substs all get filtered out. Does not clone the
     /// parent's substs Vecs — only the substs that survive the filter get
     /// constructed (via `f`) into the new state.
-    fn build_matches(parent_matches: &[MatchAtEClass], mut f: impl FnMut(&Subst, &mut Vec<Subst>)) -> (Vec<MatchAtEClass>, usize) {
+    /// Also accumulates the match-set fingerprint (see [`SearchState::match_fp`])
+    /// while the substs are hot in cache, so callers store it directly and the
+    /// match set is never re-scanned to build a [`DedupKey`].
+    fn build_matches(parent_matches: &[MatchAtEClass], mut f: impl FnMut(&Subst, &mut Vec<Subst>)) -> (Vec<MatchAtEClass>, usize, (u64, u64)) {
         let mut out: Vec<MatchAtEClass> = Vec::with_capacity(parent_matches.len());
+        let (mut fa, mut fb) = (0u64, 0u64);
         for m in parent_matches {
             let mut new_substs: Vec<Subst> = Vec::new();
             for subst in &m.substs {
                 f(subst, &mut new_substs);
             }
             if !new_substs.is_empty() {
+                for s in &new_substs {
+                    let (a, b) = subst_fp(m.root_eclass, &s.vars);
+                    fa = fa.wrapping_add(a);
+                    fb = fb.wrapping_add(b);
+                }
                 out.push(MatchAtEClass { root_eclass: m.root_eclass, substs: new_substs });
             }
         }
         let num = total_substs(&out);
-        (out, num)
+        (out, num, (fa, fb))
     }
 
     /// Builds child matches for an `expand(var_idx, target)` action from
@@ -200,7 +270,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// pattern-internal binders are handled at apply/cost time by η-wrapping
     /// (see `compute_ho_arity` and `shift_free_egraph`), so the match set
     /// stays permissive and search keeps exploring those branches.
-    fn build_subset_matches(parent_matches: &[MatchAtEClass], var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
+    fn build_subset_matches(parent_matches: &[MatchAtEClass], var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize, (u64, u64)) {
         Self::build_matches(parent_matches, |subst, out| {
             let var_id = subst.vars[var_idx];
             let var_eclass = &shared.egraph[var_id];
@@ -231,7 +301,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// whose kept-eclass fv lands in `[min_depth, merged_depth)` are
     /// representable at the deep site but unbound at the shallow one — those
     /// are dropped. Same-depth reuse has an empty gap.
-    fn build_subset_matches_reuse(parent_matches: &[MatchAtEClass], var_idx: usize, second_var_idx: usize, shallow_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
+    fn build_subset_matches_reuse(parent_matches: &[MatchAtEClass], var_idx: usize, second_var_idx: usize, shallow_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize, (u64, u64)) {
         let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
         let deep_idx = if shallow_idx == var_idx { second_var_idx } else { var_idx };
@@ -337,6 +407,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 subst.vars.remove(var_idx);
             }
         }
+        // Every subst's `vars` changed, so the cached fingerprint is stale.
+        // Concretize is off the hot path (useless-inline only), so a full
+        // recompute is fine.
+        self.match_fp = match_set_fp(&self.matches);
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
@@ -345,29 +419,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn new(shared: &SharedSearchData<F, O>, frozen_count: Option<usize>) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
+        let match_fp = match_set_fp(&matches);
         Self {
             pattern: Pattern::single_var(),
             matches,
             num_substs,
             frozen_count,
+            match_fp,
         }
     }
 
-    /// Builds the canonical [`DedupKey`] for this state: its per-variable
-    /// binder depths plus its match set, with matches and their substs sorted
-    /// so two states reached via different operation orders hash identically.
+    /// Builds the 128-bit [`DedupKey`] by folding the (tiny, positional)
+    /// `var_depth` into the incrementally-maintained match-set fingerprint
+    /// [`match_fp`](Self::match_fp). O(arity): the expensive part — summarizing
+    /// the match set — was already paid when the state was constructed.
     pub fn dedup_key(&self) -> DedupKey {
-        let mut matches: Vec<(Id, Vec<Vec<Id>>)> = self
-            .matches
-            .iter()
-            .map(|m| {
-                let mut substs: Vec<Vec<Id>> = m.substs.iter().map(|s| s.vars.clone()).collect();
-                substs.sort();
-                (m.root_eclass, substs)
-            })
-            .collect();
-        matches.sort();
-        (self.pattern.var_depth.clone(), matches)
+        let (mut a, b) = self.match_fp;
+        // var_depth is positional, so fold it sequentially. Distinguishes two
+        // states with an identical match set but different binder depths.
+        for &d in &self.pattern.var_depth {
+            a = mix64(a.rotate_left(7) ^ d as u64);
+        }
+        ((b as u128) << 64) | (a as u128)
     }
 
     /// Applies an action to `self` and returns the resulting child without
@@ -380,7 +453,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let mut new_frozen_count = self.frozen_count;
-        let (new_matches, new_num_substs) = match action {
+        let (new_matches, new_num_substs, new_match_fp) = match action {
             Action::Expand { var_idx, op, arity } => {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
                 // Commit to freezing every earlier var. `max` (rather than
@@ -421,6 +494,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             matches: new_matches,
             num_substs: new_num_substs,
             frozen_count: new_frozen_count,
+            match_fp: new_match_fp,
         }
     }
 
