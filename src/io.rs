@@ -22,7 +22,7 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     println!("Weight of root node before rules: {}", cost_before_rewrites);
 
     let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {
-        Some(rule_file) => from_file(rule_file).expect("Failed to parse rules file"),
+        Some(rule_file) => from_file(rule_file, &weights).expect("Failed to parse rules file"),
         None => vec![],
     };
     println!("loaded {} rules", rules.len());
@@ -42,7 +42,7 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
 pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights) -> SharedData<F, O> {
     let (egraph, root) = programs_to_egraph::<F::Apply<O>>(programs, weights);
     let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {
-        Some(f) => from_file(f).expect("Failed to parse rules file"),
+        Some(f) => from_file(f, &weights).expect("Failed to parse rules file"),
         None => vec![],
     };
     let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
@@ -77,20 +77,25 @@ fn extract_root_size<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id)
 }
 
 /// Loads rewrite rules from a file in `name: lhs => rhs` format.
-pub fn from_file<L, A, P>(path: P) -> anyhow::Result<Vec<Rewrite<L, A>>>
+pub fn from_file<L, A, P>(path: P, weights: &Weights) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
     L: StitchLanguage,
     A: Analysis<L>,
     P: AsRef<Path>,
 {
     let contents = fs::read_to_string(path)?;
-    parse(&contents)
+    parse(&contents, weights)
 }
 
 /// Parses rewrite rules from a string in `name: lhs => rhs` format. A rule may
 /// use `<=>` instead of `=>` to declare a bidirectional equivalence; it expands
 /// to the forward rule plus a `<name>-rev` rule with `lhs`/`rhs` swapped.
-pub fn parse<L, A>(file: &str) -> anyhow::Result<Vec<Rewrite<L, A>>>
+///
+/// Panics if a rule violates the structural conditions behind
+/// `fv(c) = fv(MinTerm(c))` (see [`rule_fv_verdict`]); the size-tie case is
+/// permitted only when `weights` make de Bruijn variables strictly more expensive than
+/// symbols (or the language has none).
+pub fn parse<L, A>(file: &str, weights: &Weights) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
     L: StitchLanguage,
     A: Analysis<L>,
@@ -116,8 +121,15 @@ where
         let name = name.trim();
         let lhs: Pattern<L> = L::parse_pattern_ast(lhs.trim())?.into();
         let rhs: Pattern<L> = L::parse_pattern_ast(rhs.trim())?.into();
-        if let Some(reason) = rule_fv_condition_violation::<L>(&lhs.ast, &rhs.ast) {
-            panic!("rule `{name}` violates the min-term free-variable conditions: {reason}");
+        match rule_fv_verdict::<L>(&lhs.ast, &rhs.ast) {
+            RuleFvVerdict::Ok => {}
+            RuleFvVerdict::Violation(reason) => panic!("rule `{name}` violates the min-term free-variable conditions: {reason}"),
+            RuleFvVerdict::OkIfDeBruijnMoreExpensive(reason) => {
+                assert!(
+                    L::de_bruijn_strictly_more_expensive_than_symbols(weights),
+                    "rule `{name}` violates the min-term free-variable conditions: {reason}, and de Bruijn variables are not strictly more expensive than symbols under the active weights"
+                );
+            }
         }
         if bidirectional {
             rewrites.push(Rewrite::new(format!("{name}-rev"), rhs.clone(), lhs.clone()).map_err(|e| anyhow!("{}", e))?);
@@ -127,10 +139,26 @@ where
     Ok(rewrites)
 }
 
-/// Structural facts about one side of a rule, used by
-/// [`rule_fv_condition_violation`]: its metavariables, whether it contains a
-/// *free* de Bruijn leaf, whether any metavariable sits beneath a binder, and its
-/// node count (a metavariable counts as one node — its minimal instantiation).
+/// Verdict from [`rule_fv_verdict`] on whether a rule preserves
+/// `fv(c) = fv(MinTerm(c))`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuleFvVerdict {
+    /// Conforming regardless of the cost model.
+    Ok,
+    /// Conforming only if de Bruijn variables are strictly more expensive than symbols.
+    /// The metavariable is dropped at a *size tie*, so under node count alone its
+    /// side is not strictly larger; but if any free-variable instantiation costs
+    /// more than the symbol that replaces it, the cost-minimal term avoids it.
+    /// The caller decides via [`StitchLanguage::de_bruijn_strictly_more_expensive_than_symbols`].
+    OkIfDeBruijnMoreExpensive(String),
+    /// Unconditionally unsafe.
+    Violation(String),
+}
+
+/// Structural facts about one side of a rule, used by [`rule_fv_verdict`]: its
+/// metavariables, whether it contains a *free* de Bruijn leaf, whether any
+/// metavariable sits beneath a binder, and its node count (a metavariable counts
+/// as one node — its minimal instantiation).
 fn rule_side_facts<L: StitchLanguage>(ast: &RecExpr<ENodeOrVar<L>>) -> (FxHashSet<Var>, bool, bool, usize) {
     let nodes = ast.as_ref();
     let mut vars = FxHashSet::default();
@@ -153,8 +181,7 @@ fn rule_side_facts<L: StitchLanguage>(ast: &RecExpr<ENodeOrVar<L>>) -> (FxHashSe
                     *free_db = true;
                 }
                 for (j, &c) in e.children().iter().enumerate() {
-                    let child_depth = depth + u32::from(disc.binds_child(j));
-                    go::<L>(nodes, c, child_depth, vars, free_db, mv, count);
+                    go::<L>(nodes, c, depth + u32::from(disc.binds_child(j)), vars, free_db, mv, count);
                 }
             }
         }
@@ -163,32 +190,50 @@ fn rule_side_facts<L: StitchLanguage>(ast: &RecExpr<ENodeOrVar<L>>) -> (FxHashSe
     (vars, free_db, mv_under_binder, count)
 }
 
-/// Checks the *structural* conditions under which `fv(c) = fv(MinTerm(c))` is
-/// guaranteed — the invariant the extraction-time `shift_free_egraph` assertion
-/// relies on. Returns `Some(reason)` for the first violated condition, or `None`
-/// if the rule passes. Treating every rule as a bidirectional union, we require:
-///   * no rule side has a *free* de Bruijn leaf,
-///   * no metavariable occurs beneath a binder,
-///   * every metavariable occurring on only one side makes that side strictly
-///     larger (so no rewrite introduces a variable on its smaller side).
+/// Classifies a rule against the *structural* conditions behind
+/// `fv(c) = fv(MinTerm(c))` — the invariant the extraction-time
+/// `shift_free_egraph` assertion relies on. Treating each rule as a bidirectional
+/// union:
+///   * a *free* de Bruijn leaf on either side, or a metavariable beneath a
+///     binder, is an unconditional [`RuleFvVerdict::Violation`];
+///   * a metavariable occurring only on the strictly-*smaller* side introduces a
+///     variable into the reduced term — also a `Violation`;
+///   * a metavariable occurring only on a *same-size* side is
+///     [`RuleFvVerdict::OkIfDeBruijnMoreExpensive`]: safe iff de Bruijn variables are
+///     strictly more expensive than symbols (then a free instantiation makes that side
+///     strictly larger by weight, so the min-term avoids it);
+///   * otherwise [`RuleFvVerdict::Ok`].
 ///
-/// These are sufficient, not necessary, conditions, and confluence (the remaining
-/// hypothesis) is not checked here; the extraction-time assertion is the backstop.
-/// `parse` panics on a `Some` result so a non-conforming rule set fails at load.
-pub fn rule_fv_condition_violation<L: StitchLanguage>(lhs: &RecExpr<ENodeOrVar<L>>, rhs: &RecExpr<ENodeOrVar<L>>) -> Option<String> {
+/// These are sufficient, not necessary, conditions; confluence (the remaining
+/// hypothesis) is not checked here, and the extraction-time assertion is the
+/// backstop. `parse` panics on a `Violation` (and on an unsatisfied
+/// `OkIfDeBruijnMoreExpensive`) so a non-conforming rule set fails at load.
+pub fn rule_fv_verdict<L: StitchLanguage>(lhs: &RecExpr<ENodeOrVar<L>>, rhs: &RecExpr<ENodeOrVar<L>>) -> RuleFvVerdict {
     let (lv, lfree, lbind, lcount) = rule_side_facts::<L>(lhs);
     let (rv, rfree, rbind, rcount) = rule_side_facts::<L>(rhs);
     if lfree || rfree {
-        return Some("a rule side contains a free de Bruijn variable".to_string());
+        return RuleFvVerdict::Violation("a rule side contains a free de Bruijn variable".to_string());
     }
     if lbind || rbind {
-        return Some("a metavariable occurs beneath a binder".to_string());
+        return RuleFvVerdict::Violation("a metavariable occurs beneath a binder".to_string());
     }
-    if lv.difference(&rv).next().is_some() && lcount <= rcount {
-        return Some("a metavariable occurs only on the LHS, which is not strictly larger".to_string());
+    let mut tie: Option<String> = None;
+    if lv.difference(&rv).next().is_some() {
+        match lcount.cmp(&rcount) {
+            std::cmp::Ordering::Less => return RuleFvVerdict::Violation("a metavariable occurs only on the LHS, which is strictly smaller".to_string()),
+            std::cmp::Ordering::Equal => tie = Some("a metavariable occurs only on the LHS, at a size tie".to_string()),
+            std::cmp::Ordering::Greater => {}
+        }
     }
-    if rv.difference(&lv).next().is_some() && rcount <= lcount {
-        return Some("a metavariable occurs only on the RHS, which is not strictly larger".to_string());
+    if rv.difference(&lv).next().is_some() {
+        match rcount.cmp(&lcount) {
+            std::cmp::Ordering::Less => return RuleFvVerdict::Violation("a metavariable occurs only on the RHS, which is strictly smaller".to_string()),
+            std::cmp::Ordering::Equal => tie = Some("a metavariable occurs only on the RHS, at a size tie".to_string()),
+            std::cmp::Ordering::Greater => {}
+        }
     }
-    None
+    match tie {
+        Some(reason) => RuleFvVerdict::OkIfDeBruijnMoreExpensive(reason),
+        None => RuleFvVerdict::Ok,
+    }
 }

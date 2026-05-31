@@ -175,6 +175,15 @@ impl<O: StitchOp> StitchLanguage for LambdaCalcLanguage<O> {
     fn display_recexpr(expr: &RecExpr<Self>) -> String {
         unappify_recexpr(expr).to_string()
     }
+
+    fn de_bruijn_strictly_more_expensive_than_symbols(weights: &Weights) -> bool {
+        // A leaf's cost is `LambdaCalcDisc::Leaf(o).intrinsic_size = o.intrinsic_size`,
+        // so the comparison is at the `O` level just as for `OpChildrenLanguage`.
+        match O::make_db_var(0) {
+            None => true,
+            Some(db) => db.intrinsic_size(weights) > O::from_name("a").intrinsic_size(weights),
+        }
+    }
 }
 
 /// Walk a `Sexp` and emit it as a `LambdaCalcLanguage<O>` `RecExpr` using the

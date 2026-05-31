@@ -42,6 +42,14 @@ pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Deb
     fn display_recexpr(expr: &RecExpr<Self>) -> String {
         expr.to_string()
     }
+
+    /// True iff a de Bruijn variable leaf is strictly more expensive than every
+    /// symbol leaf under `weights`, or the language has no de Bruijn variables at
+    /// all. When this holds, dropping a metavariable at a size tie is safe (see
+    /// `io::rule_fv_verdict`): any free-variable instantiation makes that side
+    /// strictly larger by weight, so the cost-minimal term never retains it, and
+    /// `fv(c) = fv(MinTerm(c))` is preserved.
+    fn de_bruijn_strictly_more_expensive_than_symbols(weights: &Weights) -> bool;
 }
 
 /// Runtime cost configuration. Every enode size is computed by
