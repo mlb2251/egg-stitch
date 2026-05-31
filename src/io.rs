@@ -1,7 +1,8 @@
-use crate::lang::{LanguageFamily, StitchAnalysis, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use crate::lang::{LanguageFamily, StitchAnalysis, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 use crate::shared::SharedData;
 use anyhow::anyhow;
-use egg::{Analysis, Pattern, Rewrite};
+use egg::{Analysis, ENodeOrVar, Id, Pattern, RecExpr, Rewrite, Var};
+use rustc_hash::FxHashSet;
 use std::{fs, path::Path};
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
@@ -142,7 +143,76 @@ where
         let rhs = rhs.trim();
         let lhs: Pattern<L> = L::parse_pattern_ast(lhs)?.into();
         let rhs: Pattern<L> = L::parse_pattern_ast(rhs)?.into();
+        if let Some(reason) = rule_fv_condition_violation::<L>(&lhs.ast, &rhs.ast) {
+            panic!("rule `{name}` violates the min-term free-variable conditions: {reason}");
+        }
         rewrites.push(Rewrite::new(name, lhs, rhs).map_err(|e| anyhow!("{}", e))?);
     }
     Ok(rewrites)
+}
+
+/// Structural facts about one side of a rule, used by
+/// [`rule_fv_condition_violation`]: its metavariables, whether it contains a
+/// *free* de Bruijn leaf, whether any metavariable sits beneath a binder, and its
+/// node count (a metavariable counts as one node — its minimal instantiation).
+fn rule_side_facts<L: StitchLanguage>(ast: &RecExpr<ENodeOrVar<L>>) -> (FxHashSet<Var>, bool, bool, usize) {
+    let nodes = ast.as_ref();
+    let mut vars = FxHashSet::default();
+    let (mut free_db, mut mv_under_binder, mut count) = (false, false, 0usize);
+
+    fn go<L: StitchLanguage>(nodes: &[ENodeOrVar<L>], id: Id, depth: u32, vars: &mut FxHashSet<Var>, free_db: &mut bool, mv: &mut bool, count: &mut usize) {
+        *count += 1;
+        match &nodes[usize::from(id)] {
+            ENodeOrVar::Var(v) => {
+                vars.insert(*v);
+                if depth > 0 {
+                    *mv = true;
+                }
+            }
+            ENodeOrVar::ENode(e) => {
+                let disc = e.discriminant();
+                if let Some(idx) = disc.de_bruijn_index()
+                    && idx >= depth as i32
+                {
+                    *free_db = true;
+                }
+                for (j, &c) in e.children().iter().enumerate() {
+                    let child_depth = depth + u32::from(disc.binds_child(j));
+                    go::<L>(nodes, c, child_depth, vars, free_db, mv, count);
+                }
+            }
+        }
+    }
+    go::<L>(nodes, Id::from(nodes.len() - 1), 0, &mut vars, &mut free_db, &mut mv_under_binder, &mut count);
+    (vars, free_db, mv_under_binder, count)
+}
+
+/// Checks the *structural* conditions under which `fv(c) = fv(MinTerm(c))` is
+/// guaranteed — the invariant the extraction-time `shift_free_egraph` assertion
+/// relies on. Returns `Some(reason)` for the first violated condition, or `None`
+/// if the rule passes. Treating every rule as a bidirectional union, we require:
+///   * no rule side has a *free* de Bruijn leaf,
+///   * no metavariable occurs beneath a binder,
+///   * every metavariable occurring on only one side makes that side strictly
+///     larger (so no rewrite introduces a variable on its smaller side).
+///
+/// These are sufficient, not necessary, conditions, and confluence (the remaining
+/// hypothesis) is not checked here; the extraction-time assertion is the backstop.
+/// `parse` panics on a `Some` result so a non-conforming rule set fails at load.
+pub fn rule_fv_condition_violation<L: StitchLanguage>(lhs: &RecExpr<ENodeOrVar<L>>, rhs: &RecExpr<ENodeOrVar<L>>) -> Option<String> {
+    let (lv, lfree, lbind, lcount) = rule_side_facts::<L>(lhs);
+    let (rv, rfree, rbind, rcount) = rule_side_facts::<L>(rhs);
+    if lfree || rfree {
+        return Some("a rule side contains a free de Bruijn variable".to_string());
+    }
+    if lbind || rbind {
+        return Some("a metavariable occurs beneath a binder".to_string());
+    }
+    if lv.difference(&rv).next().is_some() && lcount <= rcount {
+        return Some("a metavariable occurs only on the LHS, which is not strictly larger".to_string());
+    }
+    if rv.difference(&lv).next().is_some() && rcount <= lcount {
+        return Some("a metavariable occurs only on the RHS, which is not strictly larger".to_string());
+    }
+    None
 }
