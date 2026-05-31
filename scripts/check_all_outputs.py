@@ -26,6 +26,7 @@ ROOT = REPO / "data" / "expected_outputs"
 RULES_BY_REL = {
     "fv-overapprox/annihilator.out.json": "data/domains/fv-overapprox/annihilator.rewrites",
     "stitch/nested.out.json": "data/domains/stitch/nested.rewrites",
+    "conditional/if_branch_unify.out.json": "data/domains/conditional/if_branch.rewrites",
 }
 
 
