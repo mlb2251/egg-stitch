@@ -155,6 +155,18 @@ pub struct Args {
     #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
     pub opt_lower_bound: bool,
 
+    /// Disable dominated-no-op-wrapper stripping (on by default).
+    /// Identity DSRs like `x => (T x (M 1 0 0 0))` make every e-class
+    /// self-referential, so the search builds unbounded towers of identity
+    /// wrappers and never converges. This drops the substitutions that route
+    /// through such a wrapper — a node whose e-class equals one child's while
+    /// its other children are constant across the match set — since the
+    /// unwrapped match dominates them. Parameterized wrappers (a varying matrix
+    /// or `if` condition) are left untouched. Only runs when the e-graph
+    /// actually has self-loops. See `SearchState::strip_dominated_wrappers`.
+    #[arg(long = "no-opt-strip-wrap", action = clap::ArgAction::SetFalse)]
+    pub opt_strip_wrap: bool,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,

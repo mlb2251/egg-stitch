@@ -155,6 +155,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
     let mut useless_frozen_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
+    let mut strip_wrap_substs: usize = 0;
     let search_start = Instant::now();
 
     'search: while let Some(Reverse((_prio, node_id))) = heap.pop() {
@@ -187,10 +188,19 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         }
 
         let parent_depth = nodes[node_id].depth;
-        let successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
+        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
+        // Strip identity-DSR no-op wrapper substitutions so the otherwise-infinite
+        // tower of equivalent wrapped patterns can't form. Only fires when the
+        // e-graph has self-loops; drops successors emptied by the strip.
+        if args.opt_strip_wrap && shared.has_selfloops {
+            for child in &mut successors {
+                strip_wrap_substs += child.strip_dominated_wrappers(&shared);
+            }
+            successors.retain(|c| !c.matches.is_empty());
+        }
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow
@@ -311,6 +321,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
+    println!("{} {}", "strip-wrap substs removed:".dimmed(), strip_wrap_substs.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
