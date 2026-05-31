@@ -1,0 +1,5 @@
+// Conditional evaluation. Lets a bare branch be recognized as the corresponding
+// arm of the conditional, e.g. (a b c d e) == (if true (a b c d e) (g h i j k)),
+// so then/else sites unify under a single condition-parameterized abstraction.
+if_true:  (if true ?x ?y)  => ?x
+if_false: (if false ?x ?y) => ?y

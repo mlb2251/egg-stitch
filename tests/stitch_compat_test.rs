@@ -620,3 +620,26 @@ fn cross_depth_useless_inline() {
 fn cross_depth_forloop_db_var_inline() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_forloop_db_var_inline.json", LAMBDA, true);
 }
+
+/// Conditional-branch unification driven by a DSR equivalence. Half the
+/// programs place a big subterm `(a b c d e)` at one slot and half place
+/// `(g h i j k)`. The `(if true x y) == x` / `(if false x y) == y` rewrites let
+/// a *bare* branch be recognized as an arm of the conditional, so the optimal
+/// abstraction is `(f (if ?#0 (a b c d e) (g h i j k)) ?#1)`: it captures both
+/// big branches once in the body and each call site passes only a one-token
+/// boolean condition instead of the whole 5-node subterm. A plain metavar hole
+/// `(f ?#0 ?#1)` would have to pass that subterm at every site, so the
+/// condition-parameterized `if` genuinely wins.
+///
+/// This pins that the equivalence-driven unification is found (cost 39). It is
+/// a deliberate counter-example to a tempting "self-loop / re-nesting" prune of
+/// identity DSRs: because `(if true x y) => x` unions the `if` node into `x`'s
+/// e-class, that node looks like a self-loop, yet the abstraction containing it
+/// is the optimum — any prune keyed purely on self-loop nesting must not
+/// discard it.
+const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewrites"];
+
+#[test]
+fn conditional_branch_unify() {
+    check_fixture_bf_only("data/domains/conditional/if_branch_unify.json", IF_RULES, true);
+}
