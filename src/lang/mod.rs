@@ -22,7 +22,7 @@ pub use op_with_var::OpWithVar;
 /// can build any-arity applications in a single enode (e.g. `OpChildrenLanguage`).
 /// Languages with more constrained shapes can override the parse/display hooks
 /// to bridge between the user-facing flat syntax and their internal representation.
-pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {
+pub trait StitchLanguage: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {
     /// Returns true if this operator represents a `programs` node, which is used as the root of the egraph and has special handling in `apply_abstraction`.
     fn is_programs_node(&self) -> bool;
 
