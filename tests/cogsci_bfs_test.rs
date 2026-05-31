@@ -12,11 +12,10 @@
 //! (`num_steps_run`, `num_expansions`, `best_iteration`, `best_history`) are
 //! stripped before comparison.
 //!
-//! The no-DSR fixtures use the in-repo `data/domains/cogsci/*.json` inputs, so
-//! they always run. The DSR fixtures depend on `../babble/harness/data/
-//! benchmark-dsrs/drawings.<domain>.rewrites`, which live outside this repo —
-//! those tests skip (and pass) when babble isn't checked out alongside, matching
-//! `tests/integration_test.rs`.
+//! Both variants run in CI: the no-DSR fixtures use the in-repo
+//! `data/domains/cogsci/<domain>.json` inputs, and the DSR fixtures use the
+//! in-repo `data/domains/cogsci/<domain>.rewrites` rule files (copied from
+//! babble's `benchmark-dsrs/drawings.<domain>.rewrites`).
 //!
 //! To regenerate all fixtures after a legitimate behavior change, run with
 //! `BLESS=1`:
@@ -26,12 +25,13 @@
 //! ```
 
 use serde_json::Value;
-use std::{fs, path::Path, process::Command};
+use std::{fs, process::Command};
 
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
-/// Directory holding the per-domain DSR (`.rewrites`) files, outside this repo.
-const DSR_DIR: &str = "../babble/harness/data/benchmark-dsrs";
+/// Directory holding the per-domain DSR (`.rewrites`) files, in-repo alongside
+/// the `<domain>.json` inputs.
+const DSR_DIR: &str = "data/domains/cogsci";
 
 /// Number of sequential abstractions each run pins. Three is enough to exercise
 /// the stack: rounds 2 and 3 search the corpus rewritten by the prior round(s).
@@ -97,14 +97,9 @@ fn check_nodsr(domain: &str) {
     bless_or_check(&expected_path(domain, "nodsr"), &v);
 }
 
-/// DSR variant: the rewrite files live outside the repo (`../babble`); skip
-/// when absent so the suite still passes on a checkout without babble.
+/// DSR variant: runs best-first with the in-repo per-domain rewrite rules.
 fn check_dsr(domain: &str) {
-    let rules = format!("{DSR_DIR}/drawings.{domain}.rewrites");
-    if !Path::new(&rules).exists() {
-        eprintln!("skipping {domain} DSR test: {rules} not found");
-        return;
-    }
+    let rules = format!("{DSR_DIR}/{domain}.rewrites");
     let v = run_bfs(domain, Some(&rules), "dsr");
     bless_or_check(&expected_path(domain, "dsr"), &v);
 }

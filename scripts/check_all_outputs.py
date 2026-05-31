@@ -26,6 +26,13 @@ ROOT = REPO / "data" / "expected_outputs"
 RULES_BY_REL = {
     "fv-overapprox/annihilator.out.json": "data/domains/fv-overapprox/annihilator.rewrites",
     "stitch/nested.out.json": "data/domains/stitch/nested.rewrites",
+    # cogsci `.dsr` fixtures were searched with the per-domain drawing DSRs
+    # (committed under data/domains/cogsci/); β alone can't bridge their
+    # repeat/reroll-based rewrites. The `.nodsr` fixtures need no rules.
+    "cogsci/dials.dsr.out.json": "data/domains/cogsci/dials.rewrites",
+    "cogsci/furniture.dsr.out.json": "data/domains/cogsci/furniture.rewrites",
+    "cogsci/nuts-bolts.dsr.out.json": "data/domains/cogsci/nuts-bolts.rewrites",
+    "cogsci/wheels.dsr.out.json": "data/domains/cogsci/wheels.rewrites",
 }
 
 
