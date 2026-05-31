@@ -48,6 +48,21 @@ pub trait StitchOp: StitchDisc {
     }
 }
 
+/// True iff a De Bruijn variable leaf is strictly more expensive than a symbol
+/// leaf under `weights`, or the op type `O` has no De Bruijn variables. When this
+/// holds, dropping a metavariable at a size tie is safe: any free-variable
+/// instantiation makes its side strictly larger by weight, so the cost-minimal
+/// term avoids it, preserving `fv(c) = fv(MinTerm(c))` (see `io::rule_fv_verdict`).
+///
+/// Depends only on the leaf op, so it is one function rather than a per-language
+/// method: a language node's leaf cost is exactly its op's `intrinsic_size`.
+pub fn de_bruijn_strictly_more_expensive_than_symbols<O: StitchOp>(weights: &Weights) -> bool {
+    match O::make_db_var(0) {
+        None => true,
+        Some(db) => db.intrinsic_size(weights) > O::from_name("a").intrinsic_size(weights),
+    }
+}
+
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum Op {
     /// Opaque symbolic operator.

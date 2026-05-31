@@ -11,7 +11,7 @@ mod op_with_var;
 
 pub use family::{LambdaCalc, LanguageFamily, OpChildren};
 pub use lambda_calc::{LambdaCalcDisc, LambdaCalcLanguage};
-pub use op::{Op, StitchDisc, StitchOp};
+pub use op::{Op, StitchDisc, StitchOp, de_bruijn_strictly_more_expensive_than_symbols};
 pub use op_children::OpChildrenLanguage;
 pub use op_db::OpDB;
 pub use op_with_var::OpWithVar;
@@ -22,7 +22,7 @@ pub use op_with_var::OpWithVar;
 /// can build any-arity applications in a single enode (e.g. `OpChildrenLanguage`).
 /// Languages with more constrained shapes can override the parse/display hooks
 /// to bridge between the user-facing flat syntax and their internal representation.
-pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {
+pub trait StitchLanguage: Language<Discriminant: StitchOp> + FromOp<Error: Debug + Send + Sync + std::error::Error> + Display + Clone + Send + Sync + 'static {
     /// Returns true if this operator represents a `programs` node, which is used as the root of the egraph and has special handling in `apply_abstraction`.
     fn is_programs_node(&self) -> bool;
 
@@ -42,14 +42,6 @@ pub trait StitchLanguage: Language<Discriminant: StitchDisc> + FromOp<Error: Deb
     fn display_recexpr(expr: &RecExpr<Self>) -> String {
         expr.to_string()
     }
-
-    /// True iff a de Bruijn variable leaf is strictly more expensive than every
-    /// symbol leaf under `weights`, or the language has no de Bruijn variables at
-    /// all. When this holds, dropping a metavariable at a size tie is safe (see
-    /// `io::rule_fv_verdict`): any free-variable instantiation makes that side
-    /// strictly larger by weight, so the cost-minimal term never retains it, and
-    /// `fv(c) = fv(MinTerm(c))` is preserved.
-    fn de_bruijn_strictly_more_expensive_than_symbols(weights: &Weights) -> bool;
 }
 
 /// Runtime cost configuration. Every enode size is computed by

@@ -6,7 +6,7 @@
 
 use egg::{ENodeOrVar, RecExpr};
 use egg_stitch::io::{RuleFvVerdict, rule_fv_verdict};
-use egg_stitch::lang::{LambdaCalcLanguage, Op, OpChildrenLanguage, OpDB, StitchLanguage, Weights};
+use egg_stitch::lang::{LambdaCalcLanguage, Op, OpChildrenLanguage, OpDB, StitchLanguage, Weights, de_bruijn_strictly_more_expensive_than_symbols};
 
 type Flat = OpChildrenLanguage<Op>;
 type Lam = LambdaCalcLanguage<OpDB<Op>>;
@@ -66,14 +66,14 @@ fn metavariable_under_binder_is_a_violation() {
 }
 
 #[test]
-fn language_level_de_bruijn_cost_check() {
-    // Under the uniform leaf-cost model, every leaf costs `sym_var_cost`, so
-    // de Bruijn variables are *not* strictly more expensive than symbols in a language
-    // that has them (lambda-calc) — but the check holds vacuously for a language
-    // without de Bruijn variables (op-children). This is what lets the `id_xf`
-    // tie load for the (de-Bruijn-free) drawing domains but be rejected for a
-    // de-Bruijn language under uniform weights.
+fn op_level_de_bruijn_cost_check() {
+    // The cost check is a function of the leaf op, not the language. Under the
+    // uniform leaf-cost model every leaf costs `sym_var_cost`, so de Bruijn
+    // variables are *not* strictly more expensive than symbols for an op that has
+    // them (`OpDB`) — but it holds vacuously for an op without de Bruijn variables
+    // (`Op`). This is what lets the `id_xf` tie load for the (de-Bruijn-free)
+    // drawing domains but be rejected for a de-Bruijn op under uniform weights.
     let w = Weights::default();
-    assert!(<Flat as StitchLanguage>::de_bruijn_strictly_more_expensive_than_symbols(&w));
-    assert!(!<Lam as StitchLanguage>::de_bruijn_strictly_more_expensive_than_symbols(&w));
+    assert!(de_bruijn_strictly_more_expensive_than_symbols::<Op>(&w));
+    assert!(!de_bruijn_strictly_more_expensive_than_symbols::<OpDB<Op>>(&w));
 }

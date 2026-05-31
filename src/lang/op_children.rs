@@ -2,7 +2,7 @@ use egg::{FromOp, Id, Language};
 use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
 
-use super::{StitchLanguage, StitchOp, Weights};
+use super::{StitchLanguage, StitchOp};
 
 /// Language where each enode is an operator plus a list of child Ids.
 /// This language does not have currying-by-default but is more efficient
@@ -56,12 +56,5 @@ impl<O: StitchOp> FromOp for OpChildrenLanguage<O> {
 impl<O: StitchOp> StitchLanguage for OpChildrenLanguage<O> {
     fn is_programs_node(&self) -> bool {
         self.op.to_string() == "programs"
-    }
-
-    fn de_bruijn_strictly_more_expensive_than_symbols(weights: &Weights) -> bool {
-        match O::make_db_var(0) {
-            None => true, // no de Bruijn variables in this language
-            Some(db) => db.intrinsic_size(weights) > O::from_name("a").intrinsic_size(weights),
-        }
     }
 }

@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, StitchAnalysis, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use crate::lang::{LanguageFamily, StitchAnalysis, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, de_bruijn_strictly_more_expensive_than_symbols};
 use crate::shared::SharedData;
 use anyhow::anyhow;
 use egg::{Analysis, ENodeOrVar, Id, Pattern, RecExpr, Rewrite, Var};
@@ -93,8 +93,8 @@ where
 ///
 /// Panics if a rule violates the structural conditions behind
 /// `fv(c) = fv(MinTerm(c))` (see [`rule_fv_verdict`]); the size-tie case is
-/// permitted only when `weights` make de Bruijn variables strictly more expensive than
-/// symbols (or the language has none).
+/// permitted only when `weights` make de Bruijn variables strictly more expensive
+/// than symbols (or the language has none).
 pub fn parse<L, A>(file: &str, weights: &Weights) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
     L: StitchLanguage,
@@ -126,7 +126,7 @@ where
             RuleFvVerdict::Violation(reason) => panic!("rule `{name}` violates the min-term free-variable conditions: {reason}"),
             RuleFvVerdict::OkIfDeBruijnMoreExpensive(reason) => {
                 assert!(
-                    L::de_bruijn_strictly_more_expensive_than_symbols(weights),
+                    de_bruijn_strictly_more_expensive_than_symbols::<L::Discriminant>(weights),
                     "rule `{name}` violates the min-term free-variable conditions: {reason}, and de Bruijn variables are not strictly more expensive than symbols under the active weights"
                 );
             }
@@ -149,7 +149,7 @@ pub enum RuleFvVerdict {
     /// The metavariable is dropped at a *size tie*, so under node count alone its
     /// side is not strictly larger; but if any free-variable instantiation costs
     /// more than the symbol that replaces it, the cost-minimal term avoids it.
-    /// The caller decides via [`StitchLanguage::de_bruijn_strictly_more_expensive_than_symbols`].
+    /// The caller decides via [`crate::lang::de_bruijn_strictly_more_expensive_than_symbols`].
     OkIfDeBruijnMoreExpensive(String),
     /// Unconditionally unsafe.
     Violation(String),
