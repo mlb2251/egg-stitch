@@ -447,25 +447,41 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let mut cls: Vec<Option<Id>> = vec![None; n]; // last-seen class
         let mut seen = vec![false; n];
         let mut varies = vec![false; n];
+        // vacuous_pass[i]: child positions p where node i's e-class equals c_p's
+        // in *every* match so far (`None` until first observed). A node that
+        // keeps a position here is a vacuous wrapper — it always passes through
+        // to that child (e.g. `(repeat ?x 1 ?m)`, which `rep_1` makes ≡ `?x`
+        // regardless of the don't-care matrix `?m`).
+        let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
             for s in &m.substs {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
                 for i in 0..n {
-                    if varies[i] {
-                        continue;
-                    }
-                    match ec[i] {
-                        Some(c) if !seen[i] => {
-                            seen[i] = true;
-                            cls[i] = Some(c);
+                    if !varies[i] {
+                        match ec[i] {
+                            Some(c) if !seen[i] => {
+                                seen[i] = true;
+                                cls[i] = Some(c);
+                            }
+                            Some(c) if cls[i] == Some(c) => {}
+                            _ => varies[i] = true, // disagreement, or a failed lookup
                         }
-                        Some(c) if cls[i] == Some(c) => {}
-                        _ => varies[i] = true, // disagreement, or a failed lookup
+                    }
+                    let kids = nodes[i].children();
+                    if kids.len() >= 2 {
+                        // A failed lookup (`None`) can't be a self-loop, so it
+                        // clears every candidate position for this node.
+                        let here: Vec<bool> = kids.iter().map(|&c| ec[i].is_some() && ec[usize::from(c)] == ec[i]).collect();
+                        match &mut vacuous_pass[i] {
+                            None => vacuous_pass[i] = Some(here),
+                            Some(prev) => prev.iter_mut().zip(here).for_each(|(a, b)| *a &= b),
+                        }
                     }
                 }
             }
         }
         let is_const = |i: usize| seen[i] && !varies[i];
+        let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
         // Pass 2, per match. A subst is dropped if it is a self-loop at some node
         // `i` (its e-class equals a child's) that is dominated, where node `i` is
         // dominated when EITHER:
@@ -475,10 +491,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         //       catches intermediate towers where genuine transforms ride along;
         //   (b) every other child of `i` is constant across the whole match set
         //       (constant identity decoration) — this catches leaf towers where
-        //       the wrapped class has no genuine occurrence of the op.
-        // Parameterized wrappers satisfy neither: an align/`if` node has no
-        // genuine subst (every occurrence is eval'd) so (a) fails, and its
-        // varying matrix/condition child fails (b).
+        //       the wrapped class has no genuine occurrence of the op; or
+        //   (c) node `i` passes through to the *same* child in every match
+        //       (`is_vacuous`) — a vacuous wrapper whose decoration is a
+        //       don't-care, e.g. `(repeat ?x 1 ?m) ≡ ?x` for any `?m`.
+        // Parameterized wrappers satisfy none: an align/`if` node has no genuine
+        // subst (every occurrence is eval'd) so (a) fails, its varying
+        // matrix/condition child fails (b), and it isn't a self-loop at the
+        // scaled/`false` sites (or its passthrough child alternates), so (c)
+        // fails too.
         let mut removed = 0;
         let mut genuine_at = vec![false; n]; // per-match: node has a genuine (non-self-loop) subst
         for m in &mut self.matches {
@@ -500,11 +521,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     if kids.len() < 2 || ec[i].is_none() {
                         return false;
                     }
-                    kids.iter().enumerate().any(|(p, &cp)| {
-                        ec[usize::from(cp)] == ec[i] // self-loop: node ≡ child c_p
-                            && (genuine_at[i] // (a) redundant: a genuine subst covers this root
-                                || kids.iter().enumerate().all(|(q, &cq)| q == p || is_const(usize::from(cq)))) // (b) constant decoration
-                    })
+                    is_vacuous(i) // (c) vacuous wrapper: always passes through
+                        || kids.iter().enumerate().any(|(p, &cp)| {
+                            ec[usize::from(cp)] == ec[i] // self-loop: node ≡ child c_p
+                                && (genuine_at[i] // (a) redundant: a genuine subst covers this root
+                                    || kids.iter().enumerate().all(|(q, &cq)| q == p || is_const(usize::from(cq)))) // (b) constant decoration
+                        })
                 });
                 !dominated
             });
