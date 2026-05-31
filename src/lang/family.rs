@@ -285,7 +285,7 @@ impl LanguageFamily for LambdaCalc {
         if last_db.is_some() && nodes[usize::from(cur)].discriminant().as_var().is_some() { cur } else { id }
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
         let arity = vars.len();
         let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
         for (k, ids) in vars.iter().enumerate() {
@@ -310,8 +310,11 @@ impl LanguageFamily for LambdaCalc {
             let new_id = if let Some(&k) = pos_to_k.get(&i) {
                 let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
                 let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
+                // Deeper occurrences sit under `depth[i] − var_depth[k]` extra
+                // binders, so each captured index shifts up by that delta.
+                let occ_shift = depth[i] as i32 - var_depth[k] as i32;
                 for dbidx in variable_indices[k].iter().rev() {
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx)));
+                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx + occ_shift)));
                     current = out.add(LambdaCalcLanguage::App([current, arg_id]));
                 }
                 current

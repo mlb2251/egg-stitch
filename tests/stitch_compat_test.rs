@@ -636,3 +636,31 @@ fn cross_depth_useless_inline() {
 fn cross_depth_forloop_db_var_inline() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_forloop_db_var_inline.json", LAMBDA, true);
 }
+
+/// Regression: a metavar reused across binder depths keeps a genuine
+/// higher-order capture, and its η-app body args must be depth-shifted per
+/// occurrence. `build_with_ho` / `display_pattern_as_lambda` applied the raw
+/// `variable_indices[k]` at every occurrence, dropping the shift.
+///
+/// Unlike `cross_depth_forloop_db_var_inline` (which inlines the metavar to a
+/// literal DB leaf), this corpus keeps the capture higher-order
+/// (`variable_indices = [[0]]`, `var_depth = 1`) on a metavar merged across
+/// depths 1 and 2. The five programs share the heavy skeleton
+/// `(+ a b c d e f (lam (foo (bar _) (gg (lam (bar _))))))` — big enough above
+/// the binding `lam` that best-first roots the abstraction *above* it, so the
+/// captured `$0` is pattern-internal — while the inner slot varies in *where*
+/// it uses the bound variable (`(h $0)`, `($0 q)`, `(k $0 r)`, `(m s $0 t)`,
+/// bare `$0`), so no uniform literal body fits and the capture stays HO. The
+/// shallow slot uses `$0`, the deep slot (one `lam` deeper) the shift-variant
+/// `$1`.
+///
+/// The fixture pins the sound output (deep η-arg `$1`, lambda `($2 $1)`).
+/// Pre-fix the export emits `($2 $0)` at the deep occurrence, so `(fn_0 …)`
+/// β-reduces to `(bar $0)` where the original has `(bar $1)`. `--check-slow`
+/// misses it (size and root-fv are preserved); `scripts/check_all_outputs.py`'s
+/// β-equivalence sweep over the blessed fixture catches it. Until the
+/// per-occurrence shift is restored this test fails on the `$0`/`$1` mismatch.
+#[test]
+fn cross_depth_ho_capture() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_ho_capture.json", LAMBDA, true);
+}
