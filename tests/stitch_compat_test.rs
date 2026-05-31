@@ -397,7 +397,11 @@ fn arith_rewrites() {
         let bodies = abstraction_bodies(r);
         assert!(bodies.len() == 1, "expected exactly one abstraction");
         let abstr = all_symbols_hack(&bodies[0]);
-        if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
+        // Plus is associative+commutative, so several abstraction shapes are
+        // equally valid. With the `<=>` rules now genuinely bidirectional, the
+        // search also reaches the fully-flattened `(+ a b c d)` (one `+`); the
+        // older nested 2-/3-`+` shapes remain valid too.
+        if abstr != ["+", "a", "b", "c", "d"] && abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
             panic!("bad abstr: {:?}", abstr);
         }
         let rewr = rewritten_corpus(r, &original).iter().map(|x| all_symbols_hack(x)).collect::<Vec<_>>();

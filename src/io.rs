@@ -86,7 +86,9 @@ where
     parse(&contents)
 }
 
-/// Parses rewrite rules from a string in `name: lhs => rhs` format.
+/// Parses rewrite rules from a string in `name: lhs => rhs` format. A rule may
+/// use `<=>` instead of `=>` to declare a bidirectional equivalence; it expands
+/// to the forward rule plus a `<name>-rev` rule with `lhs`/`rhs` swapped.
 pub fn parse<L, A>(file: &str) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
     L: StitchLanguage,
@@ -102,12 +104,20 @@ where
         .filter(|line| !line.is_empty())
     {
         let (name, rewrite) = line.split_once(':').ok_or(anyhow!("missing colon"))?;
-        let (lhs, rhs) = rewrite.split_once("=>").ok_or(anyhow!("missing arrow"))?;
+        // `=>` is a substring of `<=>`, so check the bidirectional arrow first.
+        let (lhs, rhs, bidirectional) = match rewrite.split_once("<=>") {
+            Some((lhs, rhs)) => (lhs, rhs, true),
+            None => {
+                let (lhs, rhs) = rewrite.split_once("=>").ok_or(anyhow!("missing arrow"))?;
+                (lhs, rhs, false)
+            }
+        };
         let name = name.trim();
-        let lhs = lhs.trim();
-        let rhs = rhs.trim();
-        let lhs: Pattern<L> = L::parse_pattern_ast(lhs)?.into();
-        let rhs: Pattern<L> = L::parse_pattern_ast(rhs)?.into();
+        let lhs: Pattern<L> = L::parse_pattern_ast(lhs.trim())?.into();
+        let rhs: Pattern<L> = L::parse_pattern_ast(rhs.trim())?.into();
+        if bidirectional {
+            rewrites.push(Rewrite::new(format!("{name}-rev"), rhs.clone(), lhs.clone()).map_err(|e| anyhow!("{}", e))?);
+        }
         rewrites.push(Rewrite::new(name, lhs, rhs).map_err(|e| anyhow!("{}", e))?);
     }
     Ok(rewrites)
