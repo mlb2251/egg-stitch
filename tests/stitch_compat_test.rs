@@ -299,6 +299,22 @@ fn same_leaf_different_depths_is_not_reused() {
     check_fixture("data/domains/stitch/same-leaf-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
+/// Sibling of `same_leaf_different_depths_is_not_reused`, but for `shift_equal`'s
+/// *recursive* same-e-class shortcut rather than the top-level `a == b` one.
+/// In `(lam (lam (g (lam (f $1 $2)) (f $1 $1))))` the only abstraction is the
+/// cross-depth reuse `(g (lam ?#0) ?#0)`, whose captures `(f $1 $2)` and
+/// `(f $1 $1)` share the e-class `(f $1)` (fv {1}) sitting exactly at the gap
+/// boundary. The buggy `fv_outside_gap` shortcut accepted that as shift-invariant,
+/// so the merge was unsound: inlining `fn_0` reconstructs `(f $2 $2)` instead of
+/// `(f $1 $2)`. The fix rejects the reuse, so a sound search finds *no*
+/// abstraction (empty fixture, corpus unchanged). A regressed build re-discovers
+/// the bad abstraction and mismatches here; `scripts/check_all_outputs.py`'s
+/// β-equivalence sweep also rejects a bad re-bless.
+#[test]
+fn cross_depth_fv_outside_gap_is_not_reused() {
+    check_fixture("data/domains/ho-bugs/cross_depth_fv_outside_gap.json", LAMBDA, true);
+}
+
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
 /// the `(+ _ (* _ _))` shape aligns across all five programs (the fifth,
 /// `(* 7 (* (- v) (- v)))`, gets a `(+ 0 _)`-wrapped representation in its
@@ -381,7 +397,11 @@ fn arith_rewrites() {
         let bodies = abstraction_bodies(r);
         assert!(bodies.len() == 1, "expected exactly one abstraction");
         let abstr = all_symbols_hack(&bodies[0]);
-        if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
+        // Plus is associative+commutative, so several abstraction shapes are
+        // equally valid. With the `<=>` rules now genuinely bidirectional, the
+        // search also reaches the fully-flattened `(+ a b c d)` (one `+`); the
+        // older nested 2-/3-`+` shapes remain valid too.
+        if abstr != ["+", "a", "b", "c", "d"] && abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
             panic!("bad abstr: {:?}", abstr);
         }
         let rewr = rewritten_corpus(r, &original).iter().map(|x| all_symbols_hack(x)).collect::<Vec<_>>();
@@ -642,4 +662,32 @@ const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewri
 #[test]
 fn conditional_branch_unify() {
     check_fixture_bf_only("data/domains/conditional/if_branch_unify.json", IF_RULES, true);
+}
+
+/// Regression: a metavar reused across binder depths keeps a genuine
+/// higher-order capture, and its η-app body args must be depth-shifted per
+/// occurrence. `build_with_ho` / `display_pattern_as_lambda` applied the raw
+/// `variable_indices[k]` at every occurrence, dropping the shift.
+///
+/// Unlike `cross_depth_forloop_db_var_inline` (which inlines the metavar to a
+/// literal DB leaf), this corpus keeps the capture higher-order
+/// (`variable_indices = [[0]]`, `var_depth = 1`) on a metavar merged across
+/// depths 1 and 2. The five programs share the heavy skeleton
+/// `(+ a b c d e f (lam (foo (bar _) (gg (lam (bar _))))))` — big enough above
+/// the binding `lam` that best-first roots the abstraction *above* it, so the
+/// captured `$0` is pattern-internal — while the inner slot varies in *where*
+/// it uses the bound variable (`(h $0)`, `($0 q)`, `(k $0 r)`, `(m s $0 t)`,
+/// bare `$0`), so no uniform literal body fits and the capture stays HO. The
+/// shallow slot uses `$0`, the deep slot (one `lam` deeper) the shift-variant
+/// `$1`.
+///
+/// The fixture pins the sound output (deep η-arg `$1`, lambda `($2 $1)`).
+/// Pre-fix the export emits `($2 $0)` at the deep occurrence, so `(fn_0 …)`
+/// β-reduces to `(bar $0)` where the original has `(bar $1)`. `--check-slow`
+/// misses it (size and root-fv are preserved); `scripts/check_all_outputs.py`'s
+/// β-equivalence sweep over the blessed fixture catches it. Until the
+/// per-occurrence shift is restored this test fails on the `$0`/`$1` mismatch.
+#[test]
+fn cross_depth_ho_capture() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_ho_capture.json", LAMBDA, true);
 }

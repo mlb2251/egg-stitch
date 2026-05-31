@@ -147,10 +147,10 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
     /// Best-first canonical-ordering device: `Some(k)` means `?#0..?#(k-1)`
-    /// are committed to never being expanded *and* are forbidden from
-    /// participating in `Reuse`. Expanding `?#k` raises this to `Some(k)`.
-    /// `None` disables the rule entirely — SMC uses this so it can dedupe
-    /// purely on the pattern's `RecExpr`.
+    /// are committed to never being expanded again. Expanding `?#k` raises this
+    /// to `Some(k)`. Restricts only `Expand`, not `Reuse` (whose ordering uses
+    /// `Pattern::var_reusable`). `None` disables the rule — SMC uses this to
+    /// dedupe purely on the pattern's `RecExpr`.
     pub frozen_count: Option<usize>,
 }
 
@@ -193,7 +193,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     ///
     /// We don't fv-prune captures here: captures whose fv reaches into
     /// pattern-internal binders are handled at apply/cost time by η-wrapping
-    /// (see `compute_ho_arity` and `shift_free_egraph`), so the match set
+    /// (see `enumerate_candidates` and `shift_free_egraph`), so the match set
     /// stays permissive and search keeps exploring those branches.
     fn build_subset_matches(parent_matches: &[MatchAtEClass], var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
         Self::build_matches(parent_matches, |subst, out| {
@@ -452,16 +452,19 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
         // `var_reusable` is a best-first canonical-ordering device, mirroring
         // `frozen_count`. SMC (frozen_count = None) ignores it so its reuse
-        // exploration stays unrestricted. We only enforce it on *same-depth*
-        // reuse pairs — cross-depth reuse inherently requires an intervening
-        // expansion (the depth difference is *created* by expansion), so the
-        // reuse-before-expand canonical order can't apply to it.
+        // exploration stays unrestricted. Reusing two stale (non-reusable)
+        // vars always re-reaches a pattern already obtainable by reusing them
+        // earlier — when the later-created of the two was still in the fresh
+        // cohort — so we skip it as a duplicate. This holds regardless of the
+        // two vars' depths: a cross-depth reuse commutes past every expansion
+        // after the one that created the deeper var, so it too has an
+        // earlier-reuse canonical form.
         let enforce_reusable = self.frozen_count.is_some();
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                if enforce_reusable && di == dj && !self.pattern.var_reusable[i] && !self.pattern.var_reusable[j] {
+                if enforce_reusable && !self.pattern.var_reusable[i] && !self.pattern.var_reusable[j] {
                     continue;
                 }
                 let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {

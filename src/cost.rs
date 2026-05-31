@@ -23,57 +23,6 @@ impl<L: StitchLanguage> CostFunction<L> for WeightedSize {
     }
 }
 
-/// Per-metavar higher-order arity. `ho_arity[k]` is the number of wrap-lams
-/// each captured arg gets at slot `k` — equivalently, the number of distinct
-/// pattern-internal DB indices referenced across all matches at this slot.
-/// Zero means plain capture (no body wrapping needed).
-pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<u32> {
-    compute_variable_indices::<F, O>(egraph, search_state).into_iter().map(|v| v.len() as u32).collect()
-}
-
-/// Per-metavar sorted-ascending list of distinct pattern-internal DB indices
-/// referenced by any match's captured arg. `variable_indices[k][j]` is a free
-/// DB index `i` (0 ≤ i < d_k) appearing in `fv(arg_{m,k})` for some match `m`.
-/// Symmetric to `compute_ho_arity` but returns the actual set of binder indices
-/// referenced, not just their count.
-pub fn compute_variable_indices<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<Vec<i32>> {
-    let arity = search_state.pattern.var_depth.len();
-    let var_depth = &search_state.pattern.var_depth;
-    // No slot can capture pattern-internal binders → result is all-empty.
-    // Skip the per-slot hashset allocations entirely; this is the common case
-    // for domains without lambda/DB-var ops (e.g. dials).
-    if var_depth.iter().all(|&d| d == 0) {
-        return vec![Vec::new(); arity];
-    }
-    let mut sets: Vec<FxHashSet<i32>> = vec![FxHashSet::default(); arity];
-    let mut seen_per_slot: Vec<FxHashSet<Id>> = vec![FxHashSet::default(); arity];
-    for m in &search_state.matches {
-        for subst in &m.substs {
-            for (k, &arg_id) in subst.vars.iter().enumerate() {
-                let d_k = var_depth[k];
-                if d_k == 0 {
-                    continue;
-                }
-                if !seen_per_slot[k].insert(arg_id) {
-                    continue;
-                }
-                for &i in egraph[arg_id].data.fv.iter() {
-                    if i >= 0 && (i as u32) < d_k {
-                        sets[k].insert(i);
-                    }
-                }
-            }
-        }
-    }
-    sets.into_iter()
-        .map(|s| {
-            let mut v: Vec<i32> = s.into_iter().collect();
-            v.sort();
-            v
-        })
-        .collect()
-}
-
 /// A candidate `variable_indices` tuple together with the set of substs
 /// (per match) it permits. A subst is "compatible" iff its per-slot fv
 /// `R^k` is a subset of the candidate's `S_k` for every slot — only those
@@ -180,10 +129,6 @@ pub struct CostCache {
     /// Eclasses reachable from `root`, in postorder (children before parents).
     /// `solve` iterates this so child sizes settle before their parents reconsider.
     visit_order: Vec<Id>,
-    /// Postorder index per eclass (children < parents). Indexed by `usize::from(Id)`.
-    /// Currently unused by `solve`, but kept for callers/inspection.
-    #[allow(dead_code)]
-    postorder: Vec<Option<u32>>,
     /// Child → parent eclass edges, built from all enodes.
     /// We maintain our own map because `egraph.parents()` can return stale non-canonical ids.
     parents_of: FxHashMap<Id, Vec<Id>>,
@@ -202,15 +147,14 @@ impl CostCache {
         }
 
         let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
-        let mut postorder = vec![None; max_id + 1];
+        let mut visited = vec![false; max_id + 1];
         let mut visit_order: Vec<Id> = Vec::new();
-        let mut order: u32 = 0;
         let mut stack: Vec<Result<Id, Id>> = vec![Err(egraph.find(root))]; // Err=enter, Ok=exit
         let mut on_stack = FxHashSet::<Id>::default();
         while let Some(state) = stack.pop() {
             match state {
                 Err(id) => {
-                    if postorder[usize::from(id)].is_some() || !on_stack.insert(id) {
+                    if visited[usize::from(id)] || !on_stack.insert(id) {
                         continue;
                     }
                     stack.push(Ok(id));
@@ -222,14 +166,13 @@ impl CostCache {
                 }
                 Ok(id) => {
                     on_stack.remove(&id);
-                    postorder[usize::from(id)] = Some(order);
+                    visited[usize::from(id)] = true;
                     visit_order.push(id);
-                    order += 1;
                 }
             }
         }
 
-        Self { visit_order, postorder, parents_of }
+        Self { visit_order, parents_of }
     }
 }
 
@@ -419,8 +362,8 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             // Cost of rewriting a single subst at this match root. Inlined and
             // dispatched via match below (rather than `Box<dyn Iterator>`) so
             // the hot solver loop doesn't heap-allocate per call.
+            let stub_size = F::stub_application_size(ho_arity.len(), weights) as i64;
             let cost_of = |subst: &crate::matching::Subst| -> i64 {
-                let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
                 let args_size: i64 = subst
                     .vars
                     .iter()
@@ -596,7 +539,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
             let frozen = sizes.analysis.search_state.frozen_count.unwrap_or(0);
             let substs = &sizes.analysis.search_state.matches[i].substs;
             let weights = sizes.weights();
-            let stub_size = F::stub_application_size::<O>("inv_0", frozen, weights) as i64;
+            let stub_size = F::stub_application_size(frozen, weights) as i64;
             if let Some(rewrite_size) = substs.iter().map(|subst| stub_size + subst.vars.iter().take(frozen).map(|&v| sizes.get(sizes.egraph.find(v))).sum::<i64>()).min() {
                 best = best.min(rewrite_size);
             }

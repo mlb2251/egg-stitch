@@ -2,15 +2,6 @@ use crate::lang::{StitchDisc, StitchEgraph, StitchLanguage};
 use egg::Id;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-/// True iff every free-variable index of `id` lies outside the half-open
-/// gap `[lo, hi)`. Used to decide whether an η-wrap can reconcile a capture
-/// across a binder-depth gap: indices below `lo` are shared enclosing
-/// context, indices `≥ hi` are free at every site, indices in the gap are
-/// pattern-internal at the deep site but context at the shallow one.
-fn fv_outside_gap<L: StitchLanguage>(egraph: &StitchEgraph<L>, id: Id, lo: u32, hi: u32) -> bool {
-    egraph[id].data.fv.iter().all(|&i| i < lo as i32 || i >= hi as i32)
-}
-
 /// Shift-aware equality of two captured e-class ids at depths `da` and `db`.
 /// Returns true when both captures represent the same underlying value at
 /// different binder contexts.
@@ -50,12 +41,19 @@ struct ShiftEqCtx<'a, L: StitchLanguage> {
 }
 
 impl<'a, L: StitchLanguage> ShiftEqCtx<'a, L> {
-    /// True iff there exist enodes `na ∈ deeper` and `nb ∈ shallower` such
-    /// that `na` is the shift-up-by-`s` form of `nb`: same discriminant and
-    /// arity, child eclasses recursively shift-equal at the appropriate child
-    /// depths, and any free DB-var leaf in `nb` (index `≥ init_depth`) is
-    /// replaced by an index `s` larger in `na`. Bound indices (`< init_depth`)
-    /// must match exactly.
+    /// True iff `deeper` is the shift-up-by-`s` form of `shallower`, where
+    /// `init_depth` counts the binders entered so far within the recursion.
+    ///
+    /// When the two ids are the *same* e-class, that holds only if the `+s`
+    /// shift is the identity on it — i.e. it has no free index relative to the
+    /// recursion (all fv `< init_depth`).
+    ///
+    /// Otherwise it holds iff there exist enodes `na ∈ deeper` and
+    /// `nb ∈ shallower` with the same discriminant and arity whose child
+    /// eclasses are recursively shift-equal at the appropriate child depths,
+    /// where any free DB-var leaf in `nb` (index `≥ init_depth`) is replaced by
+    /// an index `s` larger in `na` and bound indices (`< init_depth`) match
+    /// exactly.
     ///
     /// Cyclic e-classes use coinductive reasoning: a recursive call back into
     /// a key already on the call stack returns `true` (taking the cycle as a
@@ -69,10 +67,13 @@ impl<'a, L: StitchLanguage> ShiftEqCtx<'a, L> {
         let deeper = self.egraph.find(deeper);
         let shallower = self.egraph.find(shallower);
         if deeper == shallower {
-            // Same e-class viewed at different recursion depths: identical
-            // physics to the top-level shared-capture case, just relative to
-            // the current recursion frame.
-            return fv_outside_gap(self.egraph, deeper, init_depth, init_depth + self.s);
+            // Same e-class on both sides: it is shift-equal to itself across the
+            // gap only when the `+s` shift is the identity on it. Every free
+            // index (`>= init_depth`) is relabeled to `+s`, so this holds iff
+            // there is no free index — i.e. all fv are bound within the
+            // recursion (`< init_depth`). This is exactly the top-level
+            // `fv.is_empty()` test, lifted to the current recursion frame.
+            return self.egraph[deeper].data.fv.iter().all(|&i| i < init_depth as i32);
         }
         let key = (deeper, shallower, init_depth);
         if let Some(&r) = self.memo.get(&key) {

@@ -75,40 +75,6 @@ fn extract_root_size<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id)
     cost as usize
 }
 
-/// Prints a programs term with each child on a new line.
-/// If the term is not a programs node, prints it normally.
-#[allow(dead_code)]
-pub fn print_programs<L: StitchLanguage>(term: &egg::RecExpr<L>) {
-    let root_node = &term.as_ref()[term.as_ref().len() - 1];
-    if root_node.is_programs_node() {
-        println!("(programs");
-        for &child_id in root_node.children() {
-            print!("  ");
-            print_expr(term, child_id.into());
-            println!();
-        }
-        println!(")");
-    } else {
-        println!("{}", term);
-    }
-}
-
-/// Recursively prints an s-expression starting from the given node id.
-#[allow(dead_code)]
-fn print_expr<L: StitchLanguage>(term: &egg::RecExpr<L>, id: usize) {
-    let node = &term.as_ref()[id];
-    if node.children().is_empty() {
-        print!("{}", node.discriminant());
-    } else {
-        print!("({}", node.discriminant());
-        for &child_id in node.children() {
-            print!(" ");
-            print_expr(term, child_id.into());
-        }
-        print!(")");
-    }
-}
-
 /// Loads rewrite rules from a file in `name: lhs => rhs` format.
 pub fn from_file<L, A, P>(path: P) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
@@ -120,7 +86,9 @@ where
     parse(&contents)
 }
 
-/// Parses rewrite rules from a string in `name: lhs => rhs` format.
+/// Parses rewrite rules from a string in `name: lhs => rhs` format. A rule may
+/// use `<=>` instead of `=>` to declare a bidirectional equivalence; it expands
+/// to the forward rule plus a `<name>-rev` rule with `lhs`/`rhs` swapped.
 pub fn parse<L, A>(file: &str) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
     L: StitchLanguage,
@@ -136,12 +104,20 @@ where
         .filter(|line| !line.is_empty())
     {
         let (name, rewrite) = line.split_once(':').ok_or(anyhow!("missing colon"))?;
-        let (lhs, rhs) = rewrite.split_once("=>").ok_or(anyhow!("missing arrow"))?;
+        // `=>` is a substring of `<=>`, so check the bidirectional arrow first.
+        let (lhs, rhs, bidirectional) = match rewrite.split_once("<=>") {
+            Some((lhs, rhs)) => (lhs, rhs, true),
+            None => {
+                let (lhs, rhs) = rewrite.split_once("=>").ok_or(anyhow!("missing arrow"))?;
+                (lhs, rhs, false)
+            }
+        };
         let name = name.trim();
-        let lhs = lhs.trim();
-        let rhs = rhs.trim();
-        let lhs: Pattern<L> = L::parse_pattern_ast(lhs)?.into();
-        let rhs: Pattern<L> = L::parse_pattern_ast(rhs)?.into();
+        let lhs: Pattern<L> = L::parse_pattern_ast(lhs.trim())?.into();
+        let rhs: Pattern<L> = L::parse_pattern_ast(rhs.trim())?.into();
+        if bidirectional {
+            rewrites.push(Rewrite::new(format!("{name}-rev"), rhs.clone(), lhs.clone()).map_err(|e| anyhow!("{}", e))?);
+        }
         rewrites.push(Rewrite::new(name, lhs, rhs).map_err(|e| anyhow!("{}", e))?);
     }
     Ok(rewrites)
