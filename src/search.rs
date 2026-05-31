@@ -193,7 +193,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     ///
     /// We don't fv-prune captures here: captures whose fv reaches into
     /// pattern-internal binders are handled at apply/cost time by η-wrapping
-    /// (see `compute_ho_arity` and `shift_free_egraph`), so the match set
+    /// (see `enumerate_candidates` and `shift_free_egraph`), so the match set
     /// stays permissive and search keeps exploring those branches.
     fn build_subset_matches(parent_matches: &[MatchAtEClass], var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
         Self::build_matches(parent_matches, |subst, out| {

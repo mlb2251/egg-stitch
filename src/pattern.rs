@@ -270,6 +270,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         // Walk RevExpr from leaves (high indices) to root (index 0), copying
         // each node into a fresh RecExpr. Children get id-mapped; var positions
         // get HO-app-wrapped.
+        // Per-occurrence binder depths: a deeper occurrence of `?#k` sits under
+        // `occ_depth − var_depth[k]` extra binders, so each captured index shifts
+        // up by that delta (mirroring `concretize`'s per-occurrence shift).
+        let depths = self.occurrence_depths();
         let mut out: RecExpr<F::Apply<OpWithVar<O>>> = RecExpr::default();
         let mut id_map: Vec<Id> = vec![Id::from(0); self.pattern.nodes.len()];
         for i in (0..self.pattern.nodes.len()).rev() {
@@ -281,7 +285,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
                 && !variable_indices[k].is_empty()
             {
                 let vis = &variable_indices[k];
-                let db_args: Vec<i32> = vis.iter().rev().copied().collect();
+                let occ_shift = depths[i] as i32 - self.var_depth[k] as i32;
+                let db_args: Vec<i32> = vis.iter().rev().map(|&d| d + occ_shift).collect();
                 new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, &db_args);
             }
             id_map[i] = new_id;
