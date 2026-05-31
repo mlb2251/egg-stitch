@@ -299,6 +299,22 @@ fn same_leaf_different_depths_is_not_reused() {
     check_fixture("data/domains/stitch/same-leaf-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
+/// Sibling of `same_leaf_different_depths_is_not_reused`, but for `shift_equal`'s
+/// *recursive* same-e-class shortcut rather than the top-level `a == b` one.
+/// In `(lam (lam (g (lam (f $1 $2)) (f $1 $1))))` the only abstraction is the
+/// cross-depth reuse `(g (lam ?#0) ?#0)`, whose captures `(f $1 $2)` and
+/// `(f $1 $1)` share the e-class `(f $1)` (fv {1}) sitting exactly at the gap
+/// boundary. The buggy `fv_outside_gap` shortcut accepted that as shift-invariant,
+/// so the merge was unsound: inlining `fn_0` reconstructs `(f $2 $2)` instead of
+/// `(f $1 $2)`. The fix rejects the reuse, so a sound search finds *no*
+/// abstraction (empty fixture, corpus unchanged). A regressed build re-discovers
+/// the bad abstraction and mismatches here; `scripts/check_all_outputs.py`'s
+/// β-equivalence sweep also rejects a bad re-bless.
+#[test]
+fn cross_depth_fv_outside_gap_is_not_reused() {
+    check_fixture("data/domains/ho-bugs/cross_depth_fv_outside_gap.json", LAMBDA, true);
+}
+
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
 /// the `(+ _ (* _ _))` shape aligns across all five programs (the fifth,
 /// `(* 7 (* (- v) (- v)))`, gets a `(+ 0 _)`-wrapped representation in its
