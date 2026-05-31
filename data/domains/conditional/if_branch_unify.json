@@ -1,0 +1,10 @@
+[
+  "(f (if true (a b c d e) (g h i j k)) k1)",
+  "(f (if false (a b c d e) (g h i j k)) k2)",
+  "(f (a b c d e) k3)",
+  "(f (g h i j k) k4)",
+  "(f (a b c d e) k5)",
+  "(f (g h i j k) k6)",
+  "(f (a b c d e) k7)",
+  "(f (g h i j k) k8)"
+]
