@@ -119,7 +119,9 @@ def parse_rewrites(path):
     rules = []
     with open(path) as f:
         for raw in f:
-            line = raw.split("#", 1)[0].strip()
+            # Strip `#` and `//` line comments. `//` never collides with the
+            # division operator, which is always written `(/ …)` with a space.
+            line = raw.split("#", 1)[0].split("//", 1)[0].strip()
             if not line:
                 continue
             _name, body = line.split(":", 1)
