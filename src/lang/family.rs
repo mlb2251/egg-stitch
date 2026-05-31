@@ -1,7 +1,7 @@
 use egg::{Id, Language, RecExpr};
 use rustc_hash::FxHashMap;
 
-use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
 /// A type-level type constructor `L<_>` for a language family.
 ///
