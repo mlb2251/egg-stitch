@@ -118,12 +118,14 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
-    /// True iff some e-class contains an enode with a child in its own
-    /// (canonical) class — a self-loop. Identity DSRs like `x => (T x (M 1 0 0 0))`
-    /// create these, and they're the source of unbounded wrapper towers. Used to
-    /// gate `strip_dominated_wrappers`: when false (e.g. no DSRs) the strip can't
-    /// fire, so we skip its per-state cost entirely.
-    pub has_selfloops: bool,
+    /// `(discriminant, child-index)` shapes that self-loop somewhere in the
+    /// e-graph — an enode whose child at that index lands in its own canonical
+    /// class. Identity DSRs like `x => (T x (M 1 0 0 0))` create these, and
+    /// they're the source of unbounded wrapper towers. `strip_dominated_wrappers`
+    /// can *only* strip these shapes, so it both gates on this being non-empty
+    /// (no self-loops, e.g. no DSRs ⇒ nothing to strip, skip the per-state cost)
+    /// and uses it to skip every pattern node whose `(op, position)` can't loop.
+    pub selfloop_ops: FxHashSet<(F::Discriminant<O>, usize)>,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -429,9 +431,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
-        if !nodes.iter().any(|nd| nd.children().len() >= 2) {
-            return 0; // no wrapper-shaped node ⇒ nothing to strip
-        }
         // pos_to_var[i] = k iff node i is the `Var(k)` leaf (usize::MAX = none).
         let mut pos_to_var = vec![usize::MAX; n];
         for (k, positions) in self.pattern.vars.iter().enumerate() {
@@ -439,52 +438,87 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 pos_to_var[usize::from(p)] = k;
             }
         }
-        // Pass 1: which nodes have a constant e-class across every match? A node
-        // that is unset stays `None`; once two substs disagree (or a lookup
-        // fails) it's marked varying. Children sit at higher indices than parents
-        // in a RevExpr, so a single high→low pass fills children before parents.
+        // Candidate wrappers are the *only* nodes the per-subst scans below need
+        // to visit. A node `i` can satisfy `ec[i] == ec[c_p]` (a self-loop at
+        // child position `p`) only if some enode of shape `(op_i, p)` self-loops
+        // in the e-graph — i.e. `(op_i, p) ∈ shared.selfloop_ops`. So we collect,
+        // once, each interior node together with its self-loop-capable positions
+        // (`selfloop_pos[i]`); every other node and position is skipped.
+        let mut selfloop_pos: Vec<Vec<usize>> = vec![Vec::new(); n];
+        let mut candidates: Vec<usize> = Vec::new();
+        for i in 0..n {
+            let arity = nodes[i].children().len();
+            if pos_to_var[i] != usize::MAX || arity < 2 {
+                continue; // var leaves and 0/1-ary nodes are never wrappers
+            }
+            let disc = F::map_discriminant(nodes[i].discriminant(), |ov| match ov {
+                OpWithVar::Node(o) => o,
+                OpWithVar::Var(_) => unreachable!("var leaf handled via pos_to_var"),
+            });
+            let pos: Vec<usize> = (0..arity).filter(|&p| shared.selfloop_ops.contains(&(disc.clone(), p))).collect();
+            if !pos.is_empty() {
+                candidates.push(i);
+                selfloop_pos[i] = pos;
+            }
+        }
+        if candidates.is_empty() {
+            return 0; // no self-loop-capable wrapper ⇒ nothing to strip
+        }
+        // Rule (b) below asks whether each *child* of a candidate is constant
+        // across the match set, so those are the only nodes we track constancy
+        // for. (compute_node_eclasses still fills every node — a wrapper's lookup
+        // needs its descendants' classes — but the bookkeeping loops don't.)
+        let mut need_const = vec![false; n];
+        for &i in &candidates {
+            for &c in nodes[i].children() {
+                need_const[usize::from(c)] = true;
+            }
+        }
+        let const_nodes: Vec<usize> = (0..n).filter(|&i| need_const[i]).collect();
+        // Pass 1: per candidate child, is its e-class constant across every
+        // match? It stays unset until first seen, then `varies` once two substs
+        // disagree (or a lookup fails). And per candidate, `vacuous_pass[i][j]`
+        // tracks whether self-loop position `selfloop_pos[i][j]` held in *every*
+        // subst — a vacuous wrapper always passes through to the same child
+        // (e.g. `(repeat ?x 1 ?m) ≡ ?x` for any don't-care `?m`).
         let mut ec: Vec<Option<Id>> = vec![None; n];
         let mut cls: Vec<Option<Id>> = vec![None; n]; // last-seen class
         let mut seen = vec![false; n];
         let mut varies = vec![false; n];
-        // vacuous_pass[i]: child positions p where node i's e-class equals c_p's
-        // in *every* match so far (`None` until first observed). A node that
-        // keeps a position here is a vacuous wrapper — it always passes through
-        // to that child (e.g. `(repeat ?x 1 ?m)`, which `rep_1` makes ≡ `?x`
-        // regardless of the don't-care matrix `?m`).
         let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
             for s in &m.substs {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                for i in 0..n {
-                    if !varies[i] {
-                        match ec[i] {
-                            Some(c) if !seen[i] => {
-                                seen[i] = true;
-                                cls[i] = Some(c);
-                            }
-                            Some(c) if cls[i] == Some(c) => {}
-                            _ => varies[i] = true, // disagreement, or a failed lookup
-                        }
+                for &i in &const_nodes {
+                    if varies[i] {
+                        continue;
                     }
-                    let kids = nodes[i].children();
-                    if kids.len() >= 2 {
-                        // A failed lookup (`None`) can't be a self-loop, so it
-                        // clears every candidate position for this node.
-                        let here: Vec<bool> = kids.iter().map(|&c| ec[i].is_some() && ec[usize::from(c)] == ec[i]).collect();
-                        match &mut vacuous_pass[i] {
-                            None => vacuous_pass[i] = Some(here),
-                            Some(prev) => prev.iter_mut().zip(here).for_each(|(a, b)| *a &= b),
+                    match ec[i] {
+                        Some(c) if !seen[i] => {
+                            seen[i] = true;
+                            cls[i] = Some(c);
                         }
+                        Some(c) if cls[i] == Some(c) => {}
+                        _ => varies[i] = true, // disagreement, or a failed lookup
+                    }
+                }
+                for &i in &candidates {
+                    // A failed lookup (`ec[i] == None`) can't be a self-loop, so
+                    // it clears every position for this node.
+                    let kids = nodes[i].children();
+                    let here: Vec<bool> = selfloop_pos[i].iter().map(|&p| ec[i].is_some() && ec[usize::from(kids[p])] == ec[i]).collect();
+                    match &mut vacuous_pass[i] {
+                        None => vacuous_pass[i] = Some(here),
+                        Some(prev) => prev.iter_mut().zip(here).for_each(|(a, b)| *a &= b),
                     }
                 }
             }
         }
         let is_const = |i: usize| seen[i] && !varies[i];
         let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
-        // Pass 2, per match. A subst is dropped if it is a self-loop at some node
-        // `i` (its e-class equals a child's) that is dominated, where node `i` is
-        // dominated when EITHER:
+        // Pass 2, per match. A subst is dropped if it is a self-loop at some
+        // candidate `i` (its e-class equals a child's) that is dominated, where
+        // node `i` is dominated when EITHER:
         //   (a) some other subst in the *same match* is genuine at `i` (its
         //       e-class differs from all its children) — so the root is already
         //       covered the real way and this wrapper subst is redundant; this
@@ -501,14 +535,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // scaled/`false` sites (or its passthrough child alternates), so (c)
         // fails too.
         let mut removed = 0;
-        let mut genuine_at = vec![false; n]; // per-match: node has a genuine (non-self-loop) subst
+        let mut genuine_at = vec![false; n]; // per-match: candidate has a genuine (non-self-loop) subst
         for m in &mut self.matches {
-            // sub-pass: which nodes have a genuine subst in this match?
+            // sub-pass: which candidates have a genuine subst in this match?
             genuine_at.iter_mut().for_each(|g| *g = false);
             for s in &m.substs {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                for i in 0..n {
-                    if nodes[i].children().len() >= 2 && ec[i].is_some() && !nodes[i].children().iter().any(|&c| ec[usize::from(c)] == ec[i]) {
+                for &i in &candidates {
+                    let kids = nodes[i].children();
+                    if ec[i].is_some() && !selfloop_pos[i].iter().any(|&p| ec[usize::from(kids[p])] == ec[i]) {
                         genuine_at[i] = true;
                     }
                 }
@@ -516,14 +551,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let before = m.substs.len();
             m.substs.retain(|s| {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                let dominated = (0..n).any(|i| {
-                    let kids = nodes[i].children();
-                    if kids.len() < 2 || ec[i].is_none() {
+                let dominated = candidates.iter().any(|&i| {
+                    if ec[i].is_none() {
                         return false;
                     }
+                    let kids = nodes[i].children();
                     is_vacuous(i) // (c) vacuous wrapper: always passes through
-                        || kids.iter().enumerate().any(|(p, &cp)| {
-                            ec[usize::from(cp)] == ec[i] // self-loop: node ≡ child c_p
+                        || selfloop_pos[i].iter().any(|&p| {
+                            ec[usize::from(kids[p])] == ec[i] // self-loop: node ≡ child c_p
                                 && (genuine_at[i] // (a) redundant: a genuine subst covers this root
                                     || kids.iter().enumerate().all(|(q, &cq)| q == p || is_const(usize::from(cq)))) // (b) constant decoration
                         })
@@ -663,13 +698,24 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 }
 
-/// True iff any e-class contains an enode with a child in its own canonical
-/// class (a self-loop). See [`SharedSearchData::has_selfloops`].
-fn egraph_has_selfloops<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
-    egraph.classes().any(|class| {
+/// Returns the set of `(discriminant, child-index)` shapes that self-loop
+/// somewhere in the e-graph — an enode whose child at that index resolves to the
+/// enode's own canonical class. Identity DSRs like `x => (T x (M 1 0 0 0))`
+/// create these (here `(T, 0)`) and are the source of unbounded wrapper towers.
+/// See [`SharedSearchData::selfloop_ops`].
+fn selfloop_ops<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>) -> FxHashSet<(L::Discriminant, usize)> {
+    let mut ops = FxHashSet::default();
+    for class in egraph.classes() {
         let id = egraph.find(class.id);
-        class.nodes.iter().any(|node| node.children().iter().any(|&c| egraph.find(c) == id))
-    })
+        for node in &class.nodes {
+            for (p, &c) in node.children().iter().enumerate() {
+                if egraph.find(c) == id {
+                    ops.insert((node.discriminant(), p));
+                }
+            }
+        }
+    }
+    ops
 }
 
 /// Fills `ec[i]` with the e-class each pattern node maps to under `subst`:
@@ -730,14 +776,14 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
-    let has_selfloops = egraph_has_selfloops(&egraph);
+    let selfloop_ops = selfloop_ops(&egraph);
     let shared = SharedSearchData {
         egraph,
         root,
         follow: follow_expr,
         usage_counts,
         check_slow: args.check_slow,
-        has_selfloops,
+        selfloop_ops,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, None);
