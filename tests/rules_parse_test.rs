@@ -12,13 +12,13 @@
 
 use egg_stitch::{
     io,
-    lang::{Op, OpChildrenLanguage, StitchAnalysis},
+    lang::{Op, OpChildrenLanguage, StitchAnalysis, Weights},
 };
 
 type Lang = OpChildrenLanguage<Op>;
 
 fn rule_names(src: &str) -> Vec<String> {
-    io::parse::<Lang, StitchAnalysis>(src).expect("parse rules").iter().map(|r| r.name.to_string()).collect()
+    io::parse::<Lang, StitchAnalysis>(src, &Weights::default()).expect("parse rules").iter().map(|r| r.name.to_string()).collect()
 }
 
 /// `<=>` expands to the forward rule plus a `<name>-rev` reverse rule.
