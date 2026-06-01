@@ -192,13 +192,7 @@ pub enum LanguageChoice {
 
 /// Tuple returned by [`multiple_step_search`]: `(library, corpus size after DSRs,
 /// final combined cost, final rewritten corpus, best-first heap size at stop)`.
-type MultiStepSearchResult = (
-    Vec<results::AbstractionResult>,
-    usize,
-    Option<usize>,
-    Option<Vec<String>>,
-    Option<usize>,
-);
+type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>, Option<usize>);
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
 /// the corpus size after DSRs (before any abstractions), the final combined cost,
