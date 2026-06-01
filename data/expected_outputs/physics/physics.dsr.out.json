@@ -1,9 +1,38 @@
 {
   "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0.json": {
-    "initial_cost": 568,
+    "compression_ratio": 1.2085106382978723,
     "cost_after_rewrites": 568,
     "final_cost": 470,
-    "compression_ratio": 1.2085106382978723,
+    "initial_cost": 568,
+    "library": [
+      {
+        "approx_cost": 484,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 3,
+        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 480,
+        "arity": 0,
+        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
+        "num_matches": 1,
+        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
+        "pattern_size": 12,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 439,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $0 (*. $1 $1)))))",
+        "num_matches": 2,
+        "pattern": "fn_2: (lam (lam (?#0 $0 (*. $1 $1))))",
+        "pattern_size": 11,
+        "usage_matches": 4
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (lam (*. $1 (/. $1 $0))))",
@@ -87,42 +116,42 @@
       "(lam (/. 1. (fold $0 0. (lam (lam (+. $0 (/. 1. $1)))))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (+. (*. $1 $1) (*. $0 $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 13,
-        "approx_cost": 484
-      },
-      {
-        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
-        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 480
-      },
-      {
-        "pattern": "fn_2: (lam (lam (?#0 $0 (*. $1 $1))))",
-        "lambda": "(lam (lam (lam ($2 $0 (*. $1 $1)))))",
-        "arity": 1,
-        "pattern_size": 11,
-        "num_matches": 2,
-        "usage_matches": 4,
-        "approx_cost": 439
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1.json": {
-    "initial_cost": 475,
+    "compression_ratio": 1.1728395061728396,
     "cost_after_rewrites": 475,
     "final_cost": 405,
-    "compression_ratio": 1.1728395061728396,
+    "initial_cost": 475,
+    "library": [
+      {
+        "approx_cost": 398,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 6,
+        "pattern": "fn_143: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 12
+      },
+      {
+        "approx_cost": 406,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_137 $0 $1))))))))",
+        "num_matches": 1,
+        "pattern": "fn_144: (lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_137 $0 $1))))))))",
+        "pattern_size": 21,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 375,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (+. $2 (*. $1 $0)))))",
+        "num_matches": 1,
+        "pattern": "fn_145: (lam (lam (lam (+. $2 (*. $1 $0)))))",
+        "pattern_size": 12,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (power (fn_136 $0 $0) (fn_137 1. 1.)))",
@@ -216,42 +245,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (+. (*. $1 $1) (*. $0 $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_143: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 6,
-        "usage_matches": 12,
-        "approx_cost": 398
-      },
-      {
-        "pattern": "fn_144: (lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_137 $0 $1))))))))",
-        "lambda": "(lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_137 $0 $1))))))))",
-        "arity": 0,
-        "pattern_size": 21,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 406
-      },
-      {
-        "pattern": "fn_145: (lam (lam (lam (+. $2 (*. $1 $0)))))",
-        "lambda": "(lam (lam (lam (+. $2 (*. $1 $0)))))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 375
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2.json": {
-    "initial_cost": 439,
+    "compression_ratio": 1.183288409703504,
     "cost_after_rewrites": 439,
     "final_cost": 371,
-    "compression_ratio": 1.1832884097035041,
+    "initial_cost": 439,
+    "library": [
+      {
+        "approx_cost": 348,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 7,
+        "pattern": "fn_145: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 371,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (+. $2 (*. $0 $1)))))",
+        "num_matches": 1,
+        "pattern": "fn_146: (lam (lam (lam (+. $2 (*. $0 $1)))))",
+        "pattern_size": 12,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 340,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 3,
+        "pattern": "fn_147: (lam (lam (?#0 $0 $1)))",
+        "pattern_size": 7,
+        "usage_matches": 4
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (power (fn_136 $0 $0) (fn_138 1. 1.)))",
@@ -345,42 +374,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(fn_147 fn_143)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_145: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 7,
-        "usage_matches": 14,
-        "approx_cost": 348
-      },
-      {
-        "pattern": "fn_146: (lam (lam (lam (+. $2 (*. $0 $1)))))",
-        "lambda": "(lam (lam (lam (+. $2 (*. $0 $1)))))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 371
-      },
-      {
-        "pattern": "fn_147: (lam (lam (?#0 $0 $1)))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 4,
-        "approx_cost": 340
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3.json": {
-    "initial_cost": 528,
+    "compression_ratio": 1.1629955947136563,
     "cost_after_rewrites": 528,
     "final_cost": 454,
-    "compression_ratio": 1.1629955947136563,
+    "initial_cost": 528,
+    "library": [
+      {
+        "approx_cost": 437,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 7,
+        "pattern": "fn_146: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 455,
+        "arity": 0,
+        "lambda": "(lam (lam (*. (fn_145 (/. $1 $0)) (+. pi pi))))",
+        "num_matches": 1,
+        "pattern": "fn_147: (lam (lam (*. (fn_145 (/. $1 $0)) (+. pi pi))))",
+        "pattern_size": 17,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 428,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (+. $2 (*. $0 $1)))))",
+        "num_matches": 1,
+        "pattern": "fn_148: (lam (lam (lam (+. $2 (*. $0 $1)))))",
+        "pattern_size": 12,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (fn_145 (fn_136 $0 $0)))",
@@ -484,42 +513,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. pi $0)))",
       "(lam (lam (fn_143 $0 $1)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_146: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 7,
-        "usage_matches": 14,
-        "approx_cost": 437
-      },
-      {
-        "pattern": "fn_147: (lam (lam (*. (fn_145 (/. $1 $0)) (+. pi pi))))",
-        "lambda": "(lam (lam (*. (fn_145 (/. $1 $0)) (+. pi pi))))",
-        "arity": 0,
-        "pattern_size": 17,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 455
-      },
-      {
-        "pattern": "fn_148: (lam (lam (lam (+. $2 (*. $0 $1)))))",
-        "lambda": "(lam (lam (lam (+. $2 (*. $0 $1)))))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 428
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4.json": {
-    "initial_cost": 522,
+    "compression_ratio": 1.1704035874439462,
     "cost_after_rewrites": 522,
     "final_cost": 446,
-    "compression_ratio": 1.1704035874439462,
+    "initial_cost": 522,
+    "library": [
+      {
+        "approx_cost": 417,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 8,
+        "pattern": "fn_148: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 16
+      },
+      {
+        "approx_cost": 446,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (+. $2 (*. $0 $1)))))",
+        "num_matches": 1,
+        "pattern": "fn_149: (lam (lam (lam (+. $2 (*. $0 $1)))))",
+        "pattern_size": 12,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 415,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 3,
+        "pattern": "fn_150: (lam (lam (?#0 $0 $1)))",
+        "pattern_size": 7,
+        "usage_matches": 4
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (fn_145 (fn_136 $0 $0)))",
@@ -625,42 +654,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. pi $0)))",
       "(fn_150 fn_143)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_148: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 8,
-        "usage_matches": 16,
-        "approx_cost": 417
-      },
-      {
-        "pattern": "fn_149: (lam (lam (lam (+. $2 (*. $0 $1)))))",
-        "lambda": "(lam (lam (lam (+. $2 (*. $0 $1)))))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 446
-      },
-      {
-        "pattern": "fn_150: (lam (lam (?#0 $0 $1)))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 4,
-        "approx_cost": 415
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0.json": {
-    "initial_cost": 601,
+    "compression_ratio": 1.2165991902834008,
     "cost_after_rewrites": 601,
     "final_cost": 494,
-    "compression_ratio": 1.2165991902834008,
+    "initial_cost": 601,
+    "library": [
+      {
+        "approx_cost": 510,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 3,
+        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 509,
+        "arity": 0,
+        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
+        "num_matches": 1,
+        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
+        "pattern_size": 12,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 473,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (/. (*. $1 $2) (fold $0 0. (lam (lam (+. $0 (*. $1 $1)))))))))",
+        "num_matches": 1,
+        "pattern": "fn_2: (lam (lam (lam (/. (*. $1 $2) (fold $0 0. (lam (lam (+. $0 (*. $1 $1)))))))))",
+        "pattern_size": 28,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (lam (*. $1 (/. $1 $0))))",
@@ -746,42 +775,42 @@
       "(lam (/. 1. (fold $0 0. (lam (lam (+. $0 (/. 1. $1)))))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (+. (*. $0 $0) (*. $1 $1))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 14,
-        "approx_cost": 510
-      },
-      {
-        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
-        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 509
-      },
-      {
-        "pattern": "fn_2: (lam (lam (lam (/. (*. $1 $2) (fold $0 0. (lam (lam (+. $0 (*. $1 $1)))))))))",
-        "lambda": "(lam (lam (lam (/. (*. $1 $2) (fold $0 0. (lam (lam (+. $0 (*. $1 $1)))))))))",
-        "arity": 0,
-        "pattern_size": 28,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 473
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1.json": {
-    "initial_cost": 491,
+    "compression_ratio": 1.20935960591133,
     "cost_after_rewrites": 491,
     "final_cost": 406,
-    "compression_ratio": 1.20935960591133,
+    "initial_cost": 491,
+    "library": [
+      {
+        "approx_cost": 421,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 4,
+        "pattern": "fn_155: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 11
+      },
+      {
+        "approx_cost": 413,
+        "arity": 1,
+        "lambda": "(lam (fold (cdr $0) (car $0) (lam (lam (fn_148 $0 $1)))))",
+        "num_matches": 1,
+        "pattern": "fn_156: (fold (cdr ?#0) (car ?#0) (lam (lam (fn_148 $0 $1))))",
+        "pattern_size": 17,
+        "usage_matches": 3
+      },
+      {
+        "approx_cost": 380,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (lam (+. (*. $0 $2) (+. $3 (*. $0 (fn_150 $0 $1))))))))",
+        "num_matches": 1,
+        "pattern": "fn_157: (lam (lam (lam (lam (+. (*. $0 $2) (+. $3 (*. $0 (fn_150 $0 $1))))))))",
+        "pattern_size": 25,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (fn_148 $0 $1)))",
       "(lam (fold (cdr $0) (car $0) (lam (lam (fn_148 $0 $1)))))",
@@ -879,42 +908,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. pi $0)))",
       "(lam (lam (fn_149 (cons $0 (cons $1 empty)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_155: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 4,
-        "usage_matches": 11,
-        "approx_cost": 421
-      },
-      {
-        "pattern": "fn_156: (fold (cdr ?#0) (car ?#0) (lam (lam (fn_148 $0 $1))))",
-        "lambda": "(lam (fold (cdr $0) (car $0) (lam (lam (fn_148 $0 $1)))))",
-        "arity": 1,
-        "pattern_size": 17,
-        "num_matches": 1,
-        "usage_matches": 3,
-        "approx_cost": 413
-      },
-      {
-        "pattern": "fn_157: (lam (lam (lam (lam (+. (*. $0 $2) (+. $3 (*. $0 (fn_150 $0 $1))))))))",
-        "lambda": "(lam (lam (lam (lam (+. (*. $0 $2) (+. $3 (*. $0 (fn_150 $0 $1))))))))",
-        "arity": 0,
-        "pattern_size": 25,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 380
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2.json": {
-    "initial_cost": 450,
+    "compression_ratio": 1.16580310880829,
     "cost_after_rewrites": 450,
     "final_cost": 386,
-    "compression_ratio": 1.16580310880829,
+    "initial_cost": 450,
+    "library": [
+      {
+        "approx_cost": 366,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 5,
+        "pattern": "fn_157: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 386,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (+. $2 (*. $1 $0)))))",
+        "num_matches": 1,
+        "pattern": "fn_158: (lam (lam (lam (+. $2 (*. $1 $0)))))",
+        "pattern_size": 12,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 355,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 3,
+        "pattern": "fn_159: (lam (lam (?#0 $0 $1)))",
+        "pattern_size": 7,
+        "usage_matches": 4
+      }
+    ],
     "original_programs": [
       "(lam (lam (fn_148 $0 $1)))",
       "(lam (fn_155 $0))",
@@ -1014,42 +1043,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (fn_149 (cons $0 (cons $1 empty)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_157: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 13,
-        "approx_cost": 366
-      },
-      {
-        "pattern": "fn_158: (lam (lam (lam (+. $2 (*. $1 $0)))))",
-        "lambda": "(lam (lam (lam (+. $2 (*. $1 $0)))))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 386
-      },
-      {
-        "pattern": "fn_159: (lam (lam (?#0 $0 $1)))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 4,
-        "approx_cost": 355
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3.json": {
-    "initial_cost": 434,
+    "compression_ratio": 1.185792349726776,
     "cost_after_rewrites": 434,
     "final_cost": 366,
-    "compression_ratio": 1.185792349726776,
+    "initial_cost": 434,
+    "library": [
+      {
+        "approx_cost": 350,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 5,
+        "pattern": "fn_157: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 354,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 4,
+        "pattern": "fn_158: (lam (lam (?#0 $0 $1)))",
+        "pattern_size": 7,
+        "usage_matches": 5
+      },
+      {
+        "approx_cost": 350,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (+. $2 (*. $1 $0)))))",
+        "num_matches": 1,
+        "pattern": "fn_159: (lam (lam (lam (+. $2 (*. $1 $0)))))",
+        "pattern_size": 12,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (fn_148 $0 $1)))",
       "(lam (fn_155 $0))",
@@ -1149,42 +1178,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(fn_158 fn_143)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_157: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 13,
-        "approx_cost": 350
-      },
-      {
-        "pattern": "fn_158: (lam (lam (?#0 $0 $1)))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 4,
-        "usage_matches": 5,
-        "approx_cost": 354
-      },
-      {
-        "pattern": "fn_159: (lam (lam (lam (+. $2 (*. $1 $0)))))",
-        "lambda": "(lam (lam (lam (+. $2 (*. $1 $0)))))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 350
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json": {
-    "initial_cost": 508,
+    "compression_ratio": 1.181395348837209,
     "cost_after_rewrites": 508,
     "final_cost": 430,
-    "compression_ratio": 1.1813953488372093,
+    "initial_cost": 508,
+    "library": [
+      {
+        "approx_cost": 424,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 5,
+        "pattern": "fn_158: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 434,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (fn_153 (fn_154 $1 (fn_157 (fn_154 $2 $2 $0)) $0) $0))))",
+        "num_matches": 1,
+        "pattern": "fn_159: (lam (lam (lam (fn_153 (fn_154 $1 (fn_157 (fn_154 $2 $2 $0)) $0) $0))))",
+        "pattern_size": 22,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 386,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 4,
+        "pattern": "fn_160: (lam (lam (?#0 $0 $1)))",
+        "pattern_size": 7,
+        "usage_matches": 5
+      }
+    ],
     "original_programs": [
       "(lam (lam (fn_148 $0 $1)))",
       "(lam (fn_155 $0))",
@@ -1294,42 +1323,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. pi $0)))",
       "(fn_160 fn_143)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_158: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 13,
-        "approx_cost": 424
-      },
-      {
-        "pattern": "fn_159: (lam (lam (lam (fn_153 (fn_154 $1 (fn_157 (fn_154 $2 $2 $0)) $0) $0))))",
-        "lambda": "(lam (lam (lam (fn_153 (fn_154 $1 (fn_157 (fn_154 $2 $2 $0)) $0) $0))))",
-        "arity": 0,
-        "pattern_size": 22,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 434
-      },
-      {
-        "pattern": "fn_160: (lam (lam (?#0 $0 $1)))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 4,
-        "usage_matches": 5,
-        "approx_cost": 386
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench005_it5.json": {
-    "initial_cost": 519,
+    "compression_ratio": 1.215456674473068,
     "cost_after_rewrites": 519,
     "final_cost": 427,
-    "compression_ratio": 1.215456674473068,
+    "initial_cost": 519,
+    "library": [
+      {
+        "approx_cost": 414,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 7,
+        "pattern": "fn_160: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 16
+      },
+      {
+        "approx_cost": 425,
+        "arity": 1,
+        "lambda": "(lam (lam (lam (lam ($3 $1 $2 $0)))))",
+        "num_matches": 2,
+        "pattern": "fn_161: (lam (lam (lam (?#0 $1 $2 $0))))",
+        "pattern_size": 10,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 392,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 5,
+        "pattern": "fn_162: (lam (lam (?#0 $0 $1)))",
+        "pattern_size": 7,
+        "usage_matches": 6
+      }
+    ],
     "original_programs": [
       "(lam (lam (fn_148 $0 $1)))",
       "(lam (fn_155 $0))",
@@ -1443,42 +1472,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. pi $0)))",
       "(fn_162 fn_143)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_160: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 7,
-        "usage_matches": 16,
-        "approx_cost": 414
-      },
-      {
-        "pattern": "fn_161: (lam (lam (lam (?#0 $1 $2 $0))))",
-        "lambda": "(lam (lam (lam (lam ($3 $1 $2 $0)))))",
-        "arity": 1,
-        "pattern_size": 10,
-        "num_matches": 2,
-        "usage_matches": 4,
-        "approx_cost": 425
-      },
-      {
-        "pattern": "fn_162: (lam (lam (?#0 $0 $1)))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 6,
-        "approx_cost": 392
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench006_it7.json": {
-    "initial_cost": 528,
+    "compression_ratio": 1.1891891891891893,
     "cost_after_rewrites": 528,
     "final_cost": 444,
-    "compression_ratio": 1.1891891891891893,
+    "initial_cost": 528,
+    "library": [
+      {
+        "approx_cost": 430,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 6,
+        "pattern": "fn_161: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 15
+      },
+      {
+        "approx_cost": 438,
+        "arity": 1,
+        "lambda": "(lam (lam (lam (lam ($3 $1 $2 $0)))))",
+        "num_matches": 2,
+        "pattern": "fn_162: (lam (lam (lam (?#0 $1 $2 $0))))",
+        "pattern_size": 10,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 412,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 4,
+        "pattern": "fn_163: (lam (lam (?#0 $0 $1)))",
+        "pattern_size": 7,
+        "usage_matches": 5
+      }
+    ],
     "original_programs": [
       "(lam (lam (fn_148 $0 $1)))",
       "(lam (fn_155 $0))",
@@ -1594,42 +1623,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. pi $0)))",
       "(fn_163 fn_143)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_161: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 6,
-        "usage_matches": 15,
-        "approx_cost": 430
-      },
-      {
-        "pattern": "fn_162: (lam (lam (lam (?#0 $1 $2 $0))))",
-        "lambda": "(lam (lam (lam (lam ($3 $1 $2 $0)))))",
-        "arity": 1,
-        "pattern_size": 10,
-        "num_matches": 2,
-        "usage_matches": 4,
-        "approx_cost": 438
-      },
-      {
-        "pattern": "fn_163: (lam (lam (?#0 $0 $1)))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 4,
-        "usage_matches": 5,
-        "approx_cost": 412
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench000_it0.json": {
-    "initial_cost": 568,
+    "compression_ratio": 1.221505376344086,
     "cost_after_rewrites": 568,
     "final_cost": 465,
-    "compression_ratio": 1.221505376344086,
+    "initial_cost": 568,
+    "library": [
+      {
+        "approx_cost": 484,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 3,
+        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 480,
+        "arity": 0,
+        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
+        "num_matches": 1,
+        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
+        "pattern_size": 12,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 444,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (/. $2 (/. (fold $0 0. (lam (lam (+. $0 (*. $1 $1))))) $1)))))",
+        "num_matches": 1,
+        "pattern": "fn_2: (lam (lam (lam (/. $2 (/. (fold $0 0. (lam (lam (+. $0 (*. $1 $1))))) $1)))))",
+        "pattern_size": 28,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (lam (*. $1 (/. $1 $0))))",
@@ -1713,42 +1742,42 @@
       "(lam (/. 1. (fold $0 0. (lam (lam (+. $0 (/. 1. $1)))))))",
       "(lam (*. $0 (*. pi $0)))",
       "(lam (lam (+. (*. $1 $1) (*. $0 $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 13,
-        "approx_cost": 484
-      },
-      {
-        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
-        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 480
-      },
-      {
-        "pattern": "fn_2: (lam (lam (lam (/. $2 (/. (fold $0 0. (lam (lam (+. $0 (*. $1 $1))))) $1)))))",
-        "lambda": "(lam (lam (lam (/. $2 (/. (fold $0 0. (lam (lam (+. $0 (*. $1 $1))))) $1)))))",
-        "arity": 0,
-        "pattern_size": 28,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 444
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench001_it1.json": {
-    "initial_cost": 506,
+    "compression_ratio": 1.1578947368421053,
     "cost_after_rewrites": 506,
     "final_cost": 437,
-    "compression_ratio": 1.1578947368421053,
+    "initial_cost": 506,
+    "library": [
+      {
+        "approx_cost": 436,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 4,
+        "pattern": "fn_162: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 11
+      },
+      {
+        "approx_cost": 441,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_137 $0 $1))))))))",
+        "num_matches": 1,
+        "pattern": "fn_163: (lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_137 $0 $1))))))))",
+        "pattern_size": 21,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 400,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 (/. $1 $0)))))",
+        "num_matches": 2,
+        "pattern": "fn_164: (lam (lam (?#0 $1 (/. $1 $0))))",
+        "pattern_size": 11,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (power (fn_136 $0 $0) (fn_137 1. 1.)))",
@@ -1844,42 +1873,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (+. (*. $1 $1) (*. $0 $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_162: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 4,
-        "usage_matches": 11,
-        "approx_cost": 436
-      },
-      {
-        "pattern": "fn_163: (lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_137 $0 $1))))))))",
-        "lambda": "(lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_137 $0 $1))))))))",
-        "arity": 0,
-        "pattern_size": 21,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 441
-      },
-      {
-        "pattern": "fn_164: (lam (lam (?#0 $1 (/. $1 $0))))",
-        "lambda": "(lam (lam (lam ($2 $1 (/. $1 $0)))))",
-        "arity": 1,
-        "pattern_size": 11,
-        "num_matches": 2,
-        "usage_matches": 3,
-        "approx_cost": 400
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench000_it0.json": {
-    "initial_cost": 568,
+    "compression_ratio": 1.2188841201716738,
     "cost_after_rewrites": 568,
     "final_cost": 466,
-    "compression_ratio": 1.2188841201716738,
+    "initial_cost": 568,
+    "library": [
+      {
+        "approx_cost": 484,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 3,
+        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 480,
+        "arity": 0,
+        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
+        "num_matches": 1,
+        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
+        "pattern_size": 12,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 438,
+        "arity": 1,
+        "lambda": "(lam (fold $0 0. (lam (lam (+. $0 (*. $1 $1))))))",
+        "num_matches": 1,
+        "pattern": "fn_2: (fold ?#0 0. (lam (lam (+. $0 (*. $1 $1)))))",
+        "pattern_size": 17,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (lam (*. $1 (/. $1 $0))))",
@@ -1963,42 +1992,42 @@
       "(lam (/. 1. (fold $0 0. (lam (lam (+. $0 (/. 1. $1)))))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (+. (*. $0 $0) (*. $1 $1))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 13,
-        "approx_cost": 484
-      },
-      {
-        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
-        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 480
-      },
-      {
-        "pattern": "fn_2: (fold ?#0 0. (lam (lam (+. $0 (*. $1 $1)))))",
-        "lambda": "(lam (fold $0 0. (lam (lam (+. $0 (*. $1 $1))))))",
-        "arity": 1,
-        "pattern_size": 17,
-        "num_matches": 1,
-        "usage_matches": 3,
-        "approx_cost": 438
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench001_it1.json": {
-    "initial_cost": 577,
+    "compression_ratio": 1.1656565656565656,
     "cost_after_rewrites": 577,
     "final_cost": 495,
-    "compression_ratio": 1.1656565656565656,
+    "initial_cost": 577,
+    "library": [
+      {
+        "approx_cost": 507,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 4,
+        "pattern": "fn_165: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 11
+      },
+      {
+        "approx_cost": 507,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (fn_141 (fn_164 $1 (/. $2 (power (fn_162 $0) (fn_163 1.))) $0) $0))))",
+        "num_matches": 1,
+        "pattern": "fn_166: (lam (lam (lam (fn_141 (fn_164 $1 (/. $2 (power (fn_162 $0) (fn_163 1.))) $0) $0))))",
+        "pattern_size": 26,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 460,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_163 (*. $0 $1)))))))))",
+        "num_matches": 1,
+        "pattern": "fn_167: (lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_163 (*. $0 $1)))))))))",
+        "pattern_size": 23,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (power (fn_162 $0) (fn_163 1.)))",
@@ -2102,42 +2131,42 @@
       "(lam (fn_140 (fn_139 (map (lam (fn_140 $0)) $0))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (fn_162 (cons $0 (cons $1 empty)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_165: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 4,
-        "usage_matches": 11,
-        "approx_cost": 507
-      },
-      {
-        "pattern": "fn_166: (lam (lam (lam (fn_141 (fn_164 $1 (/. $2 (power (fn_162 $0) (fn_163 1.))) $0) $0))))",
-        "lambda": "(lam (lam (lam (fn_141 (fn_164 $1 (/. $2 (power (fn_162 $0) (fn_163 1.))) $0) $0))))",
-        "arity": 0,
-        "pattern_size": 26,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 507
-      },
-      {
-        "pattern": "fn_167: (lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_163 (*. $0 $1)))))))))",
-        "lambda": "(lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_163 (*. $0 $1)))))))))",
-        "arity": 0,
-        "pattern_size": 23,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 460
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench000_it0.json": {
-    "initial_cost": 659,
+    "compression_ratio": 1.2047531992687386,
     "cost_after_rewrites": 659,
     "final_cost": 547,
-    "compression_ratio": 1.2047531992687386,
+    "initial_cost": 659,
+    "library": [
+      {
+        "approx_cost": 561,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 3,
+        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 15
+      },
+      {
+        "approx_cost": 563,
+        "arity": 0,
+        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
+        "num_matches": 1,
+        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
+        "pattern_size": 12,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 526,
+        "arity": 0,
+        "lambda": "(lam (fold $0 (map (lam (*. $0 0.)) (car $0)) (lam (lam (zip $0 $1 (fn_0 +.))))))",
+        "num_matches": 1,
+        "pattern": "fn_2: (lam (fold $0 (map (lam (*. $0 0.)) (car $0)) (lam (lam (zip $0 $1 (fn_0 +.))))))",
+        "pattern_size": 29,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))",
       "(lam (fold $0 (map (lam (*. $0 0.)) (car $0)) (lam (lam (zip $0 $1 (lam (lam (+. $0 $1))))))))",
@@ -2227,42 +2256,42 @@
       "(lam (/. 1. (fold $0 0. (lam (lam (+. $0 (/. 1. $1)))))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (+. (*. $1 $1) (*. $0 $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 15,
-        "approx_cost": 561
-      },
-      {
-        "pattern": "fn_1: (lam (lam (map (lam (*. $0 $2)) $0)))",
-        "lambda": "(lam (lam (map (lam (*. $0 $2)) $0)))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 563
-      },
-      {
-        "pattern": "fn_2: (lam (fold $0 (map (lam (*. $0 0.)) (car $0)) (lam (lam (zip $0 $1 (fn_0 +.))))))",
-        "lambda": "(lam (fold $0 (map (lam (*. $0 0.)) (car $0)) (lam (lam (zip $0 $1 (fn_0 +.))))))",
-        "arity": 0,
-        "pattern_size": 29,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 526
-      }
     ]
   },
   "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench001_it1.json": {
-    "initial_cost": 464,
+    "compression_ratio": 1.1658291457286432,
     "cost_after_rewrites": 464,
     "final_cost": 398,
-    "compression_ratio": 1.1658291457286432,
+    "initial_cost": 464,
+    "library": [
+      {
+        "approx_cost": 394,
+        "arity": 1,
+        "lambda": "(lam (lam (lam ($2 $1 $0))))",
+        "num_matches": 4,
+        "pattern": "fn_170: (lam (lam (?#0 $1 $0)))",
+        "pattern_size": 7,
+        "usage_matches": 11
+      },
+      {
+        "approx_cost": 399,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_150 $0 $1))))))))",
+        "num_matches": 1,
+        "pattern": "fn_171: (lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_150 $0 $1))))))))",
+        "pattern_size": 21,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 368,
+        "arity": 0,
+        "lambda": "(lam (lam (lam (+. $2 (*. $1 $0)))))",
+        "num_matches": 1,
+        "pattern": "fn_172: (lam (lam (lam (+. $2 (*. $1 $0)))))",
+        "pattern_size": 12,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (lam (fn_165 (cons $0 (cons $1 empty)))))",
       "(lam (fn_165 $0))",
@@ -2362,35 +2391,6 @@
       "(lam (fn_140 (fn_169 $0 (lam (fn_140 $0)))))",
       "(lam (*. $0 (*. $0 pi)))",
       "(lam (lam (+. (*. $1 $1) (*. $0 $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_170: (lam (lam (?#0 $1 $0)))",
-        "lambda": "(lam (lam (lam ($2 $1 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 4,
-        "usage_matches": 11,
-        "approx_cost": 394
-      },
-      {
-        "pattern": "fn_171: (lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_150 $0 $1))))))))",
-        "lambda": "(lam (lam (lam (lam (+. $3 (*. $0 (+. $2 (fn_150 $0 $1))))))))",
-        "arity": 0,
-        "pattern_size": 21,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 399
-      },
-      {
-        "pattern": "fn_172: (lam (lam (lam (+. $2 (*. $1 $0)))))",
-        "lambda": "(lam (lam (lam (+. $2 (*. $1 $0)))))",
-        "arity": 0,
-        "pattern_size": 12,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 368
-      }
     ]
   }
 }

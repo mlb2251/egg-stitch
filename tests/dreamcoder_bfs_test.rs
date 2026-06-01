@@ -33,6 +33,8 @@
 use serde_json::{Map, Value};
 use std::{fs, path::PathBuf, process::Command};
 
+mod common;
+
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
 /// Number of sequential abstractions each run pins. Three is enough to exercise
@@ -105,14 +107,16 @@ fn run_domain(domain: &str, rules: Option<&str>, tag: &str) -> Value {
 
 /// Blesses (`BLESS=1`) or checks the run output against the frozen fixture.
 fn bless_or_check(path: &str, value: &Value) {
+    let value = common::sorted(value);
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(value).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(&value).expect("serialize expected");
         text.push('\n');
         fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
         let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
-        let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(value, &expected, "fixture mismatch for {path} (run with BLESS=1 to update)");
+        let mut expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+        common::sort_keys(&mut expected);
+        assert_eq!(value, expected, "fixture mismatch for {path} (run with BLESS=1 to update)");
     }
 }
 
