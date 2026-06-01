@@ -39,6 +39,11 @@ pub struct RunResult {
     /// Total cost after all abstractions (corpus size + sum of all pattern sizes).
     pub final_cost: Option<usize>,
     pub compression_ratio: Option<f64>,
+    /// Best-first heap size when the last abstraction's search stopped. `Some(0)`
+    /// means the frontier was exhausted (the search converged); a non-zero value
+    /// means it stopped at the `num_steps` cap. `None` for SMC (no heap).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heap_size_at_end: Option<usize>,
     /// Filename of the debug log (in the same directory), if debug logging was enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_log_file: Option<String>,

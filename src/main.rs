@@ -12,6 +12,7 @@ struct RunOutput {
     original_size: usize,
     final_cost: Option<usize>,
     final_rewritten: Option<Vec<String>>,
+    heap_size_at_end: Option<usize>,
     cost_before_rewrites: usize,
     original_programs: Vec<String>,
 }
@@ -29,6 +30,7 @@ fn main() {
         original_size,
         final_cost,
         final_rewritten,
+        heap_size_at_end,
         cost_before_rewrites,
         original_programs,
     } = match args.language {
@@ -59,6 +61,7 @@ fn main() {
         cost_after_rewrites: original_size,
         final_cost,
         compression_ratio,
+        heap_size_at_end,
         debug_log_file,
         original_programs,
         rewritten_programs,
@@ -77,12 +80,13 @@ fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> RunOutp
     let load_start = std::time::Instant::now();
     let (data, cost_before_rewrites, original_programs) = io::load_egraph::<F, O>(&args.input, args.rules.as_deref(), args.weights);
     println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
-    let (library, original_size, final_cost, final_rewritten) = multiple_step_search::<F, O>(data, args);
+    let (library, original_size, final_cost, final_rewritten, heap_size_at_end) = multiple_step_search::<F, O>(data, args);
     RunOutput {
         library,
         original_size,
         final_cost,
         final_rewritten,
+        heap_size_at_end,
         cost_before_rewrites,
         original_programs,
     }

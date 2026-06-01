@@ -83,6 +83,9 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     pub best_history: Vec<BestHistoryEntry>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
+    /// Heap size when the loop stopped. `0` means the frontier was exhausted
+    /// (the search converged); a non-zero value means it hit the `num_steps` cap.
+    pub heap_size_at_end: usize,
     pub data: crate::shared::SharedData<F, O>,
     pub tree_log: Option<SearchTreeLog>,
 }
@@ -357,6 +360,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         best_history,
         best_found_at,
         num_expansions,
+        heap_size_at_end: heap.len(),
         data: shared.into_data(),
         tree_log,
     }
