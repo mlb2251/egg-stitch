@@ -549,13 +549,15 @@ def check_pair_beta(o, r, fuel):
 def check_file(path, args):
     with open(path) as f:
         data = json.load(f)
-    # `check_fixture` writes `{best-first: <result>, smc: <result>}` when the
-    # two backends diverge; otherwise the flat single-`RunResult` shape.
-    # Treat each backend independently in the dual case.
-    if "library" not in data and ("best-first" in data or "smc" in data):
+    # A single `RunResult` always carries `original_programs` at top level. When
+    # it's absent, the file aggregates several runs keyed by a tag: either the
+    # two backends (`best-first`/`smc`, written by `check_fixture`) or one entry
+    # per input file (the list/physics per-file regression in
+    # `dreamcoder_bfs_test.rs`). Check each sub-result independently.
+    if "original_programs" not in data and isinstance(data, dict):
         ok = True
-        for backend, sub in data.items():
-            if not _check_run_result(path, backend, sub, args):
+        for tag, sub in data.items():
+            if not _check_run_result(path, tag, sub, args):
                 ok = False
         return ok
     return _check_run_result(path, None, data, args)

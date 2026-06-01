@@ -22,7 +22,10 @@ ROOT = REPO / "data" / "expected_outputs"
 
 # Fixtures where the search was run with `-r <rules>` and β alone is not
 # enough to bridge the DSR-mediated equivalence in the rewritten programs.
-# Keep in sync with `tests/stitch_compat_test.rs`.
+# Keep in sync with the suites that bless these fixtures: the stitch/arith/
+# conditional/fv-overapprox entries come from `tests/stitch_compat_test.rs`,
+# the `cogsci/*.dsr` ones from `tests/cogsci_bfs_test.rs`, and the
+# `list`/`physics` ones from `tests/dreamcoder_bfs_test.rs`.
 RULES_BY_REL = {
     "fv-overapprox/annihilator.out.json": "data/domains/fv-overapprox/annihilator.rewrites",
     "stitch/nested.out.json": "data/domains/stitch/nested.rewrites",
@@ -31,6 +34,8 @@ RULES_BY_REL = {
     "cogsci/furniture.dsr.out.json": "data/domains/cogsci/furniture.rewrites",
     "cogsci/nuts-bolts.dsr.out.json": "data/domains/cogsci/nuts-bolts.rewrites",
     "cogsci/wheels.dsr.out.json": "data/domains/cogsci/wheels.rewrites",
+    "list/list.dsr.out.json": "data/domains/list/list.rewrites",
+    "physics/physics.dsr.out.json": "data/domains/physics/physics.rewrites",
 }
 
 
