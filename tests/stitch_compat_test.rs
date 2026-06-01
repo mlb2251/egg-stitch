@@ -74,7 +74,7 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
     let _ = fs::remove_file(&out);
     let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
     if let Some(obj) = v.as_object_mut() {
-        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search"] {
+        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search", "heap_size_at_end"] {
             obj.remove(k);
         }
     }

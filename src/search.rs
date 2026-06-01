@@ -535,6 +535,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // matrix/condition child fails (b), and it isn't a self-loop at the
         // scaled/`false` sites (or its passthrough child alternates), so (c)
         // fails too.
+        //
+        // All three are load-bearing. (c) subsumes (b) for *single*-passthrough
+        // wrappers (`scale_1`/`rep_1`-style), so on the cogsci corpora (b) never
+        // decides alone. But (b) is uniquely needed for *multi*-passthrough ops
+        // with a constant decoration: e.g. with `max(a,b)≡a` when `a≥b` and
+        // `≡b` when `b≥a`, the pattern `(max ?#0 5)` self-loops at child 0 for
+        // `?#0 ∈ {6,7}` (no-op, only (b) catches it) but at child 1 for `?#0 = 3`
+        // — so it is neither genuine (a) nor vacuous (c).
         let mut removed = 0;
         let mut genuine_at = vec![false; n]; // per-match: candidate has a genuine (non-self-loop) subst
         for m in &mut self.matches {
@@ -560,7 +568,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     is_vacuous(i) // (c) vacuous wrapper: always passes through
                         || selfloop_pos[i].iter().any(|&p| {
                             ec[usize::from(kids[p])] == ec[i] // self-loop: node ≡ child c_p
-                                && (genuine_at[i] // (a) redundant: a genuine subst covers this root
+                                && (genuine_at[i] // (a) a genuine subst already covers this root
                                     || kids.iter().enumerate().all(|(q, &cq)| q == p || is_const(usize::from(cq)))) // (b) constant decoration
                         })
                 });
