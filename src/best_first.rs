@@ -199,8 +199,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         };
         // Strip identity-DSR no-op wrapper substitutions so the otherwise-infinite
         // tower of equivalent wrapped patterns can't form. Only fires when the
-        // e-graph has self-loops; drops successors emptied by the strip.
-        if args.opt_strip_wrap && !shared.selfloop_ops.is_empty() {
+        // e-graph has a cycle (the source of those towers); drops successors
+        // emptied by the strip.
+        if args.opt_strip_wrap && shared.has_cycle {
             for child in &mut successors {
                 strip_wrap_substs += child.strip_dominated_wrappers(&shared);
             }

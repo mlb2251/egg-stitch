@@ -118,14 +118,14 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
-    /// `(discriminant, child-index)` shapes that self-loop somewhere in the
-    /// e-graph — an enode whose child at that index lands in its own canonical
-    /// class. Identity DSRs like `x => (T x (M 1 0 0 0))` create these, and
-    /// they're the source of unbounded wrapper towers. `strip_dominated_wrappers`
-    /// can *only* strip these shapes, so it both gates on this being non-empty
-    /// (no self-loops, e.g. no DSRs ⇒ nothing to strip, skip the per-state cost)
-    /// and uses it to skip every pattern node whose `(op, position)` can't loop.
-    pub selfloop_ops: FxHashSet<(F::Discriminant<O>, usize)>,
+    /// True iff the e-graph contains a cycle: some class reachable from itself by
+    /// following enode children. Identity-shrinking DSRs create these — a direct
+    /// self-loop from `x => (T x (M 1 0 0 0))` (1-cycle) or a longer one from
+    /// `(f (g ?x)) => ?x` (2-cycle) — and they are the source of unbounded no-op
+    /// wrapper towers. A pattern node's e-class can equal a proper descendant's
+    /// only via such a cycle, so `strip_dominated_wrappers` has work to do exactly
+    /// when this holds; it gates on this to skip its per-state cost otherwise.
+    pub has_cycle: bool,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -411,17 +411,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Strips substitutions that route through a *dominated no-op wrapper*: a
-    /// pattern node `N = op(c0…ck)` that, at this match, has the same e-class as
-    /// one of its children `c_p` (a self-loop — `op` did nothing there). Such a
-    /// substitution is an identity re-wrap (e.g. the `(T body (M 1 0 0 0))` layers
-    /// created by `scale_1`-style DSRs): the unwrapped match covers the same site
+    /// pattern node `N` that, at this match, has the same e-class as one of its
+    /// proper descendants `d` (a self-loop — the structure from `N` down to `d`
+    /// did nothing there). Such a substitution is an identity re-wrap (e.g. the
+    /// `(T body (M 1 0 0 0))` layers created by `scale_1`-style DSRs, or the two
+    /// levels of `(f (g body)) => body`): the subtree at `d` covers the same site
     /// with a strictly smaller body, so the wrapped subst is dominated.
     ///
     /// A self-loop alone isn't enough — that would also kill genuinely
     /// parameterized wrappers like `(if ?#0 a b)`, whose `true`-site self-loops
     /// are incidental. A self-loop subst is dropped only when the node is also
     /// dominated by rule (a) or (b) below, which keep such parameterized wrappers
-    /// (their passthrough child alternates across sites, and they have no genuine
+    /// (their passthrough branch alternates across sites, and they have no genuine
     /// non-self-loop subst). Operating per-subst lets it thin mixed towers — drop
     /// the re-wrap substs while keeping the genuine ones at the same node.
     ///
@@ -436,48 +437,45 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 pos_to_var[usize::from(p)] = k;
             }
         }
-        // Candidate wrappers are the *only* nodes the per-subst scans below need
-        // to visit. A node `i` can satisfy `ec[i] == ec[c_p]` (a self-loop at
-        // child position `p`) only if some enode of shape `(op_i, p)` self-loops
-        // in the e-graph — i.e. `(op_i, p) ∈ shared.selfloop_ops`. So we collect,
-        // once, each interior node together with its self-loop-capable positions
-        // (`selfloop_pos[i]`); every other node and position is skipped.
-        let mut selfloop_pos: Vec<Vec<usize>> = vec![Vec::new(); n];
-        let mut candidates: Vec<usize> = Vec::new();
-        for i in 0..n {
-            let arity = nodes[i].children().len();
-            if pos_to_var[i] != usize::MAX || arity < 2 {
-                continue; // var leaves and 0/1-ary nodes are never wrappers
-            }
-            let disc = F::map_discriminant(nodes[i].discriminant(), |ov| match ov {
-                OpWithVar::Node(o) => o,
-                OpWithVar::Var(_) => unreachable!("var leaf handled via pos_to_var"),
-            });
-            let pos: Vec<usize> = (0..arity).filter(|&p| shared.selfloop_ops.contains(&(disc.clone(), p))).collect();
-            if !pos.is_empty() {
-                candidates.push(i);
-                selfloop_pos[i] = pos;
+        // The candidate "passthrough targets" of node `i` are its *proper
+        // descendants* in the pattern tree. A subst routes through a dominated
+        // no-op wrapper at `i` when `ec[i] == ec[d]` for some descendant `d`: the
+        // subtree at `d` denotes the same e-class with a strictly smaller body, so
+        // the wrapped subst is dominated. The common case is a direct child
+        // (`(repeat ?x 1 ?m) ≡ ?x`); deeper descendants arise from multi-node
+        // identity rules like `(f (g ?x)) => ?x`, where `ec[f] == ec[?x]` two
+        // levels down. RevExpr stores children at higher indices than parents, so
+        // a single high→low pass accumulates descendants bottom-up.
+        let mut descendants: Vec<Vec<usize>> = vec![Vec::new(); n];
+        for i in (0..n).rev() {
+            for &c in nodes[i].children() {
+                let c = usize::from(c);
+                descendants[i].push(c);
+                let sub = descendants[c].clone();
+                descendants[i].extend(sub);
             }
         }
+        // Only interior nodes (≥1 child) can self-loop onto a descendant; leaves
+        // and var occurrences never can.
+        let candidates: Vec<usize> = (0..n).filter(|&i| !descendants[i].is_empty()).collect();
         if candidates.is_empty() {
-            return 0; // no self-loop-capable wrapper ⇒ nothing to strip
+            return 0; // no interior node ⇒ nothing to strip
         }
-        // Pass 1: per candidate, `vacuous_pass[i][j]` tracks whether self-loop
-        // position `selfloop_pos[i][j]` held in *every* subst — a vacuous wrapper
-        // always passes through to the same child (e.g. `(repeat ?x 1 ?m) ≡ ?x`
-        // for any don't-care `?m`). compute_node_eclasses still fills every node
-        // (a wrapper's lookup needs its descendants' classes) but the bookkeeping
-        // loop touches only candidates.
+        // Pass 1: per candidate, `vacuous_pass[i][j]` tracks whether descendant
+        // `descendants[i][j]` shared `i`'s e-class in *every* subst — a vacuous
+        // wrapper always passes through to the *same* descendant (e.g.
+        // `(repeat ?x 1 ?m) ≡ ?x` for any don't-care `?m`). A failed lookup
+        // (`ec[i] == None`) can't be a self-loop, so it clears every position.
+        // compute_node_eclasses still fills every node (a wrapper's lookup needs
+        // its descendants' classes) but the bookkeeping loop touches only
+        // candidates.
         let mut ec: Vec<Option<Id>> = vec![None; n];
         let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
             for s in &m.substs {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
                 for &i in &candidates {
-                    // A failed lookup (`ec[i] == None`) can't be a self-loop, so
-                    // it clears every position for this node.
-                    let kids = nodes[i].children();
-                    let here: Vec<bool> = selfloop_pos[i].iter().map(|&p| ec[i].is_some() && ec[usize::from(kids[p])] == ec[i]).collect();
+                    let here: Vec<bool> = descendants[i].iter().map(|&d| ec[i].is_some() && ec[d] == ec[i]).collect();
                     match &mut vacuous_pass[i] {
                         None => vacuous_pass[i] = Some(here),
                         Some(prev) => prev.iter_mut().zip(here).for_each(|(a, b)| *a &= b),
@@ -486,25 +484,22 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
         let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
-        // Pass 2, per match. A subst is dropped if it is a self-loop at some
-        // candidate `i` (its e-class equals a child's) that is dominated, where
-        // node `i` is dominated when EITHER:
+        // Pass 2, per match. A subst is dropped if `ec[i] == ec[d]` for some
+        // candidate `i` and proper descendant `d` (a no-op wrapper — the subtree
+        // at `d` already covers the site) that is dominated, where node `i` is
+        // dominated when EITHER:
         //   (a) some other subst in the *same match* is genuine at `i` (its
-        //       e-class differs from all its children) — so the root is already
-        //       covered the real way and this wrapper subst is redundant; this
-        //       catches intermediate towers where genuine transforms ride along;
-        //   (b) node `i` passes through to the *same* child in every match
+        //       e-class differs from *all* its descendants) — so the root is
+        //       already covered the real way and this wrapper subst is redundant;
+        //       this catches intermediate towers where genuine transforms ride
+        //       along;
+        //   (b) node `i` passes through to the *same* descendant in every match
         //       (`is_vacuous`) — a vacuous wrapper whose decoration is a
         //       don't-care, e.g. `(repeat ?x 1 ?m) ≡ ?x` for any `?m`.
-        // Parameterized wrappers satisfy neither: an align/`if` node has no
-        // genuine subst (every occurrence is eval'd) so (a) fails, and it isn't a
-        // self-loop at the same site in every match (its passthrough child
+        // Parameterized wrappers satisfy neither: an `if` node has no genuine
+        // subst (every occurrence is eval'd) so (a) fails, and it isn't a
+        // self-loop onto the same site in every match (its passthrough branch
         // alternates), so (b) fails too.
-        //
-        // (A former third rule "every other child is a constant decoration"
-        // existed, but it only ever decides substs that don't affect whether the
-        // heap drains — it can never empty a pattern that (a)/(b) wouldn't — so it
-        // was dropped along with its per-child constancy bookkeeping.)
         let mut removed = 0;
         let mut genuine_at = vec![false; n]; // per-match: candidate has a genuine (non-self-loop) subst
         for m in &mut self.matches {
@@ -513,8 +508,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             for s in &m.substs {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
                 for &i in &candidates {
-                    let kids = nodes[i].children();
-                    if ec[i].is_some() && !selfloop_pos[i].iter().any(|&p| ec[usize::from(kids[p])] == ec[i]) {
+                    if ec[i].is_some() && !descendants[i].iter().any(|&d| ec[d] == ec[i]) {
                         genuine_at[i] = true;
                     }
                 }
@@ -526,10 +520,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     if ec[i].is_none() {
                         return false;
                     }
-                    let kids = nodes[i].children();
                     is_vacuous(i) // (b) vacuous wrapper: always passes through
                         || (genuine_at[i] // (a) a genuine subst already covers this root
-                            && selfloop_pos[i].iter().any(|&p| ec[usize::from(kids[p])] == ec[i])) // self-loop at this subst
+                            && descendants[i].iter().any(|&d| ec[d] == ec[i])) // self-loop at this subst
                 });
                 !dominated
             });
@@ -666,24 +659,55 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 }
 
-/// Returns the set of `(discriminant, child-index)` shapes that self-loop
-/// somewhere in the e-graph — an enode whose child at that index resolves to the
-/// enode's own canonical class. Identity DSRs like `x => (T x (M 1 0 0 0))`
-/// create these (here `(T, 0)`) and are the source of unbounded wrapper towers.
-/// See [`SharedSearchData::selfloop_ops`].
-fn selfloop_ops<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>) -> FxHashSet<(L::Discriminant, usize)> {
-    let mut ops = FxHashSet::default();
+/// True iff the e-graph contains a cycle — a class reachable from itself by
+/// following enode children. Identity-shrinking DSRs create these (a 1-cycle from
+/// `x => (T x (M 1 0 0 0))`, a 2-cycle from `(f (g ?x)) => ?x`) and are the source
+/// of unbounded no-op wrapper towers. See [`SharedSearchData::has_cycle`].
+///
+/// Iterative DFS with white/gray/black coloring over canonical class ids; a back
+/// edge (an edge into a gray ancestor still on the stack) means a cycle. Adjacency
+/// is the union of each class's enodes' (canonicalized) children.
+fn egraph_has_cycle<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
+    let mut adj: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
     for class in egraph.classes() {
-        let id = egraph.find(class.id);
+        let succ = adj.entry(egraph.find(class.id)).or_default();
         for node in &class.nodes {
-            for (p, &c) in node.children().iter().enumerate() {
-                if egraph.find(c) == id {
-                    ops.insert((node.discriminant(), p));
+            succ.extend(node.children().iter().map(|&c| egraph.find(c)));
+        }
+    }
+    #[derive(Clone, Copy, PartialEq)]
+    enum Color {
+        Gray,
+        Black,
+    }
+    let mut color: FxHashMap<Id, Color> = FxHashMap::default();
+    let starts: Vec<Id> = adj.keys().copied().collect();
+    for start in starts {
+        if color.contains_key(&start) {
+            continue;
+        }
+        color.insert(start, Color::Gray);
+        let mut stack: Vec<(Id, usize)> = vec![(start, 0)];
+        while let Some(&(id, idx)) = stack.last() {
+            let succs = &adj[&id];
+            if idx < succs.len() {
+                stack.last_mut().unwrap().1 += 1;
+                let next = succs[idx];
+                match color.get(&next).copied() {
+                    Some(Color::Gray) => return true, // back edge ⇒ cycle
+                    Some(Color::Black) => {}
+                    None => {
+                        color.insert(next, Color::Gray);
+                        stack.push((next, 0));
+                    }
                 }
+            } else {
+                color.insert(id, Color::Black);
+                stack.pop();
             }
         }
     }
-    ops
+    false
 }
 
 /// Fills `ec[i]` with the e-class each pattern node maps to under `subst`:
@@ -744,14 +768,14 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
-    let selfloop_ops = selfloop_ops(&egraph);
+    let has_cycle = egraph_has_cycle(&egraph);
     let shared = SharedSearchData {
         egraph,
         root,
         follow: follow_expr,
         usage_counts,
         check_slow: args.check_slow,
-        selfloop_ops,
+        has_cycle,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, None);
