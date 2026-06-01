@@ -190,15 +190,26 @@ pub enum LanguageChoice {
     LambdaCalc,
 }
 
+/// Tuple returned by [`multiple_step_search`]: `(library, corpus size after DSRs,
+/// final combined cost, final rewritten corpus, best-first heap size at stop)`.
+type MultiStepSearchResult = (
+    Vec<results::AbstractionResult>,
+    usize,
+    Option<usize>,
+    Option<Vec<String>>,
+    Option<usize>,
+);
+
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
 /// the corpus size after DSRs (before any abstractions), the final combined cost,
-/// and the final rewritten corpus (`Some` once any abstraction has been applied,
-/// `None` if no abstraction was found).
+/// the final rewritten corpus (`Some` once any abstraction has been applied,
+/// `None` if no abstraction was found), and the best-first heap size at stop
+/// (`None` for SMC).
 ///
 /// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
 /// their match roots, then the rewritten programs are extracted as strings and used to
 /// build a fresh egraph for the next round (DSR rules are re-applied there).
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>, Option<usize>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> MultiStepSearchResult {
     let mut data = data;
     let mut library = Vec::new();
     let mut original_size = 0;
