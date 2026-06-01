@@ -19,10 +19,10 @@ use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, S
 /// Cost weights are runtime values (`Weights`) carried on `StitchAnalysis`, so
 /// they no longer parameterize this trait.
 pub trait LanguageFamily: Clone + 'static {
-    /// Discriminant type for `Apply<O>`. Only needs `StitchDisc` (hash/eq/size/var
-    /// detection) — `from_name` is not required since the family knows how to
-    /// build var leaves directly via `make_var`.
-    type Discriminant<O: StitchOp>: StitchDisc;
+    /// Discriminant type for `Apply<O>`. A `StitchOp`: besides hash/eq/size/var
+    /// detection, it can be built from a name and from a De Bruijn index, which
+    /// lets language-agnostic code construct representative leaves.
+    type Discriminant<O: StitchOp>: StitchOp;
 
     /// The Language obtained by instantiating this family with leaf-Op `O`.
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Discriminant<O>>;
