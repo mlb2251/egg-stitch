@@ -85,7 +85,7 @@ pub struct Args {
     #[arg(long, default_value_t = 50)]
     pub dead_runs: usize,
 
-    /// Maximum arity of patterns to consider as "best".
+    /// Maximum arity of patterns.
     #[arg(long, default_value_t = 1000)]
     pub max_arity: usize,
 
