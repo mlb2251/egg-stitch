@@ -38,6 +38,8 @@
 use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
 
+mod common;
+
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
 fn expected_path(input: &str) -> String {
@@ -147,14 +149,16 @@ fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) 
 
 /// Shared blessing/checking step for the two `check_fixture*` helpers.
 fn bless_or_check(path: &str, value: &Value, input: &str) {
+    let value = common::sorted(value);
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(value).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(&value).expect("serialize expected");
         text.push('\n');
         fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
         let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
-        let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(value, &expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
+        let mut expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+        common::sort_keys(&mut expected);
+        assert_eq!(value, expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
     }
 }
 
