@@ -190,20 +190,26 @@ pub enum LanguageChoice {
     LambdaCalc,
 }
 
+/// Tuple returned by [`multiple_step_search`]: `(library, corpus size after DSRs,
+/// final combined cost, final rewritten corpus, best-first heap size at stop)`.
+type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>, Option<usize>);
+
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
 /// the corpus size after DSRs (before any abstractions), the final combined cost,
-/// and the final rewritten corpus (`Some` once any abstraction has been applied,
-/// `None` if no abstraction was found).
+/// the final rewritten corpus (`Some` once any abstraction has been applied,
+/// `None` if no abstraction was found), and the best-first heap size at stop
+/// (`None` for SMC).
 ///
 /// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
 /// their match roots, then the rewritten programs are extracted as strings and used to
 /// build a fresh egraph for the next round (DSR rules are re-applied there).
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> MultiStepSearchResult {
     let mut data = data;
     let mut library = Vec::new();
     let mut original_size = 0;
     let mut final_cost = None;
     let mut final_rewritten: Option<Vec<String>> = None;
+    let mut heap_size_at_end: Option<usize> = None; // best-first frontier size at stop (last iter)
 
     let seed = args.seed.unwrap_or_else(|| rand::rng().random());
     println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
@@ -216,20 +222,21 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let fn_name_base = first_free_fn_index::<F::Apply<O>>(&data.egraph);
 
     for abstraction_idx in 0..args.num_abstractions {
-        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history) = match args.search {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history, iter_heap_size) = match args.search {
             SearchKind::Smc => {
                 let r = smc::smc::<F, O>(data, args, &mut rng);
-                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None)
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None, None)
             }
             SearchKind::BestFirst => {
                 let r = best_first::best_first(data, args);
-                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history))
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history), Some(r.heap_size_at_end))
             }
         };
 
         if abstraction_idx == 0 {
             original_size = iter_original_size;
         }
+        heap_size_at_end = iter_heap_size;
 
         match best {
             None => break,
@@ -286,7 +293,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
         }
     }
 
-    (library, original_size, final_cost, final_rewritten)
+    (library, original_size, final_cost, final_rewritten, heap_size_at_end)
 }
 
 /// Smallest `k` such that no discriminant in `egraph` renders as `fn_k`,
