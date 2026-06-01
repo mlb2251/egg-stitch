@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Run `search_and_check.py` on every `*.json` under one or more domain
-directories. Used to sweep real-world corpora (`physics`, `list`) end-to-end:
-for each input, both backends run the search and the checker verifies that
-the rewritten programs are β-equivalent to the original ones.
+directories (or on individual `*.json` files). Used to sweep real-world
+corpora (`physics`, `list`) end-to-end: for each input, both backends run the
+search and the checker verifies that the rewritten programs are β-equivalent
+to the original ones.
 
 Usage:
-    scripts/search_and_check_domain.py DOMAIN_DIR [DOMAIN_DIR …] [-- extra args]
+    scripts/search_and_check_domain.py TARGET [TARGET …] [-- extra args]
+
+where each TARGET is a domain directory or a single `*.json` file.
 
 Extra args after `--` are forwarded to `search_and_check.py`'s own
 passthrough (i.e. on to `egg-stitch`), e.g.:
@@ -34,18 +37,21 @@ def main():
     if not argv:
         print(__doc__, file=sys.stderr)
         sys.exit(2)
-    dirs = [Path(p) for p in argv]
+    targets = [Path(p) for p in argv]
     inputs = []
-    for d in dirs:
-        if not d.is_dir():
-            print(f"{d}: not a directory", file=sys.stderr)
+    for t in targets:
+        if t.is_dir():
+            inputs.extend(sorted(t.glob("*.json")))
+        elif t.is_file() and t.suffix == ".json":
+            inputs.append(t)
+        else:
+            print(f"{t}: not a directory or *.json file", file=sys.stderr)
             sys.exit(2)
-        inputs.extend(sorted(d.glob("*.json")))
     if not inputs:
-        print(f"no *.json files found under {argv}", file=sys.stderr)
+        print(f"no *.json files found for {argv}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"sweeping {len(inputs)} problem(s) across {len(dirs)} domain dir(s)")
+    print(f"sweeping {len(inputs)} problem(s) across {len(targets)} target(s)")
     failures = []
     for i, inp in enumerate(inputs, 1):
         rel = inp.relative_to(REPO) if inp.is_absolute() and REPO in inp.parents else inp

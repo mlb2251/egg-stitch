@@ -129,14 +129,14 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
     }
     // Collapse to a single entry when both backends agree; otherwise record
     // both side-by-side so the divergence is visible in the fixture.
-    // `heap_size_at_end` is a best-first-only field (SMC has no heap), so a
+    // `heap_sizes_at_end` is a best-first-only field (SMC has no heap), so a
     // bare difference on it isn't a real divergence — compare with it removed
-    // and keep the best-first value (which carries the heap size) when they
+    // and keep the best-first value (which carries the heap sizes) when they
     // otherwise agree.
     let agree = {
         let mut bf_cmp = bf.clone();
         if let Some(obj) = bf_cmp.as_object_mut() {
-            obj.remove("heap_size_at_end");
+            obj.remove("heap_sizes_at_end");
         }
         bf_cmp == smc
     };

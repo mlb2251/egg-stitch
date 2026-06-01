@@ -45,7 +45,7 @@ fn run(input: &str, rules: &str, strip: bool, tag: &str) -> Value {
 /// abstraction is still found (so the corpus isn't degenerate).
 fn assert_converges_with_strip(input: &str, rules: &str, tag: &str) {
     let v = run(input, rules, true, tag);
-    let heap = v["heap_size_at_end"].as_u64().expect("heap_size_at_end present");
+    let heap = v["heap_sizes_at_end"][0].as_u64().expect("heap_sizes_at_end[0] present");
     assert_eq!(heap, 0, "heap should drain to 0 with the strip (search converged)");
     let ratio = v["compression_ratio"].as_f64().expect("compression_ratio present");
     assert!(ratio > 1.2, "expected a real compressive abstraction, got {ratio}x");
@@ -57,7 +57,7 @@ fn assert_converges_with_strip(input: &str, rules: &str, tag: &str) {
 /// the tower risk is real (this is the `main`/pre-strip behavior).
 fn assert_no_drain_without_strip(input: &str, rules: &str, tag: &str) {
     let v = run(input, rules, false, tag);
-    let heap = v["heap_size_at_end"].as_u64().expect("heap_size_at_end present");
+    let heap = v["heap_sizes_at_end"][0].as_u64().expect("heap_sizes_at_end[0] present");
     assert!(heap > 0, "without the strip the heap must NOT drain (tower never pruned), got {heap}");
 }
 

@@ -203,14 +203,15 @@ pub enum LanguageChoice {
 }
 
 /// Tuple returned by [`multiple_step_search`]: `(library, corpus size after DSRs,
-/// final combined cost, final rewritten corpus, best-first heap size at stop)`.
-type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>, Option<usize>);
+/// final combined cost, final rewritten corpus, best-first heap size at stop for
+/// each abstraction iteration)`.
+type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>, Option<Vec<usize>>);
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
 /// the corpus size after DSRs (before any abstractions), the final combined cost,
 /// the final rewritten corpus (`Some` once any abstraction has been applied,
-/// `None` if no abstraction was found), and the best-first heap size at stop
-/// (`None` for SMC).
+/// `None` if no abstraction was found), and the best-first heap size at stop for
+/// each iteration (`None` for SMC).
 ///
 /// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
 /// their match roots, then the rewritten programs are extracted as strings and used to
@@ -221,7 +222,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let mut original_size = 0;
     let mut final_cost = None;
     let mut final_rewritten: Option<Vec<String>> = None;
-    let mut heap_size_at_end: Option<usize> = None; // best-first frontier size at stop (last iter)
+    let mut heap_sizes_at_end: Option<Vec<usize>> = None; // best-first frontier size at stop, one per search iteration
 
     let seed = args.seed.unwrap_or_else(|| rand::rng().random());
     println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
@@ -248,7 +249,9 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
         if abstraction_idx == 0 {
             original_size = iter_original_size;
         }
-        heap_size_at_end = iter_heap_size;
+        if let Some(h) = iter_heap_size {
+            heap_sizes_at_end.get_or_insert_with(Vec::new).push(h);
+        }
 
         match best {
             None => break,
@@ -305,7 +308,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
         }
     }
 
-    (library, original_size, final_cost, final_rewritten, heap_size_at_end)
+    (library, original_size, final_cost, final_rewritten, heap_sizes_at_end)
 }
 
 /// Smallest `k` such that no discriminant in `egraph` renders as `fn_k`,
