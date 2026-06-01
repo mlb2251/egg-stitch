@@ -92,9 +92,7 @@ where
 /// to the forward rule plus a `<name>-rev` rule with `lhs`/`rhs` swapped.
 ///
 /// Panics if a rule violates the structural conditions behind
-/// `fv(c) = fv(MinTerm(c))` (see [`rule_fv_verdict`]); the size-tie case is
-/// permitted only when `weights` make de Bruijn variables strictly more expensive
-/// than symbols (or the language has none).
+/// `fv(c) = fv(MinTerm(c))` (see [`rule_fv_verdict`]).
 pub fn parse<L, A>(file: &str, weights: &Weights) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
     L: StitchLanguage,
@@ -145,20 +143,17 @@ where
 pub enum RuleFvVerdict {
     /// Conforming regardless of the cost model.
     Ok,
-    /// Conforming only if de Bruijn variables are strictly more expensive than symbols.
-    /// The metavariable is dropped at a *size tie*, so under node count alone its
-    /// side is not strictly larger; but if any free-variable instantiation costs
-    /// more than the symbol that replaces it, the cost-minimal term avoids it.
-    /// The caller decides via [`crate::lang::de_bruijn_strictly_more_expensive_than_symbols`].
+    /// Conforming only if de Bruijn variables are strictly more expensive than
+    /// symbols (decided by the caller via
+    /// [`crate::lang::de_bruijn_strictly_more_expensive_than_symbols`]).
     OkIfDeBruijnMoreExpensive(String),
     /// Unconditionally unsafe.
     Violation(String),
 }
 
 /// Structural facts about one side of a rule, used by [`rule_fv_verdict`]: its
-/// metavariables, whether it contains a *free* de Bruijn leaf, whether any
-/// metavariable sits beneath a binder, and its node count (a metavariable counts
-/// as one node — its minimal instantiation).
+/// metavariables, whether it has a free de Bruijn leaf, whether a metavariable
+/// sits beneath a binder, and its node count.
 fn rule_side_facts<L: StitchLanguage>(ast: &RecExpr<ENodeOrVar<L>>) -> (FxHashSet<Var>, bool, bool, usize) {
     let nodes = ast.as_ref();
     let mut vars = FxHashSet::default();
@@ -191,23 +186,16 @@ fn rule_side_facts<L: StitchLanguage>(ast: &RecExpr<ENodeOrVar<L>>) -> (FxHashSe
 }
 
 /// Classifies a rule against the *structural* conditions behind
-/// `fv(c) = fv(MinTerm(c))` — the invariant the extraction-time
-/// `shift_free_egraph` assertion relies on. Treating each rule as a bidirectional
-/// union:
-///   * a *free* de Bruijn leaf on either side, or a metavariable beneath a
-///     binder, is an unconditional [`RuleFvVerdict::Violation`];
-///   * a metavariable occurring only on the strictly-*smaller* side introduces a
-///     variable into the reduced term — also a `Violation`;
-///   * a metavariable occurring only on a *same-size* side is
-///     [`RuleFvVerdict::OkIfDeBruijnMoreExpensive`]: safe iff de Bruijn variables are
-///     strictly more expensive than symbols (then a free instantiation makes that side
-///     strictly larger by weight, so the min-term avoids it);
+/// `fv(c) = fv(MinTerm(c))`, treating each rule as a bidirectional union:
+///   * a free de Bruijn leaf on either side, or a metavariable beneath a binder,
+///     is an unconditional [`RuleFvVerdict::Violation`];
+///   * a metavariable on only the strictly-smaller side is also a `Violation`;
+///   * a metavariable on only a same-size side is
+///     [`RuleFvVerdict::OkIfDeBruijnMoreExpensive`];
 ///   * otherwise [`RuleFvVerdict::Ok`].
 ///
-/// These are sufficient, not necessary, conditions; confluence (the remaining
-/// hypothesis) is not checked here, and the extraction-time assertion is the
-/// backstop. `parse` panics on a `Violation` (and on an unsatisfied
-/// `OkIfDeBruijnMoreExpensive`) so a non-conforming rule set fails at load.
+/// Sufficient, not necessary: confluence is not checked here, and the
+/// extraction-time assertion is the backstop.
 pub fn rule_fv_verdict<L: StitchLanguage>(lhs: &RecExpr<ENodeOrVar<L>>, rhs: &RecExpr<ENodeOrVar<L>>) -> RuleFvVerdict {
     let (lv, lfree, lbind, lcount) = rule_side_facts::<L>(lhs);
     let (rv, rfree, rbind, rcount) = rule_side_facts::<L>(rhs);
