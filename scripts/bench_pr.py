@@ -11,6 +11,12 @@ as warmup and dropped from the aggregate. Babble and Stitch are not
 invoked; only our two methods are timed. Prints a side-by-side mean elapsed
 time and mean compression ratio per (domain, method).
 
+It also diffs the committed `data/expected_outputs/**/*.out.json` fixtures
+between the two branches, comparing every `compression_ratio` leaf, and emits a
+"Compression vs <base>" report above the timing tables that flags any fixture
+whose compression dropped. As a prerequisite (shared with the timing run) the
+main worktree must be clean and the base ref must be up to date with its remote.
+
 Usage:
     python scripts/bench_pr.py [BASE=main] [PR=<current-branch>]
 
@@ -54,6 +60,12 @@ MIN_RUNS = 5
 MAX_RUNS = 60
 TARGET_REL_SEM = 0.02
 
+# Fixture-compression diff: where the committed outputs live, and the absolute
+# ratio delta below which two blessed floats are treated as equal (their
+# trailing digits are meaningless search noise).
+EXPECTED_OUTPUTS = "data/expected_outputs"
+COMP_EPS = 1e-9
+
 
 def sh(cmd, *, cwd=None, **kw):
     """Run a subprocess, echoing the command first. Defaults cwd to the repo root."""
@@ -61,12 +73,30 @@ def sh(cmd, *, cwd=None, **kw):
     return subprocess.run(cmd, check=True, cwd=cwd or ROOT, **kw)
 
 
-def check_clean_worktree() -> None:
-    """Abort if the main worktree has any uncommitted or untracked changes.
+def git_show(ref: str, rel: str):
+    """Return the contents of ``rel`` at git ref ``ref``, or None if absent."""
+    res = subprocess.run(
+        ["git", "show", f"{ref}:{rel}"], cwd=ROOT, capture_output=True, text=True
+    )
+    return res.stdout if res.returncode == 0 else None
 
-    We don't ``git checkout`` here anymore — worktrees handle that — but a
-    dirty tree usually indicates the user is mid-edit, which is rarely what
-    they want to benchmark.
+
+def rev_parse(ref: str):
+    """Return the commit SHA ``ref`` resolves to, or None if it doesn't exist."""
+    res = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", ref],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    return res.stdout.strip() or None
+
+
+def preflight(base: str) -> None:
+    """Abort unless the main worktree is clean and ``base`` is current with its
+    remote — both are prerequisites for a meaningful comparison.
+
+    A dirty tree usually means the user is mid-edit (rarely what they want to
+    benchmark), and a stale ``base`` would silently flag or bless the wrong
+    compression numbers. We don't ``git checkout`` here — worktrees handle that.
     """
     dirty = subprocess.check_output(
         ["git", "status", "--porcelain"], cwd=ROOT, text=True
@@ -75,6 +105,19 @@ def check_clean_worktree() -> None:
         raise SystemExit(
             "bench_pr: working tree is not clean — commit or stash before running.\n"
             + dirty
+        )
+    fetch = subprocess.run(
+        ["git", "fetch", "origin", base], cwd=ROOT, capture_output=True, text=True
+    )
+    if fetch.returncode != 0:
+        raise SystemExit(f"bench_pr: `git fetch origin {base}` failed:\n{fetch.stderr.strip()}")
+    local, remote = rev_parse(base), rev_parse("FETCH_HEAD")
+    if local is None:
+        raise SystemExit(f"bench_pr: baseline ref `{base}` does not exist locally")
+    if local != remote:
+        raise SystemExit(
+            f"bench_pr: local `{base}` ({local[:12]}) is not up to date with "
+            f"`origin/{base}` ({(remote or '?')[:12]}); run `git pull` on `{base}` first"
         )
 
 
@@ -178,14 +221,16 @@ def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str
     return out
 
 
-def update_pr_timing(pr_branch: str, timing_section: str) -> None:
-    """Replace (or append) the ``## Timing`` section in the PR description.
+def update_pr_report(pr_branch: str, report_section: str) -> None:
+    """Replace (or append) the managed compression + timing block in the PR.
 
     Looks up the open PR for ``pr_branch`` via ``gh``; if none exists, prints
-    a warning and returns. ``timing_section`` must start with ``## Timing``.
-    The section is replaced from its heading up to (but not including) the
-    next ``## `` heading or EOF; if no existing section is found it's
-    appended (separated by a blank line).
+    a warning and returns. ``report_section`` is the combined block: a
+    ``## Compression vs`` section followed by ``## Timing and fixture
+    regressions``. The managed region is matched as an optional compression
+    section immediately followed by the timing section (which absorbs an older
+    bare ``## Timing`` heading), up to the next ``## `` heading or EOF; if not
+    found it's appended (separated by a blank line).
     """
     try:
         body = subprocess.check_output(
@@ -196,14 +241,15 @@ def update_pr_timing(pr_branch: str, timing_section: str) -> None:
         print(f"\nbench_pr: no PR found for branch {pr_branch!r}, skipping PR update.\n  {e.stderr.strip()}")
         return
     body = body.rstrip("\n")
-    # Match "## Timing" up to (but not including) the next "## " or EOF.
     import re
-    pattern = re.compile(r"(?m)^## Timing\b.*?(?=^## |\Z)", re.DOTALL)
+    pattern = re.compile(
+        r"(?m)^(?:## Compression vs\b.*?(?=^## ))?## Timing\b.*?(?=^## |\Z)", re.DOTALL
+    )
     if pattern.search(body):
-        new_body = pattern.sub(timing_section.rstrip() + "\n\n", body).rstrip() + "\n"
+        new_body = pattern.sub(lambda _: report_section.rstrip() + "\n\n", body).rstrip() + "\n"
     else:
         sep = "\n\n" if body else ""
-        new_body = body + sep + timing_section.rstrip() + "\n"
+        new_body = body + sep + report_section.rstrip() + "\n"
     res = subprocess.run(
         ["gh", "pr", "edit", pr_branch, "--body-file", "-"],
         cwd=ROOT, input=new_body, text=True, capture_output=True,
@@ -221,6 +267,101 @@ def _speedup_emoji(speedup: float) -> str:
     if speedup < 0.98:
         return "🔴"
     return "⚪"
+
+
+def _comp_leaves(obj, prefix=""):
+    """Yield (key, ratio) for every ``compression_ratio`` in ``obj``.
+
+    A dict carrying the key is one result (we don't recurse into it); any other
+    dict is a container whose values are recursed into, extending the key path
+    (DSR fixtures map per-benchmark names to result objects). A ``null`` ratio
+    means no invention was applied, so cost is unchanged — normalised to 1.0, as
+    ``src/main.rs`` computes ``original_size / final_cost`` and only emits None
+    when no rewrite happened.
+    """
+    if isinstance(obj, dict):
+        if "compression_ratio" in obj:
+            ratio = obj["compression_ratio"]
+            yield prefix, 1.0 if ratio is None else ratio
+        else:
+            for name, val in obj.items():
+                yield from _comp_leaves(val, f"{prefix}::{name}" if prefix else name)
+
+
+def _comp_leaves_at(ref: str, rel: str) -> dict:
+    """Return ``{key: ratio}`` for every compression leaf of fixture ``rel`` at
+    git ref ``ref`` (keyed by ``rel`` plus any in-file benchmark path). Empty if
+    the file is absent there or unparseable."""
+    text = git_show(ref, rel)
+    if text is None:
+        return {}
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return {f"{rel}::{k}" if k else rel: r for k, r in _comp_leaves(obj)}
+
+
+def compression_section(base: str, pr: str) -> str:
+    """Build the markdown "Compression vs <base>" report comparing every output
+    fixture's ``compression_ratio`` leaf on ``pr`` against ``base``.
+
+    Fixtures are listed from ``pr``; each leaf is bucketed into regressed,
+    improved, or new (absent on ``base``). Unchanged leaves are summarised but
+    not listed.
+    """
+    listing = subprocess.check_output(
+        ["git", "ls-tree", "-r", "--name-only", pr, "--", EXPECTED_OUTPUTS],
+        cwd=ROOT, text=True,
+    )
+    fixtures = sorted(p for p in listing.splitlines() if p.endswith(".out.json"))
+
+    higher, lower, new, n_equal = [], [], [], 0
+    for rel in fixtures:
+        cur = _comp_leaves_at(pr, rel)
+        base_leaves = _comp_leaves_at(base, rel)
+        for key, c in cur.items():
+            if key not in base_leaves:
+                new.append((key, c))
+                continue
+            delta = c - base_leaves[key]
+            if delta > COMP_EPS:
+                higher.append((key, c, base_leaves[key]))
+            elif delta < -COMP_EPS:
+                lower.append((key, c, base_leaves[key]))
+            else:
+                n_equal += 1
+    higher.sort(); lower.sort(); new.sort()
+
+    total = len(higher) + len(lower) + n_equal + len(new)
+    lines = [f"## Compression vs `{base}`", ""]
+    lines.append(
+        f"Compared **{total}** compression values across **{len(fixtures)}** fixtures: "
+        f"{len(lower)} regressed, {len(higher)} improved, {n_equal} unchanged, "
+        f"{len(new)} new (no baseline)."
+    )
+    lines.append("")
+    lines.append(
+        "**✅ ALL OUTPUTS HAVE GREATER-OR-EQUAL COMPRESSION**"
+        if not lower else f"**❌ {len(lower)} OUTPUT(S) REGRESSED**"
+    )
+
+    def delta_table(title, rows):
+        if not rows:
+            return
+        lines.extend(["", f"### {title} ({len(rows)})", "",
+                      f"| fixture | `{base}` | `{pr}` | delta |", "|---|---:|---:|---:|"])
+        for key, c, b in rows:
+            lines.append(f"| {key} | {b:.6f} | {c:.6f} | {c - b:+.6f} |")
+
+    delta_table("⬇️ Lower compression (regressions)", lower)
+    delta_table("⬆️ Higher compression (improvements)", higher)
+    if new:
+        lines.extend(["", f"### 🆕 New (not on `{base}`) ({len(new)})", "",
+                      f"| fixture | `{pr}` |", "|---|---:|"])
+        for key, c in new:
+            lines.append(f"| {key} | {c:.6f} |")
+    return "\n".join(lines)
 
 
 def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str) -> str:
@@ -256,7 +397,10 @@ def main() -> None:
     enum_steps = int(os.environ.get("ENUM_STEPS", 5000))
     session = time.strftime("%Y-%m-%d_%H-%M-%S")
 
-    check_clean_worktree()
+    preflight(base)
+    # Built up front so a fixture regression is reported even if the (long)
+    # timing run is interrupted afterwards.
+    comp_section = compression_section(base, pr)
 
     print(f"base={base}  pr={pr}  reps=adaptive(min={MIN_RUNS}, max={MAX_RUNS}, target rel-SEM<{TARGET_REL_SEM:.0%})+1warmup  smc=({smc_steps} steps, {smc_parts} particles, T={smc_temp})  enum_steps={enum_steps}  session={session}")
 
@@ -349,10 +493,11 @@ def main() -> None:
                                summarize(session, "base", "without_dsrs", methods, without_reps),
                                summarize(session, "pr", "without_dsrs", methods, without_reps),
                                "without DSRs")
-        timing_section = "## Timing\n\n" + with_md + "\n\n" + without_md + "\n"
+        timing_section = "## Timing and fixture regressions\n\n" + with_md + "\n\n" + without_md + "\n"
+        report_section = comp_section.rstrip() + "\n\n" + timing_section
         print()
-        print(timing_section)
-        update_pr_timing(pr, timing_section)
+        print(report_section)
+        update_pr_report(pr, report_section)
     finally:
         teardown_worktree(wt_base)
         teardown_worktree(wt_pr)
