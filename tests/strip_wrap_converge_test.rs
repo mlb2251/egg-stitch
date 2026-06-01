@@ -1,6 +1,6 @@
 //! Convergence regression for `SearchState::strip_dominated_wrappers`.
 //!
-//! `data/domains/converge/tower.json` is a deliberately *compressive* corpus
+//! `data/test/converge_tower.json` is a deliberately *compressive* corpus
 //! (many distinct, reusable shapes) whose `rep_1` DSR (`(repeat ?x 1 ?m) => ?x`)
 //! turns every `(repeat shape 1 (M 1 0 0 0))` wrapper into a no-op self-loop.
 //! Those self-loops spawn an unbounded tower of equivalent re-wrapped patterns.
@@ -17,8 +17,8 @@ use serde_json::Value;
 use std::{fs, process::Command};
 
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
-const INPUT: &str = "data/domains/converge/tower.json";
-const RULES: &str = "data/domains/converge/tower.rewrites";
+const INPUT: &str = "data/test/converge_tower.json";
+const RULES: &str = "data/test/converge_tower.rewrites";
 // Comfortably above the ~200 expansions the strip needs to converge, but far
 // below where the un-stripped tower would (it never does) — keeps the run fast.
 const CAP: &str = "2000";

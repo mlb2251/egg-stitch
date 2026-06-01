@@ -412,20 +412,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Strips substitutions that route through a *dominated no-op wrapper*: a
     /// pattern node `N = op(c0…ck)` that, at this match, has the same e-class as
-    /// one of its children `c_p` (a self-loop — `op` did nothing there) while
-    /// every *other* child is a constant whose e-class never varies across the
-    /// match set. Such a substitution is an identity re-wrap (e.g. the
-    /// `(T body (M 1 0 0 0))` layers created by `scale_1`-style DSRs): the
-    /// unwrapped match covers the same site with a strictly smaller body, so the
-    /// wrapped subst is dominated and removed.
+    /// one of its children `c_p` (a self-loop — `op` did nothing there). Such a
+    /// substitution is an identity re-wrap (e.g. the `(T body (M 1 0 0 0))` layers
+    /// created by `scale_1`-style DSRs): the unwrapped match covers the same site
+    /// with a strictly smaller body, so the wrapped subst is dominated.
     ///
-    /// The "every other child constant across the match set" guard is what keeps
-    /// genuinely-parameterized wrappers: an align layer whose matrix ranges over
-    /// `{identity, scale-2}`, or a conditional `(if ?#0 a b)` whose condition
-    /// ranges over `{true, false}`, has a *varying* decoration child, so its
-    /// self-loop substs are kept. Only constant decorations (identity padding)
-    /// are stripped. Operating per-subst lets it thin mixed towers — drop the
-    /// padding substs while keeping the genuine ones at the same node.
+    /// A self-loop alone isn't enough — that would also kill genuinely
+    /// parameterized wrappers like `(if ?#0 a b)`, whose `true`-site self-loops
+    /// are incidental. A self-loop subst is dropped only when the node is also
+    /// dominated by rule (a) or (b) below, which keep such parameterized wrappers
+    /// (their passthrough child alternates across sites, and they have no genuine
+    /// non-self-loop subst). Operating per-subst lets it thin mixed towers — drop
+    /// the re-wrap substs while keeping the genuine ones at the same node.
     ///
     /// Returns the number of substs removed.
     pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
@@ -464,45 +462,17 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         if candidates.is_empty() {
             return 0; // no self-loop-capable wrapper ⇒ nothing to strip
         }
-        // Rule (b) below asks whether each *child* of a candidate is constant
-        // across the match set, so those are the only nodes we track constancy
-        // for. (compute_node_eclasses still fills every node — a wrapper's lookup
-        // needs its descendants' classes — but the bookkeeping loops don't.)
-        let mut need_const = vec![false; n];
-        for &i in &candidates {
-            for &c in nodes[i].children() {
-                need_const[usize::from(c)] = true;
-            }
-        }
-        let const_nodes: Vec<usize> = (0..n).filter(|&i| need_const[i]).collect();
-        // Pass 1: per candidate child, is its e-class constant across every
-        // match? It stays unset until first seen, then `varies` once two substs
-        // disagree (or a lookup fails). And per candidate, `vacuous_pass[i][j]`
-        // tracks whether self-loop position `selfloop_pos[i][j]` held in *every*
-        // subst — a vacuous wrapper always passes through to the same child
-        // (e.g. `(repeat ?x 1 ?m) ≡ ?x` for any don't-care `?m`).
-        // Constancy of a candidate child across the match set: `Unseen` until the
-        // first observation, then `Const(c)` while every subst agrees on `c`,
-        // collapsing to `Varies` on the first disagreement or failed lookup.
-        enum Constancy {
-            Unseen,
-            Const(Id),
-            Varies,
-        }
+        // Pass 1: per candidate, `vacuous_pass[i][j]` tracks whether self-loop
+        // position `selfloop_pos[i][j]` held in *every* subst — a vacuous wrapper
+        // always passes through to the same child (e.g. `(repeat ?x 1 ?m) ≡ ?x`
+        // for any don't-care `?m`). compute_node_eclasses still fills every node
+        // (a wrapper's lookup needs its descendants' classes) but the bookkeeping
+        // loop touches only candidates.
         let mut ec: Vec<Option<Id>> = vec![None; n];
-        let mut constancy: Vec<Constancy> = (0..n).map(|_| Constancy::Unseen).collect();
         let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
             for s in &m.substs {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                for &i in &const_nodes {
-                    constancy[i] = match (&constancy[i], ec[i]) {
-                        (Constancy::Varies, _) => Constancy::Varies,
-                        (Constancy::Unseen, Some(c)) => Constancy::Const(c),
-                        (Constancy::Const(c0), Some(c)) if *c0 == c => Constancy::Const(c),
-                        _ => Constancy::Varies, // disagreement, or a failed lookup
-                    };
-                }
                 for &i in &candidates {
                     // A failed lookup (`ec[i] == None`) can't be a self-loop, so
                     // it clears every position for this node.
@@ -515,7 +485,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
             }
         }
-        let is_const = |i: usize| matches!(constancy[i], Constancy::Const(_));
         let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
         // Pass 2, per match. A subst is dropped if it is a self-loop at some
         // candidate `i` (its e-class equals a child's) that is dominated, where
@@ -524,25 +493,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         //       e-class differs from all its children) — so the root is already
         //       covered the real way and this wrapper subst is redundant; this
         //       catches intermediate towers where genuine transforms ride along;
-        //   (b) every other child of `i` is constant across the whole match set
-        //       (constant identity decoration) — this catches leaf towers where
-        //       the wrapped class has no genuine occurrence of the op; or
-        //   (c) node `i` passes through to the *same* child in every match
+        //   (b) node `i` passes through to the *same* child in every match
         //       (`is_vacuous`) — a vacuous wrapper whose decoration is a
         //       don't-care, e.g. `(repeat ?x 1 ?m) ≡ ?x` for any `?m`.
-        // Parameterized wrappers satisfy none: an align/`if` node has no genuine
-        // subst (every occurrence is eval'd) so (a) fails, its varying
-        // matrix/condition child fails (b), and it isn't a self-loop at the
-        // scaled/`false` sites (or its passthrough child alternates), so (c)
-        // fails too.
+        // Parameterized wrappers satisfy neither: an align/`if` node has no
+        // genuine subst (every occurrence is eval'd) so (a) fails, and it isn't a
+        // self-loop at the same site in every match (its passthrough child
+        // alternates), so (b) fails too.
         //
-        // All three are load-bearing. (c) subsumes (b) for *single*-passthrough
-        // wrappers (`scale_1`/`rep_1`-style), so on the cogsci corpora (b) never
-        // decides alone. But (b) is uniquely needed for *multi*-passthrough ops
-        // with a constant decoration: e.g. with `max(a,b)≡a` when `a≥b` and
-        // `≡b` when `b≥a`, the pattern `(max ?#0 5)` self-loops at child 0 for
-        // `?#0 ∈ {6,7}` (no-op, only (b) catches it) but at child 1 for `?#0 = 3`
-        // — so it is neither genuine (a) nor vacuous (c).
+        // (A former third rule "every other child is a constant decoration"
+        // existed, but it only ever decides substs that don't affect whether the
+        // heap drains — it can never empty a pattern that (a)/(b) wouldn't — so it
+        // was dropped along with its per-child constancy bookkeeping.)
         let mut removed = 0;
         let mut genuine_at = vec![false; n]; // per-match: candidate has a genuine (non-self-loop) subst
         for m in &mut self.matches {
@@ -565,12 +527,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         return false;
                     }
                     let kids = nodes[i].children();
-                    is_vacuous(i) // (c) vacuous wrapper: always passes through
-                        || selfloop_pos[i].iter().any(|&p| {
-                            ec[usize::from(kids[p])] == ec[i] // self-loop: node ≡ child c_p
-                                && (genuine_at[i] // (a) a genuine subst already covers this root
-                                    || kids.iter().enumerate().all(|(q, &cq)| q == p || is_const(usize::from(cq)))) // (b) constant decoration
-                        })
+                    is_vacuous(i) // (b) vacuous wrapper: always passes through
+                        || (genuine_at[i] // (a) a genuine subst already covers this root
+                            && selfloop_pos[i].iter().any(|&p| ec[usize::from(kids[p])] == ec[i])) // self-loop at this subst
                 });
                 !dominated
             });

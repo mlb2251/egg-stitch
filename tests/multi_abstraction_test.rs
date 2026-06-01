@@ -41,7 +41,7 @@ const FIRST_REWRITTEN: &[&str] = &["(+ (fn_0 (h a) (h b)) 2 2 2)", "(+ (fn_0 (a 
 #[test]
 fn zero_abstractions() {
     let (eg, root) = load::<OpChildrenLanguage>();
-    let (library, _original_size, final_cost, final_rewritten) = multiple_step_search::<OpChildren, Op>(SharedData::new(eg, root), &args(100, 0));
+    let (library, _original_size, final_cost, final_rewritten, _heap) = multiple_step_search::<OpChildren, Op>(SharedData::new(eg, root), &args(100, 0));
     assert!(library.is_empty());
     assert!(final_cost.is_none());
     assert!(final_rewritten.is_none());
@@ -52,7 +52,7 @@ fn zero_abstractions() {
 #[test]
 fn one_abstraction_rewritten_corpus() {
     let (eg, root) = load::<OpChildrenLanguage>();
-    let (library, _original_size, _final_cost, final_rewritten) = multiple_step_search::<OpChildren, Op>(SharedData::new(eg, root), &args(500, 1));
+    let (library, _original_size, _final_cost, final_rewritten, _heap) = multiple_step_search::<OpChildren, Op>(SharedData::new(eg, root), &args(500, 1));
     assert_eq!(library.len(), 1);
     assert_eq!(library[0].pattern, "fn_0: (f (g ?#0) (g ?#1))");
     assert_eq!(final_rewritten.expect("one abstraction → rewritten corpus"), FIRST_REWRITTEN);
@@ -64,7 +64,7 @@ fn one_abstraction_rewritten_corpus() {
 #[test]
 fn two_abstractions() {
     let (eg, root) = load::<OpChildrenLanguage>();
-    let (library, original_size, final_cost, _final_rewritten) = multiple_step_search::<OpChildren, Op>(SharedData::new(eg, root), &args(500, 2));
+    let (library, original_size, final_cost, _final_rewritten, _heap) = multiple_step_search::<OpChildren, Op>(SharedData::new(eg, root), &args(500, 2));
 
     println!("Abstractions found:");
     for abs in &library {
