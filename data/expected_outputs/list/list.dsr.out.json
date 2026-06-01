@@ -1,9 +1,20 @@
 {
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0.json": {
-    "initial_cost": 167,
+    "compression_ratio": 1.0986842105263157,
     "cost_after_rewrites": 167,
     "final_cost": 152,
-    "compression_ratio": 1.0986842105263157,
+    "initial_cost": 167,
+    "library": [
+      {
+        "approx_cost": 146,
+        "arity": 1,
+        "lambda": "(lam (lam (map (lam (index $0 (cons (+ 1 $2) (range $0)))) $0)))",
+        "num_matches": 2,
+        "pattern": "fn_0: (lam (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))) $0))",
+        "pattern_size": 21,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (fold $0 (cons (index 1 (cdr $0)) empty) (lam (lam (cons $1 $0)))))",
       "(lam (map (lam (empty? (range (- 0 $0)))) $0))",
@@ -23,24 +34,42 @@
       "(lam (car $0))",
       "(lam (fold (cdr (cdr (cdr (cdr $0)))) $0 (lam (lam (cons $1 (cons (car $0) empty))))))",
       "(lam (fold $0 $0 (lam (lam (map (lam 0) (fold (range $1) $0 (lam (lam (cdr $2)))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (lam (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))) $0))",
-        "lambda": "(lam (lam (map (lam (index $0 (cons (+ 1 $2) (range $0)))) $0)))",
-        "arity": 1,
-        "pattern_size": 21,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 146
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench001_it1.json": {
-    "initial_cost": 217,
+    "compression_ratio": 1.0483091787439611,
     "cost_after_rewrites": 217,
     "final_cost": 207,
-    "compression_ratio": 1.0483091787439613,
+    "initial_cost": 217,
+    "library": [
+      {
+        "approx_cost": 189,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 9,
+        "pattern": "fn_1: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 8
+      },
+      {
+        "approx_cost": 203,
+        "arity": 0,
+        "lambda": "(+ 1)",
+        "num_matches": 1,
+        "pattern": "fn_2: (+ 1)",
+        "pattern_size": 3,
+        "usage_matches": 3
+      },
+      {
+        "approx_cost": 178,
+        "arity": 1,
+        "lambda": "(lam (cdr (cdr $0)))",
+        "num_matches": 5,
+        "pattern": "fn_3: (cdr (cdr ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 6
+      }
+    ],
     "original_programs": [
       "(lam (fold $0 (cons (index 1 (cdr $0)) empty) (lam (lam (cons $1 $0)))))",
       "(lam (map (lam (gt? (+ $0 1) 0)) $0))",
@@ -72,42 +101,42 @@
       "(lam (fold (fn_3 (fn_3 $0)) $0 (lam (lam (cons $1 (cons (car $0) empty))))))",
       "(fn_1 cdr)",
       "(lam (fold $0 $0 (lam (lam (map (lam 0) (fold (range $1) $0 (lam (lam (cdr $2)))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_1: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 9,
-        "usage_matches": 8,
-        "approx_cost": 189
-      },
-      {
-        "pattern": "fn_2: (+ 1)",
-        "lambda": "(+ 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 3,
-        "approx_cost": 203
-      },
-      {
-        "pattern": "fn_3: (cdr (cdr ?#0))",
-        "lambda": "(lam (cdr (cdr $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 5,
-        "usage_matches": 6,
-        "approx_cost": 178
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench002_it2.json": {
-    "initial_cost": 327,
+    "compression_ratio": 1.1275862068965516,
     "cost_after_rewrites": 327,
     "final_cost": 290,
-    "compression_ratio": 1.1275862068965516,
+    "initial_cost": 327,
+    "library": [
+      {
+        "approx_cost": 302,
+        "arity": 0,
+        "lambda": "(+ 1 1)",
+        "num_matches": 1,
+        "pattern": "fn_2: (+ 1 1)",
+        "pattern_size": 5,
+        "usage_matches": 6
+      },
+      {
+        "approx_cost": 281,
+        "arity": 2,
+        "lambda": "(lam (lam (lam (fold $0 (cons ($2 ($1 $0)) empty) (lam (lam (cons $1 $0)))))))",
+        "num_matches": 2,
+        "pattern": "fn_3: (lam (fold $0 (cons (?#0 (?#1 $0)) empty) (lam (lam (cons $1 $0)))))",
+        "pattern_size": 22,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 253,
+        "arity": 2,
+        "lambda": "(lam (lam (map (lam (index $0 $2)) (range (+ 1 $0)))))",
+        "num_matches": 2,
+        "pattern": "fn_4: (map (lam (index $0 ?#0)) (range (+ 1 ?#1)))",
+        "pattern_size": 16,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (fold $0 (cons (index 1 (cdr $0)) empty) (lam (lam (cons $1 $0)))))",
       "(lam (fold $0 (cons (car (fn_1 $0)) empty) (lam (lam (cons $1 $0)))))",
@@ -153,42 +182,42 @@
       "(lam (fold (cdr (fn_1 $0)) $0 (lam (lam (cons $1 (cons (car $0) empty))))))",
       "(lam (cdr $0))",
       "(lam (fold $0 $0 (lam (lam (map (lam 0) (fold (range $1) $0 (lam (lam (cdr $2)))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_2: (+ 1 1)",
-        "lambda": "(+ 1 1)",
-        "arity": 0,
-        "pattern_size": 5,
-        "num_matches": 1,
-        "usage_matches": 6,
-        "approx_cost": 302
-      },
-      {
-        "pattern": "fn_3: (lam (fold $0 (cons (?#0 (?#1 $0)) empty) (lam (lam (cons $1 $0)))))",
-        "lambda": "(lam (lam (lam (fold $0 (cons ($2 ($1 $0)) empty) (lam (lam (cons $1 $0)))))))",
-        "arity": 2,
-        "pattern_size": 22,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 281
-      },
-      {
-        "pattern": "fn_4: (map (lam (index $0 ?#0)) (range (+ 1 ?#1)))",
-        "lambda": "(lam (lam (map (lam (index $0 $2)) (range (+ 1 $0)))))",
-        "arity": 2,
-        "pattern_size": 16,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 253
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench003_it4.json": {
-    "initial_cost": 430,
+    "compression_ratio": 1.066997518610422,
     "cost_after_rewrites": 430,
     "final_cost": 403,
-    "compression_ratio": 1.066997518610422,
+    "initial_cost": 430,
+    "library": [
+      {
+        "approx_cost": 374,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 20,
+        "pattern": "fn_5: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 15
+      },
+      {
+        "approx_cost": 400,
+        "arity": 1,
+        "lambda": "(lam (is-prime (- $0 (if (is-square $0) 1 $0))))",
+        "num_matches": 1,
+        "pattern": "fn_6: (is-prime (- ?#0 (if (is-square ?#0) 1 ?#0)))",
+        "pattern_size": 15,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 375,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 (cdr (cdr $0)))))",
+        "num_matches": 3,
+        "pattern": "fn_7: (lam (?#0 (cdr (cdr $0))))",
+        "pattern_size": 8,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (fn_2 $0 $0))",
       "(lam (fn_2 (cdr $0) $0))",
@@ -262,42 +291,42 @@
       "(fn_5 (fn_4 (lam 0)))",
       "(lam (fold $0 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2))))))))",
       "(lam (fold $0 $0 (lam (lam (map (lam 0) (fold (range $1) $0 (lam (lam (cdr $2)))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_5: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 20,
-        "usage_matches": 15,
-        "approx_cost": 374
-      },
-      {
-        "pattern": "fn_6: (is-prime (- ?#0 (if (is-square ?#0) 1 ?#0)))",
-        "lambda": "(lam (is-prime (- $0 (if (is-square $0) 1 $0))))",
-        "arity": 1,
-        "pattern_size": 15,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 400
-      },
-      {
-        "pattern": "fn_7: (lam (?#0 (cdr (cdr $0))))",
-        "lambda": "(lam (lam ($1 (cdr (cdr $0)))))",
-        "arity": 1,
-        "pattern_size": 8,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 375
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench004_it5.json": {
-    "initial_cost": 499,
+    "compression_ratio": 1.0662393162393162,
     "cost_after_rewrites": 499,
     "final_cost": 468,
-    "compression_ratio": 1.0662393162393162,
+    "initial_cost": 499,
+    "library": [
+      {
+        "approx_cost": 423,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 25,
+        "pattern": "fn_7: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 20
+      },
+      {
+        "approx_cost": 469,
+        "arity": 0,
+        "lambda": "(lam (fn_0 1 (fn_0 1 $0)))",
+        "num_matches": 1,
+        "pattern": "fn_8: (lam (fn_0 1 (fn_0 1 $0)))",
+        "pattern_size": 10,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 436,
+        "arity": 1,
+        "lambda": "(lam (fn_7 (map $0)))",
+        "num_matches": 6,
+        "pattern": "fn_9: (fn_7 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 6
+      }
+    ],
     "original_programs": [
       "(lam (fn_2 $0 $0))",
       "(lam (fn_2 (cdr $0) $0))",
@@ -389,42 +418,42 @@
       "(fn_7 (fn_4 (lam 0)))",
       "(lam (fold $0 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2))))))))",
       "(lam (fold $0 $0 (lam (lam (map (lam 0) (fold (range $1) $0 (lam (lam (cdr $2)))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_7: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 25,
-        "usage_matches": 20,
-        "approx_cost": 423
-      },
-      {
-        "pattern": "fn_8: (lam (fn_0 1 (fn_0 1 $0)))",
-        "lambda": "(lam (fn_0 1 (fn_0 1 $0)))",
-        "arity": 0,
-        "pattern_size": 10,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 469
-      },
-      {
-        "pattern": "fn_9: (fn_7 (map ?#0))",
-        "lambda": "(lam (fn_7 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 6,
-        "usage_matches": 6,
-        "approx_cost": 436
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench005_it7.json": {
-    "initial_cost": 771,
+    "compression_ratio": 1.0753138075313808,
     "cost_after_rewrites": 771,
     "final_cost": 717,
-    "compression_ratio": 1.0753138075313808,
+    "initial_cost": 771,
+    "library": [
+      {
+        "approx_cost": 711,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 12,
+        "pattern": "fn_8: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 11
+      },
+      {
+        "approx_cost": 670,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 25,
+        "pattern": "fn_9: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 18
+      },
+      {
+        "approx_cost": 672,
+        "arity": 2,
+        "lambda": "(lam (lam (lam (fold $0 $2 $1))))",
+        "num_matches": 9,
+        "pattern": "fn_10: (lam (fold $0 ?#0 ?#1))",
+        "pattern_size": 8,
+        "usage_matches": 7
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 (car (fn_3 (range $0))))) $0))",
       "(lam (fn_2 $0 $0))",
@@ -552,42 +581,42 @@
       "(fn_10 empty (lam (lam (if (is-square $1) (cons $1 $0) $0))))",
       "(fn_10 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2)))))))",
       "(lam (fold $0 $0 (lam (lam (map (lam 0) (fold (range $1) $0 (lam (lam (cdr $2)))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_8: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 12,
-        "usage_matches": 11,
-        "approx_cost": 711
-      },
-      {
-        "pattern": "fn_9: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 25,
-        "usage_matches": 18,
-        "approx_cost": 670
-      },
-      {
-        "pattern": "fn_10: (lam (fold $0 ?#0 ?#1))",
-        "lambda": "(lam (lam (lam (fold $0 $2 $1))))",
-        "arity": 2,
-        "pattern_size": 8,
-        "num_matches": 9,
-        "usage_matches": 7,
-        "approx_cost": 672
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench006_it8.json": {
-    "initial_cost": 897,
+    "compression_ratio": 1.0678571428571428,
     "cost_after_rewrites": 897,
     "final_cost": 840,
-    "compression_ratio": 1.0678571428571428,
+    "initial_cost": 897,
+    "library": [
+      {
+        "approx_cost": 769,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 41,
+        "pattern": "fn_9: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 33
+      },
+      {
+        "approx_cost": 819,
+        "arity": 1,
+        "lambda": "(lam (fn_9 (map $0)))",
+        "num_matches": 10,
+        "pattern": "fn_10: (fn_9 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 10
+      },
+      {
+        "approx_cost": 796,
+        "arity": 2,
+        "lambda": "(lam (lam (lam (fold $0 $2 $1))))",
+        "num_matches": 9,
+        "pattern": "fn_11: (lam (fold $0 ?#0 ?#1))",
+        "pattern_size": 8,
+        "usage_matches": 7
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ 1 (+ $0 (+ 1 1)))) $0))",
@@ -733,42 +762,42 @@
       "(fn_11 empty (lam (lam (if (is-square $1) (cons $1 $0) $0))))",
       "(fn_11 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2)))))))",
       "(lam (fold $0 $0 (lam (lam (map (lam 0) (fold (range $1) $0 (lam (lam (cdr $2)))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_9: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 41,
-        "usage_matches": 33,
-        "approx_cost": 769
-      },
-      {
-        "pattern": "fn_10: (fn_9 (map ?#0))",
-        "lambda": "(lam (fn_9 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 10,
-        "usage_matches": 10,
-        "approx_cost": 819
-      },
-      {
-        "pattern": "fn_11: (lam (fold $0 ?#0 ?#1))",
-        "lambda": "(lam (lam (lam (fold $0 $2 $1))))",
-        "arity": 2,
-        "pattern_size": 8,
-        "num_matches": 9,
-        "usage_matches": 7,
-        "approx_cost": 796
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench007_it10.json": {
-    "initial_cost": 1102,
+    "compression_ratio": 1.0900098911968348,
     "cost_after_rewrites": 1102,
     "final_cost": 1011,
-    "compression_ratio": 1.0900098911968348,
+    "initial_cost": 1102,
+    "library": [
+      {
+        "approx_cost": 930,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 54,
+        "pattern": "fn_11: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 44
+      },
+      {
+        "approx_cost": 1014,
+        "arity": 1,
+        "lambda": "(lam (lam (fold $0 empty (lam (lam (if ($3 $1) (cons $1 $0) $0))))))",
+        "num_matches": 3,
+        "pattern": "fn_12: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))",
+        "pattern_size": 22,
+        "usage_matches": 3
+      },
+      {
+        "approx_cost": 940,
+        "arity": 1,
+        "lambda": "(lam (fn_11 (map $0)))",
+        "num_matches": 14,
+        "pattern": "fn_13: (fn_11 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 15
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ 1 (+ $0 (+ 1 1)))) $0))",
@@ -950,42 +979,42 @@
       "(lam (fold $0 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2))))))))",
       "(lam (fold $0 $0 (lam (lam (map (lam 0) (fold (range $1) $0 (lam (lam (cdr $2)))))))))",
       "(lam (fold (fn_3 $0) $0 (lam (lam (map (lam 1) (fold (range $1) $0 (lam (lam (cdr $2)))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_11: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 54,
-        "usage_matches": 44,
-        "approx_cost": 930
-      },
-      {
-        "pattern": "fn_12: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))",
-        "lambda": "(lam (lam (fold $0 empty (lam (lam (if ($3 $1) (cons $1 $0) $0))))))",
-        "arity": 1,
-        "pattern_size": 22,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 1014
-      },
-      {
-        "pattern": "fn_13: (fn_11 (map ?#0))",
-        "lambda": "(lam (fn_11 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 14,
-        "usage_matches": 15,
-        "approx_cost": 940
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench008_it11.json": {
-    "initial_cost": 1003,
+    "compression_ratio": 1.0843243243243244,
     "cost_after_rewrites": 1003,
     "final_cost": 925,
-    "compression_ratio": 1.0843243243243244,
+    "initial_cost": 1003,
+    "library": [
+      {
+        "approx_cost": 819,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 55,
+        "pattern": "fn_13: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 47
+      },
+      {
+        "approx_cost": 886,
+        "arity": 1,
+        "lambda": "(lam (fn_13 (map $0)))",
+        "num_matches": 14,
+        "pattern": "fn_14: (fn_13 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 15
+      },
+      {
+        "approx_cost": 886,
+        "arity": 1,
+        "lambda": "(lam (fn_14 (lam (+ $0 ($1 $0)))))",
+        "num_matches": 5,
+        "pattern": "fn_15: (fn_14 (lam (+ $0 (?#0 $0))))",
+        "pattern_size": 10,
+        "usage_matches": 5
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (fn_3 (map (lam (+ fn_9 $0)) $0)))",
@@ -1167,42 +1196,42 @@
       "(lam (fold $0 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2))))))))",
       "(lam (fn_12 0 $0 $0))",
       "(lam (fn_12 1 (fn_3 $0) $0))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_13: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 55,
-        "usage_matches": 47,
-        "approx_cost": 819
-      },
-      {
-        "pattern": "fn_14: (fn_13 (map ?#0))",
-        "lambda": "(lam (fn_13 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 14,
-        "usage_matches": 15,
-        "approx_cost": 886
-      },
-      {
-        "pattern": "fn_15: (fn_14 (lam (+ $0 (?#0 $0))))",
-        "lambda": "(lam (fn_14 (lam (+ $0 ($1 $0)))))",
-        "arity": 1,
-        "pattern_size": 10,
-        "num_matches": 5,
-        "usage_matches": 5,
-        "approx_cost": 886
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench009_it12.json": {
-    "initial_cost": 1053,
+    "compression_ratio": 1.0889348500517062,
     "cost_after_rewrites": 1053,
     "final_cost": 967,
-    "compression_ratio": 1.0889348500517062,
+    "initial_cost": 1053,
+    "library": [
+      {
+        "approx_cost": 865,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 55,
+        "pattern": "fn_14: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 48
+      },
+      {
+        "approx_cost": 935,
+        "arity": 1,
+        "lambda": "(lam (fn_14 (map $0)))",
+        "num_matches": 14,
+        "pattern": "fn_15: (fn_14 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 15
+      },
+      {
+        "approx_cost": 946,
+        "arity": 1,
+        "lambda": "(lam (lam (fold (cdr (fn_1 ($1 $0))) $0 (lam (lam (fn_2 (map (lam (car $1)) $0) (cdr $0)))))))",
+        "num_matches": 2,
+        "pattern": "fn_16: (lam (fold (cdr (fn_1 (?#0 $0))) $0 (lam (lam (fn_2 (map (lam (car $1)) $0) (cdr $0))))))",
+        "pattern_size": 29,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (fn_3 (map (lam (+ fn_9 $0)) $0)))",
@@ -1390,42 +1419,42 @@
       "(lam (fn_12 0 $0 $0))",
       "(lam (fn_12 1 (fn_3 $0) $0))",
       "(lam (fn_11 $0 (lam (gt? $0 1))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_14: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 55,
-        "usage_matches": 48,
-        "approx_cost": 865
-      },
-      {
-        "pattern": "fn_15: (fn_14 (map ?#0))",
-        "lambda": "(lam (fn_14 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 14,
-        "usage_matches": 15,
-        "approx_cost": 935
-      },
-      {
-        "pattern": "fn_16: (lam (fold (cdr (fn_1 (?#0 $0))) $0 (lam (lam (fn_2 (map (lam (car $1)) $0) (cdr $0))))))",
-        "lambda": "(lam (lam (fold (cdr (fn_1 ($1 $0))) $0 (lam (lam (fn_2 (map (lam (car $1)) $0) (cdr $0)))))))",
-        "arity": 1,
-        "pattern_size": 29,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 946
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.26.41__bench010_it15.json": {
-    "initial_cost": 1066,
+    "compression_ratio": 1.0944558521560577,
     "cost_after_rewrites": 1066,
     "final_cost": 974,
-    "compression_ratio": 1.0944558521560575,
+    "initial_cost": 1066,
+    "library": [
+      {
+        "approx_cost": 854,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 61,
+        "pattern": "fn_17: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 54
+      },
+      {
+        "approx_cost": 947,
+        "arity": 1,
+        "lambda": "(lam (fn_17 (map $0)))",
+        "num_matches": 13,
+        "pattern": "fn_18: (fn_17 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 929,
+        "arity": 1,
+        "lambda": "(lam (+ $0 1))",
+        "num_matches": 4,
+        "pattern": "fn_19: (+ ?#0 1)",
+        "pattern_size": 5,
+        "usage_matches": 12
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (fn_3 (map (lam (+ fn_9 $0)) $0)))",
@@ -1627,42 +1656,42 @@
       "(lam (fn_11 $0 (fn_17 (eq? 1))))",
       "(lam (fn_11 $0 (lam (gt? $0 1))))",
       "(lam (fn_11 $0 (lam (gt? fn_9 (fn_19 $0)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_17: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 61,
-        "usage_matches": 54,
-        "approx_cost": 854
-      },
-      {
-        "pattern": "fn_18: (fn_17 (map ?#0))",
-        "lambda": "(lam (fn_17 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 13,
-        "usage_matches": 14,
-        "approx_cost": 947
-      },
-      {
-        "pattern": "fn_19: (+ ?#0 1)",
-        "lambda": "(lam (+ $0 1))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 4,
-        "usage_matches": 12,
-        "approx_cost": 929
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0.json": {
-    "initial_cost": 172,
+    "compression_ratio": 1.3543307086614174,
     "cost_after_rewrites": 172,
     "final_cost": 127,
-    "compression_ratio": 1.3543307086614174,
+    "initial_cost": 172,
+    "library": [
+      {
+        "approx_cost": 142,
+        "arity": 0,
+        "lambda": "(+ 1 1)",
+        "num_matches": 1,
+        "pattern": "fn_0: (+ 1 1)",
+        "pattern_size": 5,
+        "usage_matches": 7
+      },
+      {
+        "approx_cost": 105,
+        "arity": 1,
+        "lambda": "(lam (lam (map (lam (+ $0 ($2 $0))) $0)))",
+        "num_matches": 4,
+        "pattern": "fn_1: (lam (map (lam (+ $0 (?#0 $0))) $0))",
+        "pattern_size": 13,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 106,
+        "arity": 0,
+        "lambda": "(+ 1 fn_0)",
+        "num_matches": 1,
+        "pattern": "fn_2: (+ 1 fn_0)",
+        "pattern_size": 5,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ $0 (+ 1 (+ 1 1)))) $0))",
@@ -1684,42 +1713,42 @@
       "(fn_1 (lam $0))",
       "(lam (fold $0 empty (lam (lam (cons (index (length $0) $2) $0)))))",
       "(lam (map (lam (index $0 $1)) (range (* fn_0 fn_0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (+ 1 1)",
-        "lambda": "(+ 1 1)",
-        "arity": 0,
-        "pattern_size": 5,
-        "num_matches": 1,
-        "usage_matches": 7,
-        "approx_cost": 142
-      },
-      {
-        "pattern": "fn_1: (lam (map (lam (+ $0 (?#0 $0))) $0))",
-        "lambda": "(lam (lam (map (lam (+ $0 ($2 $0))) $0)))",
-        "arity": 1,
-        "pattern_size": 13,
-        "num_matches": 4,
-        "usage_matches": 4,
-        "approx_cost": 105
-      },
-      {
-        "pattern": "fn_2: (+ 1 fn_0)",
-        "lambda": "(+ 1 fn_0)",
-        "arity": 0,
-        "pattern_size": 5,
-        "num_matches": 1,
-        "usage_matches": 3,
-        "approx_cost": 106
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench001_it1.json": {
-    "initial_cost": 216,
+    "compression_ratio": 1.125,
     "cost_after_rewrites": 216,
     "final_cost": 192,
-    "compression_ratio": 1.125,
+    "initial_cost": 216,
+    "library": [
+      {
+        "approx_cost": 168,
+        "arity": 2,
+        "lambda": "(lam (lam (map (lam ($2 $0 $1)))))",
+        "num_matches": 6,
+        "pattern": "fn_20: (map (lam (?#0 $0 ?#1)))",
+        "pattern_size": 8,
+        "usage_matches": 7
+      },
+      {
+        "approx_cost": 155,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 13,
+        "pattern": "fn_21: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 11
+      },
+      {
+        "approx_cost": 174,
+        "arity": 1,
+        "lambda": "(lam (lam (cdr (fn_20 index $0 $1))))",
+        "num_matches": 2,
+        "pattern": "fn_22: (lam (cdr (fn_20 index $0 ?#0)))",
+        "pattern_size": 10,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -1757,42 +1786,42 @@
       "(fn_22 (range fn_19))",
       "(fn_22 (cdr (range (+ fn_19 fn_18))))",
       "(lam (fn_20 index $0 (range fn_19)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_20: (map (lam (?#0 $0 ?#1)))",
-        "lambda": "(lam (lam (map (lam ($2 $0 $1)))))",
-        "arity": 2,
-        "pattern_size": 8,
-        "num_matches": 6,
-        "usage_matches": 7,
-        "approx_cost": 168
-      },
-      {
-        "pattern": "fn_21: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 13,
-        "usage_matches": 11,
-        "approx_cost": 155
-      },
-      {
-        "pattern": "fn_22: (lam (cdr (fn_20 index $0 ?#0)))",
-        "lambda": "(lam (lam (cdr (fn_20 index $0 $1))))",
-        "arity": 1,
-        "pattern_size": 10,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 174
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench002_it2.json": {
-    "initial_cost": 287,
+    "compression_ratio": 1.157258064516129,
     "cost_after_rewrites": 287,
     "final_cost": 248,
-    "compression_ratio": 1.157258064516129,
+    "initial_cost": 287,
+    "library": [
+      {
+        "approx_cost": 239,
+        "arity": 1,
+        "lambda": "(lam (lam (fold $0 ($1 $0) (lam (lam (cons $1 $0))))))",
+        "num_matches": 4,
+        "pattern": "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))",
+        "pattern_size": 16,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 203,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 14,
+        "pattern": "fn_24: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 12
+      },
+      {
+        "approx_cost": 225,
+        "arity": 0,
+        "lambda": "(+ fn_19 1)",
+        "num_matches": 1,
+        "pattern": "fn_25: (+ fn_19 1)",
+        "pattern_size": 5,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -1844,42 +1873,42 @@
       "(lam (cdr (fn_20 $0)))",
       "(lam (map (lam (index $0 (cdr (cdr $1)))) (range fn_25)))",
       "(fn_24 fn_20)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))",
-        "lambda": "(lam (lam (fold $0 ($1 $0) (lam (lam (cons $1 $0))))))",
-        "arity": 1,
-        "pattern_size": 16,
-        "num_matches": 4,
-        "usage_matches": 4,
-        "approx_cost": 239
-      },
-      {
-        "pattern": "fn_24: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 14,
-        "usage_matches": 12,
-        "approx_cost": 203
-      },
-      {
-        "pattern": "fn_25: (+ fn_19 1)",
-        "lambda": "(+ fn_19 1)",
-        "arity": 0,
-        "pattern_size": 5,
-        "num_matches": 1,
-        "usage_matches": 3,
-        "approx_cost": 225
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench003_it3.json": {
-    "initial_cost": 323,
+    "compression_ratio": 1.0730897009966778,
     "cost_after_rewrites": 323,
     "final_cost": 301,
-    "compression_ratio": 1.0730897009966778,
+    "initial_cost": 323,
+    "library": [
+      {
+        "approx_cost": 275,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 17,
+        "pattern": "fn_26: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 288,
+        "arity": 2,
+        "lambda": "(lam (lam (is-square ($1 (lam (lam ($2 $0 $1)))))))",
+        "num_matches": 3,
+        "pattern": "fn_27: (is-square (?#0 (lam (lam (?#1 $0 $1)))))",
+        "pattern_size": 11,
+        "usage_matches": 3
+      },
+      {
+        "approx_cost": 274,
+        "arity": 1,
+        "lambda": "(lam (lam (fn_25 $0 $1)))",
+        "num_matches": 4,
+        "pattern": "fn_28: (lam (fn_25 $0 ?#0))",
+        "pattern_size": 6,
+        "usage_matches": 4
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -1947,42 +1976,42 @@
       "(lam (map (lam (index $0 (cdr (cdr $1)))) (range fn_24)))",
       "(fn_26 fn_20)",
       "(lam (fold $0 empty (lam (lam (if (is-prime $1) (cons $1 $0) $0)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_26: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 17,
-        "usage_matches": 13,
-        "approx_cost": 275
-      },
-      {
-        "pattern": "fn_27: (is-square (?#0 (lam (lam (?#1 $0 $1)))))",
-        "lambda": "(lam (lam (is-square ($1 (lam (lam ($2 $0 $1)))))))",
-        "arity": 2,
-        "pattern_size": 11,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 288
-      },
-      {
-        "pattern": "fn_28: (lam (fn_25 $0 ?#0))",
-        "lambda": "(lam (lam (fn_25 $0 $1)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 4,
-        "usage_matches": 4,
-        "approx_cost": 274
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench004_it4.json": {
-    "initial_cost": 425,
+    "compression_ratio": 1.127320954907162,
     "cost_after_rewrites": 425,
     "final_cost": 377,
-    "compression_ratio": 1.1273209549071619,
+    "initial_cost": 425,
+    "library": [
+      {
+        "approx_cost": 381,
+        "arity": 1,
+        "lambda": "(lam (lam (fold $0 empty (lam (lam (if ($3 $1) (cons $1 $0) $0))))))",
+        "num_matches": 3,
+        "pattern": "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))",
+        "pattern_size": 22,
+        "usage_matches": 3
+      },
+      {
+        "approx_cost": 305,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 23,
+        "pattern": "fn_28: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 19
+      },
+      {
+        "approx_cost": 336,
+        "arity": 2,
+        "lambda": "(lam (lam (is-square ($1 (lam (lam ($2 $0 $1)))))))",
+        "num_matches": 3,
+        "pattern": "fn_29: (is-square (?#0 (lam (lam (?#1 $0 $1)))))",
+        "pattern_size": 11,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -2066,42 +2095,42 @@
       "(fn_28 fn_20)",
       "(fn_27 (fn_28 is-square))",
       "(fn_27 (fn_28 is-prime))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))",
-        "lambda": "(lam (lam (fold $0 empty (lam (lam (if ($3 $1) (cons $1 $0) $0))))))",
-        "arity": 1,
-        "pattern_size": 22,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 381
-      },
-      {
-        "pattern": "fn_28: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 23,
-        "usage_matches": 19,
-        "approx_cost": 305
-      },
-      {
-        "pattern": "fn_29: (is-square (?#0 (lam (lam (?#1 $0 $1)))))",
-        "lambda": "(lam (lam (is-square ($1 (lam (lam ($2 $0 $1)))))))",
-        "arity": 2,
-        "pattern_size": 11,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 336
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench005_it5.json": {
-    "initial_cost": 482,
+    "compression_ratio": 1.1004566210045663,
     "cost_after_rewrites": 482,
     "final_cost": 438,
-    "compression_ratio": 1.1004566210045663,
+    "initial_cost": 482,
+    "library": [
+      {
+        "approx_cost": 386,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 29,
+        "pattern": "fn_27: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 25
+      },
+      {
+        "approx_cost": 440,
+        "arity": 0,
+        "lambda": "(lam (fn_11 $0 (lam (is-prime (mod (+ $0 $0) fn_19)))))",
+        "num_matches": 1,
+        "pattern": "fn_28: (lam (fn_11 $0 (lam (is-prime (mod (+ $0 $0) fn_19)))))",
+        "pattern_size": 17,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 347,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 17,
+        "pattern": "fn_29: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 14
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -2203,42 +2232,42 @@
       "(fn_27 fn_20)",
       "(fn_29 fn_11 (fn_27 is-square))",
       "(fn_29 fn_11 (fn_27 is-prime))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_27: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 29,
-        "usage_matches": 25,
-        "approx_cost": 386
-      },
-      {
-        "pattern": "fn_28: (lam (fn_11 $0 (lam (is-prime (mod (+ $0 $0) fn_19)))))",
-        "lambda": "(lam (fn_11 $0 (lam (is-prime (mod (+ $0 $0) fn_19)))))",
-        "arity": 0,
-        "pattern_size": 17,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 440
-      },
-      {
-        "pattern": "fn_29: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 17,
-        "usage_matches": 14,
-        "approx_cost": 347
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench006_it6.json": {
-    "initial_cost": 550,
+    "compression_ratio": 1.0934393638170974,
     "cost_after_rewrites": 550,
     "final_cost": 503,
-    "compression_ratio": 1.0934393638170974,
+    "initial_cost": 550,
+    "library": [
+      {
+        "approx_cost": 422,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 35,
+        "pattern": "fn_28: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 33
+      },
+      {
+        "approx_cost": 496,
+        "arity": 1,
+        "lambda": "(lam (fn_28 (map (fn_28 $0))))",
+        "num_matches": 4,
+        "pattern": "fn_29: (fn_28 (map (fn_28 ?#0)))",
+        "pattern_size": 7,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 417,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 18,
+        "pattern": "fn_30: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 15
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -2360,42 +2389,42 @@
       "(fn_28 fn_20)",
       "(fn_30 fn_11 (fn_28 is-square))",
       "(fn_30 fn_11 (fn_28 is-prime))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_28: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 35,
-        "usage_matches": 33,
-        "approx_cost": 422
-      },
-      {
-        "pattern": "fn_29: (fn_28 (map (fn_28 ?#0)))",
-        "lambda": "(lam (fn_28 (map (fn_28 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 4,
-        "usage_matches": 4,
-        "approx_cost": 496
-      },
-      {
-        "pattern": "fn_30: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 18,
-        "usage_matches": 15,
-        "approx_cost": 417
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench007_it7.json": {
-    "initial_cost": 652,
+    "compression_ratio": 1.108843537414966,
     "cost_after_rewrites": 652,
     "final_cost": 588,
-    "compression_ratio": 1.1088435374149659,
+    "initial_cost": 652,
+    "library": [
+      {
+        "approx_cost": 504,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 39,
+        "pattern": "fn_29: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 38
+      },
+      {
+        "approx_cost": 579,
+        "arity": 1,
+        "lambda": "(lam (fn_29 (map (fn_29 $0))))",
+        "num_matches": 5,
+        "pattern": "fn_30: (fn_29 (map (fn_29 ?#0)))",
+        "pattern_size": 7,
+        "usage_matches": 6
+      },
+      {
+        "approx_cost": 482,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 21,
+        "pattern": "fn_31: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 19
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -2537,42 +2566,42 @@
       "(fn_31 fn_11 (fn_29 is-square))",
       "(fn_31 fn_11 (fn_29 is-prime))",
       "(fn_31 fn_11 (fn_31 gt? 0))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_29: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 39,
-        "usage_matches": 38,
-        "approx_cost": 504
-      },
-      {
-        "pattern": "fn_30: (fn_29 (map (fn_29 ?#0)))",
-        "lambda": "(lam (fn_29 (map (fn_29 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 6,
-        "approx_cost": 579
-      },
-      {
-        "pattern": "fn_31: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 21,
-        "usage_matches": 19,
-        "approx_cost": 482
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench008_it8.json": {
-    "initial_cost": 752,
+    "compression_ratio": 1.0994152046783623,
     "cost_after_rewrites": 752,
     "final_cost": 684,
-    "compression_ratio": 1.0994152046783625,
+    "initial_cost": 752,
+    "library": [
+      {
+        "approx_cost": 592,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 44,
+        "pattern": "fn_30: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 41
+      },
+      {
+        "approx_cost": 676,
+        "arity": 1,
+        "lambda": "(lam (fn_30 (map (fn_30 $0))))",
+        "num_matches": 5,
+        "pattern": "fn_31: (fn_30 (map (fn_30 ?#0)))",
+        "pattern_size": 7,
+        "usage_matches": 6
+      },
+      {
+        "approx_cost": 573,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 23,
+        "pattern": "fn_32: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 20
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -2732,42 +2761,42 @@
       "(fn_32 fn_11 (fn_30 is-prime))",
       "(fn_32 fn_11 (fn_32 gt? 0))",
       "(fn_32 fn_11 (fn_30 (gt? 1)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_30: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 44,
-        "usage_matches": 41,
-        "approx_cost": 592
-      },
-      {
-        "pattern": "fn_31: (fn_30 (map (fn_30 ?#0)))",
-        "lambda": "(lam (fn_30 (map (fn_30 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 6,
-        "approx_cost": 676
-      },
-      {
-        "pattern": "fn_32: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 23,
-        "usage_matches": 20,
-        "approx_cost": 573
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench009_it11.json": {
-    "initial_cost": 901,
+    "compression_ratio": 1.098780487804878,
     "cost_after_rewrites": 901,
     "final_cost": 820,
-    "compression_ratio": 1.0987804878048781,
+    "initial_cost": 901,
+    "library": [
+      {
+        "approx_cost": 721,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 48,
+        "pattern": "fn_30: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 46
+      },
+      {
+        "approx_cost": 693,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 32,
+        "pattern": "fn_31: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 28
+      },
+      {
+        "approx_cost": 792,
+        "arity": 1,
+        "lambda": "(lam (fn_30 (map (fn_30 $0))))",
+        "num_matches": 5,
+        "pattern": "fn_32: (fn_30 (map (fn_30 ?#0)))",
+        "pattern_size": 7,
+        "usage_matches": 6
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -2961,42 +2990,42 @@
       "(fn_31 fn_11 (fn_31 gt? 0))",
       "(fn_31 fn_11 (fn_30 (gt? 1)))",
       "(fn_31 fn_11 (fn_31 gt? fn_18))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_30: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 48,
-        "usage_matches": 46,
-        "approx_cost": 721
-      },
-      {
-        "pattern": "fn_31: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 32,
-        "usage_matches": 28,
-        "approx_cost": 693
-      },
-      {
-        "pattern": "fn_32: (fn_30 (map (fn_30 ?#0)))",
-        "lambda": "(lam (fn_30 (map (fn_30 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 6,
-        "approx_cost": 792
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench010_it16.json": {
-    "initial_cost": 838,
+    "compression_ratio": 1.1055408970976253,
     "cost_after_rewrites": 838,
     "final_cost": 758,
-    "compression_ratio": 1.1055408970976253,
+    "initial_cost": 838,
+    "library": [
+      {
+        "approx_cost": 650,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 47,
+        "pattern": "fn_33: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 48
+      },
+      {
+        "approx_cost": 646,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 33,
+        "pattern": "fn_34: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 25
+      },
+      {
+        "approx_cost": 730,
+        "arity": 1,
+        "lambda": "(lam (fn_33 (map (fn_33 $0))))",
+        "num_matches": 5,
+        "pattern": "fn_35: (fn_33 (map (fn_33 ?#0)))",
+        "pattern_size": 7,
+        "usage_matches": 6
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -3194,42 +3223,42 @@
       "(fn_34 fn_11 (fn_33 (gt? 1)))",
       "(fn_34 fn_11 (fn_33 (eq? 1)))",
       "(fn_34 fn_11 (fn_34 gt? fn_18))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_33: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 47,
-        "usage_matches": 48,
-        "approx_cost": 650
-      },
-      {
-        "pattern": "fn_34: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 33,
-        "usage_matches": 25,
-        "approx_cost": 646
-      },
-      {
-        "pattern": "fn_35: (fn_33 (map (fn_33 ?#0)))",
-        "lambda": "(lam (fn_33 (map (fn_33 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 6,
-        "approx_cost": 730
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.31.39__bench011_it18.json": {
-    "initial_cost": 904,
+    "compression_ratio": 1.1119311193111932,
     "cost_after_rewrites": 904,
     "final_cost": 813,
-    "compression_ratio": 1.1119311193111932,
+    "initial_cost": 904,
+    "library": [
+      {
+        "approx_cost": 704,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 49,
+        "pattern": "fn_34: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 51
+      },
+      {
+        "approx_cost": 805,
+        "arity": 1,
+        "lambda": "(lam (lam (fn_11 $0 (fn_34 $1))))",
+        "num_matches": 7,
+        "pattern": "fn_35: (lam (fn_11 $0 (fn_34 ?#0)))",
+        "pattern_size": 8,
+        "usage_matches": 7
+      },
+      {
+        "approx_cost": 783,
+        "arity": 1,
+        "lambda": "(lam (fn_34 (map (fn_34 $0))))",
+        "num_matches": 5,
+        "pattern": "fn_36: (fn_34 (map (fn_34 ?#0)))",
+        "pattern_size": 7,
+        "usage_matches": 6
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -3435,42 +3464,33 @@
       "(fn_35 (eq? 1))",
       "(fn_35 (gt? fn_18))",
       "(lam (fn_11 $0 (lam (gt? $0 fn_18))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_34: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 49,
-        "usage_matches": 51,
-        "approx_cost": 704
-      },
-      {
-        "pattern": "fn_35: (lam (fn_11 $0 (fn_34 ?#0)))",
-        "lambda": "(lam (lam (fn_11 $0 (fn_34 $1))))",
-        "arity": 1,
-        "pattern_size": 8,
-        "num_matches": 7,
-        "usage_matches": 7,
-        "approx_cost": 805
-      },
-      {
-        "pattern": "fn_36: (fn_34 (map (fn_34 ?#0)))",
-        "lambda": "(lam (fn_34 (map (fn_34 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 5,
-        "usage_matches": 6,
-        "approx_cost": 783
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench000_it0.json": {
-    "initial_cost": 147,
+    "compression_ratio": 1.0916030534351144,
     "cost_after_rewrites": 143,
     "final_cost": 131,
-    "compression_ratio": 1.0916030534351144,
+    "initial_cost": 147,
+    "library": [
+      {
+        "approx_cost": 128,
+        "arity": 1,
+        "lambda": "(lam (cons (car $0) (cons (car (cdr $0)) empty)))",
+        "num_matches": 1,
+        "pattern": "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))",
+        "pattern_size": 15,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 114,
+        "arity": 0,
+        "lambda": "(+ 1 1)",
+        "num_matches": 1,
+        "pattern": "fn_1: (+ 1 1)",
+        "pattern_size": 5,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (index $0 (cons (+ 1 1) (range $0)))) $0))",
       "(lam (car $0))",
@@ -3490,33 +3510,42 @@
       "(lam (fold $0 1 (lam (lam (* $0 $1)))))",
       "(lam (fold (cdr (cdr (cdr $0))) $0 (lam (lam (cons $1 (fn_0 $0))))))",
       "(lam (fn_0 $0))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))",
-        "lambda": "(lam (cons (car $0) (cons (car (cdr $0)) empty)))",
-        "arity": 1,
-        "pattern_size": 15,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 128
-      },
-      {
-        "pattern": "fn_1: (+ 1 1)",
-        "lambda": "(+ 1 1)",
-        "arity": 0,
-        "pattern_size": 5,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 114
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench001_it1.json": {
-    "initial_cost": 213,
+    "compression_ratio": 1.0885416666666667,
     "cost_after_rewrites": 209,
     "final_cost": 192,
-    "compression_ratio": 1.0885416666666667,
+    "initial_cost": 213,
+    "library": [
+      {
+        "approx_cost": 196,
+        "arity": 1,
+        "lambda": "(lam (fold $0 1 (lam (lam (* $0 $1)))))",
+        "num_matches": 1,
+        "pattern": "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))",
+        "pattern_size": 13,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 153,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 11,
+        "pattern": "fn_37: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 10
+      },
+      {
+        "approx_cost": 173,
+        "arity": 0,
+        "lambda": "(lam (fn_37 (cons $0)))",
+        "num_matches": 1,
+        "pattern": "fn_38: (lam (fn_37 (cons $0)))",
+        "pattern_size": 6,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (fold $0 (cons (+ 1 (+ fn_34 fn_34)) empty) (lam (lam (cons $1 $0)))))",
       "(lam (map (lam (index $0 (cons fn_34 (range $0)))) $0))",
@@ -3552,42 +3581,42 @@
       "(lam (fold $0 $0 fn_38))",
       "(lam (fold (cdr (cdr (cdr $0))) $0 (lam (lam (cons $1 (fn_35 $0))))))",
       "(fn_37 fn_35)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))",
-        "lambda": "(lam (fold $0 1 (lam (lam (* $0 $1)))))",
-        "arity": 1,
-        "pattern_size": 13,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 196
-      },
-      {
-        "pattern": "fn_37: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 11,
-        "usage_matches": 10,
-        "approx_cost": 153
-      },
-      {
-        "pattern": "fn_38: (lam (fn_37 (cons $0)))",
-        "lambda": "(lam (fn_37 (cons $0)))",
-        "arity": 0,
-        "pattern_size": 6,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 173
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench002_it2.json": {
-    "initial_cost": 289,
+    "compression_ratio": 1.11328125,
     "cost_after_rewrites": 285,
     "final_cost": 256,
-    "compression_ratio": 1.11328125,
+    "initial_cost": 289,
+    "library": [
+      {
+        "approx_cost": 207,
+        "arity": 2,
+        "lambda": "(lam (lam (lam (map (lam ($3 $0 ($2 $0))) $0))))",
+        "num_matches": 7,
+        "pattern": "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))",
+        "pattern_size": 13,
+        "usage_matches": 7
+      },
+      {
+        "approx_cost": 241,
+        "arity": 0,
+        "lambda": "(+ fn_34)",
+        "num_matches": 1,
+        "pattern": "fn_39: (+ fn_34)",
+        "pattern_size": 3,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 222,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 9,
+        "pattern": "fn_40: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 6
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (fn_36 $0 (cdr (fn_35 (cdr $0)))))",
@@ -3637,42 +3666,42 @@
       "(lam (fold (cdr $0) $0 (lam (lam (cons $1 (fn_36 (fn_35 $0) (fn_35 (cdr (cdr $0)))))))))",
       "(lam (fold (cdr (cdr (cdr $0))) $0 (lam (lam (cons $1 (fn_35 $0))))))",
       "(fn_40 fn_35)"
-    ],
-    "library": [
-      {
-        "pattern": "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))",
-        "lambda": "(lam (lam (lam (map (lam ($3 $0 ($2 $0))) $0))))",
-        "arity": 2,
-        "pattern_size": 13,
-        "num_matches": 7,
-        "usage_matches": 7,
-        "approx_cost": 207
-      },
-      {
-        "pattern": "fn_39: (+ fn_34)",
-        "lambda": "(+ fn_34)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 241
-      },
-      {
-        "pattern": "fn_40: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 9,
-        "usage_matches": 6,
-        "approx_cost": 222
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench003_it3.json": {
-    "initial_cost": 401,
+    "compression_ratio": 1.1424418604651163,
     "cost_after_rewrites": 393,
     "final_cost": 344,
-    "compression_ratio": 1.1424418604651163,
+    "initial_cost": 401,
+    "library": [
+      {
+        "approx_cost": 289,
+        "arity": 2,
+        "lambda": "(lam (lam (lam (map (lam ($3 $0 ($2 $0))) $0))))",
+        "num_matches": 9,
+        "pattern": "fn_40: (lam (map (lam (?#0 $0 (?#1 $0))) $0))",
+        "pattern_size": 13,
+        "usage_matches": 9
+      },
+      {
+        "approx_cost": 318,
+        "arity": 1,
+        "lambda": "(lam (lam (fn_36 $0 $1)))",
+        "num_matches": 8,
+        "pattern": "fn_41: (lam (fn_36 $0 ?#0))",
+        "pattern_size": 6,
+        "usage_matches": 6
+      },
+      {
+        "approx_cost": 316,
+        "arity": 1,
+        "lambda": "(lam (fn_41 (cons $0 empty)))",
+        "num_matches": 3,
+        "pattern": "fn_42: (fn_41 (cons ?#0 empty))",
+        "pattern_size": 7,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (fn_36 $0 (cdr (fn_35 (cdr $0)))))",
@@ -3742,42 +3771,42 @@
       "(lam (fn_39 $0))",
       "(lam (fn_35 $0))",
       "(lam (fold $0 empty (lam (fn_41 (range (fn_37 (range $0)))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_40: (lam (map (lam (?#0 $0 (?#1 $0))) $0))",
-        "lambda": "(lam (lam (lam (map (lam ($3 $0 ($2 $0))) $0))))",
-        "arity": 2,
-        "pattern_size": 13,
-        "num_matches": 9,
-        "usage_matches": 9,
-        "approx_cost": 289
-      },
-      {
-        "pattern": "fn_41: (lam (fn_36 $0 ?#0))",
-        "lambda": "(lam (lam (fn_36 $0 $1)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 8,
-        "usage_matches": 6,
-        "approx_cost": 318
-      },
-      {
-        "pattern": "fn_42: (fn_41 (cons ?#0 empty))",
-        "lambda": "(lam (fn_41 (cons $0 empty)))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 316
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench004_it4.json": {
-    "initial_cost": 491,
+    "compression_ratio": 1.1445497630331751,
     "cost_after_rewrites": 483,
     "final_cost": 422,
-    "compression_ratio": 1.1445497630331753,
+    "initial_cost": 491,
+    "library": [
+      {
+        "approx_cost": 399,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 13,
+        "pattern": "fn_41: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 15
+      },
+      {
+        "approx_cost": 422,
+        "arity": 0,
+        "lambda": "(fn_41 (lam (if (is-prime $0) 0 (+ $0 1))))",
+        "num_matches": 1,
+        "pattern": "fn_42: (fn_41 (lam (if (is-prime $0) 0 (+ $0 1))))",
+        "pattern_size": 16,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 328,
+        "arity": 2,
+        "lambda": "(lam (lam (fn_41 (lam ($2 $0 ($1 $0))))))",
+        "num_matches": 9,
+        "pattern": "fn_43: (fn_41 (lam (?#0 $0 (?#1 $0))))",
+        "pattern_size": 10,
+        "usage_matches": 9
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (fn_40 $0 (index fn_34 $0)))",
@@ -3863,42 +3892,42 @@
       "(lam (fn_39 $0))",
       "(lam (fn_35 $0))",
       "(lam (fold $0 empty (lam (lam (fn_36 $0 (range (- 1 $1)))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_41: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 13,
-        "usage_matches": 15,
-        "approx_cost": 399
-      },
-      {
-        "pattern": "fn_42: (fn_41 (lam (if (is-prime $0) 0 (+ $0 1))))",
-        "lambda": "(fn_41 (lam (if (is-prime $0) 0 (+ $0 1))))",
-        "arity": 0,
-        "pattern_size": 16,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 422
-      },
-      {
-        "pattern": "fn_43: (fn_41 (lam (?#0 $0 (?#1 $0))))",
-        "lambda": "(lam (lam (fn_41 (lam ($2 $0 ($1 $0))))))",
-        "arity": 2,
-        "pattern_size": 10,
-        "num_matches": 9,
-        "usage_matches": 9,
-        "approx_cost": 328
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench005_it5.json": {
-    "initial_cost": 633,
+    "compression_ratio": 1.112099644128114,
     "cost_after_rewrites": 625,
     "final_cost": 562,
-    "compression_ratio": 1.112099644128114,
+    "initial_cost": 633,
+    "library": [
+      {
+        "approx_cost": 547,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 13,
+        "pattern": "fn_42: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 527,
+        "arity": 2,
+        "lambda": "(lam (lam (lam (fold $0 $2 $1))))",
+        "num_matches": 8,
+        "pattern": "fn_43: (lam (fold $0 ?#0 ?#1))",
+        "pattern_size": 8,
+        "usage_matches": 8
+      },
+      {
+        "approx_cost": 544,
+        "arity": 0,
+        "lambda": "(+ fn_34 1)",
+        "num_matches": 1,
+        "pattern": "fn_44: (+ fn_34 1)",
+        "pattern_size": 5,
+        "usage_matches": 4
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (fn_40 $0 (index fn_34 $0)))",
@@ -4002,42 +4031,42 @@
       "(lam (fn_35 $0))",
       "(fn_43 empty (lam (lam (fn_36 $0 (range (- 1 $1))))))",
       "(fn_43 empty (lam (lam (if (eq? $1 1) (fn_40 $0 $1) $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_42: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 13,
-        "usage_matches": 14,
-        "approx_cost": 547
-      },
-      {
-        "pattern": "fn_43: (lam (fold $0 ?#0 ?#1))",
-        "lambda": "(lam (lam (lam (fold $0 $2 $1))))",
-        "arity": 2,
-        "pattern_size": 8,
-        "num_matches": 8,
-        "usage_matches": 8,
-        "approx_cost": 527
-      },
-      {
-        "pattern": "fn_44: (+ fn_34 1)",
-        "lambda": "(+ fn_34 1)",
-        "arity": 0,
-        "pattern_size": 5,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 544
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench006_it6.json": {
-    "initial_cost": 680,
+    "compression_ratio": 1.119205298013245,
     "cost_after_rewrites": 676,
     "final_cost": 604,
-    "compression_ratio": 1.119205298013245,
+    "initial_cost": 680,
+    "library": [
+      {
+        "approx_cost": 580,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 15,
+        "pattern": "fn_45: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 17
+      },
+      {
+        "approx_cost": 557,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 23,
+        "pattern": "fn_46: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 18
+      },
+      {
+        "approx_cost": 499,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 26,
+        "pattern": "fn_47: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 19
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_38 $0)) $0))",
@@ -4157,42 +4186,42 @@
       "(fn_46 fn_35)",
       "(fn_47 fn_44 (lam (fn_47 fn_36 (range (- 1 $0)))))",
       "(fn_47 fn_44 (lam (lam (if (eq? $1 1) (fn_40 $0 $1) $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_45: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 15,
-        "usage_matches": 17,
-        "approx_cost": 580
-      },
-      {
-        "pattern": "fn_46: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 23,
-        "usage_matches": 18,
-        "approx_cost": 557
-      },
-      {
-        "pattern": "fn_47: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 26,
-        "usage_matches": 19,
-        "approx_cost": 499
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench007_it7.json": {
-    "initial_cost": 740,
+    "compression_ratio": 1.0909090909090908,
     "cost_after_rewrites": 732,
     "final_cost": 671,
-    "compression_ratio": 1.0909090909090908,
+    "initial_cost": 740,
+    "library": [
+      {
+        "approx_cost": 588,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 41,
+        "pattern": "fn_46: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 37
+      },
+      {
+        "approx_cost": 645,
+        "arity": 1,
+        "lambda": "(lam (fn_46 (map $0)))",
+        "num_matches": 11,
+        "pattern": "fn_47: (fn_46 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 11
+      },
+      {
+        "approx_cost": 656,
+        "arity": 1,
+        "lambda": "(lam (fold $0 1 (lam (lam (+ $0 (- $1 $0))))))",
+        "num_matches": 1,
+        "pattern": "fn_48: (fold ?#0 1 (lam (lam (+ $0 (- $1 $0)))))",
+        "pattern_size": 17,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_38 $0)) $0))",
@@ -4328,42 +4357,42 @@
       "(lam (+ 1 (fn_48 $0)))",
       "(lam (fn_44 $0 (lam (lam (fn_36 $0 (range (- 1 $1)))))))",
       "(lam (fn_44 $0 (lam (lam (if (eq? $1 1) (fn_40 $0 $1) $0)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_46: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 41,
-        "usage_matches": 37,
-        "approx_cost": 588
-      },
-      {
-        "pattern": "fn_47: (fn_46 (map ?#0))",
-        "lambda": "(lam (fn_46 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 11,
-        "usage_matches": 11,
-        "approx_cost": 645
-      },
-      {
-        "pattern": "fn_48: (fold ?#0 1 (lam (lam (+ $0 (- $1 $0)))))",
-        "lambda": "(lam (fold $0 1 (lam (lam (+ $0 (- $1 $0))))))",
-        "arity": 1,
-        "pattern_size": 17,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 656
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench008_it8.json": {
-    "initial_cost": 745,
+    "compression_ratio": 1.0891812865497077,
     "cost_after_rewrites": 745,
     "final_cost": 684,
-    "compression_ratio": 1.0891812865497077,
+    "initial_cost": 745,
+    "library": [
+      {
+        "approx_cost": 597,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 44,
+        "pattern": "fn_50: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 38
+      },
+      {
+        "approx_cost": 662,
+        "arity": 1,
+        "lambda": "(lam (fn_50 (map $0)))",
+        "num_matches": 10,
+        "pattern": "fn_51: (fn_50 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 10
+      },
+      {
+        "approx_cost": 585,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 25,
+        "pattern": "fn_52: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 18
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_38 $0)) $0))",
@@ -4519,42 +4548,42 @@
       "(fn_52 fn_44 (lam (fn_52 fn_36 (range (- 1 $0)))))",
       "(fn_52 fn_44 (lam (lam (if (eq? $1 1) (fn_40 $0 $1) $0))))",
       "(fn_52 fn_44 (lam (lam (if (gt? $1 1) (cons $1 $0) $0))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_50: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 44,
-        "usage_matches": 38,
-        "approx_cost": 597
-      },
-      {
-        "pattern": "fn_51: (fn_50 (map ?#0))",
-        "lambda": "(lam (fn_50 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 10,
-        "usage_matches": 10,
-        "approx_cost": 662
-      },
-      {
-        "pattern": "fn_52: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 25,
-        "usage_matches": 18,
-        "approx_cost": 585
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench009_it10.json": {
-    "initial_cost": 884,
+    "compression_ratio": 1.085995085995086,
     "cost_after_rewrites": 884,
     "final_cost": 814,
-    "compression_ratio": 1.085995085995086,
+    "initial_cost": 884,
+    "library": [
+      {
+        "approx_cost": 708,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 50,
+        "pattern": "fn_52: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 45
+      },
+      {
+        "approx_cost": 794,
+        "arity": 1,
+        "lambda": "(lam (fn_52 (map $0)))",
+        "num_matches": 10,
+        "pattern": "fn_53: (fn_52 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 10
+      },
+      {
+        "approx_cost": 705,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 28,
+        "pattern": "fn_54: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 20
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_46 $0))",
@@ -4744,42 +4773,42 @@
       "(fn_54 fn_44 (lam (fn_54 fn_36 (range (- 1 $0)))))",
       "(fn_54 fn_44 (lam (lam (if (eq? $1 1) (fn_40 $0 $1) $0))))",
       "(fn_54 fn_51 (fn_54 gt? 1))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_52: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 50,
-        "usage_matches": 45,
-        "approx_cost": 708
-      },
-      {
-        "pattern": "fn_53: (fn_52 (map ?#0))",
-        "lambda": "(lam (fn_52 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 10,
-        "usage_matches": 10,
-        "approx_cost": 794
-      },
-      {
-        "pattern": "fn_54: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 28,
-        "usage_matches": 20,
-        "approx_cost": 705
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench010_it12.json": {
-    "initial_cost": 918,
+    "compression_ratio": 1.0941597139451729,
     "cost_after_rewrites": 918,
     "final_cost": 839,
-    "compression_ratio": 1.0941597139451729,
+    "initial_cost": 918,
+    "library": [
+      {
+        "approx_cost": 710,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 55,
+        "pattern": "fn_53: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 53
+      },
+      {
+        "approx_cost": 740,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 30,
+        "pattern": "fn_54: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 22
+      },
+      {
+        "approx_cost": 799,
+        "arity": 1,
+        "lambda": "(lam (fn_53 (map $0)))",
+        "num_matches": 10,
+        "pattern": "fn_55: (fn_53 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 10
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_46 $0))",
@@ -4977,42 +5006,42 @@
       "(fn_54 fn_51 (fn_53 (gt? 1)))",
       "(fn_54 fn_44 (lam (lam (if (eq? $1 1) (fn_40 $0 $1) $0))))",
       "(fn_54 fn_51 (fn_54 gt? 1))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_53: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 55,
-        "usage_matches": 53,
-        "approx_cost": 710
-      },
-      {
-        "pattern": "fn_54: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 30,
-        "usage_matches": 22,
-        "approx_cost": 740
-      },
-      {
-        "pattern": "fn_55: (fn_53 (map ?#0))",
-        "lambda": "(lam (fn_53 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 10,
-        "usage_matches": 10,
-        "approx_cost": 799
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.35.48__bench011_it17.json": {
-    "initial_cost": 920,
+    "compression_ratio": 1.1138014527845037,
     "cost_after_rewrites": 920,
     "final_cost": 826,
-    "compression_ratio": 1.1138014527845037,
+    "initial_cost": 920,
+    "library": [
+      {
+        "approx_cost": 692,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 57,
+        "pattern": "fn_54: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 58
+      },
+      {
+        "approx_cost": 809,
+        "arity": 1,
+        "lambda": "(lam (lam (fn_51 $0 $1)))",
+        "num_matches": 10,
+        "pattern": "fn_55: (lam (fn_51 $0 ?#0))",
+        "pattern_size": 6,
+        "usage_matches": 10
+      },
+      {
+        "approx_cost": 798,
+        "arity": 1,
+        "lambda": "(lam (fn_54 (map (fn_54 $0))))",
+        "num_matches": 6,
+        "pattern": "fn_56: (fn_54 (map (fn_54 ?#0)))",
+        "pattern_size": 7,
+        "usage_matches": 6
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_46 $0))",
@@ -5216,42 +5245,42 @@
       "(fn_55 (lam (gt? $0 1)))",
       "(fn_55 (fn_54 (gt? fn_46)))",
       "(fn_55 (lam (gt? $0 fn_46)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_54: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 57,
-        "usage_matches": 58,
-        "approx_cost": 692
-      },
-      {
-        "pattern": "fn_55: (lam (fn_51 $0 ?#0))",
-        "lambda": "(lam (lam (fn_51 $0 $1)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 10,
-        "usage_matches": 10,
-        "approx_cost": 809
-      },
-      {
-        "pattern": "fn_56: (fn_54 (map (fn_54 ?#0)))",
-        "lambda": "(lam (fn_54 (map (fn_54 $0))))",
-        "arity": 1,
-        "pattern_size": 7,
-        "num_matches": 6,
-        "usage_matches": 6,
-        "approx_cost": 798
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench000_it0.json": {
-    "initial_cost": 177,
+    "compression_ratio": 1.10625,
     "cost_after_rewrites": 177,
     "final_cost": 160,
-    "compression_ratio": 1.10625,
+    "initial_cost": 177,
+    "library": [
+      {
+        "approx_cost": 159,
+        "arity": 0,
+        "lambda": "(+ 1)",
+        "num_matches": 1,
+        "pattern": "fn_0: (+ 1)",
+        "pattern_size": 3,
+        "usage_matches": 7
+      },
+      {
+        "approx_cost": 148,
+        "arity": 2,
+        "lambda": "(lam (lam (lam (map (lam ($3 $0 (fn_0 (fn_0 $2)))) $0))))",
+        "num_matches": 2,
+        "pattern": "fn_1: (lam (map (lam (?#0 $0 (fn_0 (fn_0 ?#1)))) $0))",
+        "pattern_size": 15,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 140,
+        "arity": 0,
+        "lambda": "(fn_0 1)",
+        "num_matches": 1,
+        "pattern": "fn_2: (fn_0 1)",
+        "pattern_size": 3,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (eq? $0 (+ 1 (+ 1 1)))) $0))",
       "(lam (fold (cdr $0) 0 (lam (lam (+ $0 (if (eq? $1 (car $2)) 1 0))))))",
@@ -5273,42 +5302,42 @@
       "(fn_1 mod (fn_0 fn_2))",
       "(lam (map (lam (index $0 $1)) (range (length (cdr $0)))))",
       "(lam (map (lam (car $1)) $0))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (+ 1)",
-        "lambda": "(+ 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 7,
-        "approx_cost": 159
-      },
-      {
-        "pattern": "fn_1: (lam (map (lam (?#0 $0 (fn_0 (fn_0 ?#1)))) $0))",
-        "lambda": "(lam (lam (lam (map (lam ($3 $0 (fn_0 (fn_0 $2)))) $0))))",
-        "arity": 2,
-        "pattern_size": 15,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 148
-      },
-      {
-        "pattern": "fn_2: (fn_0 1)",
-        "lambda": "(fn_0 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 140
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench001_it1.json": {
-    "initial_cost": 246,
+    "compression_ratio": 1.0789473684210529,
     "cost_after_rewrites": 246,
     "final_cost": 228,
-    "compression_ratio": 1.0789473684210527,
+    "initial_cost": 246,
+    "library": [
+      {
+        "approx_cost": 222,
+        "arity": 2,
+        "lambda": "(lam (lam (map (lam (index $0 $2)) (range $0))))",
+        "num_matches": 3,
+        "pattern": "fn_55: (map (lam (index $0 ?#0)) (range ?#1))",
+        "pattern_size": 12,
+        "usage_matches": 3
+      },
+      {
+        "approx_cost": 213,
+        "arity": 0,
+        "lambda": "(fn_54 1)",
+        "num_matches": 1,
+        "pattern": "fn_56: (fn_54 1)",
+        "pattern_size": 3,
+        "usage_matches": 5
+      },
+      {
+        "approx_cost": 207,
+        "arity": 1,
+        "lambda": "(lam (lam (cons ($1 $0) $0)))",
+        "num_matches": 2,
+        "pattern": "fn_57: (lam (cons (?#0 $0) $0))",
+        "pattern_size": 8,
+        "usage_matches": 2
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (eq? $0 (fn_54 1))) $0))",
       "(lam (fold (cdr $0) 0 (lam (lam (+ $0 (if (eq? $1 (car $2)) 1 0))))))",
@@ -5342,42 +5371,42 @@
       "(lam (cdr (fn_55 $0 fn_56)))",
       "(lam (map (lam (index (fn_54 (fn_54 $0)) $1)) (range (fn_54 (fn_54 0)))))",
       "(lam (fn_55 $0 (fn_54 0)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_55: (map (lam (index $0 ?#0)) (range ?#1))",
-        "lambda": "(lam (lam (map (lam (index $0 $2)) (range $0))))",
-        "arity": 2,
-        "pattern_size": 12,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 222
-      },
-      {
-        "pattern": "fn_56: (fn_54 1)",
-        "lambda": "(fn_54 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 5,
-        "approx_cost": 213
-      },
-      {
-        "pattern": "fn_57: (lam (cons (?#0 $0) $0))",
-        "lambda": "(lam (lam (cons ($1 $0) $0)))",
-        "arity": 1,
-        "pattern_size": 8,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 207
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench002_it3.json": {
-    "initial_cost": 474,
+    "compression_ratio": 1.1152941176470588,
     "cost_after_rewrites": 474,
     "final_cost": 425,
-    "compression_ratio": 1.1152941176470588,
+    "initial_cost": 474,
+    "library": [
+      {
+        "approx_cost": 420,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 12,
+        "pattern": "fn_57: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 10
+      },
+      {
+        "approx_cost": 412,
+        "arity": 1,
+        "lambda": "(lam (lam (fold $0 ($1 $0) (lam (lam (cons $1 $0))))))",
+        "num_matches": 3,
+        "pattern": "fn_58: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))",
+        "pattern_size": 16,
+        "usage_matches": 3
+      },
+      {
+        "approx_cost": 399,
+        "arity": 0,
+        "lambda": "(fn_54 (fn_54 0))",
+        "num_matches": 1,
+        "pattern": "fn_59: (fn_54 (fn_54 0))",
+        "pattern_size": 5,
+        "usage_matches": 4
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ fn_55 $0)) $0))",
       "(lam (fold $0 (cdr (cdr (fn_56 $0 fn_55))) (lam (lam (cons $1 $0)))))",
@@ -5447,42 +5476,42 @@
       "(lam (map (lam (index (fn_54 (fn_54 $0)) $1)) (range fn_59)))",
       "(lam (fn_56 $0 (fn_54 0)))",
       "(lam (fn_56 $0 fn_59))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_57: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 12,
-        "usage_matches": 10,
-        "approx_cost": 420
-      },
-      {
-        "pattern": "fn_58: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))",
-        "lambda": "(lam (lam (fold $0 ($1 $0) (lam (lam (cons $1 $0))))))",
-        "arity": 1,
-        "pattern_size": 16,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 412
-      },
-      {
-        "pattern": "fn_59: (fn_54 (fn_54 0))",
-        "lambda": "(fn_54 (fn_54 0))",
-        "arity": 0,
-        "pattern_size": 5,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 399
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench003_it4.json": {
-    "initial_cost": 481,
+    "compression_ratio": 1.0931818181818185,
     "cost_after_rewrites": 481,
     "final_cost": 440,
-    "compression_ratio": 1.0931818181818183,
+    "initial_cost": 481,
+    "library": [
+      {
+        "approx_cost": 433,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 11,
+        "pattern": "fn_59: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 9
+      },
+      {
+        "approx_cost": 441,
+        "arity": 0,
+        "lambda": "(lam (lam (if (gt? $0 $1) $0 $1)))",
+        "num_matches": 1,
+        "pattern": "fn_60: (lam (lam (if (gt? $0 $1) $0 $1)))",
+        "pattern_size": 13,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 406,
+        "arity": 1,
+        "lambda": "(lam (fn_59 (lam ($1 $0))))",
+        "num_matches": 6,
+        "pattern": "fn_61: (fn_59 (lam (?#0 $0)))",
+        "pattern_size": 6,
+        "usage_matches": 5
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ fn_55 $0)) $0))",
       "(lam (fn_36 $0 (fn_29 (fn_56 $0 fn_55))))",
@@ -5568,42 +5597,42 @@
       "(lam (fn_56 $0 (fn_54 0)))",
       "(lam (fn_57 $0))",
       "(lam (+ 1 (fold $0 fn_55 fn_60)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_59: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 11,
-        "usage_matches": 9,
-        "approx_cost": 433
-      },
-      {
-        "pattern": "fn_60: (lam (lam (if (gt? $0 $1) $0 $1)))",
-        "lambda": "(lam (lam (if (gt? $0 $1) $0 $1)))",
-        "arity": 0,
-        "pattern_size": 13,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 441
-      },
-      {
-        "pattern": "fn_61: (fn_59 (lam (?#0 $0)))",
-        "lambda": "(lam (fn_59 (lam ($1 $0))))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 6,
-        "usage_matches": 5,
-        "approx_cost": 406
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench004_it5.json": {
-    "initial_cost": 560,
+    "compression_ratio": 1.108910891089109,
     "cost_after_rewrites": 560,
     "final_cost": 505,
-    "compression_ratio": 1.108910891089109,
+    "initial_cost": 560,
+    "library": [
+      {
+        "approx_cost": 488,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 14,
+        "pattern": "fn_60: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 498,
+        "arity": 2,
+        "lambda": "(lam (lam (fold $1 0 (lam (lam (+ $0 (if (eq? $1 $2) 1 0)))))))",
+        "num_matches": 2,
+        "pattern": "fn_61: (fold ?#0 0 (lam (lam (+ $0 (if (eq? $1 ?#1) 1 0)))))",
+        "pattern_size": 23,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 461,
+        "arity": 1,
+        "lambda": "(lam (fn_60 (lam ($1 $0))))",
+        "num_matches": 6,
+        "pattern": "fn_62: (fn_60 (lam (?#0 $0)))",
+        "pattern_size": 6,
+        "usage_matches": 5
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ fn_55 $0)) $0))",
       "(lam (fn_36 $0 (fn_29 (fn_56 $0 fn_55))))",
@@ -5707,42 +5736,42 @@
       "(lam (fn_56 $0 (fn_54 0)))",
       "(lam (fn_57 $0))",
       "(lam (+ 1 (fn_59 $0 fn_55)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_60: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 14,
-        "usage_matches": 13,
-        "approx_cost": 488
-      },
-      {
-        "pattern": "fn_61: (fold ?#0 0 (lam (lam (+ $0 (if (eq? $1 ?#1) 1 0)))))",
-        "lambda": "(lam (lam (fold $1 0 (lam (lam (+ $0 (if (eq? $1 $2) 1 0)))))))",
-        "arity": 2,
-        "pattern_size": 23,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 498
-      },
-      {
-        "pattern": "fn_62: (fn_60 (lam (?#0 $0)))",
-        "lambda": "(lam (fn_60 (lam ($1 $0))))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 6,
-        "usage_matches": 5,
-        "approx_cost": 461
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench005_it6.json": {
-    "initial_cost": 571,
+    "compression_ratio": 1.0917782026768643,
     "cost_after_rewrites": 571,
     "final_cost": 523,
-    "compression_ratio": 1.0917782026768643,
+    "initial_cost": 571,
+    "library": [
+      {
+        "approx_cost": 499,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 14,
+        "pattern": "fn_62: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 488,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 17,
+        "pattern": "fn_63: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 12
+      },
+      {
+        "approx_cost": 508,
+        "arity": 0,
+        "lambda": "(fn_54 0)",
+        "num_matches": 1,
+        "pattern": "fn_64: (fn_54 0)",
+        "pattern_size": 3,
+        "usage_matches": 5
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_55 $0)) $0))",
@@ -5858,42 +5887,42 @@
       "(lam (fn_56 $0 fn_64))",
       "(fn_63 fn_57)",
       "(lam (+ 1 (fn_59 $0 fn_55)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_62: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 14,
-        "usage_matches": 13,
-        "approx_cost": 499
-      },
-      {
-        "pattern": "fn_63: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 17,
-        "usage_matches": 12,
-        "approx_cost": 488
-      },
-      {
-        "pattern": "fn_64: (fn_54 0)",
-        "lambda": "(fn_54 0)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 5,
-        "approx_cost": 508
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench006_it7.json": {
-    "initial_cost": 615,
+    "compression_ratio": 1.0904255319148937,
     "cost_after_rewrites": 615,
     "final_cost": 564,
-    "compression_ratio": 1.0904255319148937,
+    "initial_cost": 615,
+    "library": [
+      {
+        "approx_cost": 543,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 14,
+        "pattern": "fn_62: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 524,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 20,
+        "pattern": "fn_63: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 484,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 21,
+        "pattern": "fn_64: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 14
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_55 $0)) $0))",
@@ -6023,42 +6052,42 @@
       "(fn_64 fn_56 fn_55)",
       "(fn_63 fn_57)",
       "(lam (+ 1 (fn_59 $0 fn_55)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_62: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 14,
-        "usage_matches": 13,
-        "approx_cost": 543
-      },
-      {
-        "pattern": "fn_63: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 20,
-        "usage_matches": 14,
-        "approx_cost": 524
-      },
-      {
-        "pattern": "fn_64: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 21,
-        "usage_matches": 14,
-        "approx_cost": 484
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench007_it8.json": {
-    "initial_cost": 704,
+    "compression_ratio": 1.0880989180834622,
     "cost_after_rewrites": 704,
     "final_cost": 647,
-    "compression_ratio": 1.0880989180834622,
+    "initial_cost": 704,
+    "library": [
+      {
+        "approx_cost": 632,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 13,
+        "pattern": "fn_63: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 650,
+        "arity": 0,
+        "lambda": "(lam (fn_58 1 (map (lam (fn_54 (fn_54 $0))) $0)))",
+        "num_matches": 1,
+        "pattern": "fn_64: (lam (fn_58 1 (map (lam (fn_54 (fn_54 $0))) $0)))",
+        "pattern_size": 15,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 581,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 22,
+        "pattern": "fn_65: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 15
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_55 $0)) $0))",
@@ -6206,42 +6235,42 @@
       "(fn_65 fn_57)",
       "(lam (+ 1 (fn_59 $0 0)))",
       "(lam (fold $0 empty (lam (lam (if (gt? $1 1) (cons $1 $0) $0)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_63: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 13,
-        "usage_matches": 13,
-        "approx_cost": 632
-      },
-      {
-        "pattern": "fn_64: (lam (fn_58 1 (map (lam (fn_54 (fn_54 $0))) $0)))",
-        "lambda": "(lam (fn_58 1 (map (lam (fn_54 (fn_54 $0))) $0)))",
-        "arity": 0,
-        "pattern_size": 15,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 650
-      },
-      {
-        "pattern": "fn_65: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 22,
-        "usage_matches": 15,
-        "approx_cost": 581
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench008_it9.json": {
-    "initial_cost": 777,
+    "compression_ratio": 1.0912921348314606,
     "cost_after_rewrites": 777,
     "final_cost": 712,
-    "compression_ratio": 1.0912921348314606,
+    "initial_cost": 777,
+    "library": [
+      {
+        "approx_cost": 699,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 14,
+        "pattern": "fn_64: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 659,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 27,
+        "pattern": "fn_65: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 20
+      },
+      {
+        "approx_cost": 694,
+        "arity": 0,
+        "lambda": "(fn_54 0)",
+        "num_matches": 1,
+        "pattern": "fn_66: (fn_54 0)",
+        "pattern_size": 3,
+        "usage_matches": 8
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_55 $0)) $0))",
@@ -6407,42 +6436,42 @@
       "(fn_65 fn_57)",
       "(lam (+ 1 (fn_59 $0 0)))",
       "(lam (fold $0 empty (lam (lam (if (gt? $1 1) (cons $1 $0) $0)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_64: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 14,
-        "usage_matches": 14,
-        "approx_cost": 699
-      },
-      {
-        "pattern": "fn_65: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 27,
-        "usage_matches": 20,
-        "approx_cost": 659
-      },
-      {
-        "pattern": "fn_66: (fn_54 0)",
-        "lambda": "(fn_54 0)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 8,
-        "approx_cost": 694
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench009_it10.json": {
-    "initial_cost": 826,
+    "compression_ratio": 1.099866844207723,
     "cost_after_rewrites": 826,
     "final_cost": 751,
-    "compression_ratio": 1.099866844207723,
+    "initial_cost": 826,
+    "library": [
+      {
+        "approx_cost": 742,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 15,
+        "pattern": "fn_65: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 15
+      },
+      {
+        "approx_cost": 697,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 26,
+        "pattern": "fn_66: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 22
+      },
+      {
+        "approx_cost": 621,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 31,
+        "pattern": "fn_67: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 24
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_55 $0)) $0))",
@@ -6624,42 +6653,42 @@
       "(fn_66 fn_57)",
       "(lam (+ 1 (fn_59 $0 0)))",
       "(fn_67 fn_11 (fn_66 fn_64))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_65: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 15,
-        "usage_matches": 15,
-        "approx_cost": 742
-      },
-      {
-        "pattern": "fn_66: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 26,
-        "usage_matches": 22,
-        "approx_cost": 697
-      },
-      {
-        "pattern": "fn_67: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 31,
-        "usage_matches": 24,
-        "approx_cost": 621
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench010_it11.json": {
-    "initial_cost": 783,
+    "compression_ratio": 1.0997191011235956,
     "cost_after_rewrites": 783,
     "final_cost": 712,
-    "compression_ratio": 1.0997191011235956,
+    "initial_cost": 783,
+    "library": [
+      {
+        "approx_cost": 705,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 14,
+        "pattern": "fn_67: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 645,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 28,
+        "pattern": "fn_68: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 25
+      },
+      {
+        "approx_cost": 602,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 28,
+        "pattern": "fn_69: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 20
+      }
+    ],
     "original_programs": [
       "(lam (fn_65 $0))",
       "(lam (map (lam (+ fn_55 $0)) $0))",
@@ -6841,42 +6870,42 @@
       "(fn_68 fn_57)",
       "(lam (+ 1 (fn_59 $0 0)))",
       "(fn_69 fn_11 (fn_68 fn_64))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_67: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 14,
-        "usage_matches": 14,
-        "approx_cost": 705
-      },
-      {
-        "pattern": "fn_68: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 28,
-        "usage_matches": 25,
-        "approx_cost": 645
-      },
-      {
-        "pattern": "fn_69: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 28,
-        "usage_matches": 20,
-        "approx_cost": 602
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.39.19__bench011_it14.json": {
-    "initial_cost": 809,
+    "compression_ratio": 1.1082191780821915,
     "cost_after_rewrites": 809,
     "final_cost": 730,
-    "compression_ratio": 1.1082191780821917,
+    "initial_cost": 809,
+    "library": [
+      {
+        "approx_cost": 649,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 43,
+        "pattern": "fn_68: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 41
+      },
+      {
+        "approx_cost": 708,
+        "arity": 1,
+        "lambda": "(lam (fn_68 (map $0)))",
+        "num_matches": 12,
+        "pattern": "fn_69: (fn_68 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 586,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 34,
+        "pattern": "fn_70: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 27
+      }
+    ],
     "original_programs": [
       "(lam (fn_65 $0))",
       "(lam (map (lam (+ fn_55 $0)) $0))",
@@ -7066,42 +7095,42 @@
       "(fn_70 fn_11 (fn_68 (eq? 1)))",
       "(fn_70 fn_11 (fn_68 fn_64))",
       "(fn_70 fn_11 (fn_68 (gt? fn_55)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_68: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 43,
-        "usage_matches": 41,
-        "approx_cost": 649
-      },
-      {
-        "pattern": "fn_69: (fn_68 (map ?#0))",
-        "lambda": "(lam (fn_68 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 12,
-        "usage_matches": 13,
-        "approx_cost": 708
-      },
-      {
-        "pattern": "fn_70: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 34,
-        "usage_matches": 27,
-        "approx_cost": 586
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench000_it0.json": {
-    "initial_cost": 136,
+    "compression_ratio": 1.1428571428571428,
     "cost_after_rewrites": 136,
     "final_cost": 119,
-    "compression_ratio": 1.1428571428571428,
+    "initial_cost": 136,
+    "library": [
+      {
+        "approx_cost": 118,
+        "arity": 0,
+        "lambda": "(+ 1 (+ 1 1))",
+        "num_matches": 1,
+        "pattern": "fn_0: (+ 1 (+ 1 1))",
+        "pattern_size": 9,
+        "usage_matches": 3
+      },
+      {
+        "approx_cost": 109,
+        "arity": 0,
+        "lambda": "(+ 1)",
+        "num_matches": 1,
+        "pattern": "fn_1: (+ 1)",
+        "pattern_size": 3,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 92,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 5,
+        "pattern": "fn_2: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 5
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 (+ 1 (+ 1 (+ 1 1))))) $0))",
       "(lam (map (lam (eq? $0 (+ 1 (+ 1 1)))) $0))",
@@ -7121,42 +7150,42 @@
       "(lam (is-prime (fold $0 (fn_1 1) (lam (lam (- $0 (mod $1 (+ $0 1))))))))",
       "(fn_2 length)",
       "(lam (map (lam (index $0 (cdr $1))) (range fn_0)))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_0: (+ 1 (+ 1 1))",
-        "lambda": "(+ 1 (+ 1 1))",
-        "arity": 0,
-        "pattern_size": 9,
-        "num_matches": 1,
-        "usage_matches": 3,
-        "approx_cost": 118
-      },
-      {
-        "pattern": "fn_1: (+ 1)",
-        "lambda": "(+ 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 2,
-        "approx_cost": 109
-      },
-      {
-        "pattern": "fn_2: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 5,
-        "usage_matches": 5,
-        "approx_cost": 92
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench001_it1.json": {
-    "initial_cost": 252,
+    "compression_ratio": 1.0956521739130434,
     "cost_after_rewrites": 252,
     "final_cost": 230,
-    "compression_ratio": 1.0956521739130434,
+    "initial_cost": 252,
+    "library": [
+      {
+        "approx_cost": 212,
+        "arity": 2,
+        "lambda": "(lam (lam (map (lam ($2 $0 $1)))))",
+        "num_matches": 6,
+        "pattern": "fn_19: (map (lam (?#0 $0 ?#1)))",
+        "pattern_size": 8,
+        "usage_matches": 6
+      },
+      {
+        "approx_cost": 214,
+        "arity": 1,
+        "lambda": "(lam (lam (fold $0 (cons ($1 $0) empty) (lam (lam (cons $1 $0))))))",
+        "num_matches": 2,
+        "pattern": "fn_20: (lam (fold $0 (cons (?#0 $0) empty) (lam (lam (cons $1 $0)))))",
+        "pattern_size": 20,
+        "usage_matches": 2
+      },
+      {
+        "approx_cost": 178,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 11,
+        "pattern": "fn_21: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 8
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 (+ 1 fn_18))) $0))",
       "(lam (fold $0 (cons (index fn_18 $0) empty) (lam (lam (cons $1 $0)))))",
@@ -7196,42 +7225,42 @@
       "(lam (cdr (cdr (fn_19 index $0 (range (+ fn_18 fn_18))))))",
       "(fn_21 cdr)",
       "(lam (fn_19 index $0 (range (+ 1 1))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_19: (map (lam (?#0 $0 ?#1)))",
-        "lambda": "(lam (lam (map (lam ($2 $0 $1)))))",
-        "arity": 2,
-        "pattern_size": 8,
-        "num_matches": 6,
-        "usage_matches": 6,
-        "approx_cost": 212
-      },
-      {
-        "pattern": "fn_20: (lam (fold $0 (cons (?#0 $0) empty) (lam (lam (cons $1 $0)))))",
-        "lambda": "(lam (lam (fold $0 (cons ($1 $0) empty) (lam (lam (cons $1 $0))))))",
-        "arity": 1,
-        "pattern_size": 20,
-        "num_matches": 2,
-        "usage_matches": 2,
-        "approx_cost": 214
-      },
-      {
-        "pattern": "fn_21: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 11,
-        "usage_matches": 8,
-        "approx_cost": 178
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench002_it2.json": {
-    "initial_cost": 304,
+    "compression_ratio": 1.0974729241877257,
     "cost_after_rewrites": 304,
     "final_cost": 277,
-    "compression_ratio": 1.0974729241877257,
+    "initial_cost": 304,
+    "library": [
+      {
+        "approx_cost": 260,
+        "arity": 2,
+        "lambda": "(lam (lam (lam (map (lam ($3 $0 $2)) $0))))",
+        "num_matches": 6,
+        "pattern": "fn_57: (lam (map (lam (?#0 $0 ?#1)) $0))",
+        "pattern_size": 11,
+        "usage_matches": 5
+      },
+      {
+        "approx_cost": 265,
+        "arity": 0,
+        "lambda": "(+ 1)",
+        "num_matches": 1,
+        "pattern": "fn_58: (+ 1)",
+        "pattern_size": 3,
+        "usage_matches": 4
+      },
+      {
+        "approx_cost": 260,
+        "arity": 0,
+        "lambda": "(fn_57 mod)",
+        "num_matches": 1,
+        "pattern": "fn_59: (fn_57 mod)",
+        "pattern_size": 3,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 (+ 1 fn_18))) $0))",
       "(lam (fn_23 $0 (index fn_18 $0)))",
@@ -7285,42 +7314,42 @@
       "(lam (cdr $0))",
       "(lam (fn_56 $0 (fn_58 1)))",
       "(lam (fold $0 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_57: (lam (map (lam (?#0 $0 ?#1)) $0))",
-        "lambda": "(lam (lam (lam (map (lam ($3 $0 $2)) $0))))",
-        "arity": 2,
-        "pattern_size": 11,
-        "num_matches": 6,
-        "usage_matches": 5,
-        "approx_cost": 260
-      },
-      {
-        "pattern": "fn_58: (+ 1)",
-        "lambda": "(+ 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 4,
-        "approx_cost": 265
-      },
-      {
-        "pattern": "fn_59: (fn_57 mod)",
-        "lambda": "(fn_57 mod)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 3,
-        "approx_cost": 260
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench003_it3.json": {
-    "initial_cost": 428,
+    "compression_ratio": 1.0734177215189873,
     "cost_after_rewrites": 424,
     "final_cost": 395,
-    "compression_ratio": 1.0734177215189873,
+    "initial_cost": 428,
+    "library": [
+      {
+        "approx_cost": 359,
+        "arity": 1,
+        "lambda": "(lam (cdr (cdr $0)))",
+        "num_matches": 5,
+        "pattern": "fn_57: (cdr (cdr ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 14
+      },
+      {
+        "approx_cost": 393,
+        "arity": 0,
+        "lambda": "(+ 1)",
+        "num_matches": 1,
+        "pattern": "fn_58: (+ 1)",
+        "pattern_size": 3,
+        "usage_matches": 6
+      },
+      {
+        "approx_cost": 348,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 17,
+        "pattern": "fn_59: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 13
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 (+ 1 fn_18))) $0))",
       "(lam (fn_23 $0 (index fn_18 $0)))",
@@ -7392,42 +7421,42 @@
       "(lam (fn_56 $0 (fn_58 1)))",
       "(lam (fn_58 (fold $0 fn_18 (lam (lam (+ $0 (- $1 $0)))))))",
       "(lam (fold $0 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2))))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_57: (cdr (cdr ?#0))",
-        "lambda": "(lam (cdr (cdr $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 5,
-        "usage_matches": 14,
-        "approx_cost": 359
-      },
-      {
-        "pattern": "fn_58: (+ 1)",
-        "lambda": "(+ 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 6,
-        "approx_cost": 393
-      },
-      {
-        "pattern": "fn_59: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 17,
-        "usage_matches": 13,
-        "approx_cost": 348
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench004_it4.json": {
-    "initial_cost": 479,
+    "compression_ratio": 1.0602678571428572,
     "cost_after_rewrites": 475,
     "final_cost": 448,
-    "compression_ratio": 1.0602678571428572,
+    "initial_cost": 479,
+    "library": [
+      {
+        "approx_cost": 419,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 20,
+        "pattern": "fn_57: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 15
+      },
+      {
+        "approx_cost": 445,
+        "arity": 0,
+        "lambda": "(+ 1)",
+        "num_matches": 1,
+        "pattern": "fn_58: (+ 1)",
+        "pattern_size": 3,
+        "usage_matches": 6
+      },
+      {
+        "approx_cost": 436,
+        "arity": 0,
+        "lambda": "(+ fn_18)",
+        "num_matches": 1,
+        "pattern": "fn_59: (+ fn_18)",
+        "pattern_size": 3,
+        "usage_matches": 5
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 (+ 1 fn_18))) $0))",
       "(lam (fn_23 $0 (car (fn_29 $0))))",
@@ -7511,42 +7540,42 @@
       "(lam (fn_58 (fold $0 fn_18 (lam (lam (+ $0 (- $1 $0)))))))",
       "(lam (fold $0 empty (lam (lam (fold (range $1) $0 (lam (lam (cons $3 $2))))))))",
       "(lam (fold $0 empty (lam (lam (if (gt? $1 fn_18) (cons $1 $0) $0)))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_57: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 20,
-        "usage_matches": 15,
-        "approx_cost": 419
-      },
-      {
-        "pattern": "fn_58: (+ 1)",
-        "lambda": "(+ 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 6,
-        "approx_cost": 445
-      },
-      {
-        "pattern": "fn_59: (+ fn_18)",
-        "lambda": "(+ fn_18)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 5,
-        "approx_cost": 436
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench005_it5.json": {
-    "initial_cost": 589,
+    "compression_ratio": 1.068014705882353,
     "cost_after_rewrites": 581,
     "final_cost": 544,
-    "compression_ratio": 1.068014705882353,
+    "initial_cost": 589,
+    "library": [
+      {
+        "approx_cost": 509,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 25,
+        "pattern": "fn_69: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 19
+      },
+      {
+        "approx_cost": 541,
+        "arity": 0,
+        "lambda": "(+ fn_18)",
+        "num_matches": 1,
+        "pattern": "fn_70: (+ fn_18)",
+        "pattern_size": 3,
+        "usage_matches": 8
+      },
+      {
+        "approx_cost": 516,
+        "arity": 1,
+        "lambda": "(lam (fn_69 (map $0)))",
+        "num_matches": 7,
+        "pattern": "fn_71: (fn_69 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 7
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 (+ 1 fn_18))) $0))",
       "(lam (fn_23 $0 (car (fn_29 $0))))",
@@ -7650,42 +7679,42 @@
       "(lam (+ 1 (fold $0 fn_18 (lam (lam (+ $0 (- $1 $0)))))))",
       "(lam (fn_68 $0 (lam (lam ($0 $1)))))",
       "(lam (fn_68 $0 (lam (lam ($0 (- $1 fn_18))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_69: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 25,
-        "usage_matches": 19,
-        "approx_cost": 509
-      },
-      {
-        "pattern": "fn_70: (+ fn_18)",
-        "lambda": "(+ fn_18)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 8,
-        "approx_cost": 541
-      },
-      {
-        "pattern": "fn_71: (fn_69 (map ?#0))",
-        "lambda": "(lam (fn_69 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 7,
-        "usage_matches": 7,
-        "approx_cost": 516
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench006_it6.json": {
-    "initial_cost": 672,
+    "compression_ratio": 1.080906148867314,
     "cost_after_rewrites": 668,
     "final_cost": 618,
-    "compression_ratio": 1.080906148867314,
+    "initial_cost": 672,
+    "library": [
+      {
+        "approx_cost": 614,
+        "arity": 1,
+        "lambda": "(lam (lam (map $1 $0)))",
+        "num_matches": 10,
+        "pattern": "fn_71: (lam (map ?#0 $0))",
+        "pattern_size": 6,
+        "usage_matches": 10
+      },
+      {
+        "approx_cost": 593,
+        "arity": 1,
+        "lambda": "(lam (+ $0 1))",
+        "num_matches": 3,
+        "pattern": "fn_72: (+ ?#0 1)",
+        "pattern_size": 5,
+        "usage_matches": 10
+      },
+      {
+        "approx_cost": 598,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0 (+ 1 fn_18))))",
+        "num_matches": 3,
+        "pattern": "fn_73: (lam (?#0 $0 (+ 1 fn_18)))",
+        "pattern_size": 10,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 (+ 1 fn_18))) $0))",
       "(lam (fn_23 $0 (car (fn_29 $0))))",
@@ -7809,42 +7838,42 @@
       "(lam (+ 1 (fold $0 fn_18 (lam (lam (+ $0 (- $1 $0)))))))",
       "(lam (fn_68 $0 (lam (lam ($0 $1)))))",
       "(lam (fn_68 $0 (lam (lam ($0 (- $1 fn_18))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_71: (lam (map ?#0 $0))",
-        "lambda": "(lam (lam (map $1 $0)))",
-        "arity": 1,
-        "pattern_size": 6,
-        "num_matches": 10,
-        "usage_matches": 10,
-        "approx_cost": 614
-      },
-      {
-        "pattern": "fn_72: (+ ?#0 1)",
-        "lambda": "(lam (+ $0 1))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 3,
-        "usage_matches": 10,
-        "approx_cost": 593
-      },
-      {
-        "pattern": "fn_73: (lam (?#0 $0 (+ 1 fn_18)))",
-        "lambda": "(lam (lam ($1 $0 (+ 1 fn_18))))",
-        "arity": 1,
-        "pattern_size": 10,
-        "num_matches": 3,
-        "usage_matches": 3,
-        "approx_cost": 598
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench007_it7.json": {
-    "initial_cost": 762,
+    "compression_ratio": 1.0937950937950938,
     "cost_after_rewrites": 758,
     "final_cost": 693,
-    "compression_ratio": 1.0937950937950938,
+    "initial_cost": 762,
+    "library": [
+      {
+        "approx_cost": 638,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 33,
+        "pattern": "fn_72: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 31
+      },
+      {
+        "approx_cost": 667,
+        "arity": 1,
+        "lambda": "(lam (+ $0 1))",
+        "num_matches": 3,
+        "pattern": "fn_73: (+ ?#0 1)",
+        "pattern_size": 5,
+        "usage_matches": 13
+      },
+      {
+        "approx_cost": 651,
+        "arity": 1,
+        "lambda": "(lam (fn_72 (map $0)))",
+        "num_matches": 10,
+        "pattern": "fn_74: (fn_72 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 11
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ $0 (+ 1 fn_18))) $0))",
@@ -7986,42 +8015,42 @@
       "(lam (fn_68 $0 (lam (lam (if (is-prime $1) $2 empty)))))",
       "(lam (fn_68 $0 (lam (lam ($0 $1)))))",
       "(lam (fn_68 $0 (lam (lam ($0 (- $1 fn_18))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_72: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 33,
-        "usage_matches": 31,
-        "approx_cost": 638
-      },
-      {
-        "pattern": "fn_73: (+ ?#0 1)",
-        "lambda": "(lam (+ $0 1))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 3,
-        "usage_matches": 13,
-        "approx_cost": 667
-      },
-      {
-        "pattern": "fn_74: (fn_72 (map ?#0))",
-        "lambda": "(lam (fn_72 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 10,
-        "usage_matches": 11,
-        "approx_cost": 651
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench008_it8.json": {
-    "initial_cost": 832,
+    "compression_ratio": 1.0823529411764703,
     "cost_after_rewrites": 828,
     "final_cost": 765,
-    "compression_ratio": 1.0823529411764705,
+    "initial_cost": 832,
+    "library": [
+      {
+        "approx_cost": 692,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 36,
+        "pattern": "fn_73: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 35
+      },
+      {
+        "approx_cost": 738,
+        "arity": 1,
+        "lambda": "(lam (fn_73 (map $0)))",
+        "num_matches": 11,
+        "pattern": "fn_74: (fn_73 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 12
+      },
+      {
+        "approx_cost": 748,
+        "arity": 0,
+        "lambda": "(+ 1)",
+        "num_matches": 1,
+        "pattern": "fn_75: (+ 1)",
+        "pattern_size": 3,
+        "usage_matches": 8
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ fn_18 $0)) $0))",
@@ -8179,42 +8208,42 @@
       "(lam (fn_68 $0 (lam (lam (if (is-prime $1) $2 empty)))))",
       "(lam (fn_68 $0 (lam (lam ($0 $1)))))",
       "(lam (fn_68 $0 (lam (lam ($0 (- $1 fn_18))))))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_73: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 36,
-        "usage_matches": 35,
-        "approx_cost": 692
-      },
-      {
-        "pattern": "fn_74: (fn_73 (map ?#0))",
-        "lambda": "(lam (fn_73 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 11,
-        "usage_matches": 12,
-        "approx_cost": 738
-      },
-      {
-        "pattern": "fn_75: (+ 1)",
-        "lambda": "(+ 1)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 8,
-        "approx_cost": 748
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench009_it13.json": {
-    "initial_cost": 1071,
+    "compression_ratio": 1.1022727272727273,
     "cost_after_rewrites": 1067,
     "final_cost": 968,
-    "compression_ratio": 1.1022727272727273,
+    "initial_cost": 1071,
+    "library": [
+      {
+        "approx_cost": 871,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 48,
+        "pattern": "fn_74: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 50
+      },
+      {
+        "approx_cost": 942,
+        "arity": 1,
+        "lambda": "(lam (fn_74 (map $0)))",
+        "num_matches": 15,
+        "pattern": "fn_75: (fn_74 (map ?#0))",
+        "pattern_size": 5,
+        "usage_matches": 16
+      },
+      {
+        "approx_cost": 799,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 36,
+        "pattern": "fn_76: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 32
+      }
+    ],
     "original_programs": [
       "(lam (map (lam (+ $0 1)) $0))",
       "(lam (map (lam (+ $0 fn_18)) $0))",
@@ -8416,42 +8445,42 @@
       "(fn_76 fn_73 (fn_74 (gt? 1)))",
       "(fn_76 fn_73 (fn_76 gt? 1))",
       "(fn_76 fn_73 (fn_76 gt? fn_18))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_74: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 48,
-        "usage_matches": 50,
-        "approx_cost": 871
-      },
-      {
-        "pattern": "fn_75: (fn_74 (map ?#0))",
-        "lambda": "(lam (fn_74 (map $0)))",
-        "arity": 1,
-        "pattern_size": 5,
-        "num_matches": 15,
-        "usage_matches": 16,
-        "approx_cost": 942
-      },
-      {
-        "pattern": "fn_76: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 36,
-        "usage_matches": 32,
-        "approx_cost": 799
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench010_it17.json": {
-    "initial_cost": 1028,
+    "compression_ratio": 1.0928495197438637,
     "cost_after_rewrites": 1024,
     "final_cost": 937,
-    "compression_ratio": 1.0928495197438635,
+    "initial_cost": 1028,
+    "library": [
+      {
+        "approx_cost": 836,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 47,
+        "pattern": "fn_75: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 48
+      },
+      {
+        "approx_cost": 790,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 37,
+        "pattern": "fn_76: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 32
+      },
+      {
+        "approx_cost": 917,
+        "arity": 0,
+        "lambda": "(fn_76 fn_73)",
+        "num_matches": 1,
+        "pattern": "fn_77: (fn_76 fn_73)",
+        "pattern_size": 3,
+        "usage_matches": 10
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -8659,42 +8688,42 @@
       "(fn_77 (fn_76 gt? 1))",
       "(fn_77 (fn_75 (gt? fn_18)))",
       "(fn_77 (fn_76 gt? fn_18))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_75: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 47,
-        "usage_matches": 48,
-        "approx_cost": 836
-      },
-      {
-        "pattern": "fn_76: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 37,
-        "usage_matches": 32,
-        "approx_cost": 790
-      },
-      {
-        "pattern": "fn_77: (fn_76 fn_73)",
-        "lambda": "(fn_76 fn_73)",
-        "arity": 0,
-        "pattern_size": 3,
-        "num_matches": 1,
-        "usage_matches": 10,
-        "approx_cost": 917
-      }
     ]
   },
   "list_hard_test_ellisk_2019-02-15T11.43.28__bench011_it19.json": {
-    "initial_cost": 1009,
+    "compression_ratio": 1.1068281938325992,
     "cost_after_rewrites": 1005,
     "final_cost": 908,
-    "compression_ratio": 1.1068281938325992,
+    "initial_cost": 1009,
+    "library": [
+      {
+        "approx_cost": 805,
+        "arity": 1,
+        "lambda": "(lam (lam ($1 $0)))",
+        "num_matches": 48,
+        "pattern": "fn_76: (lam (?#0 $0))",
+        "pattern_size": 4,
+        "usage_matches": 51
+      },
+      {
+        "approx_cost": 762,
+        "arity": 2,
+        "lambda": "(lam (lam (lam ($2 $0 $1))))",
+        "num_matches": 37,
+        "pattern": "fn_77: (lam (?#0 $0 ?#1))",
+        "pattern_size": 6,
+        "usage_matches": 33
+      },
+      {
+        "approx_cost": 889,
+        "arity": 1,
+        "lambda": "(lam (fn_77 fn_73 (lam ($1 (mod (+ $0 $0) fn_72)))))",
+        "num_matches": 2,
+        "pattern": "fn_78: (fn_77 fn_73 (lam (?#0 (mod (+ $0 $0) fn_72))))",
+        "pattern_size": 16,
+        "usage_matches": 3
+      }
+    ],
     "original_programs": [
       "(lam (fn_17 1 $0))",
       "(lam (fn_17 fn_18 $0))",
@@ -8902,35 +8931,6 @@
       "(fn_77 fn_73 (fn_77 gt? 1))",
       "(fn_77 fn_73 (fn_76 (gt? fn_18)))",
       "(fn_77 fn_73 (fn_77 gt? fn_18))"
-    ],
-    "library": [
-      {
-        "pattern": "fn_76: (lam (?#0 $0))",
-        "lambda": "(lam (lam ($1 $0)))",
-        "arity": 1,
-        "pattern_size": 4,
-        "num_matches": 48,
-        "usage_matches": 51,
-        "approx_cost": 805
-      },
-      {
-        "pattern": "fn_77: (lam (?#0 $0 ?#1))",
-        "lambda": "(lam (lam (lam ($2 $0 $1))))",
-        "arity": 2,
-        "pattern_size": 6,
-        "num_matches": 37,
-        "usage_matches": 33,
-        "approx_cost": 762
-      },
-      {
-        "pattern": "fn_78: (fn_77 fn_73 (lam (?#0 (mod (+ $0 $0) fn_72))))",
-        "lambda": "(lam (fn_77 fn_73 (lam ($1 (mod (+ $0 $0) fn_72)))))",
-        "arity": 1,
-        "pattern_size": 16,
-        "num_matches": 2,
-        "usage_matches": 3,
-        "approx_cost": 889
-      }
     ]
   }
 }
