@@ -481,26 +481,27 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // tracks whether self-loop position `selfloop_pos[i][j]` held in *every*
         // subst — a vacuous wrapper always passes through to the same child
         // (e.g. `(repeat ?x 1 ?m) ≡ ?x` for any don't-care `?m`).
+        // Constancy of a candidate child across the match set: `Unseen` until the
+        // first observation, then `Const(c)` while every subst agrees on `c`,
+        // collapsing to `Varies` on the first disagreement or failed lookup.
+        enum Constancy {
+            Unseen,
+            Const(Id),
+            Varies,
+        }
         let mut ec: Vec<Option<Id>> = vec![None; n];
-        let mut cls: Vec<Option<Id>> = vec![None; n]; // last-seen class
-        let mut seen = vec![false; n];
-        let mut varies = vec![false; n];
+        let mut constancy: Vec<Constancy> = (0..n).map(|_| Constancy::Unseen).collect();
         let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
             for s in &m.substs {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
                 for &i in &const_nodes {
-                    if varies[i] {
-                        continue;
-                    }
-                    match ec[i] {
-                        Some(c) if !seen[i] => {
-                            seen[i] = true;
-                            cls[i] = Some(c);
-                        }
-                        Some(c) if cls[i] == Some(c) => {}
-                        _ => varies[i] = true, // disagreement, or a failed lookup
-                    }
+                    constancy[i] = match (&constancy[i], ec[i]) {
+                        (Constancy::Varies, _) => Constancy::Varies,
+                        (Constancy::Unseen, Some(c)) => Constancy::Const(c),
+                        (Constancy::Const(c0), Some(c)) if *c0 == c => Constancy::Const(c),
+                        _ => Constancy::Varies, // disagreement, or a failed lookup
+                    };
                 }
                 for &i in &candidates {
                     // A failed lookup (`ec[i] == None`) can't be a self-loop, so
@@ -514,7 +515,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
             }
         }
-        let is_const = |i: usize| seen[i] && !varies[i];
+        let is_const = |i: usize| matches!(constancy[i], Constancy::Const(_));
         let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
         // Pass 2, per match. A subst is dropped if it is a self-loop at some
         // candidate `i` (its e-class equals a child's) that is dominated, where
