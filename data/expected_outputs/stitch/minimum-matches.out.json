@@ -1,57 +1,28 @@
 {
-  "best-first": {
-    "compression_ratio": 2.2142857142857144,
-    "cost_after_rewrites": 31,
-    "final_cost": 14,
-    "heap_size_at_end": 0,
-    "initial_cost": 31,
-    "library": [
-      {
-        "approx_cost": 11,
-        "arity": 0,
-        "lambda": "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
-        "num_matches": 1,
-        "pattern": "fn_0: (+ (+ 1 2) (+ 1 2) (+ 1 2))",
-        "pattern_size": 10,
-        "usage_matches": 3
-      }
-    ],
-    "original_programs": [
-      "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
-      "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
-      "(+ (+ 1 2) (+ 1 2) (+ 1 2))"
-    ],
-    "rewritten_programs": [
-      "fn_0",
-      "fn_0",
-      "fn_0"
-    ]
-  },
-  "smc": {
-    "compression_ratio": 2.2142857142857144,
-    "cost_after_rewrites": 31,
-    "final_cost": 14,
-    "initial_cost": 31,
-    "library": [
-      {
-        "approx_cost": 11,
-        "arity": 0,
-        "lambda": "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
-        "num_matches": 1,
-        "pattern": "fn_0: (+ (+ 1 2) (+ 1 2) (+ 1 2))",
-        "pattern_size": 10,
-        "usage_matches": 3
-      }
-    ],
-    "original_programs": [
-      "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
-      "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
-      "(+ (+ 1 2) (+ 1 2) (+ 1 2))"
-    ],
-    "rewritten_programs": [
-      "fn_0",
-      "fn_0",
-      "fn_0"
-    ]
-  }
+  "compression_ratio": 2.2142857142857144,
+  "cost_after_rewrites": 31,
+  "final_cost": 14,
+  "heap_size_at_end": 0,
+  "initial_cost": 31,
+  "library": [
+    {
+      "approx_cost": 11,
+      "arity": 0,
+      "lambda": "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
+      "num_matches": 1,
+      "pattern": "fn_0: (+ (+ 1 2) (+ 1 2) (+ 1 2))",
+      "pattern_size": 10,
+      "usage_matches": 3
+    }
+  ],
+  "original_programs": [
+    "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
+    "(+ (+ 1 2) (+ 1 2) (+ 1 2))",
+    "(+ (+ 1 2) (+ 1 2) (+ 1 2))"
+  ],
+  "rewritten_programs": [
+    "fn_0",
+    "fn_0",
+    "fn_0"
+  ]
 }

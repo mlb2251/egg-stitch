@@ -1,53 +1,26 @@
 {
-  "best-first": {
-    "compression_ratio": 1.7826086956521738,
-    "cost_after_rewrites": 41,
-    "final_cost": 23,
-    "heap_size_at_end": 0,
-    "initial_cost": 41,
-    "library": [
-      {
-        "approx_cost": 21,
-        "arity": 0,
-        "lambda": "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
-        "num_matches": 1,
-        "pattern": "fn_0: (a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
-        "pattern_size": 20,
-        "usage_matches": 2
-      }
-    ],
-    "original_programs": [
-      "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
-      "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))"
-    ],
-    "rewritten_programs": [
-      "fn_0",
-      "fn_0"
-    ]
-  },
-  "smc": {
-    "compression_ratio": 1.7826086956521738,
-    "cost_after_rewrites": 41,
-    "final_cost": 23,
-    "initial_cost": 41,
-    "library": [
-      {
-        "approx_cost": 21,
-        "arity": 0,
-        "lambda": "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
-        "num_matches": 1,
-        "pattern": "fn_0: (a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
-        "pattern_size": 20,
-        "usage_matches": 2
-      }
-    ],
-    "original_programs": [
-      "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
-      "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))"
-    ],
-    "rewritten_programs": [
-      "fn_0",
-      "fn_0"
-    ]
-  }
+  "compression_ratio": 1.7826086956521738,
+  "cost_after_rewrites": 41,
+  "final_cost": 23,
+  "heap_size_at_end": 0,
+  "initial_cost": 41,
+  "library": [
+    {
+      "approx_cost": 21,
+      "arity": 0,
+      "lambda": "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
+      "num_matches": 1,
+      "pattern": "fn_0: (a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
+      "pattern_size": 20,
+      "usage_matches": 2
+    }
+  ],
+  "original_programs": [
+    "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))",
+    "(a b c d e f g h (A B C) (A B C) (A B C) (A B C))"
+  ],
+  "rewritten_programs": [
+    "fn_0",
+    "fn_0"
+  ]
 }
