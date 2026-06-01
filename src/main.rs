@@ -12,9 +12,9 @@ struct RunOutput {
     original_size: usize,
     final_cost: Option<usize>,
     final_rewritten: Option<Vec<String>>,
+    heap_size_at_end: Option<usize>,
     cost_before_rewrites: usize,
     original_programs: Vec<String>,
-    heap_size_at_end: Option<usize>,
 }
 
 fn main() {
@@ -30,9 +30,9 @@ fn main() {
         original_size,
         final_cost,
         final_rewritten,
+        heap_size_at_end,
         cost_before_rewrites,
         original_programs,
-        heap_size_at_end,
     } = match args.language {
         LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
         LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
@@ -86,8 +86,8 @@ fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> RunOutp
         original_size,
         final_cost,
         final_rewritten,
+        heap_size_at_end,
         cost_before_rewrites,
         original_programs,
-        heap_size_at_end,
     }
 }

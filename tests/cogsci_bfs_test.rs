@@ -27,6 +27,8 @@
 use serde_json::Value;
 use std::{fs, process::Command};
 
+mod common;
+
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
 /// Directory holding the per-domain DSR (`.rewrites`) files, in-repo alongside
@@ -62,7 +64,7 @@ fn run_bfs(domain: &str, rules: Option<&str>, tag: &str) -> Value {
     let _ = fs::remove_file(&out);
     let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
     if let Some(obj) = v.as_object_mut() {
-        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search", "heap_size_at_end"] {
+        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search"] {
             obj.remove(k);
         }
     }
@@ -80,14 +82,16 @@ fn run_bfs(domain: &str, rules: Option<&str>, tag: &str) -> Value {
 
 /// Blesses (`BLESS=1`) or checks the run output against the frozen fixture.
 fn bless_or_check(path: &str, value: &Value) {
+    let value = common::sorted(value);
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(value).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(&value).expect("serialize expected");
         text.push('\n');
         fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
         let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
-        let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(value, &expected, "fixture mismatch for {path} (run with BLESS=1 to update)");
+        let mut expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+        common::sort_keys(&mut expected);
+        assert_eq!(value, expected, "fixture mismatch for {path} (run with BLESS=1 to update)");
     }
 }
 

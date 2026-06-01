@@ -38,6 +38,8 @@
 use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
 
+mod common;
+
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
 fn expected_path(input: &str) -> String {
@@ -74,7 +76,7 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
     let _ = fs::remove_file(&out);
     let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
     if let Some(obj) = v.as_object_mut() {
-        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search", "heap_size_at_end"] {
+        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search"] {
             obj.remove(k);
         }
     }
@@ -127,7 +129,18 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
     }
     // Collapse to a single entry when both backends agree; otherwise record
     // both side-by-side so the divergence is visible in the fixture.
-    let combined = if bf == smc { bf } else { json!({"best-first": bf, "smc": smc}) };
+    // `heap_size_at_end` is a best-first-only field (SMC has no heap), so a
+    // bare difference on it isn't a real divergence — compare with it removed
+    // and keep the best-first value (which carries the heap size) when they
+    // otherwise agree.
+    let agree = {
+        let mut bf_cmp = bf.clone();
+        if let Some(obj) = bf_cmp.as_object_mut() {
+            obj.remove("heap_size_at_end");
+        }
+        bf_cmp == smc
+    };
+    let combined = if agree { bf } else { json!({"best-first": bf, "smc": smc}) };
     bless_or_check(&expected_path(input), &combined, input);
 }
 
@@ -147,14 +160,16 @@ fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) 
 
 /// Shared blessing/checking step for the two `check_fixture*` helpers.
 fn bless_or_check(path: &str, value: &Value, input: &str) {
+    let value = common::sorted(value);
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(value).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(&value).expect("serialize expected");
         text.push('\n');
         fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
         let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
-        let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(value, &expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
+        let mut expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+        common::sort_keys(&mut expected);
+        assert_eq!(value, expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
     }
 }
 
