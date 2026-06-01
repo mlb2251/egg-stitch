@@ -1,14 +1,31 @@
 {
-  "compression_ratio": null,
-  "cost_after_rewrites": 9,
-  "final_cost": null,
-  "initial_cost": 9,
-  "original_programs": [
-    "(a (lam_1 (a a)))",
-    "(b (lam_1 (b b)))"
-  ],
-  "rewritten_programs": [
-    "(a (lam_1 (a a)))",
-    "(b (lam_1 (b b)))"
-  ]
+  "best-first": {
+    "compression_ratio": null,
+    "cost_after_rewrites": 9,
+    "final_cost": null,
+    "heap_size_at_end": 0,
+    "initial_cost": 9,
+    "original_programs": [
+      "(a (lam_1 (a a)))",
+      "(b (lam_1 (b b)))"
+    ],
+    "rewritten_programs": [
+      "(a (lam_1 (a a)))",
+      "(b (lam_1 (b b)))"
+    ]
+  },
+  "smc": {
+    "compression_ratio": null,
+    "cost_after_rewrites": 9,
+    "final_cost": null,
+    "initial_cost": 9,
+    "original_programs": [
+      "(a (lam_1 (a a)))",
+      "(b (lam_1 (b b)))"
+    ],
+    "rewritten_programs": [
+      "(a (lam_1 (a a)))",
+      "(b (lam_1 (b b)))"
+    ]
+  }
 }

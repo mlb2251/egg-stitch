@@ -1,27 +1,57 @@
 {
-  "compression_ratio": 1.4,
-  "cost_after_rewrites": 42,
-  "final_cost": 30,
-  "initial_cost": 42,
-  "library": [
-    {
-      "approx_cost": 12,
-      "arity": 1,
-      "lambda": "(lam (F e (lam (lam (P $0 ($2 $1 $1))))))",
-      "num_matches": 3,
-      "pattern": "fn_0: (F e (lam (lam (P $0 (?#0 $1 $1)))))",
-      "pattern_size": 15,
-      "usage_matches": 3
-    }
-  ],
-  "original_programs": [
-    "(F e (lam (lam (P $0 (g $1)))))",
-    "(F e (lam (lam (P $0 (h $1 $1)))))",
-    "(F e (lam (lam (P $0 (k $1)))))"
-  ],
-  "rewritten_programs": [
-    "(fn_0 (lam g))",
-    "(fn_0 (lam (h $0)))",
-    "(fn_0 (lam k))"
-  ]
+  "best-first": {
+    "compression_ratio": 1.4,
+    "cost_after_rewrites": 42,
+    "final_cost": 30,
+    "heap_size_at_end": 0,
+    "initial_cost": 42,
+    "library": [
+      {
+        "approx_cost": 12,
+        "arity": 1,
+        "lambda": "(lam (F e (lam (lam (P $0 ($2 $1 $1))))))",
+        "num_matches": 3,
+        "pattern": "fn_0: (F e (lam (lam (P $0 (?#0 $1 $1)))))",
+        "pattern_size": 15,
+        "usage_matches": 3
+      }
+    ],
+    "original_programs": [
+      "(F e (lam (lam (P $0 (g $1)))))",
+      "(F e (lam (lam (P $0 (h $1 $1)))))",
+      "(F e (lam (lam (P $0 (k $1)))))"
+    ],
+    "rewritten_programs": [
+      "(fn_0 (lam g))",
+      "(fn_0 (lam (h $0)))",
+      "(fn_0 (lam k))"
+    ]
+  },
+  "smc": {
+    "compression_ratio": 1.4,
+    "cost_after_rewrites": 42,
+    "final_cost": 30,
+    "initial_cost": 42,
+    "library": [
+      {
+        "approx_cost": 12,
+        "arity": 1,
+        "lambda": "(lam (F e (lam (lam (P $0 ($2 $1 $1))))))",
+        "num_matches": 3,
+        "pattern": "fn_0: (F e (lam (lam (P $0 (?#0 $1 $1)))))",
+        "pattern_size": 15,
+        "usage_matches": 3
+      }
+    ],
+    "original_programs": [
+      "(F e (lam (lam (P $0 (g $1)))))",
+      "(F e (lam (lam (P $0 (h $1 $1)))))",
+      "(F e (lam (lam (P $0 (k $1)))))"
+    ],
+    "rewritten_programs": [
+      "(fn_0 (lam g))",
+      "(fn_0 (lam (h $0)))",
+      "(fn_0 (lam k))"
+    ]
+  }
 }
