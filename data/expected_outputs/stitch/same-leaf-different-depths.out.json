@@ -2,7 +2,9 @@
   "compression_ratio": null,
   "cost_after_rewrites": 33,
   "final_cost": null,
-  "heap_size_at_end": 0,
+  "heap_sizes_at_end": [
+    0
+  ],
   "initial_cost": 33,
   "original_programs": [
     "(lam (fold $0 1 (lam (lam (* $0 $1)))))",
