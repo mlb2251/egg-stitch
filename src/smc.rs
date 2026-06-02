@@ -7,7 +7,7 @@ use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::math::logaddexp;
 use crate::pattern::Pattern;
-use crate::search::{Action, SearchState, SuccessorEnum, setup_search};
+use crate::search::{SearchState, SuccessorEnum, setup_search};
 use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
@@ -56,10 +56,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     // (`-inf`, or `NaN` for a zero-cost particle), collapsing the whole run to
     // "all particles died"; a negative one would silently invert the objective.
     assert!(temperature > 0.0 && temperature.is_finite(), "--temperature must be a positive finite number, got {temperature}");
-    // A negative boost yields negative resampling weights, which make the
-    // cumulative array non-monotonic and break `partition_point` in
-    // `weighted_choice`. Zero is allowed (fully suppresses reuse actions).
-    assert!(args.boost_reuse_weight >= 0.0 && args.boost_reuse_weight.is_finite(), "--boost-reuse-weight must be a non-negative finite number, got {}", args.boost_reuse_weight);
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
@@ -87,8 +83,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     for step in 0..num_steps {
         // For each (state, mult) group, enumerate successor *actions* (no child
         // states built up front), then resample `mult` of them. Each action's
-        // sampling weight is its `(match, subst)` support count; reuse-action
-        // weights are additionally multiplied by `boost_reuse_weight`. Child
+        // sampling weight is its `(match, subst)` support count. Child
         // states are materialised only for sampled actions via `apply_action`,
         // avoiding the per-shape `clone + expand` work for successors that
         // win zero samples. Resulting patterns are deduped globally across groups.
@@ -107,7 +102,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
                 continue;
             }
-            let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
+            let mut weights: Vec<f64> = actions.iter().map(|(_, support)| *support as f64).collect();
             let acc = normalize_and_accumulate(&mut weights);
             let mut counts: Vec<usize> = vec![0; actions.len()];
             for _ in 0..mult {
@@ -276,20 +271,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         data: shared.into_data(),
         debug_log,
     }
-}
-
-/// Weights each successor by its `(match, subst)` support count, with reuse
-/// supports additionally multiplied by `boost_reuse_weight`. With a boost of
-/// 1.0 this is the pure support-weighted distribution; larger values bias
-/// sampling toward reuse actions, smaller values toward expansion.
-fn action_weights_with_reuse_boost<D>(actions: &[(Action<D>, usize)], boost_reuse_weight: f64) -> Vec<f64> {
-    actions
-        .iter()
-        .map(|(a, support)| {
-            let kind_scale = if matches!(a, Action::Reuse { .. }) { boost_reuse_weight } else { 1.0 };
-            kind_scale * (*support as f64)
-        })
-        .collect()
 }
 
 /// Finds the index `i` such that `r` falls into the half-open interval
