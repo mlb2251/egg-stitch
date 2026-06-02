@@ -163,7 +163,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut strip_wrap_substs: usize = 0;
     let search_start = Instant::now();
 
-    'search: while let Some(Reverse((_prio, node_id))) = heap.pop() {
+    'search: loop {
+        // Check cutoffs before popping so a node isn't discarded from the frontier.
         if let Some(b) = budget
             && num_expansions >= b
         {
@@ -176,6 +177,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
         }
+        let Some(Reverse((_prio, node_id))) = heap.pop() else {
+            break;
+        };
 
         // Re-check the cached lower bound: best may have improved since this node was pushed.
         if let Some(lb) = nodes[node_id].lower_bound
