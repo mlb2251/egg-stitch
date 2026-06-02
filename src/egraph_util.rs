@@ -8,55 +8,105 @@ use crate::matching::Subst;
 use egg::{Id, Language};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-/// True iff the e-graph contains a cycle — a class reachable from itself by
-/// following enode children. Identity-shrinking DSRs create these (a 1-cycle from
-/// `x => (T x (M 1 0 0 0))`, a 2-cycle from `(f (g ?x)) => ?x`) and are the source
-/// of unbounded no-op wrapper towers. See [`crate::search::SharedSearchData::has_cycle`].
+/// Returns the set of e-classes that lie on a cycle — a class reachable from
+/// itself by following enode children. Identity-shrinking DSRs create these (a
+/// 1-cycle from `x => (T x (M 1 0 0 0))`, a 2-cycle from `(f (g ?x)) => ?x`) and
+/// are the source of unbounded no-op wrapper towers. A class is on a cycle iff it
+/// is in a strongly-connected component of size ≥ 2, or is a singleton with a
+/// self-edge (an enode whose own child is its class). The set is empty iff the
+/// e-graph is acyclic. See [`crate::search::SharedSearchData`].
 ///
-/// Iterative DFS with white/gray/black coloring over canonical class ids; a back
-/// edge (an edge into a gray ancestor still on the stack) means a cycle. Adjacency
-/// is the union of each class's enodes' (canonicalized) children.
-pub fn egraph_has_cycle<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
+/// Iterative Tarjan SCC over canonical class ids; adjacency is the union of each
+/// class's enodes' (canonicalized) children, deduped.
+pub fn egraph_cycle_classes<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> FxHashSet<Id> {
     let mut adj: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
+    let mut self_edge: FxHashSet<Id> = FxHashSet::default();
     for class in egraph.classes() {
-        let succ = adj.entry(egraph.find(class.id)).or_default();
+        let id = egraph.find(class.id);
+        let succ = adj.entry(id).or_default();
         for node in &class.nodes {
-            succ.extend(node.children().iter().map(|&c| egraph.find(c)));
+            for &c in node.children() {
+                let c = egraph.find(c);
+                if c == id {
+                    self_edge.insert(id);
+                }
+                succ.push(c);
+            }
         }
+        succ.sort_unstable();
+        succ.dedup();
     }
-    #[derive(Clone, Copy, PartialEq)]
-    enum Color {
-        Gray,
-        Black,
-    }
-    let mut color: FxHashMap<Id, Color> = FxHashMap::default();
+
+    // Iterative Tarjan. `index`/`lowlink` keyed by class; `stack`+`on_stack` are
+    // the SCC stack; `call` is the explicit DFS stack of (node, next-child-idx).
+    let mut index: FxHashMap<Id, u32> = FxHashMap::default();
+    let mut lowlink: FxHashMap<Id, u32> = FxHashMap::default();
+    let mut on_stack: FxHashSet<Id> = FxHashSet::default();
+    let mut stack: Vec<Id> = Vec::new();
+    let mut counter: u32 = 0;
+    let mut result: FxHashSet<Id> = FxHashSet::default();
+
     let starts: Vec<Id> = adj.keys().copied().collect();
     for start in starts {
-        if color.contains_key(&start) {
+        if index.contains_key(&start) {
             continue;
         }
-        color.insert(start, Color::Gray);
-        let mut stack: Vec<(Id, usize)> = vec![(start, 0)];
-        while let Some(&(id, idx)) = stack.last() {
-            let succs = &adj[&id];
-            if idx < succs.len() {
-                stack.last_mut().unwrap().1 += 1;
-                let next = succs[idx];
-                match color.get(&next).copied() {
-                    Some(Color::Gray) => return true, // back edge ⇒ cycle
-                    Some(Color::Black) => {}
+        index.insert(start, counter);
+        lowlink.insert(start, counter);
+        counter += 1;
+        stack.push(start);
+        on_stack.insert(start);
+        let mut call: Vec<(Id, usize)> = vec![(start, 0)];
+        while let Some(&(v, ci)) = call.last() {
+            let succs = &adj[&v];
+            if ci < succs.len() {
+                call.last_mut().unwrap().1 += 1;
+                let w = succs[ci];
+                match index.get(&w).copied() {
                     None => {
-                        color.insert(next, Color::Gray);
-                        stack.push((next, 0));
+                        index.insert(w, counter);
+                        lowlink.insert(w, counter);
+                        counter += 1;
+                        stack.push(w);
+                        on_stack.insert(w);
+                        call.push((w, 0));
                     }
+                    Some(iw) if on_stack.contains(&w) => {
+                        let e = lowlink.get_mut(&v).unwrap();
+                        *e = (*e).min(iw);
+                    }
+                    Some(_) => {}
                 }
             } else {
-                color.insert(id, Color::Black);
-                stack.pop();
+                // v is fully explored; if it's an SCC root, pop the component.
+                if lowlink[&v] == index[&v] {
+                    let mut comp: Vec<Id> = Vec::new();
+                    loop {
+                        let w = stack.pop().unwrap();
+                        on_stack.remove(&w);
+                        comp.push(w);
+                        if w == v {
+                            break;
+                        }
+                    }
+                    // Size ≥ 2 ⇒ every member is on a cycle; a singleton is cyclic
+                    // only if it has a self-edge.
+                    if comp.len() >= 2 {
+                        result.extend(comp);
+                    } else if self_edge.contains(&comp[0]) {
+                        result.insert(comp[0]);
+                    }
+                }
+                call.pop();
+                if let Some(&(parent, _)) = call.last() {
+                    let lv = lowlink[&v];
+                    let e = lowlink.get_mut(&parent).unwrap();
+                    *e = (*e).min(lv);
+                }
             }
         }
     }
-    false
+    result
 }
 
 /// Fills `ec[i]` with the e-class each pattern node maps to under `subst`:
