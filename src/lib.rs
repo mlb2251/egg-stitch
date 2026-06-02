@@ -2,6 +2,7 @@ pub mod best_first;
 pub mod candidates;
 pub mod cost;
 pub mod debug_log;
+pub mod egraph_util;
 pub mod follow;
 pub mod io;
 pub mod lang;
@@ -254,7 +255,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_data.egraph.analysis.weights);
                 let body_str = state.pattern.display_with_ho(variable_indices);
                 let lambda = state.pattern.display_as_lambda(variable_indices);
-                let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
+                let usage_counts = egraph_util::compute_usage_counts(&result_data.egraph, result_data.root);
                 // With the `None` sentinel every match keeps every subst, so every
                 // match contributes its usage count; otherwise count only matches
                 // whose kept list is non-empty.
