@@ -59,12 +59,17 @@ pub fn egraph_has_cycle<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
     false
 }
 
-/// Fills `ec[i]` with the e-class each pattern node maps to under `subst`:
-/// `Var(k)` leaves resolve to `subst.vars[k]`; interior nodes resolve via
-/// `egraph.lookup` of the op applied to its children's e-classes (`None` if the
-/// composite enode isn't hash-consed, which propagates upward). Children sit at
-/// higher indices than parents in a RevExpr, so the single high→low pass fills
-/// children before parents. `ec` must be at least `nodes.len()` long.
+/// Fills `ec[i]` with `ec_σ(i)` — the e-class the subpattern at node `i` denotes
+/// under the substitution `subst = σ`, in the paper's notation:
+///
+///   ec_σ(?v)         = σ(v)                              (a `Var(k)` leaf)
+///   ec_σ(op(i₁..iₖ)) = lookup_G(op(ec_σ(i₁)..ec_σ(iₖ)))  (interior node)
+///
+/// where `lookup_G` returns `⊥` (`None`) when the composite enode isn't
+/// hash-consed; `⊥` then propagates upward. When defined, `ec_σ(i)` is the e-class
+/// of the instantiated subpattern, and at the root it is the match root `r`.
+/// Children sit at higher indices than parents in a RevExpr, so the single
+/// high→low pass fills children before parents. `ec` must be ≥ `nodes.len()` long.
 ///
 /// `pos_to_var[i]` is the metavariable index of node `i` if it is a `Var` leaf,
 /// or `usize::MAX` otherwise.

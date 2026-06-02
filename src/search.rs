@@ -416,21 +416,42 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
-    /// Strips substitutions that route through a *dominated no-op wrapper*: a
-    /// pattern node `N` that, at this match, has the same e-class as one of its
-    /// proper descendants `d` (a self-loop — the structure from `N` down to `d`
-    /// did nothing there). Such a substitution is an identity re-wrap (e.g. the
-    /// `(T body (M 1 0 0 0))` layers created by `scale_1`-style DSRs, or the two
-    /// levels of `(f (g body)) => body`): the subtree at `d` covers the same site
-    /// with a strictly smaller body, so the wrapped subst is dominated.
+    /// Strips dominated no-op wrapper substitutions from the match set `M`.
+    ///
+    /// Notation (matching the paper's formalism). For a match `(r, σ) ∈ M` and a
+    /// pattern node position `i`, write `ec_σ(i) ∈ E ∪ {⊥}` for the e-class the
+    /// subpattern at `i` denotes under `σ` (computed by `compute_node_eclasses`),
+    /// `Desc(i)` for the proper descendants of `i`, and `I(p)` for the interior
+    /// nodes (those with `Desc(i) ≠ ∅`). Define
+    ///
+    ///   wrap_σ(i) ⟺ ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i). ec_σ(d) = ec_σ(i)
+    ///
+    /// — a self-loop: the structure from `i` down to `d` denotes the same class,
+    /// so `i` is a no-op re-wrap (e.g. `(T body (M 1 0 0 0)) ≡ body` from a
+    /// `scale_1`-style DSR, or the two levels of `(f (g body)) ≡ body`), and
+    ///
+    ///   genu_σ(i) ⟺ ec_σ(i) ≠ ⊥ ∧ ∀ d ∈ Desc(i). ec_σ(d) ≠ ec_σ(i)
+    ///
+    /// — genuine: `i` is not a self-loop under `σ`. A wrapper subst is dropped only
+    /// when its node is *dominated*, by EITHER
+    ///
+    ///   (a) red_r(i) ⟺ ∃ (r, σ') ∈ M. genu_σ'(i)  — a sibling subst at the same
+    ///       root `r` covers it genuinely, so this re-wrap is redundant (thins
+    ///       intermediate towers where genuine transforms ride along); or
+    ///   (b) vac(i) ⟺ ∃ d ∈ Desc(i). ∀ (r', σ') ∈ M. ec_σ'(i) ≠ ⊥ ∧ ec_σ'(d) = ec_σ'(i)
+    ///       — `i` passes through to the *same* descendant in every match, a
+    ///       vacuous wrapper whose decoration is a don't-care (e.g.
+    ///       `(repeat ?x 1 ?m) ≡ ?x` for any `?m`).
+    ///
+    /// So `M' = { (r, σ) ∈ M : ¬∃ i ∈ I(p). wrap_σ(i) ∧ (red_r(i) ∨ vac(i)) }`.
     ///
     /// A self-loop alone isn't enough — that would also kill genuinely
-    /// parameterized wrappers like `(if ?#0 a b)`, whose `true`-site self-loops
-    /// are incidental. A self-loop subst is dropped only when the node is also
-    /// dominated by rule (a) or (b) below, which keep such parameterized wrappers
-    /// (their passthrough branch alternates across sites, and they have no genuine
-    /// non-self-loop subst). Operating per-subst lets it thin mixed towers — drop
-    /// the re-wrap substs while keeping the genuine ones at the same node.
+    /// parameterized wrappers like `(if ?#0 a b)`, which satisfy neither rule:
+    /// every occurrence is eval'd (no `genu_σ'`, so `red_r` fails) and the
+    /// passthrough branch alternates across sites (so `vac` fails). Soundness: a
+    /// dropped subst is dominated — (a) keeps a genuine cover of `r`; (b)'s wrapped
+    /// pattern is dominated by the spliced (unwrapped at `d`) pattern, reached on a
+    /// sibling branch.
     ///
     /// Returns the number of substs removed.
     pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
@@ -443,15 +464,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 pos_to_var[usize::from(p)] = k;
             }
         }
-        // The candidate "passthrough targets" of node `i` are its *proper
-        // descendants* in the pattern tree. A subst routes through a dominated
-        // no-op wrapper at `i` when `ec[i] == ec[d]` for some descendant `d`: the
-        // subtree at `d` denotes the same e-class with a strictly smaller body, so
-        // the wrapped subst is dominated. The common case is a direct child
-        // (`(repeat ?x 1 ?m) ≡ ?x`); deeper descendants arise from multi-node
-        // identity rules like `(f (g ?x)) => ?x`, where `ec[f] == ec[?x]` two
-        // levels down. RevExpr stores children at higher indices than parents, so
-        // a single high→low pass accumulates descendants bottom-up.
+        // `descendants[i]` is `Desc(i)`, the proper descendants of `i` — the
+        // candidate passthrough targets `d` for a self-loop `ec_σ(d) = ec_σ(i)`.
+        // The common case is a direct child (`(repeat ?x 1 ?m) ≡ ?x`); deeper
+        // descendants arise from multi-node identities like `(f (g ?x)) => ?x`,
+        // where `ec_σ(f) = ec_σ(?x)` two levels down. RevExpr stores children at
+        // higher indices than parents, so a single high→low pass accumulates
+        // `Desc(i)` bottom-up.
         let mut descendants: Vec<Vec<usize>> = vec![Vec::new(); n];
         for i in (0..n).rev() {
             for &c in nodes[i].children() {
@@ -461,20 +480,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 descendants[i].extend(sub);
             }
         }
-        // Only interior nodes (≥1 child) can self-loop onto a descendant; leaves
-        // and var occurrences never can.
+        // `candidates` is `I(p)`, the interior nodes (`Desc(i) ≠ ∅`); only these
+        // can self-loop onto a descendant.
         let candidates: Vec<usize> = (0..n).filter(|&i| !descendants[i].is_empty()).collect();
         if candidates.is_empty() {
             return 0; // no interior node ⇒ nothing to strip
         }
-        // Pass 1: per candidate, `vacuous_pass[i][j]` tracks whether descendant
-        // `descendants[i][j]` shared `i`'s e-class in *every* subst — a vacuous
-        // wrapper always passes through to the *same* descendant (e.g.
-        // `(repeat ?x 1 ?m) ≡ ?x` for any don't-care `?m`). A failed lookup
-        // (`ec[i] == None`) can't be a self-loop, so it clears every position.
-        // compute_node_eclasses still fills every node (a wrapper's lookup needs
-        // its descendants' classes) but the bookkeeping loop touches only
-        // candidates.
+        // Pass 1 computes `vac`. `vacuous_pass[i][j]` stays true iff descendant
+        // `descendants[i][j] = d` satisfies `ec_σ(i) ≠ ⊥ ∧ ec_σ(d) = ec_σ(i)` in
+        // *every* `(r, σ) ∈ M`; `vac(i)` holds iff some `j` survives. `ec_σ(i) = ⊥`
+        // (a lookup miss) can't be a self-loop, so it clears every `j`.
+        // `compute_node_eclasses` fills `ec_σ` over all nodes (a wrapper's lookup
+        // needs its descendants' classes); the bookkeeping loop touches only `I(p)`.
         let mut ec: Vec<Option<Id>> = vec![None; n];
         let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
@@ -490,26 +507,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
         let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
-        // Pass 2, per match. A subst is dropped if `ec[i] == ec[d]` for some
-        // candidate `i` and proper descendant `d` (a no-op wrapper — the subtree
-        // at `d` already covers the site) that is dominated, where node `i` is
-        // dominated when EITHER:
-        //   (a) some other subst in the *same match* is genuine at `i` (its
-        //       e-class differs from *all* its descendants) — so the root is
-        //       already covered the real way and this wrapper subst is redundant;
-        //       this catches intermediate towers where genuine transforms ride
-        //       along;
-        //   (b) node `i` passes through to the *same* descendant in every match
-        //       (`is_vacuous`) — a vacuous wrapper whose decoration is a
-        //       don't-care, e.g. `(repeat ?x 1 ?m) ≡ ?x` for any `?m`.
-        // Parameterized wrappers satisfy neither: an `if` node has no genuine
-        // subst (every occurrence is eval'd) so (a) fails, and it isn't a
-        // self-loop onto the same site in every match (its passthrough branch
-        // alternates), so (b) fails too.
+        // Pass 2, per match (root `r`). The sub-pass computes `red_r`:
+        // `genuine_at[i]` ⟺ `∃ σ at r. genu_σ(i)`. Then drop each subst `σ` with a
+        // dominated wrapper: `∃ i ∈ I(p). wrap_σ(i) ∧ (red_r(i) ∨ vac(i))`, where
+        // `ec_σ(i) = ⊥` rules `i` out. `vac(i)` is the global Pass-1 result; `(a)`
+        // pairs `red_r(i)` with `wrap_σ(i)` (a self-loop `∃ d. ec_σ(d) = ec_σ(i)`)
+        // at this subst.
         let mut removed = 0;
-        let mut genuine_at = vec![false; n]; // per-match: candidate has a genuine (non-self-loop) subst
+        let mut genuine_at = vec![false; n]; // red_r: candidate has a genu_σ subst at this root
         for m in &mut self.matches {
-            // sub-pass: which candidates have a genuine subst in this match?
+            // sub-pass: genuine_at[i] ⟺ ∃ σ at this root with genu_σ(i).
             genuine_at.iter_mut().for_each(|g| *g = false);
             for s in &m.substs {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
@@ -524,11 +531,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
                 let dominated = candidates.iter().any(|&i| {
                     if ec[i].is_none() {
-                        return false;
+                        return false; // ec_σ(i) = ⊥ ⇒ not a wrapper
                     }
-                    is_vacuous(i) // (b) vacuous wrapper: always passes through
-                        || (genuine_at[i] // (a) a genuine subst already covers this root
-                            && descendants[i].iter().any(|&d| ec[d] == ec[i])) // self-loop at this subst
+                    is_vacuous(i) // (b) vac(i): passes through in every match
+                        || (genuine_at[i] // (a) red_r(i): a genu_σ' covers this root, and...
+                            && descendants[i].iter().any(|&d| ec[d] == ec[i])) // ...wrap_σ(i) here
                 });
                 !dominated
             });
