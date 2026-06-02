@@ -12,16 +12,17 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
-/// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
+/// Inserts a freshly-expanded state into the parallel (states, mult_count)
+/// deduped-by-pattern buffer, accumulating `count` particles into the existing
+/// group or pushing a new one.
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: f64, states: &mut Vec<SearchState<F, O>>, mult_count: &mut Vec<f64>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
     match dedup.get(&s.pattern) {
-        Some(&idx) => mults[idx] += count,
+        Some(&idx) => mult_count[idx] += count,
         None => {
             let idx = states.len();
             dedup.insert(s.pattern.clone(), idx);
             states.push(s);
-            mults.push(count);
+            mult_count.push(count);
         }
     }
 }
@@ -60,6 +61,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     // cumulative array non-monotonic and break `partition_point` in
     // `weighted_choice`. Zero is allowed (fully suppresses reuse actions).
     assert!(args.boost_reuse_weight >= 0.0 && args.boost_reuse_weight.is_finite(), "--boost-reuse-weight must be a non-negative finite number, got {}", args.boost_reuse_weight);
+    // Tempering exponent on the dedup multiplicity in the resample weight.
+    // Negative would down-weight popular patterns (inverts the intent).
+    assert!(args.resample_temper >= 0.0 && args.resample_temper.is_finite(), "--resample-temper must be a non-negative finite number, got {}", args.resample_temper);
+    let resample_temper = args.resample_temper;
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
@@ -86,25 +91,24 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     for step in 0..num_steps {
         // For each (state, mult) group, enumerate successor *actions* (no child
-        // states built up front), then resample `mult` of them. Each action's
-        // sampling weight is its `(match, subst)` support count; reuse-action
-        // weights are additionally multiplied by `boost_reuse_weight`. Child
-        // states are materialised only for sampled actions via `apply_action`,
-        // avoiding the per-shape `clone + expand` work for successors that
-        // win zero samples. Resulting patterns are deduped globally across groups.
+        // states built up front), then resample `mult` of them ∝ `(match, subst)`
+        // support (reuse boosted by `boost_reuse_weight`). `mult[i]` accumulates
+        // the dedup multiplicity (how many particles reached pattern `i`), which
+        // feeds the tempered resample weight below. Child states are materialised
+        // only for sampled actions via `apply_action`.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
-        let mut mults: Vec<usize> = Vec::new();
+        let mut mult_count: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
-                    dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                    dedup_insert(child, mult as f64, &mut expanded, &mut mult_count, &mut dedup);
                     continue;
                 }
                 SuccessorEnum::All(actions) => actions,
             };
             if actions.is_empty() {
-                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                dedup_insert(state, mult as f64, &mut expanded, &mut mult_count, &mut dedup);
                 continue;
             }
             let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
@@ -116,7 +120,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
                     let child = state.apply_action(&action, &shared);
-                    dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                    dedup_insert(child, count as f64, &mut expanded, &mut mult_count, &mut dedup);
                 }
             }
         }
@@ -149,9 +153,13 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             pruned.push(false);
         }
 
-        // log-space weights: logw_i = -cost_i / temperature; pruned particles
-        // (lb >= best) are dead since no descendant can beat the current best.
-        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
+        // log-space weights: logw_i = temper*ln(mult_i) - cost_i / temperature;
+        // pruned particles (lb >= best) are dead. `mult_i^temper` is a *tempered*
+        // dedup multiplicity: temper=0 weights every distinct pattern by cost
+        // alone (max frontier diversity, slower), temper=1 by full particle count
+        // (concentrates, loses diversity). temper~0.5 keeps main's compression
+        // while pruning the frontier ~2x faster (see --resample-temper).
+        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { resample_temper * mult_count[i].ln() - (*c as f64) / temperature }).collect();
 
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);

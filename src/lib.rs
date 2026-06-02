@@ -104,6 +104,14 @@ pub struct Args {
     #[arg(long, default_value_t = 1.0)]
     pub boost_reuse_weight: f64,
 
+    /// Tempering exponent on the SMC dedup multiplicity in the resample weight:
+    /// `weight ∝ mult^temper · exp(-cost/T)`. `0` weights every distinct pattern
+    /// by cost alone (maximally diverse frontier, but slower); `1` weights by the
+    /// full particle count (concentrates, hurts compression). The default `0.5`
+    /// (√count) preserves compression while pruning the frontier ~2× faster.
+    #[arg(long, default_value_t = 0.5)]
+    pub resample_temper: f64,
+
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]
     pub check_slow: bool,
