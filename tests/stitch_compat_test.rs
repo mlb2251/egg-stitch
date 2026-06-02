@@ -58,14 +58,23 @@ fn temp_output_path(input: &str, search: &str) -> std::path::PathBuf {
 }
 
 /// Invokes the cargo-built binary, writes its `--output` JSON to a temp file,
-/// reads it back, and strips non-deterministic fields.
+/// reads it back, and strips non-deterministic fields. Best-first uses the
+/// default 50 000-step budget.
 fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
+    run_backend_steps(search, input, "50000", extra_args)
+}
+
+/// Like [`run_backend`] but with an explicit best-first `--num-steps` budget
+/// (ignored by SMC). Used for corpora where 50 000 steps is impractical — e.g.
+/// an e-graph cyclic *through a binder*, whose pattern search space is unbounded
+/// and whose per-expansion work grows super-linearly.
+fn run_backend_steps(search: &str, input: &str, bf_steps: &str, extra_args: &[&str]) -> Value {
     let out = temp_output_path(input, search);
     let out_str = out.to_str().expect("utf-8 temp path");
     let mut cmd = Command::new(BIN);
     cmd.args(["--search", search, "--input", input, "--check-slow", "--num-abstractions", "1", "--output", out_str]);
     if search == "best-first" {
-        cmd.args(["--num-steps", "50000"]);
+        cmd.args(["--num-steps", bf_steps]);
     } else {
         cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
     }
@@ -151,7 +160,13 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
 /// signal. The fixture format is the same single `RunResult` shape that
 /// `check_fixture` writes when both backends already agree.
 fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) {
-    let mut bf = run_backend("best-first", input, extra_args);
+    check_fixture_bf_only_steps(input, "50000", extra_args, check_pattern);
+}
+
+/// [`check_fixture_bf_only`] with an explicit best-first `--num-steps` budget,
+/// for corpora where the default 50 000 is impractical (see [`run_backend_steps`]).
+fn check_fixture_bf_only_steps(input: &str, bf_steps: &str, extra_args: &[&str], check_pattern: bool) {
+    let mut bf = run_backend_steps("best-first", input, bf_steps, extra_args);
     strip_library_field(&mut bf, "best_history");
     if !check_pattern {
         strip_library_patterns(&mut bf);
@@ -359,6 +374,27 @@ fn arithmetic_aplusbplus1234() {
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
+}
+
+/// Regression for the `shift_equal` binder-cycle non-termination
+/// (`src/shift_equal.rs`). The rules `a => (lambda a)` / `b => (lambda b)` carry
+/// no metavariables, so `rule_fv_verdict` accepts them, yet each concrete RHS
+/// hashconses back into the matched class — equality saturation closes two
+/// distinct cycles *through the `lambda` binder*. Best-first then reaches a
+/// pattern with two metavars at different binder depths capturing those cyclic
+/// classes and calls `shift_equal(a, b, 0, 1)`.
+///
+/// Pre-fix, that call grew its `(deeper, shallower, init_depth)` key without
+/// bound (one bump per binder around the cycle) and overflowed the stack —
+/// aborting this run. With `init_depth` clamped at `shift_clamp` the coinduction
+/// closes, so the run completes and produces a stable result. A small step
+/// budget keeps it fast (the cyclic e-graph makes the search space unbounded).
+#[test]
+fn binder_cycle_terminates() {
+    // Pre-fix the run aborts with a stack overflow inside `shift_equal`'s
+    // coinduction, so `run_backend_steps`'s success assertion is itself the
+    // regression signal; the fixture then pins the (now-terminating) result.
+    check_fixture_bf_only_steps("data/domains/cyclic-binder/lam_self_cycle.json", "300", &["--language", "lambda-calc", "--rules", "data/domains/cyclic-binder/lam_self_cycle.rewrites"], true);
 }
 
 /// Collapse an s-expression to a sorted multiset of its atoms, discarding

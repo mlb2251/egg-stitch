@@ -128,6 +128,11 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// when one of the pattern's leaf labels lands on a cyclic class; it gates on
     /// this set to skip its per-state cost otherwise.
     pub on_cycle: FxHashSet<Id>,
+    /// Precomputed De Bruijn clamp for [`shift_equal`] (see
+    /// [`crate::shift_equal::shift_clamp`]). Computed once here because the
+    /// e-graph isn't unioned during search, and `shift_equal` is on the hot
+    /// path — recomputing it per call would be O(enodes) each time.
+    pub shift_clamp: u32,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -248,7 +253,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         Self::build_matches(parent_matches, |subst, out| {
             let shallow_id = subst.vars[shallow_idx];
             let deep_id = subst.vars[deep_idx];
-            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph) {
+            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph, shared.shift_clamp) {
                 return;
             }
             let mut new_subst = subst.clone();
@@ -633,7 +638,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     continue;
                 }
                 let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
-                    let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count();
+                    let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph, shared.shift_clamp)).count();
                     (s + usage(m.root_eclass) * c, r + c)
                 });
                 if support == 0 {
@@ -702,6 +707,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
     let on_cycle = egraph_cycle_classes(&egraph);
+    let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let shared = SharedSearchData {
         egraph,
         root,
@@ -709,6 +715,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         usage_counts,
         check_slow: args.check_slow,
         on_cycle,
+        shift_clamp,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, None);
