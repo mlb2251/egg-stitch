@@ -387,6 +387,10 @@ pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     /// Per-match list of compatible subst indices. `None` means every subst
     /// is considered compatible.
     pub kept_substs: Option<&'a [Vec<usize>]>,
+    /// Precomputed `∃ slot: var_depth > 0 || ho_arity > 0` — whether any captured
+    /// arg is re-indexed at the call site. When false, the per-arg shift handling
+    /// is skipped entirely (the common case; see `best`).
+    pub any_shift: bool,
 }
 
 impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for RewriteAnalysis<'a, F, O> {
@@ -403,7 +407,16 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             // the hot solver loop doesn't heap-allocate per call.
             let stub_size = F::stub_application_size(ho_arity.len(), weights) as i64;
             let var_depth = &sizes.analysis.search_state.pattern.var_depth;
+            // Whether *any* slot re-indexes its captured arg (precomputed once per
+            // candidate). When none does — every slot is depth-0 and non-HO, i.e.
+            // all op-children patterns and any binder-free lambda pattern — the
+            // rewrite is a plain stub over the un-shifted arg sizes, so we keep the
+            // original tight loop with no per-arg branch or `shifted_arg_size` call.
+            let any_shift = sizes.analysis.any_shift;
             let cost_of = |subst: &crate::matching::Subst| -> i64 {
+                if !any_shift {
+                    return stub_size + subst.vars.iter().map(|&v| sizes.get(v)).sum::<i64>();
+                }
                 let args_size: i64 = subst
                     .vars
                     .iter()
@@ -412,10 +425,10 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
                         let h = ho_arity[k];
                         let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
                         // A depth-0 non-HO slot doesn't shift its arg, so the
-                        // un-shifted `get(v)` is exact (and skips the walk — this
-                        // is the common case). Otherwise score the *depth-shifted*
-                        // arg (what `wrap_subst_args` builds): re-indexing can move
-                        // a sub-rewrite off its match root, so `get(v)` would
+                        // un-shifted `get(v)` is exact (and skips the walk).
+                        // Otherwise score the *depth-shifted* arg (what
+                        // `wrap_subst_args` builds): re-indexing can move a
+                        // sub-rewrite off its match root, so `get(v)` would
                         // undercount.
                         let arg = if h == 0 && var_depth[k] == 0 { sizes.get(v) } else { sizes.shifted_arg_size(v, 0) };
                         wrap + arg
@@ -531,11 +544,13 @@ pub fn compute_size_for_candidate<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
 /// across candidates.
 #[allow(clippy::too_many_arguments)]
 fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, candidate: &CostCandidate, ho_arity: &[u32]) -> usize {
+    let any_shift = ho_arity.iter().any(|&h| h > 0) || search_state.pattern.var_depth.iter().any(|&d| d > 0);
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
         ho_arity,
         kept_substs: candidate.kept_substs.as_deref(),
+        any_shift,
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for (i, m) in search_state.matches.iter().enumerate() {

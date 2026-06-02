@@ -58,7 +58,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     assert!(temperature > 0.0 && temperature.is_finite(), "--temperature must be a positive finite number, got {temperature}");
     // A negative boost yields negative resampling weights, which make the
     // cumulative array non-monotonic and break `partition_point` in
-    // `weighted_choice`. Zero is allowed (fully suppresses reuse actions).
+    // `weighted_choice`. Zero is allowed.
     assert!(args.boost_reuse_weight >= 0.0 && args.boost_reuse_weight.is_finite(), "--boost-reuse-weight must be a non-negative finite number, got {}", args.boost_reuse_weight);
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;
