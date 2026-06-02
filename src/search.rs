@@ -1,11 +1,11 @@
-use crate::egraph_util::{build_size_minimal_extraction, compute_node_eclasses, compute_usage_counts, egraph_cycle_classes};
+use crate::egraph_util::{build_size_minimal_extraction, compute_node_eclasses, compute_usage_counts, egraph_has_cycle};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
@@ -119,15 +119,14 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
-    /// The e-classes that lie on a cycle: some class reachable from itself by
+    /// True iff the e-graph contains a cycle: some class reachable from itself by
     /// following enode children. Identity-shrinking DSRs create these — a direct
     /// self-loop from `x => (T x (M 1 0 0 0))` (1-cycle) or a longer one from
     /// `(f (g ?x)) => ?x` (2-cycle) — and they are the source of unbounded no-op
     /// wrapper towers. A pattern node's e-class can equal a proper descendant's
     /// only via such a cycle, so `strip_dominated_wrappers` has work to do exactly
-    /// when one of the pattern's leaf labels lands on a cyclic class; it gates on
-    /// this set to skip its per-state cost otherwise.
-    pub on_cycle: FxHashSet<Id>,
+    /// when this holds; it gates on this to skip its per-state cost otherwise.
+    pub has_cycle: bool,
     /// Precomputed De Bruijn clamp for [`shift_equal`] (see
     /// [`crate::shift_equal::shift_clamp`]). Computed once here because the
     /// e-graph isn't unioned during search, and `shift_equal` is on the hot
@@ -141,11 +140,6 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
     /// to the outer abstraction loop.
     pub fn into_data(self) -> crate::shared::SharedData<F, O> {
         crate::shared::SharedData::new(self.egraph, self.root)
-    }
-
-    /// True iff the e-graph contains any cycle (some e-class is on a cycle).
-    pub fn has_cycle(&self) -> bool {
-        !self.on_cycle.is_empty()
     }
 }
 
@@ -438,11 +432,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// non-self-loop subst). Operating per-subst lets it thin mixed towers — drop
     /// the re-wrap substs while keeping the genuine ones at the same node.
     ///
-    /// A cycle gate skips the scan up front when none of the pattern's leaf labels
-    /// (variable bindings or concrete-leaf classes) land on a cyclic e-class
-    /// (`shared.on_cycle`): a wrapper requires a cycle through some leaf, so this is
-    /// a pure no-op-preserving early-out, not a change to which substs are removed.
-    ///
     /// Returns the number of substs removed.
     pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
         let nodes = &self.pattern.pattern.nodes;
@@ -477,26 +466,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let candidates: Vec<usize> = (0..n).filter(|&i| !descendants[i].is_empty()).collect();
         if candidates.is_empty() {
             return 0; // no interior node ⇒ nothing to strip
-        }
-        // Cycle gate. A wrapper (`ec[i] == ec[d]`, `d` a descendant) needs a cycle
-        // through `ec[i]`; an interior class can only be on a cycle if one of its
-        // children's classes is (induction down to the leaves), so a wrapper forces
-        // some *leaf* label — a variable binding or a concrete leaf's class — onto a
-        // cycle. If no leaf label lands on `shared.on_cycle`, no wrapper exists and
-        // the scan would remove nothing, so skip it. This keeps the strip's removals
-        // identical and only avoids provable no-ops.
-        let touches_cycle = nodes.iter().enumerate().any(|(i, node)| {
-            // concrete leaf (no children, not a var): class is subst-independent.
-            pos_to_var[i] == usize::MAX && node.children().is_empty() && {
-                let disc = F::map_discriminant(node.discriminant(), |ov| match ov {
-                    OpWithVar::Node(o) => o,
-                    OpWithVar::Var(_) => unreachable!("var leaf handled via pos_to_var"),
-                });
-                shared.egraph.lookup(F::make(disc, Vec::new())).is_some_and(|c| shared.on_cycle.contains(&c))
-            }
-        }) || self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars.iter().any(|&b| shared.on_cycle.contains(&shared.egraph.find(b)))));
-        if !touches_cycle {
-            return 0;
         }
         // Pass 1: per candidate, `vacuous_pass[i][j]` tracks whether descendant
         // `descendants[i][j]` shared `i`'s e-class in *every* subst — a vacuous
@@ -706,7 +675,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
-    let on_cycle = egraph_cycle_classes(&egraph);
+    let has_cycle = egraph_has_cycle(&egraph);
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let shared = SharedSearchData {
         egraph,
@@ -714,7 +683,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         follow: follow_expr,
         usage_counts,
         check_slow: args.check_slow,
-        on_cycle,
+        has_cycle,
         shift_clamp,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
