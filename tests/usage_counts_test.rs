@@ -8,8 +8,8 @@
 /// child with no count.
 use egg::{FromOp, Language};
 use egg_stitch::{
+    egraph_util::compute_usage_counts,
     lang::{Op, OpChildrenLanguage, StitchEgraph},
-    search::compute_usage_counts,
 };
 
 #[test]
