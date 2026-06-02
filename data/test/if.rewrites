@@ -1,0 +1,5 @@
+// (if c t e) where both branches are taken to the same thing collapses; the
+// re-nesting form makes `if` a freely-renestable identity wrapper (self-loop),
+// analogous to scale_1 in the drawings DSRs.
+if_nest: (if ?c ?t ?e) => (if ?c (if ?c ?t ?e) (if ?c ?t ?e))
+if_same: (if ?c ?x ?x) => ?x
