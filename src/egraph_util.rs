@@ -1,13 +1,7 @@
 //! E-graph traversal and query helpers used by the search, kept apart from the
-//! search logic itself. Everything here takes a [`StitchEgraph`] (plus, in one
-//! case, a pattern instantiation) and computes a fact about it — cycle presence,
-//! the e-class of each pattern node, a size-minimal extraction, or per-class
-//! usage counts. None of it touches the search state.
-//!
-//! egg itself does not expose reusable equivalents: its cycle finder is private
-//! to the (LP-only) `lp_extract` module, and its `Extractor`/`AstSize` yield a
-//! `RecExpr` tree under a different cost model rather than the DAG-shared
-//! `OpWithVar` output and usage counts we need here.
+//! search logic itself. Each takes a [`StitchEgraph`] and computes a fact about
+//! it — a size-minimal extraction or per-class usage counts — without touching
+//! the search state.
 
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
 use crate::matching::Subst;
