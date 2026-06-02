@@ -411,21 +411,23 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
-    /// Strips substitutions that route through a *dominated no-op wrapper*: a
-    /// pattern node `N` that, at this match, has the same e-class as one of its
-    /// proper descendants `d` (a self-loop — the structure from `N` down to `d`
-    /// did nothing there). Such a substitution is an identity re-wrap (e.g. the
-    /// `(T body (M 1 0 0 0))` layers created by `scale_1`-style DSRs, or the two
-    /// levels of `(f (g body)) => body`): the subtree at `d` covers the same site
-    /// with a strictly smaller body, so the wrapped subst is dominated.
+    /// Strips substitutions that route through a *vacuous no-op wrapper*: a pattern
+    /// node `N` whose e-class equals one of its *proper descendants* `d` (a
+    /// self-loop — the structure from `N` down to `d` did nothing), where `N` is
+    /// *vacuous*: it passes through to that same descendant in *every* subst of
+    /// *every* match. The common case is a direct child (`(repeat ?x 1 ?m) ≡ ?x`,
+    /// a 1-cycle); deeper descendants arise from multi-node identities like
+    /// `(f (g body)) => body` (a 2-cycle, the self-loop sitting at the grandparent).
+    /// A vacuous wrapper means the unwrapped pattern (spliced at `d`) dominates, so
+    /// the whole state is pruned.
     ///
-    /// A self-loop alone isn't enough — that would also kill genuinely
-    /// parameterized wrappers like `(if ?#0 a b)`, whose `true`-site self-loops
-    /// are incidental. A self-loop subst is dropped only when the node is also
-    /// dominated by rule (a) or (b) below, which keep such parameterized wrappers
-    /// (their passthrough branch alternates across sites, and they have no genuine
-    /// non-self-loop subst). Operating per-subst lets it thin mixed towers — drop
-    /// the re-wrap substs while keeping the genuine ones at the same node.
+    /// EXPERIMENTAL REDUCTION: rule (a) — per-root local redundancy via a genuine
+    /// sibling subst — is dropped; only the vacuous rule (b) remains. The empirical
+    /// finding (see `strip_wrap_converge_test`) is that vacuity over the *current*
+    /// match set, checked over the full descendant reach, is the load-bearing
+    /// terminator: it converges both the 1-cycle and 2-cycle self-loop corpora
+    /// without (a). Deep-descendant ("ancestor") detection, by contrast, is *not*
+    /// optional — dropping it leaves the 2-cycle tower unpruned.
     ///
     /// Returns the number of substs removed.
     pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
@@ -438,15 +440,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 pos_to_var[usize::from(p)] = k;
             }
         }
-        // The candidate "passthrough targets" of node `i` are its *proper
-        // descendants* in the pattern tree. A subst routes through a dominated
-        // no-op wrapper at `i` when `ec[i] == ec[d]` for some descendant `d`: the
-        // subtree at `d` denotes the same e-class with a strictly smaller body, so
-        // the wrapped subst is dominated. The common case is a direct child
-        // (`(repeat ?x 1 ?m) ≡ ?x`); deeper descendants arise from multi-node
-        // identity rules like `(f (g ?x)) => ?x`, where `ec[f] == ec[?x]` two
-        // levels down. RevExpr stores children at higher indices than parents, so
-        // a single high→low pass accumulates descendants bottom-up.
+        // The passthrough targets of node `i` are its *proper descendants*. A subst
+        // routes through a no-op wrapper at `i` when `ec[i] == ec[d]` for some
+        // descendant `d`: the subtree at `d` denotes the same e-class with a strictly
+        // smaller body. The common case is a direct child (`(repeat ?x 1 ?m) ≡ ?x`);
+        // deeper descendants arise from multi-node identities like `(f (g ?x)) => ?x`,
+        // where `ec[f] == ec[?x]` two levels down. RevExpr stores children at higher
+        // indices than parents, so a single high→low pass accumulates descendants
+        // bottom-up.
         let mut descendants: Vec<Vec<usize>> = vec![Vec::new(); n];
         for i in (0..n).rev() {
             for &c in nodes[i].children() {
@@ -456,8 +457,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 descendants[i].extend(sub);
             }
         }
-        // Only interior nodes (≥1 child) can self-loop onto a descendant; leaves
-        // and var occurrences never can.
+        // Only interior nodes (≥1 child) can self-loop onto a descendant; leaves and
+        // var occurrences never can.
         let candidates: Vec<usize> = (0..n).filter(|&i| !descendants[i].is_empty()).collect();
         if candidates.is_empty() {
             return 0; // no interior node ⇒ nothing to strip
@@ -468,8 +469,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // `(repeat ?x 1 ?m) ≡ ?x` for any don't-care `?m`). A failed lookup
         // (`ec[i] == None`) can't be a self-loop, so it clears every position.
         // compute_node_eclasses still fills every node (a wrapper's lookup needs
-        // its descendants' classes) but the bookkeeping loop touches only
-        // candidates.
+        // its descendants' classes) but the bookkeeping loop touches only candidates.
         let mut ec: Vec<Option<Id>> = vec![None; n];
         let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
@@ -485,49 +485,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
         let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
-        // Pass 2, per match. A subst is dropped if `ec[i] == ec[d]` for some
-        // candidate `i` and proper descendant `d` (a no-op wrapper — the subtree
-        // at `d` already covers the site) that is dominated, where node `i` is
-        // dominated when EITHER:
-        //   (a) some other subst in the *same match* is genuine at `i` (its
-        //       e-class differs from *all* its descendants) — so the root is
-        //       already covered the real way and this wrapper subst is redundant;
-        //       this catches intermediate towers where genuine transforms ride
-        //       along;
-        //   (b) node `i` passes through to the *same* descendant in every match
-        //       (`is_vacuous`) — a vacuous wrapper whose decoration is a
-        //       don't-care, e.g. `(repeat ?x 1 ?m) ≡ ?x` for any `?m`.
-        // Parameterized wrappers satisfy neither: an `if` node has no genuine
-        // subst (every occurrence is eval'd) so (a) fails, and it isn't a
-        // self-loop onto the same site in every match (its passthrough branch
-        // alternates), so (b) fails too.
+        // Pass 2: rule (b) only. A node `i` that is a vacuous wrapper dominates the
+        // whole pattern (the spliced, unwrapped pattern covers every site at no
+        // greater cost), so every subst is dropped and the state is pruned.
+        // `is_vacuous` is a property of the entire match set, not of a single subst,
+        // so this is all-or-nothing — there is no per-subst (a) thinning in this
+        // experimental variant.
         let mut removed = 0;
-        let mut genuine_at = vec![false; n]; // per-match: candidate has a genuine (non-self-loop) subst
-        for m in &mut self.matches {
-            // sub-pass: which candidates have a genuine subst in this match?
-            genuine_at.iter_mut().for_each(|g| *g = false);
-            for s in &m.substs {
-                compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                for &i in &candidates {
-                    if ec[i].is_some() && !descendants[i].iter().any(|&d| ec[d] == ec[i]) {
-                        genuine_at[i] = true;
-                    }
-                }
+        if candidates.iter().any(|&i| is_vacuous(i)) {
+            for m in &mut self.matches {
+                removed += m.substs.len();
+                m.substs.clear();
             }
-            let before = m.substs.len();
-            m.substs.retain(|s| {
-                compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                let dominated = candidates.iter().any(|&i| {
-                    if ec[i].is_none() {
-                        return false;
-                    }
-                    is_vacuous(i) // (b) vacuous wrapper: always passes through
-                        || (genuine_at[i] // (a) a genuine subst already covers this root
-                            && descendants[i].iter().any(|&d| ec[d] == ec[i])) // self-loop at this subst
-                });
-                !dominated
-            });
-            removed += before - m.substs.len();
         }
         if removed > 0 {
             self.matches.retain(|mm| !mm.substs.is_empty());
