@@ -295,6 +295,45 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
         let weights = &self.egraph.analysis.weights;
         self.egraph[eclass].nodes.iter().map(|enode| enode.discriminant().intrinsic_size(weights) as i64 + self.sum(enode.children())).min().unwrap()
     }
+    /// Size that a captured argument `eclass` contributes once `wrap_subst_args`
+    /// lifts it to the call site (`init_depth` counts the binders entered so far
+    /// in the lift, starting at 0).
+    ///
+    /// A subtree that is *closed* under the lift (every `fv < init_depth`) is
+    /// shift-invariant: `shift_free_egraph` returns the very same e-class, so the
+    /// abstraction's own rewrite still fires on it and its rewritten size
+    /// `get(..)` carries over. A subtree with a *free* index is re-indexed onto a
+    /// fresh e-class on which that rewrite can no longer fire, so it is sized
+    /// structurally (no rewrite at this node), recursing into children with the
+    /// per-binder depth bump. Using `get(eclass)` directly here (the old
+    /// behaviour) double-counts the rewrite at re-indexed match roots and
+    /// undercounts the true post-shift size, breaking the `fast >= slow`
+    /// upper-bound contract. This mirrors `shift_free_egraph`'s walk (same
+    /// min-size representative) but accumulates a size; it is an upper bound on
+    /// the slow path, exact unless a re-indexed operand collides with a cheaper
+    /// existing e-class.
+    /// Only meaningful for slots that actually shift (`var_depth > 0` or HO arity
+    /// `> 0`); callers use `get(v)` directly for depth-0 non-HO slots, where the
+    /// lift is the identity and `get(v)` is already exact (and avoids this walk).
+    pub fn shifted_arg_size(&self, eclass: Id, init_depth: u32) -> i64 {
+        let canonical = self.egraph.find(eclass);
+        if self.egraph[canonical].data.fv.iter().all(|&i| i < init_depth as i32) {
+            return self.get(canonical);
+        }
+        let weights = &self.egraph.analysis.weights;
+        let rep = self.egraph[canonical]
+            .nodes
+            .iter()
+            .min_by_key(|n| n.discriminant().intrinsic_size(weights) as u64 + n.children().iter().map(|&c| self.egraph[c].data.size as u64).sum::<u64>())
+            .expect("non-empty eclass");
+        let disc = rep.discriminant();
+        let mut size = disc.intrinsic_size(weights) as i64;
+        for (j, &c) in rep.children().iter().enumerate() {
+            let child_depth = init_depth + if disc.binds_child(j) { 1 } else { 0 };
+            size += self.shifted_arg_size(c, child_depth);
+        }
+        size
+    }
     pub fn weights(&self) -> &Weights {
         &self.egraph.analysis.weights
     }
@@ -363,6 +402,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             // dispatched via match below (rather than `Box<dyn Iterator>`) so
             // the hot solver loop doesn't heap-allocate per call.
             let stub_size = F::stub_application_size(ho_arity.len(), weights) as i64;
+            let var_depth = &sizes.analysis.search_state.pattern.var_depth;
             let cost_of = |subst: &crate::matching::Subst| -> i64 {
                 let args_size: i64 = subst
                     .vars
@@ -371,7 +411,14 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
                     .map(|(k, &v)| {
                         let h = ho_arity[k];
                         let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
-                        wrap + sizes.get(v)
+                        // A depth-0 non-HO slot doesn't shift its arg, so the
+                        // un-shifted `get(v)` is exact (and skips the walk — this
+                        // is the common case). Otherwise score the *depth-shifted*
+                        // arg (what `wrap_subst_args` builds): re-indexing can move
+                        // a sub-rewrite off its match root, so `get(v)` would
+                        // undercount.
+                        let arg = if h == 0 && var_depth[k] == 0 { sizes.get(v) } else { sizes.shifted_arg_size(v, 0) };
+                        wrap + arg
                     })
                     .sum();
                 stub_size + args_size
