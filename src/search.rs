@@ -118,6 +118,11 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
+    /// Precomputed De Bruijn clamp for [`shift_equal`] (see
+    /// [`crate::shift_equal::shift_clamp`]). Computed once here because the
+    /// e-graph isn't unioned during search, and `shift_equal` is on the hot
+    /// path — recomputing it per call would be O(enodes) each time.
+    pub shift_clamp: u32,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -233,7 +238,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         Self::build_matches(parent_matches, |subst, out| {
             let shallow_id = subst.vars[shallow_idx];
             let deep_id = subst.vars[deep_idx];
-            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph) {
+            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph, shared.shift_clamp) {
                 return;
             }
             let mut new_subst = subst.clone();
@@ -468,7 +473,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     continue;
                 }
                 let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
-                    let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count();
+                    let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph, shared.shift_clamp)).count();
                     (s + usage(m.root_eclass) * c, r + c)
                 });
                 if support == 0 {
@@ -564,12 +569,14 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
+    let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let shared = SharedSearchData {
         egraph,
         root,
         follow: follow_expr,
         usage_counts,
         check_slow: args.check_slow,
+        shift_clamp,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, None);
