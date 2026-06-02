@@ -1,0 +1,7 @@
+// genuine conditional evaluation: lets a bare (a b c d e) be recognized as
+// (if true (a b c d e) (g h i j k)), unifying then/else sites under one if.
+if_true:  (if true ?x ?y)  => ?x
+if_false: (if false ?x ?y) => ?y
+// identity self-loop on if (re-applicable padding), analogous to scale_1.
+if_nest:  (if ?c ?t ?e) => (if ?c (if ?c ?t ?e) (if ?c ?t ?e))
+if_same:  (if ?c ?x ?x) => ?x

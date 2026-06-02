@@ -1,0 +1,40 @@
+{
+  "compression_ratio": 1.4615384615384617,
+  "cost_after_rewrites": 57,
+  "final_cost": 39,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 71,
+  "library": [
+    {
+      "approx_cost": -41,
+      "arity": 2,
+      "lambda": "(lam (lam (f (if $1 (a b c d e) (g h i j k)) $0)))",
+      "num_matches": 8,
+      "pattern": "fn_0: (f (if ?#0 (a b c d e) (g h i j k)) ?#1)",
+      "pattern_size": 14,
+      "usage_matches": 8
+    }
+  ],
+  "original_programs": [
+    "(f (if true (a b c d e) (g h i j k)) k1)",
+    "(f (if false (a b c d e) (g h i j k)) k2)",
+    "(f (a b c d e) k3)",
+    "(f (g h i j k) k4)",
+    "(f (a b c d e) k5)",
+    "(f (g h i j k) k6)",
+    "(f (a b c d e) k7)",
+    "(f (g h i j k) k8)"
+  ],
+  "rewritten_programs": [
+    "(fn_0 true k1)",
+    "(fn_0 false k2)",
+    "(fn_0 true k3)",
+    "(fn_0 false k4)",
+    "(fn_0 true k5)",
+    "(fn_0 false k6)",
+    "(fn_0 true k7)",
+    "(fn_0 false k8)"
+  ]
+}

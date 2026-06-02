@@ -1,0 +1,36 @@
+{
+  "compression_ratio": 1.0571428571428572,
+  "cost_after_rewrites": 37,
+  "final_cost": 35,
+  "heap_sizes_at_end": [
+    1807
+  ],
+  "initial_cost": 37,
+  "library": [
+    {
+      "approx_cost": 17,
+      "arity": 2,
+      "lambda": "(lam (lam (if p $1 $0)))",
+      "num_matches": 6,
+      "pattern": "fn_0: (if p ?#0 ?#1)",
+      "pattern_size": 4,
+      "usage_matches": 6
+    }
+  ],
+  "original_programs": [
+    "(seq (if p a1 b1) c1)",
+    "(seq (if p a2 b2) c2)",
+    "(seq (if p a3 b3) c3)",
+    "(seq (if p a4 b4) c4)",
+    "(seq (if p a5 b5) c5)",
+    "(seq (if p a6 b6) c6)"
+  ],
+  "rewritten_programs": [
+    "(seq (fn_0 a1 b1) c1)",
+    "(seq (fn_0 a2 b2) c2)",
+    "(seq (fn_0 a3 b3) c3)",
+    "(seq (fn_0 a4 b4) c4)",
+    "(seq (fn_0 a5 b5) c5)",
+    "(seq (fn_0 a6 b6) c6)"
+  ]
+}
