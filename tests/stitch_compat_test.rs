@@ -43,8 +43,9 @@ mod common;
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
 fn expected_path(input: &str) -> String {
-    // Mirror the `data/domains/<...>/foo.json` layout under `data/expected_outputs/`.
-    let relative = input.strip_prefix("data/domains/").expect("expected input under data/domains/");
+    // Mirror the input layout under `data/expected_outputs/`: `data/domains/<...>`
+    // and the hand-built `data/test/<...>` corpora both map by stripping `data/`.
+    let relative = input.strip_prefix("data/domains/").or_else(|| input.strip_prefix("data/")).expect("expected input under data/domains/ or data/");
     let stem = relative.strip_suffix(".json").unwrap_or(relative);
     format!("data/expected_outputs/{stem}.out.json")
 }
@@ -705,4 +706,40 @@ fn conditional_branch_unify() {
 #[test]
 fn cross_depth_ho_capture() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_ho_capture.json", LAMBDA, true);
+}
+
+/// Hand-built `data/test/` corpora whose rule sets each introduce an identity
+/// self-loop — a freely re-nestable wrapper (`(+ ?x 0) == ?x`,
+/// `(if ?c ?x ?x) == ?x`, `(repeat ?x 1 ?m) == ?x`, `(f (g ?x)) == ?x`) —
+/// alongside genuine equivalences (`4 == (+ 2 2)`). Best-first only, capped at
+/// `--max-arity 2`: the self-loops make the space unbounded, so the
+/// `--num-steps` cap in `run_backend` is what bounds the towers (`converge_tower`
+/// / `nested_loop_tower` still hit the cap, leaving a non-zero `heap_sizes_at_end`
+/// — the regression these pin until dominated-wrapper stripping drains them).
+fn check_self_loop(input: &str, rules: &str) {
+    check_fixture_bf_only(&format!("data/test/{input}.json"), &["--rules", &format!("data/test/{rules}.rewrites"), "--max-arity", "2"], true);
+}
+
+/// `4 == (+ 2 2)` unifies the two corpus shapes; `(+ ?x 0)` is the self-loop.
+#[test]
+fn self_loop_arith_unify() {
+    check_self_loop("arith_unify", "arith");
+}
+
+/// Direct-child self-loop `(repeat ?x 1 ?m) => ?x` over a compressive corpus.
+#[test]
+fn self_loop_converge_tower() {
+    check_self_loop("converge_tower", "converge_tower");
+}
+
+/// Grandchild self-loop `(f (g ?x)) => ?x` over a compressive corpus.
+#[test]
+fn self_loop_nested_loop_tower() {
+    check_self_loop("nested_loop_tower", "nested_loop_tower");
+}
+
+/// `if_nest`/`if_same` self-loop over an `(if p _ _)` corpus.
+#[test]
+fn self_loop_if_unify() {
+    check_self_loop("if_unify", "if");
 }

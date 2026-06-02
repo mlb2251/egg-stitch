@@ -1,0 +1,68 @@
+{
+  "compression_ratio": 1.6739690721649485,
+  "cost_after_rewrites": 1299,
+  "final_cost": 776,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 1431,
+  "library": [
+    {
+      "approx_cost": 1194,
+      "arity": 2,
+      "lambda": "(lam (lam (C $1 (C $0 $1))))",
+      "num_matches": 20,
+      "pattern": "fn_0: (C ?#0 (C ?#1 ?#0))",
+      "pattern_size": 5,
+      "usage_matches": 22
+    }
+  ],
+  "original_programs": [
+    "(C (C (f (g (T (C (l a) (l b)) (M 0 0 0 1)))) (f (g (T (C (l b) (l c)) (M 1 0 0 2))))) (C (f (g (T (C (l c) (l d)) (M 2 0 0 3)))) (C (T (C (l a) (l b)) (M 0 0 0 1)) (T (C (l b) (l c)) (M 1 0 0 2)))))",
+    "(C (C (f (g (T (C (l b) (l c)) (M 1 0 0 2)))) (f (g (T (C (l e) (l f)) (M 4 0 0 5))))) (C (f (g (T (C (l h) (l i)) (M 7 0 0 8)))) (C (T (C (l b) (l c)) (M 1 0 0 2)) (T (C (l e) (l f)) (M 4 0 0 5)))))",
+    "(C (C (f (g (T (C (l c) (l d)) (M 2 0 0 3)))) (f (g (T (C (l h) (l i)) (M 7 0 0 8))))) (C (f (g (T (C (l c) (l f)) (M 2 0 0 5)))) (C (T (C (l c) (l d)) (M 2 0 0 3)) (T (C (l h) (l i)) (M 7 0 0 8)))))",
+    "(C (C (f (g (T (C (l d) (l e)) (M 3 0 0 4)))) (f (g (T (C (l a) (l d)) (M 0 0 0 3))))) (C (f (g (T (C (l h) (l a)) (M 7 0 0 0)))) (C (T (C (l d) (l e)) (M 3 0 0 4)) (T (C (l a) (l d)) (M 0 0 0 3)))))",
+    "(C (C (f (g (T (C (l e) (l f)) (M 4 0 0 5)))) (f (g (T (C (l d) (l g)) (M 3 0 0 6))))) (C (f (g (T (C (l c) (l d)) (M 2 0 0 3)))) (C (T (C (l e) (l f)) (M 4 0 0 5)) (T (C (l d) (l g)) (M 3 0 0 6)))))",
+    "(C (C (f (g (T (C (l f) (l g)) (M 5 0 0 6)))) (f (g (T (C (l g) (l j)) (M 6 0 0 9))))) (C (f (g (T (C (l h) (l i)) (M 7 0 0 8)))) (C (T (C (l f) (l g)) (M 5 0 0 6)) (T (C (l g) (l j)) (M 6 0 0 9)))))",
+    "(C (C (f (g (T (C (l g) (l h)) (M 6 0 0 7)))) (f (g (T (C (l j) (l c)) (M 9 0 0 2))))) (C (f (g (T (C (l c) (l f)) (M 2 0 0 5)))) (C (T (C (l g) (l h)) (M 6 0 0 7)) (T (C (l j) (l c)) (M 9 0 0 2)))))",
+    "(C (C (f (g (T (C (l h) (l i)) (M 7 0 0 8)))) (f (g (T (C (l c) (l d)) (M 2 0 0 3))))) (C (f (g (T (C (l h) (l a)) (M 7 0 0 0)))) (C (T (C (l h) (l i)) (M 7 0 0 8)) (T (C (l c) (l d)) (M 2 0 0 3)))))",
+    "(C (C (f (g (T (C (l i) (l j)) (M 8 0 0 9)))) (f (g (T (C (l f) (l g)) (M 5 0 0 6))))) (C (f (g (T (C (l c) (l d)) (M 2 0 0 3)))) (C (T (C (l i) (l j)) (M 8 0 0 9)) (T (C (l f) (l g)) (M 5 0 0 6)))))",
+    "(C (C (f (g (T (C (l j) (l a)) (M 9 0 0 0)))) (f (g (T (C (l i) (l j)) (M 8 0 0 9))))) (C (f (g (T (C (l h) (l i)) (M 7 0 0 8)))) (C (T (C (l j) (l a)) (M 9 0 0 0)) (T (C (l i) (l j)) (M 8 0 0 9)))))",
+    "(C (C (f (g (T (C (l a) (l d)) (M 0 0 0 3)))) (f (g (T (C (l b) (l e)) (M 1 0 0 4))))) (C (f (g (T (C (l c) (l f)) (M 2 0 0 5)))) (C (T (C (l a) (l d)) (M 0 0 0 3)) (T (C (l b) (l e)) (M 1 0 0 4)))))",
+    "(C (C (f (g (T (C (l b) (l e)) (M 1 0 0 4)))) (f (g (T (C (l e) (l h)) (M 4 0 0 7))))) (C (f (g (T (C (l h) (l a)) (M 7 0 0 0)))) (C (T (C (l b) (l e)) (M 1 0 0 4)) (T (C (l e) (l h)) (M 4 0 0 7)))))",
+    "(C (C (f (g (T (C (l c) (l f)) (M 2 0 0 5)))) (f (g (T (C (l h) (l a)) (M 7 0 0 0))))) (C (f (g (T (C (l c) (l d)) (M 2 0 0 3)))) (C (T (C (l c) (l f)) (M 2 0 0 5)) (T (C (l h) (l a)) (M 7 0 0 0)))))",
+    "(C (C (f (g (T (C (l d) (l g)) (M 3 0 0 6)))) (f (g (T (C (l a) (l b)) (M 0 0 0 1))))) (C (f (g (T (C (l h) (l i)) (M 7 0 0 8)))) (C (T (C (l d) (l g)) (M 3 0 0 6)) (T (C (l a) (l b)) (M 0 0 0 1)))))",
+    "(C (C (f (g (T (C (l e) (l h)) (M 4 0 0 7)))) (f (g (T (C (l d) (l e)) (M 3 0 0 4))))) (C (f (g (T (C (l c) (l f)) (M 2 0 0 5)))) (C (T (C (l e) (l h)) (M 4 0 0 7)) (T (C (l d) (l e)) (M 3 0 0 4)))))",
+    "(C (C (f (g (T (C (l f) (l i)) (M 5 0 0 8)))) (f (g (T (C (l g) (l h)) (M 6 0 0 7))))) (C (f (g (T (C (l h) (l a)) (M 7 0 0 0)))) (C (T (C (l f) (l i)) (M 5 0 0 8)) (T (C (l g) (l h)) (M 6 0 0 7)))))",
+    "(C (C (f (g (T (C (l g) (l j)) (M 6 0 0 9)))) (f (g (T (C (l j) (l a)) (M 9 0 0 0))))) (C (f (g (T (C (l c) (l d)) (M 2 0 0 3)))) (C (T (C (l g) (l j)) (M 6 0 0 9)) (T (C (l j) (l a)) (M 9 0 0 0)))))",
+    "(C (C (f (g (T (C (l h) (l a)) (M 7 0 0 0)))) (f (g (T (C (l c) (l f)) (M 2 0 0 5))))) (C (f (g (T (C (l h) (l i)) (M 7 0 0 8)))) (C (T (C (l h) (l a)) (M 7 0 0 0)) (T (C (l c) (l f)) (M 2 0 0 5)))))",
+    "(C (C (f (g (T (C (l i) (l b)) (M 8 0 0 1)))) (f (g (T (C (l f) (l i)) (M 5 0 0 8))))) (C (f (g (T (C (l c) (l f)) (M 2 0 0 5)))) (C (T (C (l i) (l b)) (M 8 0 0 1)) (T (C (l f) (l i)) (M 5 0 0 8)))))",
+    "(C (C (f (g (T (C (l j) (l c)) (M 9 0 0 2)))) (f (g (T (C (l i) (l b)) (M 8 0 0 1))))) (C (f (g (T (C (l h) (l a)) (M 7 0 0 0)))) (C (T (C (l j) (l c)) (M 9 0 0 2)) (T (C (l i) (l b)) (M 8 0 0 1)))))",
+    "(C (C (f (g (T (C (l a) (l b)) (M 0 0 0 1)))) (f (g (T (C (l b) (l c)) (M 1 0 0 2))))) (C (f (g (T (C (l c) (l d)) (M 2 0 0 3)))) (C (T (C (l a) (l b)) (M 0 0 0 1)) (T (C (l b) (l c)) (M 1 0 0 2)))))",
+    "(C (C (f (g (T (C (l b) (l c)) (M 1 0 0 2)))) (f (g (T (C (l e) (l f)) (M 4 0 0 5))))) (C (f (g (T (C (l h) (l i)) (M 7 0 0 8)))) (C (T (C (l b) (l c)) (M 1 0 0 2)) (T (C (l e) (l f)) (M 4 0 0 5)))))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 (C (T (C (l a) (l b)) (M 0 0 0 1)) (T (C (l b) (l c)) (M 1 0 0 2))) (T (C (l c) (l d)) (M 2 0 0 3)))",
+    "(fn_0 (C (T (C (l b) (l c)) (M 1 0 0 2)) (T (C (l e) (l f)) (M 4 0 0 5))) (T (C (l h) (l i)) (M 7 0 0 8)))",
+    "(fn_0 (C (T (C (l c) (l d)) (M 2 0 0 3)) (T (C (l h) (l i)) (M 7 0 0 8))) (T (C (l c) (l f)) (M 2 0 0 5)))",
+    "(fn_0 (C (T (C (l d) (l e)) (M 3 0 0 4)) (T (C (l a) (l d)) (M 0 0 0 3))) (T (C (l h) (l a)) (M 7 0 0 0)))",
+    "(fn_0 (C (T (C (l e) (l f)) (M 4 0 0 5)) (T (C (l d) (l g)) (M 3 0 0 6))) (T (C (l c) (l d)) (M 2 0 0 3)))",
+    "(fn_0 (C (T (C (l f) (l g)) (M 5 0 0 6)) (T (C (l g) (l j)) (M 6 0 0 9))) (T (C (l h) (l i)) (M 7 0 0 8)))",
+    "(fn_0 (C (T (C (l g) (l h)) (M 6 0 0 7)) (T (C (l j) (l c)) (M 9 0 0 2))) (T (C (l c) (l f)) (M 2 0 0 5)))",
+    "(fn_0 (C (T (C (l h) (l i)) (M 7 0 0 8)) (T (C (l c) (l d)) (M 2 0 0 3))) (T (C (l h) (l a)) (M 7 0 0 0)))",
+    "(fn_0 (C (T (C (l i) (l j)) (M 8 0 0 9)) (T (C (l f) (l g)) (M 5 0 0 6))) (T (C (l c) (l d)) (M 2 0 0 3)))",
+    "(fn_0 (C (T (C (l j) (l a)) (M 9 0 0 0)) (T (C (l i) (l j)) (M 8 0 0 9))) (T (C (l h) (l i)) (M 7 0 0 8)))",
+    "(fn_0 (C (T (C (l a) (l d)) (M 0 0 0 3)) (T (C (l b) (l e)) (M 1 0 0 4))) (T (C (l c) (l f)) (M 2 0 0 5)))",
+    "(fn_0 (C (T (C (l b) (l e)) (M 1 0 0 4)) (T (C (l e) (l h)) (M 4 0 0 7))) (T (C (l h) (l a)) (M 7 0 0 0)))",
+    "(fn_0 (C (T (C (l c) (l f)) (M 2 0 0 5)) (T (C (l h) (l a)) (M 7 0 0 0))) (T (C (l c) (l d)) (M 2 0 0 3)))",
+    "(fn_0 (C (T (C (l d) (l g)) (M 3 0 0 6)) (T (C (l a) (l b)) (M 0 0 0 1))) (T (C (l h) (l i)) (M 7 0 0 8)))",
+    "(fn_0 (C (T (C (l e) (l h)) (M 4 0 0 7)) (T (C (l d) (l e)) (M 3 0 0 4))) (T (C (l c) (l f)) (M 2 0 0 5)))",
+    "(fn_0 (C (T (C (l f) (l i)) (M 5 0 0 8)) (T (C (l g) (l h)) (M 6 0 0 7))) (T (C (l h) (l a)) (M 7 0 0 0)))",
+    "(fn_0 (C (T (C (l g) (l j)) (M 6 0 0 9)) (T (C (l j) (l a)) (M 9 0 0 0))) (T (C (l c) (l d)) (M 2 0 0 3)))",
+    "(fn_0 (C (T (C (l h) (l a)) (M 7 0 0 0)) (T (C (l c) (l f)) (M 2 0 0 5))) (T (C (l h) (l i)) (M 7 0 0 8)))",
+    "(fn_0 (C (T (C (l i) (l b)) (M 8 0 0 1)) (T (C (l f) (l i)) (M 5 0 0 8))) (T (C (l c) (l f)) (M 2 0 0 5)))",
+    "(fn_0 (C (T (C (l j) (l c)) (M 9 0 0 2)) (T (C (l i) (l b)) (M 8 0 0 1))) (T (C (l h) (l a)) (M 7 0 0 0)))",
+    "(fn_0 (C (T (C (l a) (l b)) (M 0 0 0 1)) (T (C (l b) (l c)) (M 1 0 0 2))) (T (C (l c) (l d)) (M 2 0 0 3)))",
+    "(fn_0 (C (T (C (l b) (l c)) (M 1 0 0 2)) (T (C (l e) (l f)) (M 4 0 0 5))) (T (C (l h) (l i)) (M 7 0 0 8)))"
+  ]
+}
