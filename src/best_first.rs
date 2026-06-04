@@ -124,10 +124,15 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let no_zero_arity = args.no_zero_arity;
     let debug = args.debug_log;
     let strategy = args.priority;
+    // Active only when the wrap-nesting bound is (cyclic egraph + strip): makes
+    // cost selection drop candidates that only rewrite via over-cap re-wrap
+    // towers, matching the frontier gate's `max_wrap_nesting` at abstraction
+    // granularity. `None` elsewhere leaves candidate enumeration unchanged.
+    let wrap_cap = (args.opt_strip_wrap && shared.has_cycle).then_some(args.max_wrap_nesting);
 
     let initial_state = SearchState::new(&shared, Some(0));
     let mut scratch = CostScratch::new(&shared.egraph);
-    let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
+    let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow, wrap_cap).cost;
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
@@ -210,6 +215,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 // mixed (non-uniform) re-wrap towers stay finite — sound-as-
                 // incomplete, removes only over-nested search nodes.
                 strip_wrap_substs += child.strip_dominated_wrappers(&shared);
+                strip_wrap_substs += child.prune_unique_max_depth_root(&shared);
             }
             successors.retain(|c| !c.matches.is_empty() && c.min_wrap_nesting_depth(&shared) <= args.max_wrap_nesting);
         }
@@ -248,7 +254,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // Capture the selection here so updates to `best` can stash it
             // without re-running the optimisation in `multiple_step_search`.
             // Cost-equal to the old `compute_cost` call — same underlying work.
-            let child_selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, shared.check_slow);
+            let child_selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, shared.check_slow, wrap_cap);
             let child_cost = child_selection.cost;
             cost_time += cost_t.elapsed();
             cost_calls += 1;

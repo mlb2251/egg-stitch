@@ -112,7 +112,18 @@ pub fn enumerate_kept_subst_subsets(var_captures: &[Vec<Vec<i32>>]) -> Vec<Vec<u
 /// At least one candidate is always returned: when no slot can capture
 /// pattern-internal binders, the result is a single empty-`S` candidate
 /// with every subst kept (signalled by the `None` sentinel).
-pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<CostCandidate> {
+///
+/// When `max_wrap_nesting` is `Some(cap)` (the wrap-nesting bound is active —
+/// cyclic egraph + `--opt-strip-wrap`), candidates whose entire kept-subst pool
+/// has stacked-self-loop depth `> cap` are dropped: such a candidate's
+/// abstraction can only rewrite through over-cap re-wrap towers, so returning it
+/// would violate the per-abstraction guarantee that an optimal rewrite retains a
+/// within-cap subst (see [`SearchState::subst_within_wrap_cap`]). The keep-all
+/// candidate is always eligible on a state that survives the frontier gate (its
+/// pool is the full subst set, which the gate guarantees holds a within-cap
+/// subst), so filtering never empties the candidate list; if it somehow would,
+/// the unfiltered set is kept so the cost stays defined.
+pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, max_wrap_nesting: Option<usize>) -> Vec<CostCandidate> {
     let arity = search_state.pattern.var_depth.len();
     let var_depth = &search_state.pattern.var_depth;
     // Fast path: no slot can capture pattern-internal binders. Emit the
@@ -145,7 +156,7 @@ pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgrap
         }
     }
     let n_matches = search_state.matches.len();
-    enumerate_kept_subst_subsets(&var_captures)
+    let mut out: Vec<CostCandidate> = enumerate_kept_subst_subsets(&var_captures)
         .into_iter()
         .map(|subset| {
             // Re-derive `variable_indices` as the union of captures across
@@ -168,5 +179,18 @@ pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgrap
             }
             CostCandidate { variable_indices, kept_substs: Some(kept_per_match) }
         })
-        .collect()
+        .collect();
+    // Per-abstraction wrap-nesting guarantee: drop candidates whose kept pool is
+    // entirely over-cap. `kept_substs` is `Some(..)` on every general-path
+    // candidate, so we index `within[mi][si]` directly. Skip filtering if it
+    // would empty the list (no within-cap subst anywhere — a state the frontier
+    // gate should already have pruned) so the cost stays defined.
+    if let Some(cap) = max_wrap_nesting {
+        let within = search_state.subst_within_wrap_cap(egraph, cap);
+        let eligible = |c: &CostCandidate| c.kept_substs.as_ref().is_none_or(|km| km.iter().enumerate().any(|(mi, sis)| sis.iter().any(|&si| within[mi][si])));
+        if out.iter().any(eligible) {
+            out.retain(eligible);
+        }
+    }
+    out
 }
