@@ -465,7 +465,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// re-wrap towers on cyclic e-graphs) are NOT droppable soundly at the subst
     /// level (a self-wrap can be the cheapest rewrite of its root; see
     /// `strip_redundant_sibling_unsound_test`). Those are bounded instead by
-    /// [`Self::wrap_nesting_depth`] at the search frontier. Returns substs removed.
+    /// [`Self::min_wrap_nesting_depth`] at the search frontier. Returns substs removed.
     pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
@@ -511,21 +511,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         removed
     }
 
-    /// Maximum number of *stacked self-loops* (spins) on any root-to-leaf path,
-    /// over all matches — the search-frontier bound that keeps re-wrap towers
-    /// finite on cyclic e-graphs.
+    /// The *minimum* over matches of each subst's stacked-self-loop (spin) depth
+    /// — the search-frontier bound that keeps re-wrap towers finite on cyclic
+    /// e-graphs.
     ///
     /// A node `i` is a self-loop under `σ` iff `ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i).
     /// ec_σ(d) = ec_σ(i)` (it denotes the same e-class as a descendant — a no-op
-    /// wrapper at this subst). The depth is the longest chain of such nodes from
-    /// the root down, maximised over substs. Crucially this counts only loop
-    /// *closures*: genuine nesting (each level a distinct e-class) contributes
-    /// nothing, so bounding it trims redundant re-wraps without touching real
-    /// structure. Capping it (see `--max-wrap-nesting`) is sound-as-incomplete:
-    /// it removes whole search nodes but never alters the cost of an explored
-    /// pattern, so it can't change a reported optimum — it can only fail to
-    /// explore an abstraction that needs more than the cap of stacked no-ops.
-    pub fn wrap_nesting_depth(&self, shared: &SharedSearchData<F, O>) -> usize {
+    /// wrapper at this subst). A subst's depth is the longest chain of such nodes
+    /// from the root down; this returns the *min* of that over all substs.
+    ///
+    /// Capping the min (see `--max-wrap-nesting`) prunes a pattern only when
+    /// *every* surviving rewrite is over-spun past the cap — i.e. the pattern is
+    /// nothing but a re-wrap tower with no shallow use left. A pattern keeping
+    /// even one within-cap subst is retained. (This is strictly weaker than
+    /// bounding the max-over-substs: it prunes a subset, so it's more complete,
+    /// while still cutting pure towers, whose every subst is over-spun.) The
+    /// count is of loop *closures* only — genuine nesting (each level a distinct
+    /// e-class) contributes nothing — so it trims redundant re-wraps without
+    /// touching real structure. Sound-as-incomplete: it removes whole search
+    /// nodes but never alters the cost of an explored pattern, so it can't change
+    /// a reported optimum — only fail to explore an abstraction whose *every*
+    /// rewrite needs more than the cap of stacked no-ops.
+    pub fn min_wrap_nesting_depth(&self, shared: &SharedSearchData<F, O>) -> usize {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
         let pos_to_var = self.pos_to_var();
@@ -534,7 +541,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             return 0; // single leaf, no interior nodes
         }
         let mut ec: Vec<Option<Id>> = vec![None; n];
-        let mut max_depth = 0;
+        let mut min_depth = usize::MAX;
         for m in &self.matches {
             for s in &m.substs {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
@@ -548,10 +555,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     let child_max = nodes[i].children().iter().map(|&c| chain[usize::from(c)]).max().unwrap_or(0);
                     chain[i] = child_max + usize::from(is_loop);
                 }
-                max_depth = max_depth.max(chain[0]);
+                min_depth = min_depth.min(chain[0]);
             }
         }
-        max_depth
+        // No substs (shouldn't happen — callers gate on non-empty matches) ⇒ 0.
+        if min_depth == usize::MAX { 0 } else { min_depth }
     }
 
     /// Returns the enumerable successors of `self`. When dominance pruning

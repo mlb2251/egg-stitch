@@ -211,7 +211,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 // incomplete, removes only over-nested search nodes.
                 strip_wrap_substs += child.strip_dominated_wrappers(&shared);
             }
-            successors.retain(|c| !c.matches.is_empty() && c.wrap_nesting_depth(&shared) <= args.max_wrap_nesting);
+            successors.retain(|c| !c.matches.is_empty() && c.min_wrap_nesting_depth(&shared) <= args.max_wrap_nesting);
         }
 
         for child_state in successors {
