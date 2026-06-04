@@ -411,34 +411,40 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
-    /// Strips dominated no-op wrapper substitutions from the match set `M`.
+    /// Strips dominated no-op wrap-self substitutions from the match set `M`.
     ///
     /// Notation (matching the paper's formalism). For a match `(r, σ) ∈ M` and a
-    /// pattern node position `i`, write `ec_σ(i) ∈ E ∪ {⊥}` for the e-class the
-    /// subpattern at `i` denotes under `σ` (computed by `compute_eclasses_for_pattern_nodes`),
-    /// `Desc(i)` for the proper descendants of `i`, and `I(p)` for the interior
-    /// nodes (those with `Desc(i) ≠ ∅`). Define
+    /// pattern node position `i`, write
+    ///     - `ec_σ(i) ∈ E ∪ {⊥}` for the e-class the subpattern at `i` denotes under `σ` (computed by `compute_eclasses_for_pattern_nodes`)
+    ///     - `Desc(i)` for the proper descendants of `i`
+    ///     - `I(p)` for the interior nodes (those with `Desc(i) ≠ ∅`)
     ///
-    ///   wrap_σ(i) ⟺ ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i). ec_σ(d) = ec_σ(i)
+    /// Then define
     ///
-    /// — a self-loop: the structure from `i` down to `d` denotes the same class,
-    /// so `i` is a no-op re-wrap (e.g. `(T body (M 1 0 0 0)) ≡ body` from a
-    /// `scale_1`-style DSR, or the two levels of `(f (g body)) ≡ body`), and
+    ///   wrapself_σ(i) ⟺ ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i). ec_σ(d) = ec_σ(i)
+    ///   progress_σ(i) ⟺ ec_σ(i) ≠ ⊥ ∧ ∀ d ∈ Desc(i). ec_σ(d) ≠ ec_σ(i)
     ///
-    ///   genu_σ(i) ⟺ ec_σ(i) ≠ ⊥ ∧ ∀ d ∈ Desc(i). ec_σ(d) ≠ ec_σ(i)
+    /// If i is a self-wrapper, then i is a node which, within the pattern,
+    /// matches one of its own children, at this subst. e.g., (+ ?x ?y) is
+    /// a self-wrap if either ?x or ?y is 0 at this subst.
     ///
-    /// — genuine: `i` is not a self-loop under `σ`. A wrapper subst is dropped only
-    /// when its node is *dominated*, by EITHER
+    /// Alternatively, i could be a progressive node, where all of its children
+    /// belong to distinct e-classes from itself. e.g., (+ ?x ?y) is a progressive node
+    /// if both ?x and ?y are nonzero at this subst. Notably, a progressive node can
+    /// later become a self-wrapper if further expanded, the descendants do not have
+    /// to be *smaller*, just distinct.
     ///
-    ///   (a) red_r(i) ⟺ ∃ (r, σ') ∈ M. genu_σ'(i)  — a sibling subst at the same
-    ///       root `r` covers it genuinely, so this re-wrap is redundant (thins
-    ///       intermediate towers where genuine transforms ride along); or
+    /// A self-wrapping subst is potentially droppable. We do so when EITHER
+    ///
+    ///   (a) redundant_r(i) ⟺ ∃ (r, σ') ∈ M. progress_σ'(i)  — a sibling subst at the same
+    ///       root `r` is progressing at `i`, so `i` does not need to be
+    ///       wrapped at this subst for the match to survive; or
     ///   (b) vac(i) ⟺ ∃ d ∈ Desc(i). ∀ (r', σ') ∈ M. ec_σ'(i) ≠ ⊥ ∧ ec_σ'(d) = ec_σ'(i)
     ///       — `i` passes through to the *same* descendant in every match, a
     ///       vacuous wrapper whose decoration is a don't-care (e.g.
     ///       `(repeat ?x 1 ?m) ≡ ?x` for any `?m`).
     ///
-    /// So `M' = { (r, σ) ∈ M : ¬∃ i ∈ I(p). wrap_σ(i) ∧ (red_r(i) ∨ vac(i)) }`.
+    /// So `M' = { (r, σ) ∈ M : ¬∃ i ∈ I(p). wrapself_σ(i) ∧ (red_r(i) ∨ vac(i)) }`.
     ///
     /// A self-loop alone isn't enough — that would also kill genuinely
     /// parameterized wrappers like `(if ?#0 a b)`, which satisfy neither rule:
