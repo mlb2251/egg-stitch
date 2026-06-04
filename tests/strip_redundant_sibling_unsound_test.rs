@@ -22,10 +22,10 @@
 //!     across `(k ?a)` and `(P ?a ?b)`.
 //!   - one root `r` written both as the expensive genuine form
 //!     `(f (k THREE) D⁵(P THREE NEGTWO))` and the cheap wrap form
-//!     `(f (k one) D⁵(P one z))`; rules collapse them into the *same* e-class:
-//!       `pid:  (P ?x z) => ?x`            (the no-op self-loop ⇒ `has_cycle`)
-//!       `fold: (P THREE NEGTWO) => one`   (genuine `+` folds to the same class)
-//!       `keq:  (k THREE) => (k one)`      (`k` is non-injective: both reach `r`)
+//!     `(f (k one) D⁵(P one z))`; rules collapse them into the *same* e-class —
+//!     `pid: (P ?x z) => ?x` (the no-op self-loop ⇒ `has_cycle`),
+//!     `fold: (P THREE NEGTWO) => one` (genuine `+` folds to the same class),
+//!     `keq: (k THREE) => (k one)` (`k` is non-injective: both reach `r`).
 //!
 //! At `r`, `B` matches two ways: `σ` (`?a=one,  ?b=z`, self-wrap at `P`, cheap)
 //! and `σ'` (`?a=THREE, ?b=NEGTWO`, progresses at `P`, expensive). The old rule
