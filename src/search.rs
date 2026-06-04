@@ -411,78 +411,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
-    /// Strips dominated no-op wrap-self substitutions from the match set `M`.
-    ///
-    /// Notation (matching the paper's formalism). For a match `(r, σ) ∈ M` and a
-    /// pattern node position `i`, write
-    ///     - `ec_σ(i) ∈ E ∪ {⊥}` for the e-class the subpattern at `i` denotes under `σ` (computed by `compute_eclasses_for_pattern_nodes`)
-    ///     - `Desc(i)` for the proper descendants of `i`
-    ///     - `I(p)` for the interior nodes (those with `Desc(i) ≠ ∅`)
-    ///
-    /// Then define
-    ///
-    ///   wrapself_σ(i) ⟺ ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i). ec_σ(d) = ec_σ(i)
-    ///   progress_σ(i) ⟺ ec_σ(i) ≠ ⊥ ∧ ∀ d ∈ Desc(i). ec_σ(d) ≠ ec_σ(i)
-    ///
-    /// If i is a self-wrapper, then i is a node which, within the pattern,
-    /// matches one of its own children, at this subst. e.g., (+ ?x ?y) is
-    /// a self-wrap if either ?x or ?y is 0 at this subst.
-    ///
-    /// Alternatively, i could be a progressive node, where all of its children
-    /// belong to distinct e-classes from itself. e.g., (+ ?x ?y) is a progressive node
-    /// if both ?x and ?y are nonzero at this subst. Notably, a progressive node can
-    /// later become a self-wrapper if further expanded, the descendants do not have
-    /// to be *smaller*, just distinct.
-    ///
-    /// Write `cost_σ = Σ_k size(ec of σ's arg #k)` for the (stub-free) rewrite
-    /// cost of applying the abstraction via `σ` at its root — the quantity the
-    /// cost analysis minimises over the substs at a root (`cost.rs`). A
-    /// self-wrapping subst is potentially droppable. We do so when EITHER
-    ///
-    ///   (a) redundant_r(i) ⟺ ∃ (r, σ') ∈ M. progress_σ'(i) ∧ cost_σ' ≤ cost_σ
-    ///       — a sibling subst at the same root `r` is progressing at `i` *and is
-    ///       a no-more-expensive rewrite of `r`*, so dropping the wrapped `σ`
-    ///       cannot raise `r`'s cost; or
-    ///   (b) vac(i) ⟺ ∃ d ∈ Desc(i). ∀ (r', σ') ∈ M. ec_σ'(i) ≠ ⊥ ∧ ec_σ'(d) = ec_σ'(i)
-    ///       — `i` passes through to the *same* descendant in every match, a
-    ///       vacuous wrapper whose decoration is a don't-care (e.g.
-    ///       `(repeat ?x 1 ?m) ≡ ?x` for any `?m`).
-    ///
-    /// So `M' = { (r, σ) ∈ M : ¬∃ i ∈ I(p). wrapself_σ(i) ∧ (red_r(i) ∨ vac(i)) }`.
-    ///
-    /// The `cost_σ' ≤ cost_σ` guard on (a) is load-bearing. A progressing sibling
-    /// keeps `r` *matched*, but `σ` and `σ'` bind the metavars to different
-    /// e-classes, so `σ'` can be a strictly *more expensive* rewrite — and when
-    /// the pattern internalises structure no shallower pattern reproduces (e.g. a
-    /// metavar reuse straddling `i`), there is no cheaper alternative, so dropping
-    /// the cheap `σ` strictly worsens the optimum. The guard fires (a) only when
-    /// the surviving sibling actually dominates `σ`'s cost. It still collapses the
-    /// infinite re-wrap towers (the reason this strip exists): a re-wrap enlarges
-    /// the arg bound at `i`, so the unwrapped sibling is cheaper and `σ` is
-    /// dropped. A self-loop alone is also insufficient — it would kill genuinely
-    /// parameterised wrappers like `(if ?#0 a b)`, which satisfy neither rule.
-    /// Soundness: a dropped subst is dominated — (a) keeps a no-costlier genuine
-    /// rewrite of `r`; (b)'s wrapped pattern is dominated by the spliced
-    /// (unwrapped at `d`) pattern, reached on a sibling branch.
-    ///
-    /// Returns the number of substs removed.
-    pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
+    /// Builds `descendants[i]` = the proper descendants of pattern node `i`
+    /// (the candidate self-loop targets `d` for `ec_σ(d) = ec_σ(i)`). `RevExpr`
+    /// stores children at higher indices than parents, so a single high→low pass
+    /// accumulates them bottom-up. Shared by the wrapper strip and the
+    /// spin-nesting gate.
+    fn pattern_descendants(&self) -> Vec<Vec<usize>> {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
-        // pos_to_var[i] = k iff node i is the `Var(k)` leaf (usize::MAX = none).
-        let mut pos_to_var = vec![usize::MAX; n];
-        for (k, positions) in self.pattern.vars.iter().enumerate() {
-            for &p in positions {
-                pos_to_var[usize::from(p)] = k;
-            }
-        }
-        // `descendants[i]` is `Desc(i)`, the proper descendants of `i` — the
-        // candidate passthrough targets `d` for a self-loop `ec_σ(d) = ec_σ(i)`.
-        // The common case is a direct child (`(repeat ?x 1 ?m) ≡ ?x`); deeper
-        // descendants arise from multi-node identities like `(f (g ?x)) => ?x`,
-        // where `ec_σ(f) = ec_σ(?x)` two levels down. RevExpr stores children at
-        // higher indices than parents, so a single high→low pass accumulates
-        // `Desc(i)` bottom-up.
         let mut descendants: Vec<Vec<usize>> = vec![Vec::new(); n];
         for i in (0..n).rev() {
             for &c in nodes[i].children() {
@@ -492,19 +428,58 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 descendants[i].extend(sub);
             }
         }
-        // `candidates` is `I(p)`, the interior nodes (`Desc(i) ≠ ∅`); only these
-        // can self-loop onto a descendant.
+        descendants
+    }
+
+    /// `pos_to_var[i] = k` iff node `i` is the `Var(k)` leaf (`usize::MAX` = none).
+    fn pos_to_var(&self) -> Vec<usize> {
+        let mut pos_to_var = vec![usize::MAX; self.pattern.pattern.nodes.len()];
+        for (k, positions) in self.pattern.vars.iter().enumerate() {
+            for &p in positions {
+                pos_to_var[usize::from(p)] = k;
+            }
+        }
+        pos_to_var
+    }
+
+    /// Strips *vacuous* no-op wrap-self substitutions from the match set `M`.
+    ///
+    /// For a match `(r, σ) ∈ M` and node `i`, write `ec_σ(i) ∈ E ∪ {⊥}` for the
+    /// e-class the subpattern at `i` denotes under `σ`, `Desc(i)` for its proper
+    /// descendants, and
+    ///     `vac(i) ⟺ ∃ d ∈ Desc(i). ∀ (r, σ) ∈ M. ec_σ(i) ≠ ⊥ ∧ ec_σ(d) = ec_σ(i)`
+    /// — node `i` passes through to the *same* descendant `d` in *every* match
+    /// (e.g. `(repeat ?x 1 ?m) ≡ ?x` for any `?m`, `(f (g ?x)) ≡ ?x`). We drop
+    /// every subst that self-wraps at a vacuous node:
+    ///     `M' = { (r, σ) : ¬∃ i. vac(i) ∧ ∃ d ∈ Desc(i). ec_σ(d) = ec_σ(i) }`
+    /// (which empties the whole pattern, since vac ⇒ every subst wraps there).
+    ///
+    /// Soundness: a vacuous node is semantically a no-op everywhere, so the
+    /// pattern equals its splice (unwrapped at `d`) on every match — and the
+    /// splice matches the same roots with a strictly smaller body, so it
+    /// dominates on total cost and is reachable on a sibling branch. Dropping the
+    /// vacuously-wrapped pattern therefore can't change the optimum.
+    ///
+    /// This handles only *uniform* no-op wrappers. Non-uniform ones (a node that
+    /// is a no-op at some substs but genuine at others — the source of the mixed
+    /// re-wrap towers on cyclic e-graphs) are NOT droppable soundly at the subst
+    /// level (a self-wrap can be the cheapest rewrite of its root; see
+    /// `strip_redundant_sibling_unsound_test`). Those are bounded instead by
+    /// [`Self::wrap_nesting_depth`] at the search frontier. Returns substs removed.
+    pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
+        let nodes = &self.pattern.pattern.nodes;
+        let n = nodes.len();
+        let pos_to_var = self.pos_to_var();
+        let descendants = self.pattern_descendants();
+        // Only interior nodes (`Desc(i) ≠ ∅`) can self-loop onto a descendant.
         let candidates: Vec<usize> = (0..n).filter(|&i| !descendants[i].is_empty()).collect();
         if candidates.is_empty() {
-            return 0; // no interior node ⇒ nothing to strip
+            return 0;
         }
-        // Pass 1 computes `vac`. `vacuous_pass[i][j]` stays true iff descendant
-        // `descendants[i][j] = d` satisfies `ec_σ(i) ≠ ⊥ ∧ ec_σ(d) = ec_σ(i)` in
-        // *every* `(r, σ) ∈ M`; `vac(i)` holds iff some `j` survives. `ec_σ(i) = ⊥`
-        // (a lookup miss) can't be a self-loop, so it clears every `j`.
-        // `compute_eclasses_for_pattern_nodes` fills `ec_σ` over all nodes (a wrapper's lookup
-        // needs its descendants' classes); the bookkeeping loop touches only `I(p)`.
         let mut ec: Vec<Option<Id>> = vec![None; n];
+        // `vacuous_pass[i][j]` stays true iff descendant `descendants[i][j] = d`
+        // satisfies `ec_σ(i) ≠ ⊥ ∧ ec_σ(d) = ec_σ(i)` in *every* match; `vac(i)`
+        // holds iff some `j` survives. `ec_σ(i) = ⊥` clears every `j`.
         let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
             for s in &m.substs {
@@ -519,43 +494,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
         let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
-        // (stub-free) rewrite cost of a subst: Σ over its arg slots of the
-        // arg e-class's min weighted size. The stub is constant across a root's
-        // substs (same arity), so this suffices to compare two rewrites of `r`.
-        let subst_cost = |s: &Subst| -> u64 { s.vars.iter().map(|&v| shared.egraph[v].data.size as u64).sum() };
-        // Pass 2, per match (root `r`). The sub-pass computes `red_r`'s witness:
-        // `min_progress_cost[i]` = min `cost_σ'` over substs at `r` that progress
-        // at `i` (u64::MAX if none). Then drop each subst `σ` with a dominated
-        // wrapper: `∃ i ∈ I(p). wrap_σ(i) ∧ (vac(i) ∨ min_progress_cost[i] ≤ cost_σ)`,
-        // where `ec_σ(i) = ⊥` rules `i` out. `vac(i)` is the global Pass-1 result;
-        // `(a)` requires a *no-costlier* progressing sibling, so dropping `σ`
-        // cannot raise `r`'s rewrite cost.
         let mut removed = 0;
-        let mut min_progress_cost = vec![u64::MAX; n];
         for m in &mut self.matches {
-            // sub-pass: min_progress_cost[i] = min cost_σ over progress_σ(i) at this root.
-            min_progress_cost.iter_mut().for_each(|g| *g = u64::MAX);
-            for s in &m.substs {
-                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                let sc = subst_cost(s);
-                for &i in &candidates {
-                    if ec[i].is_some() && !descendants[i].iter().any(|&d| ec[d] == ec[i]) {
-                        min_progress_cost[i] = min_progress_cost[i].min(sc);
-                    }
-                }
-            }
             let before = m.substs.len();
             m.substs.retain(|s| {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                let sc = subst_cost(s);
-                let dominated = candidates.iter().any(|&i| {
-                    if ec[i].is_none() {
-                        return false; // ec_σ(i) = ⊥ ⇒ not a wrapper
-                    }
-                    is_vacuous(i) // (b) vac(i): passes through in every match
-                        || (descendants[i].iter().any(|&d| ec[d] == ec[i]) // wrap_σ(i) here, and...
-                            && min_progress_cost[i] <= sc) // (a) a no-costlier genu_σ' covers this root
-                });
+                let dominated = candidates.iter().any(|&i| is_vacuous(i) && ec[i].is_some() && descendants[i].iter().any(|&d| ec[d] == ec[i]));
                 !dominated
             });
             removed += before - m.substs.len();
@@ -565,6 +509,49 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             self.num_substs -= removed;
         }
         removed
+    }
+
+    /// Maximum number of *stacked self-loops* (spins) on any root-to-leaf path,
+    /// over all matches — the search-frontier bound that keeps re-wrap towers
+    /// finite on cyclic e-graphs.
+    ///
+    /// A node `i` is a self-loop under `σ` iff `ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i).
+    /// ec_σ(d) = ec_σ(i)` (it denotes the same e-class as a descendant — a no-op
+    /// wrapper at this subst). The depth is the longest chain of such nodes from
+    /// the root down, maximised over substs. Crucially this counts only loop
+    /// *closures*: genuine nesting (each level a distinct e-class) contributes
+    /// nothing, so bounding it trims redundant re-wraps without touching real
+    /// structure. Capping it (see `--max-wrap-nesting`) is sound-as-incomplete:
+    /// it removes whole search nodes but never alters the cost of an explored
+    /// pattern, so it can't change a reported optimum — it can only fail to
+    /// explore an abstraction that needs more than the cap of stacked no-ops.
+    pub fn wrap_nesting_depth(&self, shared: &SharedSearchData<F, O>) -> usize {
+        let nodes = &self.pattern.pattern.nodes;
+        let n = nodes.len();
+        let pos_to_var = self.pos_to_var();
+        let descendants = self.pattern_descendants();
+        if (0..n).all(|i| descendants[i].is_empty()) {
+            return 0; // single leaf, no interior nodes
+        }
+        let mut ec: Vec<Option<Id>> = vec![None; n];
+        let mut max_depth = 0;
+        for m in &self.matches {
+            for s in &m.substs {
+                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
+                // `chain[i]` = stacked self-loops from `i` down its deepest path.
+                // Nodes are in parent-before-child order, so a low→high pass would
+                // need children first; compute high→low (children precede in the
+                // reversed index order of RevExpr) so child values are ready.
+                let mut chain = vec![0usize; n];
+                for i in (0..n).rev() {
+                    let is_loop = ec[i].is_some() && descendants[i].iter().any(|&d| ec[d] == ec[i]);
+                    let child_max = nodes[i].children().iter().map(|&c| chain[usize::from(c)]).max().unwrap_or(0);
+                    chain[i] = child_max + usize::from(is_loop);
+                }
+                max_depth = max_depth.max(chain[0]);
+            }
+        }
+        max_depth
     }
 
     /// Returns the enumerable successors of `self`. When dominance pruning

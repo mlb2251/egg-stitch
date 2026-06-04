@@ -1,14 +1,20 @@
-//! End-to-end counterexample showing `strip_dominated_wrappers` rule (a)
-//! (`redundant_r`) is **unsound**: it can drop a subst that is part of the
-//! optimal rewrite, raising the cost the search reports for a pattern.
+//! End-to-end regression for `strip_dominated_wrappers`: stripping a dominated
+//! wrapper must never change a pattern's optimum.
 //!
-//! Rule (a) drops a self-wrapping subst `σ` at root `r` whenever some sibling
-//! subst `σ'` *progresses* at the same wrapper node `i`, on the theory that σ'
-//! "keeps a genuine cover of `r`". But σ and σ' bind the metavars to different
-//! e-classes, so σ' can be a strictly more expensive rewrite of `r`. When the
-//! pattern internalizes structure that no shallower pattern reproduces — here a
-//! metavar reuse straddling the wrapper — there is no cheaper alternative, so
-//! dropping σ strictly worsens the pattern's optimal cost.
+//! This corpus broke the original rule (a) (`redundant_r`), which dropped a
+//! self-wrapping subst `σ` at root `r` whenever some sibling subst `σ'`
+//! *progressed* at the wrapper node, on the theory that σ' "keeps a genuine cover
+//! of `r`". But σ and σ' bind the metavars to different e-classes, so σ' can be a
+//! strictly more expensive rewrite of `r`. When the pattern internalizes
+//! structure no shallower pattern reproduces — here a metavar reuse straddling
+//! the wrapper — there is no cheaper alternative, so dropping σ strictly worsened
+//! the optimum (the search scored the *same* abstraction 54 vs 42).
+//!
+//! The current strip drops only *vacuous* wrappers (no-op in every match); σ's
+//! wrapper `P` is genuine at the 8 sites, so it isn't vacuous and σ is kept. (The
+//! tower that vac can't reach is bounded separately by `wrap_nesting_depth` /
+//! `--max-wrap-nesting`; σ has spin-depth 1, well under the cap.) So σ survives
+//! and the optimum is preserved — this test pins exactly that.
 //!
 //! The corpus:
 //!   - 8 genuine sites `(f (k pj) (D (D (D (D (D (P pj qj))))))`, `qj ≠ z`, so
@@ -22,20 +28,15 @@
 //!       `keq:  (k THREE) => (k one)`      (`k` is non-injective: both reach `r`)
 //!
 //! At `r`, `B` matches two ways: `σ` (`?a=one,  ?b=z`, self-wrap at `P`, cheap)
-//! and `σ'` (`?a=THREE, ?b=NEGTWO`, progresses at `P`, expensive). Rule (a) sees
-//! σ' progressing and drops σ. The splice `(f (k ?a) D⁵ ?a)` that "dominates on
-//! a sibling branch" cannot match the genuine sites (it forces `k`'s arg to equal
-//! the `P`-subtree), so nothing recovers σ's cheap rewrite of `r`.
+//! and `σ'` (`?a=THREE, ?b=NEGTWO`, progresses at `P`, expensive). The old rule
+//! dropped σ on seeing σ' progress; the splice `(f (k ?a) D⁵ ?a)` that "dominates
+//! on a sibling branch" cannot match the genuine sites (it forces `k`'s arg to
+//! equal the `P`-subtree), so nothing recovered σ's cheap rewrite of `r`. Both
+//! modes find the *identical* abstraction `(f (k ?#0) (D⁵ (P ?#0 ?#1)))`; the bug
+//! showed only in the cost (54 vs 42).
 //!
-//! Before the fix both modes found the *identical* abstraction
-//! `(f (k ?#0) (D (D (D (D (D (P ?#0 ?#1)))))))`, but stripping scored it 12
-//! higher (54 vs 42) purely because σ was dropped.
-//!
-//! The fix adds a cost guard to rule (a): a progressing sibling justifies
-//! dropping σ only when it is a no-costlier rewrite of the root (`cost_σ' ≤
-//! cost_σ`). σ here is *cheaper* than its sibling, so it is now kept and the
-//! strip no longer changes the optimum. This test pins that invariant: the strip
-//! must not raise the cost (`cost_on == cost_off`).
+//! This test pins the soundness invariant: stripping must not raise the cost
+//! (`cost_on == cost_off`).
 
 use serde_json::Value;
 use std::{fs, process::Command};

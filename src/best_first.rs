@@ -205,9 +205,13 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         // emptied by the strip.
         if args.opt_strip_wrap && shared.has_cycle {
             for child in &mut successors {
+                // (1) Drop vacuous (uniform no-op) wrapper substs — sound, the
+                // unwrapped splice dominates. (2) Bound stacked self-loops so the
+                // mixed (non-uniform) re-wrap towers stay finite — sound-as-
+                // incomplete, removes only over-nested search nodes.
                 strip_wrap_substs += child.strip_dominated_wrappers(&shared);
             }
-            successors.retain(|c| !c.matches.is_empty());
+            successors.retain(|c| !c.matches.is_empty() && c.wrap_nesting_depth(&shared) <= args.max_wrap_nesting);
         }
 
         for child_state in successors {
