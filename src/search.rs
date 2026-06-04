@@ -1,4 +1,4 @@
-use crate::egraph_util::{build_size_minimal_extraction, compute_node_eclasses, compute_usage_counts, egraph_has_cycle};
+use crate::egraph_util::{build_size_minimal_extraction, compute_eclasses_for_pattern_nodes, compute_usage_counts, egraph_has_cycle};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
@@ -415,7 +415,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     ///
     /// Notation (matching the paper's formalism). For a match `(r, σ) ∈ M` and a
     /// pattern node position `i`, write `ec_σ(i) ∈ E ∪ {⊥}` for the e-class the
-    /// subpattern at `i` denotes under `σ` (computed by `compute_node_eclasses`),
+    /// subpattern at `i` denotes under `σ` (computed by `compute_eclasses_for_pattern_nodes`),
     /// `Desc(i)` for the proper descendants of `i`, and `I(p)` for the interior
     /// nodes (those with `Desc(i) ≠ ∅`). Define
     ///
@@ -485,13 +485,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // `descendants[i][j] = d` satisfies `ec_σ(i) ≠ ⊥ ∧ ec_σ(d) = ec_σ(i)` in
         // *every* `(r, σ) ∈ M`; `vac(i)` holds iff some `j` survives. `ec_σ(i) = ⊥`
         // (a lookup miss) can't be a self-loop, so it clears every `j`.
-        // `compute_node_eclasses` fills `ec_σ` over all nodes (a wrapper's lookup
+        // `compute_eclasses_for_pattern_nodes` fills `ec_σ` over all nodes (a wrapper's lookup
         // needs its descendants' classes); the bookkeeping loop touches only `I(p)`.
         let mut ec: Vec<Option<Id>> = vec![None; n];
         let mut vacuous_pass: Vec<Option<Vec<bool>>> = vec![None; n];
         for m in &self.matches {
             for s in &m.substs {
-                compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
+                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
                 for &i in &candidates {
                     let here: Vec<bool> = descendants[i].iter().map(|&d| ec[i].is_some() && ec[d] == ec[i]).collect();
                     match &mut vacuous_pass[i] {
@@ -514,7 +514,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             // sub-pass: genuine_at[i] ⟺ ∃ σ at this root with genu_σ(i).
             genuine_at.iter_mut().for_each(|g| *g = false);
             for s in &m.substs {
-                compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
+                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
                 for &i in &candidates {
                     if ec[i].is_some() && !descendants[i].iter().any(|&d| ec[d] == ec[i]) {
                         genuine_at[i] = true;
@@ -523,7 +523,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
             let before = m.substs.len();
             m.substs.retain(|s| {
-                compute_node_eclasses::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
+                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
                 let dominated = candidates.iter().any(|&i| {
                     if ec[i].is_none() {
                         return false; // ec_σ(i) = ⊥ ⇒ not a wrapper

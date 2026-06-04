@@ -73,7 +73,7 @@ pub fn egraph_has_cycle<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
 ///
 /// `pos_to_var[i]` is the metavariable index of node `i` if it is a `Var` leaf,
 /// or `usize::MAX` otherwise.
-pub fn compute_node_eclasses<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], pos_to_var: &[usize], subst: &Subst, egraph: &StitchEgraph<F::Apply<O>>, ec: &mut [Option<Id>]) {
+pub fn compute_eclasses_for_pattern_nodes<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], pos_to_var: &[usize], subst: &Subst, egraph: &StitchEgraph<F::Apply<O>>, ec: &mut [Option<Id>]) {
     for i in (0..nodes.len()).rev() {
         ec[i] = if pos_to_var[i] != usize::MAX {
             Some(egraph.find(subst.vars[pos_to_var[i]]))
