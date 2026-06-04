@@ -1,0 +1,3 @@
+pid: (P ?x z) => ?x
+fold: (P (g1 (g2 (g3 (g4 (g5 gbase))))) (h1 (h2 (h3 (h4 (h5 hbase)))))) => one
+keq: (k (g1 (g2 (g3 (g4 (g5 gbase)))))) => (k one)

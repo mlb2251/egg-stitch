@@ -434,11 +434,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// later become a self-wrapper if further expanded, the descendants do not have
     /// to be *smaller*, just distinct.
     ///
-    /// A self-wrapping subst is potentially droppable. We do so when EITHER
+    /// Write `cost_σ = Σ_k size(ec of σ's arg #k)` for the (stub-free) rewrite
+    /// cost of applying the abstraction via `σ` at its root — the quantity the
+    /// cost analysis minimises over the substs at a root (`cost.rs`). A
+    /// self-wrapping subst is potentially droppable. We do so when EITHER
     ///
-    ///   (a) redundant_r(i) ⟺ ∃ (r, σ') ∈ M. progress_σ'(i)  — a sibling subst at the same
-    ///       root `r` is progressing at `i`, so `i` does not need to be
-    ///       wrapped at this subst for the match to survive; or
+    ///   (a) redundant_r(i) ⟺ ∃ (r, σ') ∈ M. progress_σ'(i) ∧ cost_σ' ≤ cost_σ
+    ///       — a sibling subst at the same root `r` is progressing at `i` *and is
+    ///       a no-more-expensive rewrite of `r`*, so dropping the wrapped `σ`
+    ///       cannot raise `r`'s cost; or
     ///   (b) vac(i) ⟺ ∃ d ∈ Desc(i). ∀ (r', σ') ∈ M. ec_σ'(i) ≠ ⊥ ∧ ec_σ'(d) = ec_σ'(i)
     ///       — `i` passes through to the *same* descendant in every match, a
     ///       vacuous wrapper whose decoration is a don't-care (e.g.
@@ -446,13 +450,20 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     ///
     /// So `M' = { (r, σ) ∈ M : ¬∃ i ∈ I(p). wrapself_σ(i) ∧ (red_r(i) ∨ vac(i)) }`.
     ///
-    /// A self-loop alone isn't enough — that would also kill genuinely
-    /// parameterized wrappers like `(if ?#0 a b)`, which satisfy neither rule:
-    /// every occurrence is eval'd (no `genu_σ'`, so `red_r` fails) and the
-    /// passthrough branch alternates across sites (so `vac` fails). Soundness: a
-    /// dropped subst is dominated — (a) keeps a genuine cover of `r`; (b)'s wrapped
-    /// pattern is dominated by the spliced (unwrapped at `d`) pattern, reached on a
-    /// sibling branch.
+    /// The `cost_σ' ≤ cost_σ` guard on (a) is load-bearing. A progressing sibling
+    /// keeps `r` *matched*, but `σ` and `σ'` bind the metavars to different
+    /// e-classes, so `σ'` can be a strictly *more expensive* rewrite — and when
+    /// the pattern internalises structure no shallower pattern reproduces (e.g. a
+    /// metavar reuse straddling `i`), there is no cheaper alternative, so dropping
+    /// the cheap `σ` strictly worsens the optimum. The guard fires (a) only when
+    /// the surviving sibling actually dominates `σ`'s cost. It still collapses the
+    /// infinite re-wrap towers (the reason this strip exists): a re-wrap enlarges
+    /// the arg bound at `i`, so the unwrapped sibling is cheaper and `σ` is
+    /// dropped. A self-loop alone is also insufficient — it would kill genuinely
+    /// parameterised wrappers like `(if ?#0 a b)`, which satisfy neither rule.
+    /// Soundness: a dropped subst is dominated — (a) keeps a no-costlier genuine
+    /// rewrite of `r`; (b)'s wrapped pattern is dominated by the spliced
+    /// (unwrapped at `d`) pattern, reached on a sibling branch.
     ///
     /// Returns the number of substs removed.
     pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
@@ -508,35 +519,42 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
         let is_vacuous = |i: usize| vacuous_pass[i].as_ref().is_some_and(|v| v.iter().any(|&x| x));
-        // Pass 2, per match (root `r`). The sub-pass computes `red_r`:
-        // `genuine_at[i]` ⟺ `∃ σ at r. genu_σ(i)`. Then drop each subst `σ` with a
-        // dominated wrapper: `∃ i ∈ I(p). wrap_σ(i) ∧ (red_r(i) ∨ vac(i))`, where
-        // `ec_σ(i) = ⊥` rules `i` out. `vac(i)` is the global Pass-1 result; `(a)`
-        // pairs `red_r(i)` with `wrap_σ(i)` (a self-loop `∃ d. ec_σ(d) = ec_σ(i)`)
-        // at this subst.
+        // (stub-free) rewrite cost of a subst: Σ over its arg slots of the
+        // arg e-class's min weighted size. The stub is constant across a root's
+        // substs (same arity), so this suffices to compare two rewrites of `r`.
+        let subst_cost = |s: &Subst| -> u64 { s.vars.iter().map(|&v| shared.egraph[v].data.size as u64).sum() };
+        // Pass 2, per match (root `r`). The sub-pass computes `red_r`'s witness:
+        // `min_progress_cost[i]` = min `cost_σ'` over substs at `r` that progress
+        // at `i` (u64::MAX if none). Then drop each subst `σ` with a dominated
+        // wrapper: `∃ i ∈ I(p). wrap_σ(i) ∧ (vac(i) ∨ min_progress_cost[i] ≤ cost_σ)`,
+        // where `ec_σ(i) = ⊥` rules `i` out. `vac(i)` is the global Pass-1 result;
+        // `(a)` requires a *no-costlier* progressing sibling, so dropping `σ`
+        // cannot raise `r`'s rewrite cost.
         let mut removed = 0;
-        let mut genuine_at = vec![false; n]; // red_r: candidate has a genu_σ subst at this root
+        let mut min_progress_cost = vec![u64::MAX; n];
         for m in &mut self.matches {
-            // sub-pass: genuine_at[i] ⟺ ∃ σ at this root with genu_σ(i).
-            genuine_at.iter_mut().for_each(|g| *g = false);
+            // sub-pass: min_progress_cost[i] = min cost_σ over progress_σ(i) at this root.
+            min_progress_cost.iter_mut().for_each(|g| *g = u64::MAX);
             for s in &m.substs {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
+                let sc = subst_cost(s);
                 for &i in &candidates {
                     if ec[i].is_some() && !descendants[i].iter().any(|&d| ec[d] == ec[i]) {
-                        genuine_at[i] = true;
+                        min_progress_cost[i] = min_progress_cost[i].min(sc);
                     }
                 }
             }
             let before = m.substs.len();
             m.substs.retain(|s| {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
+                let sc = subst_cost(s);
                 let dominated = candidates.iter().any(|&i| {
                     if ec[i].is_none() {
                         return false; // ec_σ(i) = ⊥ ⇒ not a wrapper
                     }
                     is_vacuous(i) // (b) vac(i): passes through in every match
-                        || (genuine_at[i] // (a) red_r(i): a genu_σ' covers this root, and...
-                            && descendants[i].iter().any(|&d| ec[d] == ec[i])) // ...wrap_σ(i) here
+                        || (descendants[i].iter().any(|&d| ec[d] == ec[i]) // wrap_σ(i) here, and...
+                            && min_progress_cost[i] <= sc) // (a) a no-costlier genu_σ' covers this root
                 });
                 !dominated
             });
