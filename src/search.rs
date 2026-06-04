@@ -120,12 +120,7 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
     /// True iff the e-graph contains a cycle: some class reachable from itself by
-    /// following enode children. Identity-shrinking DSRs create these — a direct
-    /// self-loop from `x => (T x (M 1 0 0 0))` (1-cycle) or a longer one from
-    /// `(f (g ?x)) => ?x` (2-cycle) — and they are the source of unbounded no-op
-    /// wrapper towers. A pattern node's e-class can equal a proper descendant's
-    /// only via such a cycle, so `strip_dominated_wrappers` has work to do exactly
-    /// when this holds; it gates on this to skip its per-state cost otherwise.
+    /// following enode children.
     pub has_cycle: bool,
     /// Precomputed De Bruijn clamp for [`shift_equal`] (see
     /// [`crate::shift_equal::shift_clamp`]). Computed once here because the
