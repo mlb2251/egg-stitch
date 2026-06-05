@@ -200,7 +200,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         };
 
         if shared.has_cycle {
-            successors.retain(|c| !c.matches.is_empty() && args.max_wrap_nesting.0.is_none_or(|cap| c.max_var_wrap_nesting_depth(&shared) <= cap));
+            successors.retain(|c| !c.matches.is_empty() && args.max_wrap_nesting.0.is_none_or(|cap| c.within_wrap_nesting_cap(&shared, cap)));
         }
 
         for child_state in successors {

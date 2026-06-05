@@ -713,7 +713,7 @@ fn cross_depth_forloop_db_var_inline() {
 /// `(if true x y) => x` unions the `if` node into `x`'s e-class, that node is a
 /// self-loop under every match, burying the condition variable `?#0` at depth 1
 /// everywhere — so the per-variable wrap-nesting gate
-/// (`SearchState::max_var_wrap_nesting_depth`) drops the whole abstraction at the
+/// (`SearchState::within_wrap_nesting_cap`) drops the whole abstraction at the
 /// default `--max-wrap-nesting 0`. The two tests below pin both behaviours: the
 /// default (cap 0) prunes it and a worse abstraction wins (cost 44), and raising
 /// the cap to 2 recovers the `if`-wrapped optimum (cost 39). (This is exactly the
@@ -745,7 +745,7 @@ fn conditional_branch_unify_cap2_recovers_if_abstraction() {
 /// (`P` at the r1 roots, `Q` at the r2 roots). Every match has one wrapper
 /// spinning, so a minimax `min_σ max_v` wrap-nesting gate would prune it even at
 /// cap 0 and settle for a cost-60 abstraction. The actual gate is the
-/// per-variable maximin `max_v min_σ` (`SearchState::max_var_wrap_nesting_depth`):
+/// per-variable maximin `max_v min_σ` (`SearchState::within_wrap_nesting_cap`):
 /// each of `?#0`/`?#1`/`?#2` is shallow in *some* match, so the optimum survives
 /// at cap 0 (cost 54). Re-blessing this to a cost-60 shape signals a regression
 /// to minimax.
@@ -788,7 +788,7 @@ fn cross_depth_ho_capture() {
 /// `(if ?c ?x ?x) == ?x`, `(repeat ?x 1 ?m) == ?x`, `(f (g ?x)) == ?x`) —
 /// alongside genuine equivalences (`4 == (+ 2 2)`). Best-first only, capped at
 /// `--max-arity 2`: the self-loops make the space unbounded, so the per-variable
-/// wrap-nesting gate (`SearchState::max_var_wrap_nesting_depth`, default
+/// wrap-nesting gate (`SearchState::within_wrap_nesting_cap`, default
 /// `--max-wrap-nesting 0`) is what bounds the towers — the fixtures pin that the
 /// search converges (`heap_sizes_at_end` drains) to a real abstraction.
 fn check_self_loop(input: &str, rules: &str) {

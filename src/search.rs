@@ -442,9 +442,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         pos_to_var
     }
 
-    /// Search-frontier wrap-nesting bound (`--max-wrap-nesting`): the worst
-    /// variable's *best* stacked-self-loop (spin) depth —
-    /// `max over vars v of (min over matches (r,σ) of spin-depth(v, r, σ))`.
+    /// Search-frontier wrap-nesting gate (`--max-wrap-nesting`): true iff the
+    /// worst variable's *best* stacked-self-loop (spin) depth is within `cap` —
+    /// `max over vars v of (min over matches (r,σ) of spin-depth(v, r, σ)) ≤ cap`.
     ///
     /// A node `i` is a self-loop under `σ` iff `ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i).
     /// ec_σ(d) = ec_σ(i)` (it denotes the same e-class as a descendant — a no-op
@@ -454,18 +454,20 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// *every* match; the state is pruned iff some variable is buried — i.e. the
     /// invariant kept is "∀v ∃(r,σ): spin-depth(v) ≤ cap": every variable has at
     /// least one shallow rewrite, possibly via a *different* match.
-    pub fn max_var_wrap_nesting_depth(&self, shared: &SharedSearchData<F, O>) -> usize {
+    pub fn within_wrap_nesting_cap(&self, shared: &SharedSearchData<F, O>, cap: usize) -> bool {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
         let descendants = self.pattern_descendants();
         let nvars = self.pattern.vars.len();
         if nvars == 0 || (0..n).all(|i| descendants[i].is_empty()) {
-            return 0; // no variables / single leaf: nothing can be buried
+            return true; // no variables / single leaf: nothing can be buried
         }
         let pos_to_var = self.pos_to_var();
         let mut ec: Vec<Option<Id>> = vec![None; n];
-        // Per-variable minimum spin-depth over all matches (`MAX` until first seen).
-        let mut per_var_min = vec![usize::MAX; nvars];
+        // Per variable: has some match witnessed it at spin-depth ≤ cap?
+        let mut satisfied = vec![false; nvars];
+        // always equal to the sum of `satisfied`'s false count
+        let mut num_unsatisfied_vars = nvars;
         for m in &self.matches {
             for s in &m.substs {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
@@ -481,12 +483,21 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     }
                 }
                 for (k, positions) in self.pattern.vars.iter().enumerate() {
-                    let d = positions.iter().map(|&p| depth_to[usize::from(p)]).min().unwrap_or(usize::MAX);
-                    per_var_min[k] = per_var_min[k].min(d);
+                    if satisfied[k] {
+                        continue; // already has a shallow witness
+                    }
+                    let depth = positions.iter().map(|&p| depth_to[usize::from(p)]).min().expect("every pattern var has ≥1 position");
+                    if depth <= cap {
+                        satisfied[k] = true;
+                        num_unsatisfied_vars -= 1;
+                    }
+                }
+                if num_unsatisfied_vars == 0 {
+                    return true; // every var has a shallow witness — verdict locked
                 }
             }
         }
-        per_var_min.into_iter().filter(|&d| d != usize::MAX).max().unwrap_or(0)
+        false
     }
 
     /// Returns the enumerable successors of `self`. When dominance pruning
