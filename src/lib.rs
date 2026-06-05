@@ -38,6 +38,23 @@ pub enum SearchKind {
     BestFirst,
 }
 
+/// `--max-wrap-nesting` value: a depth cap, or `none` to disable the gate
+/// (unbounded — re-wrap towers won't terminate on cyclic e-graphs). Wraps an
+/// `Option<usize>` so clap can parse the `none` sentinel; access via `.0`.
+#[derive(Clone, Copy, Debug)]
+pub struct MaxWrapNesting(pub Option<usize>);
+
+impl std::str::FromStr for MaxWrapNesting {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("none") {
+            Ok(Self(None))
+        } else {
+            s.parse::<usize>().map(|n| Self(Some(n))).map_err(|_| format!("expected a non-negative integer or `none`, got {s:?}"))
+        }
+    }
+}
+
 /// E-graph based program synthesis via SMC.
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -166,16 +183,18 @@ pub struct Args {
     /// every variable shallow in *some* match. This `max_v min_σ` (maximin) is
     /// weaker than the older `min_σ max_v` (minimax, "∃σ shallow for all v"): it
     /// keeps mixed patterns whose spin *alternates* across variables/matches
-    /// (see `tests/wrap_nesting_optimum_test.rs`) rather than dropping them.
+    /// (see `crossed_wrap_collapse_maximin_gate`) rather than dropping them.
     /// Counts loop *closures* only (genuine nesting contributes nothing).
     /// Termination still holds — wrapping deeper buries some variable past the
     /// cap in every match. Default 0: no variable may be buried under *any*
     /// self-loop in every match. This can forgo a real optimum that puts a
     /// variable under one collapsed wrapper in every match — e.g. a condition
     /// captured inside a DSR-collapsed `if` (see `conditional_branch_unify_*`
-    /// tests); raise the cap to recover those. Only active on cyclic e-graphs.
-    #[arg(long = "max-wrap-nesting", default_value_t = 0)]
-    pub max_wrap_nesting: usize,
+    /// tests); raise the cap to recover those. Pass `none` to disable the gate
+    /// entirely (unbounded — won't terminate on cyclic e-graphs). Only active on
+    /// cyclic e-graphs.
+    #[arg(long = "max-wrap-nesting", default_value = "0")]
+    pub max_wrap_nesting: MaxWrapNesting,
 
     /// Path to write JSON output.
     #[arg(short, long)]

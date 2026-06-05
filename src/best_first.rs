@@ -200,8 +200,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         };
         // On cyclic e-graphs, bound the otherwise-infinite re-wrap tower via the
         // wrap-nesting gate (see `SearchState::max_var_wrap_nesting_depth`).
+        // `--max-wrap-nesting none` disables the depth check (unbounded).
         if shared.has_cycle {
-            successors.retain(|c| !c.matches.is_empty() && c.max_var_wrap_nesting_depth(&shared) <= args.max_wrap_nesting);
+            successors.retain(|c| !c.matches.is_empty() && args.max_wrap_nesting.0.is_none_or(|cap| c.max_var_wrap_nesting_depth(&shared) <= cap));
         }
 
         for child_state in successors {
