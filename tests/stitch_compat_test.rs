@@ -38,11 +38,14 @@
 use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
 
+mod common;
+
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
 fn expected_path(input: &str) -> String {
-    // Mirror the `data/domains/<...>/foo.json` layout under `data/expected_outputs/`.
-    let relative = input.strip_prefix("data/domains/").expect("expected input under data/domains/");
+    // Mirror the input layout under `data/expected_outputs/`: `data/domains/<...>`
+    // and the hand-built `data/test/<...>` corpora both map by stripping `data/`.
+    let relative = input.strip_prefix("data/domains/").or_else(|| input.strip_prefix("data/")).expect("expected input under data/domains/ or data/");
     let stem = relative.strip_suffix(".json").unwrap_or(relative);
     format!("data/expected_outputs/{stem}.out.json")
 }
@@ -55,14 +58,23 @@ fn temp_output_path(input: &str, search: &str) -> std::path::PathBuf {
 }
 
 /// Invokes the cargo-built binary, writes its `--output` JSON to a temp file,
-/// reads it back, and strips non-deterministic fields.
+/// reads it back, and strips non-deterministic fields. Best-first uses the
+/// default 50 000-step budget.
 fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
+    run_backend_steps(search, input, "50000", extra_args)
+}
+
+/// Like [`run_backend`] but with an explicit best-first `--num-steps` budget
+/// (ignored by SMC). Used for corpora where 50 000 steps is impractical — e.g.
+/// an e-graph cyclic *through a binder*, whose pattern search space is unbounded
+/// and whose per-expansion work grows super-linearly.
+fn run_backend_steps(search: &str, input: &str, bf_steps: &str, extra_args: &[&str]) -> Value {
     let out = temp_output_path(input, search);
     let out_str = out.to_str().expect("utf-8 temp path");
     let mut cmd = Command::new(BIN);
     cmd.args(["--search", search, "--input", input, "--check-slow", "--num-abstractions", "1", "--output", out_str]);
     if search == "best-first" {
-        cmd.args(["--num-steps", "50000"]);
+        cmd.args(["--num-steps", bf_steps]);
     } else {
         cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
     }
@@ -127,7 +139,18 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
     }
     // Collapse to a single entry when both backends agree; otherwise record
     // both side-by-side so the divergence is visible in the fixture.
-    let combined = if bf == smc { bf } else { json!({"best-first": bf, "smc": smc}) };
+    // `heap_sizes_at_end` is a best-first-only field (SMC has no heap), so a
+    // bare difference on it isn't a real divergence — compare with it removed
+    // and keep the best-first value (which carries the heap sizes) when they
+    // otherwise agree.
+    let agree = {
+        let mut bf_cmp = bf.clone();
+        if let Some(obj) = bf_cmp.as_object_mut() {
+            obj.remove("heap_sizes_at_end");
+        }
+        bf_cmp == smc
+    };
+    let combined = if agree { bf } else { json!({"best-first": bf, "smc": smc}) };
     bless_or_check(&expected_path(input), &combined, input);
 }
 
@@ -137,7 +160,13 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
 /// signal. The fixture format is the same single `RunResult` shape that
 /// `check_fixture` writes when both backends already agree.
 fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) {
-    let mut bf = run_backend("best-first", input, extra_args);
+    check_fixture_bf_only_steps(input, "50000", extra_args, check_pattern);
+}
+
+/// [`check_fixture_bf_only`] with an explicit best-first `--num-steps` budget,
+/// for corpora where the default 50 000 is impractical (see [`run_backend_steps`]).
+fn check_fixture_bf_only_steps(input: &str, bf_steps: &str, extra_args: &[&str], check_pattern: bool) {
+    let mut bf = run_backend_steps("best-first", input, bf_steps, extra_args);
     strip_library_field(&mut bf, "best_history");
     if !check_pattern {
         strip_library_patterns(&mut bf);
@@ -147,14 +176,16 @@ fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) 
 
 /// Shared blessing/checking step for the two `check_fixture*` helpers.
 fn bless_or_check(path: &str, value: &Value, input: &str) {
+    let value = common::sorted(value);
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(value).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(&value).expect("serialize expected");
         text.push('\n');
         fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
         let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
-        let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(value, &expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
+        let mut expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+        common::sort_keys(&mut expected);
+        assert_eq!(value, expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
     }
 }
 
@@ -299,6 +330,22 @@ fn same_leaf_different_depths_is_not_reused() {
     check_fixture("data/domains/stitch/same-leaf-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
+/// Sibling of `same_leaf_different_depths_is_not_reused`, but for `shift_equal`'s
+/// *recursive* same-e-class shortcut rather than the top-level `a == b` one.
+/// In `(lam (lam (g (lam (f $1 $2)) (f $1 $1))))` the only abstraction is the
+/// cross-depth reuse `(g (lam ?#0) ?#0)`, whose captures `(f $1 $2)` and
+/// `(f $1 $1)` share the e-class `(f $1)` (fv {1}) sitting exactly at the gap
+/// boundary. The buggy `fv_outside_gap` shortcut accepted that as shift-invariant,
+/// so the merge was unsound: inlining `fn_0` reconstructs `(f $2 $2)` instead of
+/// `(f $1 $2)`. The fix rejects the reuse, so a sound search finds *no*
+/// abstraction (empty fixture, corpus unchanged). A regressed build re-discovers
+/// the bad abstraction and mismatches here; `scripts/check_all_outputs.py`'s
+/// β-equivalence sweep also rejects a bad re-bless.
+#[test]
+fn cross_depth_fv_outside_gap_is_not_reused() {
+    check_fixture("data/domains/ho-bugs/cross_depth_fv_outside_gap.json", LAMBDA, true);
+}
+
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
 /// the `(+ _ (* _ _))` shape aligns across all five programs (the fifth,
 /// `(* 7 (* (- v) (- v)))`, gets a `(+ 0 _)`-wrapped representation in its
@@ -327,6 +374,27 @@ fn arithmetic_aplusbplus1234() {
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
+}
+
+/// Regression for the `shift_equal` binder-cycle non-termination
+/// (`src/shift_equal.rs`). The rules `a => (lambda a)` / `b => (lambda b)` carry
+/// no metavariables, so `rule_fv_verdict` accepts them, yet each concrete RHS
+/// hashconses back into the matched class — equality saturation closes two
+/// distinct cycles *through the `lambda` binder*. Best-first then reaches a
+/// pattern with two metavars at different binder depths capturing those cyclic
+/// classes and calls `shift_equal(a, b, 0, 1)`.
+///
+/// Pre-fix, that call grew its `(deeper, shallower, init_depth)` key without
+/// bound (one bump per binder around the cycle) and overflowed the stack —
+/// aborting this run. With `init_depth` clamped at `shift_clamp` the coinduction
+/// closes, so the run completes and produces a stable result. A small step
+/// budget keeps it fast (the cyclic e-graph makes the search space unbounded).
+#[test]
+fn binder_cycle_terminates() {
+    // Pre-fix the run aborts with a stack overflow inside `shift_equal`'s
+    // coinduction, so `run_backend_steps`'s success assertion is itself the
+    // regression signal; the fixture then pins the (now-terminating) result.
+    check_fixture_bf_only_steps("data/domains/cyclic-binder/lam_self_cycle.json", "300", &["--language", "lambda-calc", "--rules", "data/domains/cyclic-binder/lam_self_cycle.rewrites"], true);
 }
 
 /// Collapse an s-expression to a sorted multiset of its atoms, discarding
@@ -381,7 +449,11 @@ fn arith_rewrites() {
         let bodies = abstraction_bodies(r);
         assert!(bodies.len() == 1, "expected exactly one abstraction");
         let abstr = all_symbols_hack(&bodies[0]);
-        if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
+        // Plus is associative+commutative, so several abstraction shapes are
+        // equally valid. With the `<=>` rules now genuinely bidirectional, the
+        // search also reaches the fully-flattened `(+ a b c d)` (one `+`); the
+        // older nested 2-/3-`+` shapes remain valid too.
+        if abstr != ["+", "a", "b", "c", "d"] && abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
             panic!("bad abstr: {:?}", abstr);
         }
         let rewr = rewritten_corpus(r, &original).iter().map(|x| all_symbols_hack(x)).collect::<Vec<_>>();
@@ -600,4 +672,110 @@ fn ho_shared_lam_with_outer_context() {
 #[test]
 fn cross_depth_useless_inline() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_useless_inline.json", LAMBDA, true);
+}
+
+/// Regression (minimised from the `logo` domain): a cross-depth reuse that
+/// over-shifts a concrete DB-var leaf on inline. The three programs share the
+/// skeleton `(lam (logo_forLoop ?N (lam (lam (logo_FWRT ?A ?B $0))) $0))`,
+/// where the inner-loop accumulator `$0` (deep, binder depth 3) and the
+/// `logo_forLoop` init `$0` (shallow, binder depth 1) hash-cons to the *same*
+/// `$0` e-class. `shift_equal`'s `a == b` shortcut accepts merging them
+/// cross-depth (their fv `{0}` sits *below* the gap `[1, 3)`), even though the
+/// two `$0`s reference different binders. Best-first then dominance-reuses the
+/// two slots and inlines the merged (useless) var: the deep occurrence is
+/// shifted to `$2`, yielding the unsound
+/// `(lam (logo_forLoop ?#0 (lam (lam (logo_FWRT ?#1 (logo_DIVA logo_UA 4) $2))) $0))`.
+/// β-reduced, the abstraction puts `$2` where every original program has `$0`,
+/// so `check_equiv` rejects it. The fixture pins the *sound* output (deep `$0`);
+/// until the reuse is fixed this test fails on the `$2` mismatch.
+#[test]
+fn cross_depth_forloop_db_var_inline() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_forloop_db_var_inline.json", LAMBDA, true);
+}
+
+/// Conditional-branch unification driven by a DSR equivalence. Half the
+/// programs place a big subterm `(a b c d e)` at one slot and half place
+/// `(g h i j k)`. The `(if true x y) == x` / `(if false x y) == y` rewrites let
+/// a *bare* branch be recognized as an arm of the conditional, so the optimal
+/// abstraction is `(f (if ?#0 (a b c d e) (g h i j k)) ?#1)`: it captures both
+/// big branches once in the body and each call site passes only a one-token
+/// boolean condition instead of the whole 5-node subterm. A plain metavar hole
+/// `(f ?#0 ?#1)` would have to pass that subterm at every site, so the
+/// condition-parameterized `if` genuinely wins.
+///
+/// This pins that the equivalence-driven unification is found (cost 39). It is
+/// a deliberate counter-example to a tempting "self-loop / re-nesting" prune of
+/// identity DSRs: because `(if true x y) => x` unions the `if` node into `x`'s
+/// e-class, that node looks like a self-loop, yet the abstraction containing it
+/// is the optimum — any prune keyed purely on self-loop nesting must not
+/// discard it.
+const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewrites"];
+
+#[test]
+fn conditional_branch_unify() {
+    check_fixture_bf_only("data/domains/conditional/if_branch_unify.json", IF_RULES, true);
+}
+
+/// Regression: a metavar reused across binder depths keeps a genuine
+/// higher-order capture, and its η-app body args must be depth-shifted per
+/// occurrence. `build_with_ho` / `display_pattern_as_lambda` applied the raw
+/// `variable_indices[k]` at every occurrence, dropping the shift.
+///
+/// Unlike `cross_depth_forloop_db_var_inline` (which inlines the metavar to a
+/// literal DB leaf), this corpus keeps the capture higher-order
+/// (`variable_indices = [[0]]`, `var_depth = 1`) on a metavar merged across
+/// depths 1 and 2. The five programs share the heavy skeleton
+/// `(+ a b c d e f (lam (foo (bar _) (gg (lam (bar _))))))` — big enough above
+/// the binding `lam` that best-first roots the abstraction *above* it, so the
+/// captured `$0` is pattern-internal — while the inner slot varies in *where*
+/// it uses the bound variable (`(h $0)`, `($0 q)`, `(k $0 r)`, `(m s $0 t)`,
+/// bare `$0`), so no uniform literal body fits and the capture stays HO. The
+/// shallow slot uses `$0`, the deep slot (one `lam` deeper) the shift-variant
+/// `$1`.
+///
+/// The fixture pins the sound output (deep η-arg `$1`, lambda `($2 $1)`).
+/// Pre-fix the export emits `($2 $0)` at the deep occurrence, so `(fn_0 …)`
+/// β-reduces to `(bar $0)` where the original has `(bar $1)`. `--check-slow`
+/// misses it (size and root-fv are preserved); `scripts/check_all_outputs.py`'s
+/// β-equivalence sweep over the blessed fixture catches it. Until the
+/// per-occurrence shift is restored this test fails on the `$0`/`$1` mismatch.
+#[test]
+fn cross_depth_ho_capture() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_ho_capture.json", LAMBDA, true);
+}
+
+/// Hand-built `data/test/` corpora whose rule sets each introduce an identity
+/// self-loop — a freely re-nestable wrapper (`(+ ?x 0) == ?x`,
+/// `(if ?c ?x ?x) == ?x`, `(repeat ?x 1 ?m) == ?x`, `(f (g ?x)) == ?x`) —
+/// alongside genuine equivalences (`4 == (+ 2 2)`). Best-first only, capped at
+/// `--max-arity 2`: the self-loops make the space unbounded, so the
+/// `--num-steps` cap in `run_backend` is what bounds the towers (`converge_tower`
+/// / `nested_loop_tower` still hit the cap, leaving a non-zero `heap_sizes_at_end`
+/// — the regression these pin until dominated-wrapper stripping drains them).
+fn check_self_loop(input: &str, rules: &str) {
+    check_fixture_bf_only(&format!("data/test/{input}.json"), &["--rules", &format!("data/test/{rules}.rewrites"), "--max-arity", "2"], true);
+}
+
+/// `4 == (+ 2 2)` unifies the two corpus shapes; `(+ ?x 0)` is the self-loop.
+#[test]
+fn self_loop_arith_unify() {
+    check_self_loop("arith_unify", "arith");
+}
+
+/// Direct-child self-loop `(repeat ?x 1 ?m) => ?x` over a compressive corpus.
+#[test]
+fn self_loop_converge_tower() {
+    check_self_loop("converge_tower", "converge_tower");
+}
+
+/// Grandchild self-loop `(f (g ?x)) => ?x` over a compressive corpus.
+#[test]
+fn self_loop_nested_loop_tower() {
+    check_self_loop("nested_loop_tower", "nested_loop_tower");
+}
+
+/// `if_nest`/`if_same` self-loop over an `(if p _ _)` corpus.
+#[test]
+fn self_loop_if_unify() {
+    check_self_loop("if_unify", "if");
 }

@@ -60,11 +60,13 @@ fn lam_then_app_inherits_outer_depth() {
 
 #[test]
 fn mixed_depths_are_independent() {
-    // Build (@ (lam ?#0) ?#1): only the meta-var inside `lam` gets bumped.
+    // Build (@ (lam ?#1) ?#0): only the meta-var inside `lam` gets bumped.
+    // BFS numbering appends the lam's body hole at the end (?#1), so the
+    // untouched second `app` child shifts down to ?#0.
     let mut p: Pat = Pattern::single_var();
     p.expand(0, &app()); // (@ ?#0 ?#1), depths [0, 0]
-    p.expand(0, &lam()); // (@ (lam ?#0) ?#1), depths [1, 0]
-    assert_eq!(p.var_depth, vec![1, 0]);
+    p.expand(0, &lam()); // (@ (lam ?#1) ?#0), depths [0, 1]
+    assert_eq!(p.var_depth, vec![0, 1]);
 }
 
 #[test]

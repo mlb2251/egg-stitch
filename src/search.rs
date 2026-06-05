@@ -1,10 +1,11 @@
+use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
 
 /// Tracks already-explored canonical patterns to dedupe successors during
@@ -71,12 +72,12 @@ fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32, cross_depth: bool) -> bool
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
 where
     L::Discriminant: StitchDisc,
 {
     let Some(dbidx) = target.discriminant().de_bruijn_index() else { return false };
-    cross_depth || target_is_free_db_var(dbidx, depth)
+    target_is_free_db_var(dbidx, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -118,6 +119,11 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
+    /// Precomputed De Bruijn clamp for [`shift_equal`] (see
+    /// [`crate::shift_equal::shift_clamp`]). Computed once here because the
+    /// e-graph isn't unioned during search, and `shift_equal` is on the hot
+    /// path — recomputing it per call would be O(enodes) each time.
+    pub shift_clamp: u32,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -147,10 +153,10 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
     /// Best-first canonical-ordering device: `Some(k)` means `?#0..?#(k-1)`
-    /// are committed to never being expanded *and* are forbidden from
-    /// participating in `Reuse`. Expanding `?#k` raises this to `Some(k)`.
-    /// `None` disables the rule entirely — SMC uses this so it can dedupe
-    /// purely on the pattern's `RecExpr`.
+    /// are committed to never being expanded again. Expanding `?#k` raises this
+    /// to `Some(k)`. Restricts only `Expand`, not `Reuse` (whose ordering uses
+    /// `Pattern::var_reusable`). `None` disables the rule — SMC uses this to
+    /// dedupe purely on the pattern's `RecExpr`.
     pub frozen_count: Option<usize>,
 }
 
@@ -193,7 +199,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     ///
     /// We don't fv-prune captures here: captures whose fv reaches into
     /// pattern-internal binders are handled at apply/cost time by η-wrapping
-    /// (see `compute_ho_arity` and `shift_free_egraph`), so the match set
+    /// (see `enumerate_candidates` and `shift_free_egraph`), so the match set
     /// stays permissive and search keeps exploring those branches.
     fn build_subset_matches(parent_matches: &[MatchAtEClass], var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
         Self::build_matches(parent_matches, |subst, out| {
@@ -233,7 +239,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         Self::build_matches(parent_matches, |subst, out| {
             let shallow_id = subst.vars[shallow_idx];
             let deep_id = subst.vars[deep_idx];
-            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph) {
+            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph, shared.shift_clamp) {
                 return;
             }
             let mut new_subst = subst.clone();
@@ -293,14 +299,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// canonical order, so it shouldn't bump the freeze cursor.
     ///
     /// Concretizations are applied in descending `var_idx` order so earlier
-    /// indices don't shift mid-loop. Cross-depth-reused vars are skipped:
-    /// their occurrences live at different pattern depths, so a single
-    /// DB-bearing literal can't be sound at every site — `shift_equal` may
-    /// accept the reuse purely on a context-fv check, so even a `useless`
-    /// reading here doesn't license collapsing both sites to one literal.
+    /// indices don't shift mid-loop. Cross-depth vars inline too: `concretize`
+    /// shifts the extraction to each occurrence's depth (sound — every surviving
+    /// cross-depth reuse is a genuine shift-variant).
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
         let start = self.frozen_count.unwrap_or(0);
-        let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter(|&k| !self.pattern.var_cross_depth[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
+        let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {
             return None;
         }
@@ -454,20 +458,23 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
         // `var_reusable` is a best-first canonical-ordering device, mirroring
         // `frozen_count`. SMC (frozen_count = None) ignores it so its reuse
-        // exploration stays unrestricted. We only enforce it on *same-depth*
-        // reuse pairs — cross-depth reuse inherently requires an intervening
-        // expansion (the depth difference is *created* by expansion), so the
-        // reuse-before-expand canonical order can't apply to it.
+        // exploration stays unrestricted. Reusing two stale (non-reusable)
+        // vars always re-reaches a pattern already obtainable by reusing them
+        // earlier — when the later-created of the two was still in the fresh
+        // cohort — so we skip it as a duplicate. This holds regardless of the
+        // two vars' depths: a cross-depth reuse commutes past every expansion
+        // after the one that created the deeper var, so it too has an
+        // earlier-reuse canonical form.
         let enforce_reusable = self.frozen_count.is_some();
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                if enforce_reusable && di == dj && !self.pattern.var_reusable[i] && !self.pattern.var_reusable[j] {
+                if enforce_reusable && !self.pattern.var_reusable[i] && !self.pattern.var_reusable[j] {
                     continue;
                 }
                 let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
-                    let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count();
+                    let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph, shared.shift_clamp)).count();
                     (s + usage(m.root_eclass) * c, r + c)
                 });
                 if support == 0 {
@@ -483,8 +490,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         for var_idx in 0..n {
             // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k; `max_arity` caps how many vars best-first will
-            // create. Both checks are no-ops for SMC (frozen_count = None,
+            // `?#j` with j < k; `max_arity` caps the eventual frozen_count
+            // (since a successful expand at var_idx raises fc to >= var_idx).
+            // Both checks are no-ops for SMC (frozen_count = None,
             // max_arity = usize::MAX).
             if var_idx > max_arity {
                 continue;
@@ -495,7 +503,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 continue;
             }
             let d_k = self.pattern.var_depth[var_idx];
-            let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
             let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
             for m in &self.matches {
@@ -503,7 +510,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
-                        if invalid_literal_expansion(node, d_k, cross_depth) {
+                        if invalid_literal_expansion(node, d_k) {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());
@@ -525,34 +532,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 }
 
-/// Walks `eclass` picking the size-minimal enode at each step (same cost
-/// rule as `extract_root_size`: intrinsic node weight + sum of child eclass
-/// sizes), appending each enode in postorder to `out` with its children
-/// remapped to the appended positions. `memo` shares any eclass visited
-/// twice in the walk, so the result is DAG-shared rather than tree-expanded.
-/// Returns the root's index in `out`. Discriminants are lifted into the
-/// pattern leaf-op via `OpWithVar::Node` so the result splices into a
-/// `Pattern<F, O>::pattern` directly.
-fn build_size_minimal_extraction<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, eclass: Id, out: &mut Vec<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>) -> Id {
-    let canonical = egraph.find(eclass);
-    if let Some(&id) = memo.get(&canonical) {
-        return id;
-    }
-    let weights = egraph.analysis.weights;
-    let rep = egraph[canonical]
-        .nodes
-        .iter()
-        .min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>())
-        .expect("non-empty eclass")
-        .clone();
-    let children: Vec<Id> = rep.children().iter().map(|&c| build_size_minimal_extraction::<F, O>(egraph, c, out, memo)).collect();
-    let node = F::make(F::map_discriminant(rep.discriminant(), OpWithVar::Node), children);
-    out.push(node);
-    let id = Id::from(out.len() - 1);
-    memo.insert(canonical, id);
-    id
-}
-
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
@@ -563,12 +542,14 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
+    let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let shared = SharedSearchData {
         egraph,
         root,
         follow: follow_expr,
         usage_counts,
         check_slow: args.check_slow,
+        shift_clamp,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, None);
@@ -585,54 +566,4 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SearchState {{ pattern: {}, matches: {} }}", self.pattern, self.matches.len())
     }
-}
-
-/// Computes how many times each e-class appears in the fully-expanded corpus tree.
-/// Top-down pass: root gets count 1, then propagate to children of the size-minimal
-/// enode (same rule as [`build_size_minimal_extraction`] and `WeightedSize`).
-///
-/// Canonical eclass ids are not necessarily in topological order after unions
-/// (a parent's canonical id can be lower than a child's), so we explicitly
-/// derive a parents-before-children order via iterative DFS post-order from
-/// the root and propagate along it.
-pub fn compute_usage_counts<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> FxHashMap<Id, usize> {
-    let root = egraph.find(root);
-    let weights = egraph.analysis.weights;
-    let min_enode = |id: Id| -> Option<&L> { egraph[id].nodes.iter().min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>()) };
-    let mut order: Vec<Id> = Vec::new();
-    let mut seen: FxHashSet<Id> = FxHashSet::default();
-    let mut stack: Vec<(Id, bool)> = vec![(root, false)];
-    while let Some((id, post)) = stack.pop() {
-        if post {
-            order.push(id);
-            continue;
-        }
-        if !seen.insert(id) {
-            continue;
-        }
-        stack.push((id, true));
-        if let Some(enode) = min_enode(id) {
-            for &child in enode.children() {
-                let child = egraph.find(child);
-                if !seen.contains(&child) {
-                    stack.push((child, false));
-                }
-            }
-        }
-    }
-    order.reverse();
-    let mut counts = FxHashMap::<Id, usize>::default();
-    counts.insert(root, 1);
-    for id in order {
-        let count = counts.get(&id).copied().unwrap_or(0);
-        if count == 0 {
-            continue;
-        }
-        if let Some(enode) = min_enode(id) {
-            for &child in enode.children() {
-                *counts.entry(egraph.find(child)).or_insert(0) += count;
-            }
-        }
-    }
-    counts
 }

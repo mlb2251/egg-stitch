@@ -2,14 +2,17 @@
   "compression_ratio": 1.5145685997171143,
   "cost_after_rewrites": 5354,
   "final_cost": 3535,
+  "heap_sizes_at_end": [
+    0
+  ],
   "initial_cost": 5354,
   "library": [
     {
       "approx_cost": 2727,
       "arity": 2,
-      "lambda": "(lam (lam (app Y (lam (lam (app (app (app if (app is_nil $0)) nil) (app (app cons (app (app $3 (app car $0)) ($2 $0))) (app $1 (app cdr $0)))))))))",
+      "lambda": "(lam (lam (app Y (lam (lam (app (app (app if (app is_nil $0)) nil) (app (app cons (app (app $2 (app car $0)) ($3 $0))) (app $1 (app cdr $0)))))))))",
       "num_matches": 2,
-      "pattern": "fn_0: (app Y (lam (lam (app (app (app if (app is_nil $0)) nil) (app (app cons (app (app ?#0 (app car $0)) (?#1 $0))) (app $1 (app cdr $0)))))))",
+      "pattern": "fn_0: (app Y (lam (lam (app (app (app if (app is_nil $0)) nil) (app (app cons (app (app ?#1 (app car $0)) (?#0 $0))) (app $1 (app cdr $0)))))))",
       "pattern_size": 2627,
       "usage_matches": 2
     }
@@ -19,7 +22,7 @@
     "(app Y (lam (lam (app (app (app if (app is_nil $0)) nil) (app (app cons (app (app - (app car $0)) 1))            (app $1 (app cdr $0)))))))"
   ],
   "rewritten_programs": [
-    "(fn_0 + (lam (app car $0)))",
-    "(fn_0 - (lam 1))"
+    "(fn_0 (lam (app car $0)) +)",
+    "(fn_0 (lam 1) -)"
   ]
 }

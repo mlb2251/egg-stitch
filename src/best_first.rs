@@ -83,6 +83,9 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     pub best_history: Vec<BestHistoryEntry>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
+    /// Heap size when the loop stopped. `0` means the frontier was exhausted
+    /// (the search converged); a non-zero value means it hit the `num_steps` cap.
+    pub heap_size_at_end: usize,
     pub data: crate::shared::SharedData<F, O>,
     pub tree_log: Option<SearchTreeLog>,
 }
@@ -157,7 +160,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut useless_inline_hits: usize = 0;
     let search_start = Instant::now();
 
-    'search: while let Some(Reverse((_prio, node_id))) = heap.pop() {
+    'search: loop {
+        // Check cutoffs before popping so a node isn't discarded from the frontier.
         if let Some(b) = budget
             && num_expansions >= b
         {
@@ -170,6 +174,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
         }
+        let Some(Reverse((_prio, node_id))) = heap.pop() else {
+            break;
+        };
 
         // Re-check the cached lower bound: best may have improved since this node was pushed.
         if let Some(lb) = nodes[node_id].lower_bound
@@ -236,6 +243,17 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _, _)| *c);
             let arity = child_state.pattern.vars.len();
+            // KNOWN DIVERGENCE FROM SMC: this update is *not* guarded by
+            // `shared.follow.is_none()`, unlike its counterpart at smc.rs:135. In
+            // `--follow` mode best-first therefore records the cheapest matching
+            // *prefix* as `best`, whereas SMC records only an exact follow match
+            // (and returns `None` if the budget runs out first). The non-prefix
+            // children are already filtered out above (see :199), so `best` is
+            // always a valid follow-prefix; the two backends just disagree on
+            // what they report when no exact hit is reached within budget. This
+            // is intentionally left as-is: follow mode is a reachability check
+            // and none of the follow tests depend on which backend's
+            // budget-exhaustion behaviour is used.
             if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat && !child_state.has_useless_var(&shared) {
                 let elapsed = search_start.elapsed().as_secs_f64();
                 println!(
@@ -260,6 +278,14 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // has reached the goal, and continuing risks overwriting `best`
             // with a cheaper non-matching pattern that slipped past the prefix
             // filter. Record this child as best and stop.
+            //
+            // NOTE: --follow mode is a reachability check — we only care that
+            // the target pattern is constructible via the expansions BFS/SMC
+            // has access to. Overwriting `best` with the follow-hit child even
+            // when its cost is worse than a previously-recorded best is
+            // intentional: the reported `best` in follow mode is "the follow
+            // target we reached", not "the cheapest pattern seen". Do not
+            // "fix" this by guarding the overwrite on `child_cost < best.cost`.
             let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
 
             nodes.push(Node {
@@ -349,6 +375,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         best_history,
         best_found_at,
         num_expansions,
+        heap_size_at_end: heap.len(),
         data: shared.into_data(),
         tree_log,
     }

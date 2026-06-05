@@ -6,8 +6,12 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// Maximum number of distinct (slot, fv) pairs `enumerate_kept_subst_subsets`
 /// is willing to enumerate. The OR-closure that builds canonical S-masks can
 /// in the worst case reach `2^MAX_PACKED_FV_BITS` distinct masks, so this caps
-/// the per-call work (and the `u64` bit-mask width — must stay ≤ 64).
+/// the per-call work.
 const MAX_PACKED_FV_BITS: u32 = 20;
+const _: () = assert!(
+    MAX_PACKED_FV_BITS <= 64,
+    "MAX_PACKED_FV_BITS must be ≤ 64: the OR-closure encodes (slot, fv) pairs into a u64 bit-mask, and shifting `1u64 << b` for b ≥ 64 is undefined behaviour in Rust."
+);
 
 /// Core enumeration: given each subst's per-slot captured-fv set, return the
 /// canonical subsets of subst indices to consider as rewrite candidates.
