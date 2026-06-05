@@ -628,10 +628,7 @@ pub fn remove_exceeding_wrap_nesting<F: LanguageFamily, O: StitchOp, T>(successo
     if !shared.has_cycle {
         return;
     }
-    successors.retain(|item| {
-        let c = state_of(item);
-        !c.matches.is_empty() && max_wrap_nesting.is_none_or(|cap| c.within_wrap_nesting_cap(shared, cap))
-    });
+    successors.retain(|item| max_wrap_nesting.is_none_or(|cap| state_of(item).within_wrap_nesting_cap(shared, cap)));
 }
 
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
