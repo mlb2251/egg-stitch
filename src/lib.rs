@@ -184,10 +184,13 @@ pub struct Args {
     /// (see `tests/wrap_nesting_optimum_test.rs`) rather than dropping them.
     /// Counts loop *closures* only (genuine nesting contributes nothing).
     /// Termination still holds — wrapping deeper buries some variable past the
-    /// cap in every match. Default 2 (covers 0-spin abstractions and the 1-spin
-    /// body-compresses case with headroom). Only active alongside `opt_strip_wrap`
-    /// on cyclic e-graphs.
-    #[arg(long = "max-wrap-nesting", default_value_t = 2)]
+    /// cap in every match. Default 0: no variable may be buried under *any*
+    /// self-loop in every match. This can forgo a real optimum that puts a
+    /// variable under one collapsed wrapper in every match — e.g. a condition
+    /// captured inside a DSR-collapsed `if` (see `conditional_branch_unify_*`
+    /// tests); raise the cap to recover those. Only active alongside
+    /// `opt_strip_wrap` on cyclic e-graphs.
+    #[arg(long = "max-wrap-nesting", default_value_t = 0)]
     pub max_wrap_nesting: usize,
 
     /// Path to write JSON output.

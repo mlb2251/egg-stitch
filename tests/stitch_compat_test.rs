@@ -53,8 +53,14 @@ fn expected_path(input: &str) -> String {
 /// Path for the temporary `--output` JSON of a single backend run. Includes
 /// pid + input stem + search to stay unique across parallel tests.
 fn temp_output_path(input: &str, search: &str) -> std::path::PathBuf {
+    // Per-call counter so two tests sharing the same (input, search) — e.g. the
+    // `conditional_branch_unify_cap{0,2}` pair — don't collide on the temp file
+    // when nextest runs them in parallel.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
     let stem = Path::new(input).file_stem().and_then(|s| s.to_str()).unwrap_or("input");
-    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}.json", std::process::id(), stem, search))
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}-{}.json", std::process::id(), stem, search, seq))
 }
 
 /// Invokes the cargo-built binary, writes its `--output` JSON to a temp file,
@@ -703,17 +709,36 @@ fn cross_depth_forloop_db_var_inline() {
 /// `(f ?#0 ?#1)` would have to pass that subterm at every site, so the
 /// condition-parameterized `if` genuinely wins.
 ///
-/// This pins that the equivalence-driven unification is found (cost 39). It is
-/// a deliberate counter-example to a tempting "self-loop / re-nesting" prune of
-/// identity DSRs: because `(if true x y) => x` unions the `if` node into `x`'s
-/// e-class, that node looks like a self-loop, yet the abstraction containing it
-/// is the optimum — any prune keyed purely on self-loop nesting must not
-/// discard it.
+/// This optimum is found *only* when `--max-wrap-nesting` allows it. Because
+/// `(if true x y) => x` unions the `if` node into `x`'s e-class, that node is a
+/// self-loop under every match, burying the condition variable `?#0` at depth 1
+/// everywhere — so the per-variable wrap-nesting gate
+/// (`SearchState::max_var_wrap_nesting_depth`) drops the whole abstraction at the
+/// default `--max-wrap-nesting 0`. The two tests below pin both behaviours: at
+/// cap ≥ 1 the `if`-wrapped optimum (cost 39) survives; at the default cap 0 it's
+/// pruned and a worse abstraction wins. (This is exactly the incompleteness of a
+/// self-loop prune — keeping it cheap to spot if the default ever changes.)
+const IF_INPUT: &str = "data/domains/conditional/if_branch_unify.json";
 const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewrites"];
 
+/// `--max-wrap-nesting 2` (the original default): the equivalence-driven
+/// `if`-unification optimum (cost 39) is found. Pins the original fixture.
 #[test]
-fn conditional_branch_unify() {
-    check_fixture_bf_only("data/domains/conditional/if_branch_unify.json", IF_RULES, true);
+fn conditional_branch_unify_cap2_keeps_if_abstraction() {
+    let args = &["--rules", "data/domains/conditional/if_branch.rewrites", "--max-wrap-nesting", "2"];
+    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.out.json", &bf, "if_branch_unify (cap 2)");
+}
+
+/// Default `--max-wrap-nesting 0`: the `if` self-loop buries `?#0` in every
+/// match, so the gate prunes the optimum and a worse abstraction wins. Pins the
+/// (distinct) cap-0 fixture.
+#[test]
+fn conditional_branch_unify_cap0_drops_if_abstraction() {
+    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", IF_RULES);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap0.out.json", &bf, "if_branch_unify (cap 0)");
 }
 
 /// Regression: a metavar reused across binder depths keeps a genuine
