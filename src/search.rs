@@ -454,15 +454,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// *every* match; the state is pruned iff some variable is buried — i.e. the
     /// invariant kept is "∀v ∃(r,σ): spin-depth(v) ≤ cap": every variable has at
     /// least one shallow rewrite, possibly via a *different* match.
-    ///
-    /// This `max_v min_σ` (maximin) is strictly weaker than the older `min_σ max_v`
-    /// (minimax, "∃σ shallow for all v"): it keeps *mixed* patterns whose spin
-    /// alternates across variables/matches — e.g. a reused metavar straddling two
-    /// wrappers that collapse on disjoint subsets of matches — so it doesn't drop
-    /// an optimum just because no *single* match is shallow everywhere. Counts
-    /// loop *closures* only (genuine nesting contributes nothing). Termination
-    /// still holds: wrapping any pattern one level deeper buries some variable
-    /// past the cap in *every* match, so the re-wrap tower is finite.
     pub fn max_var_wrap_nesting_depth(&self, shared: &SharedSearchData<F, O>) -> usize {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();

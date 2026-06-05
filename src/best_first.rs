@@ -198,9 +198,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
-        // On cyclic e-graphs, bound the otherwise-infinite re-wrap tower via the
-        // wrap-nesting gate (see `SearchState::max_var_wrap_nesting_depth`).
-        // `--max-wrap-nesting none` disables the depth check (unbounded).
+
         if shared.has_cycle {
             successors.retain(|c| !c.matches.is_empty() && args.max_wrap_nesting.0.is_none_or(|cap| c.max_var_wrap_nesting_depth(&shared) <= cap));
         }

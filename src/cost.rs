@@ -401,9 +401,7 @@ pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 /// Optimise over every meaningful candidate. Returns the chosen candidate
 /// (variable_indices + kept-subst mask) and its total cost, so callers
 /// downstream (`apply_abstraction`, `build_rewritten_egraph`) can use the
-/// same selection without redoing the optimisation. The wrap-nesting cap is
-/// enforced at the search frontier (`SearchState::max_var_wrap_nesting_depth`),
-/// not here.
+/// same selection without redoing the optimisation.
 pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> CostSelection {
     assert!(
         !search_state.matches.is_empty(),
