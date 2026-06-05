@@ -741,6 +741,41 @@ fn conditional_branch_unify_cap0_drops_if_abstraction() {
     bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap0.out.json", &bf, "if_branch_unify (cap 0)");
 }
 
+/// Crossed-spin wrap collapse: the optimum `(g (da³(P ?#0 ?#1)) (db³(Q ?#0 ?#2)))`
+/// reuses `?#0` across two wrappers that collapse on disjoint match families
+/// (`P` at the r1 roots, `Q` at the r2 roots). Every match has one wrapper
+/// spinning, so a minimax `min_σ max_v` wrap-nesting gate would prune it even at
+/// cap 0 and settle for a cost-60 abstraction. The actual gate is the
+/// per-variable maximin `max_v min_σ` (`SearchState::max_var_wrap_nesting_depth`):
+/// each of `?#0`/`?#1`/`?#2` is shallow in *some* match, so the optimum survives
+/// at cap 0 (cost 54). Re-blessing this to a cost-60 shape signals a regression
+/// to minimax.
+#[test]
+fn crossed_wrap_collapse_maximin_gate() {
+    let args = &["--language", "op-children", "--rules", "data/test/crossed_wrap_collapse.rewrites", "--max-arity", "3", "--max-wrap-nesting", "0"];
+    check_fixture_bf_only("data/test/crossed_wrap_collapse.json", args, true);
+}
+
+/// `strip_dominated_wrappers` soundness: stripping a *dominated* wrap subst must
+/// not change the optimum. The cost-guarded collapse keeps a cheap wrap subst at
+/// the shared root, so the strip run and the `--no-opt-strip-wrap` baseline find
+/// the *same* abstraction at the *same* cost (before the fix the strip raised it
+/// from 42 to 54). The fixture pins the strip-on output; the asserts pin the
+/// off == on relation a single fixture can't express.
+#[test]
+fn redundant_sibling_strip_preserves_optimum() {
+    const SR_INPUT: &str = "data/test/strip_redundant_sibling_unsound.json";
+    let base: &[&str] = &["--language", "op-children", "--rules", "data/test/strip_redundant_sibling_unsound.rewrites", "--max-arity", "3"];
+    let mut on = run_backend_steps("best-first", SR_INPUT, "50000", base);
+    let mut off_args = base.to_vec();
+    off_args.push("--no-opt-strip-wrap");
+    let off = run_backend_steps("best-first", SR_INPUT, "50000", &off_args);
+    assert_eq!(on["library"][0]["pattern"], off["library"][0]["pattern"], "strip must find the same abstraction as the no-strip baseline");
+    assert_eq!(on["final_cost"], off["final_cost"], "strip must not change the optimal cost (was 54 > 42 before the fix)");
+    strip_library_field(&mut on, "best_history");
+    bless_or_check(&expected_path(SR_INPUT), &on, SR_INPUT);
+}
+
 /// Regression: a metavar reused across binder depths keeps a genuine
 /// higher-order capture, and its η-app body args must be depth-shifted per
 /// occurrence. `build_with_ho` / `display_pattern_as_lambda` applied the raw

@@ -1,0 +1,44 @@
+{
+  "compression_ratio": 2.547619047619047,
+  "cost_after_rewrites": 107,
+  "final_cost": 42,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 126,
+  "library": [
+    {
+      "approx_cost": 8,
+      "arity": 2,
+      "lambda": "(lam (lam (f (k $1) (D (D (D (D (D (P $1 $0)))))))))",
+      "num_matches": 9,
+      "pattern": "fn_0: (f (k ?#0) (D (D (D (D (D (P ?#0 ?#1)))))))",
+      "pattern_size": 11,
+      "usage_matches": 10
+    }
+  ],
+  "original_programs": [
+    "(f (k p0) (D (D (D (D (D (P p0 q0)))))))",
+    "(f (k p1) (D (D (D (D (D (P p1 q1)))))))",
+    "(f (k p2) (D (D (D (D (D (P p2 q2)))))))",
+    "(f (k p3) (D (D (D (D (D (P p3 q3)))))))",
+    "(f (k p4) (D (D (D (D (D (P p4 q4)))))))",
+    "(f (k p5) (D (D (D (D (D (P p5 q5)))))))",
+    "(f (k p6) (D (D (D (D (D (P p6 q6)))))))",
+    "(f (k p7) (D (D (D (D (D (P p7 q7)))))))",
+    "(f (k (g1 (g2 (g3 (g4 (g5 gbase)))))) (D (D (D (D (D (P (g1 (g2 (g3 (g4 (g5 gbase))))) (h1 (h2 (h3 (h4 (h5 hbase))))))))))))",
+    "(f (k one) (D (D (D (D (D (P one z)))))))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 p0 q0)",
+    "(fn_0 p1 q1)",
+    "(fn_0 p2 q2)",
+    "(fn_0 p3 q3)",
+    "(fn_0 p4 q4)",
+    "(fn_0 p5 q5)",
+    "(fn_0 p6 q6)",
+    "(fn_0 p7 q7)",
+    "(fn_0 one z)",
+    "(fn_0 one z)"
+  ]
+}
