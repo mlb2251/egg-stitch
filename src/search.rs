@@ -466,8 +466,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let mut ec: Vec<Option<Id>> = vec![None; n];
         // Per variable: has some match witnessed it at spin-depth ≤ cap?
         let mut satisfied = vec![false; nvars];
-        // always equal to the sum of `satisfied`'s false count
-        let mut num_unsatisfied_vars = nvars;
         for m in &self.matches {
             for s in &m.substs {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
@@ -489,10 +487,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     let depth = positions.iter().map(|&p| depth_to[usize::from(p)]).min().expect("every pattern var has ≥1 position");
                     if depth <= cap {
                         satisfied[k] = true;
-                        num_unsatisfied_vars -= 1;
                     }
                 }
-                if num_unsatisfied_vars == 0 {
+                if satisfied.iter().all(|&b| b) {
                     return true; // every var has a shallow witness — verdict locked
                 }
             }
