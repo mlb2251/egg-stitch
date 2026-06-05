@@ -709,36 +709,35 @@ fn cross_depth_forloop_db_var_inline() {
 /// `(f ?#0 ?#1)` would have to pass that subterm at every site, so the
 /// condition-parameterized `if` genuinely wins.
 ///
-/// This optimum is found *only* when `--max-wrap-nesting` allows it. Because
+/// Whether this optimum is found depends on `--max-wrap-nesting`. Because
 /// `(if true x y) => x` unions the `if` node into `x`'s e-class, that node is a
 /// self-loop under every match, burying the condition variable `?#0` at depth 1
 /// everywhere — so the per-variable wrap-nesting gate
 /// (`SearchState::max_var_wrap_nesting_depth`) drops the whole abstraction at the
-/// default `--max-wrap-nesting 0`. The two tests below pin both behaviours: at
-/// cap ≥ 1 the `if`-wrapped optimum (cost 39) survives; at the default cap 0 it's
-/// pruned and a worse abstraction wins. (This is exactly the incompleteness of a
-/// self-loop prune — keeping it cheap to spot if the default ever changes.)
+/// default `--max-wrap-nesting 0`. The two tests below pin both behaviours: the
+/// default (cap 0) prunes it and a worse abstraction wins (cost 44), and raising
+/// the cap to 2 recovers the `if`-wrapped optimum (cost 39). (This is exactly the
+/// incompleteness of a self-loop prune — keeping it cheap to spot.)
 const IF_INPUT: &str = "data/domains/conditional/if_branch_unify.json";
 const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewrites"];
 
-/// `--max-wrap-nesting 2` (the original default): the equivalence-driven
-/// `if`-unification optimum (cost 39) is found. Pins the original fixture.
+/// Default `--max-wrap-nesting 0`: the `if` self-loop buries `?#0` in every
+/// match, so the gate prunes the optimum and a worse abstraction wins (cost 44).
+/// As the default behaviour it owns the plain fixture.
 #[test]
-fn conditional_branch_unify_cap2_keeps_if_abstraction() {
+fn conditional_branch_unify_default_drops_if_abstraction() {
+    check_fixture_bf_only(IF_INPUT, IF_RULES, true);
+}
+
+/// Alternate `--max-wrap-nesting 2`: raising the cap past the buried depth
+/// recovers the equivalence-driven `if`-unification optimum (cost 39). Pins the
+/// non-default `.cap2` fixture.
+#[test]
+fn conditional_branch_unify_cap2_recovers_if_abstraction() {
     let args = &["--rules", "data/domains/conditional/if_branch.rewrites", "--max-wrap-nesting", "2"];
     let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", args);
     strip_library_field(&mut bf, "best_history");
-    bless_or_check("data/expected_outputs/conditional/if_branch_unify.out.json", &bf, "if_branch_unify (cap 2)");
-}
-
-/// Default `--max-wrap-nesting 0`: the `if` self-loop buries `?#0` in every
-/// match, so the gate prunes the optimum and a worse abstraction wins. Pins the
-/// (distinct) cap-0 fixture.
-#[test]
-fn conditional_branch_unify_cap0_drops_if_abstraction() {
-    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", IF_RULES);
-    strip_library_field(&mut bf, "best_history");
-    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap0.out.json", &bf, "if_branch_unify (cap 0)");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap2.out.json", &bf, "if_branch_unify (cap 2)");
 }
 
 /// Crossed-spin wrap collapse: the optimum `(g (da³(P ?#0 ?#1)) (db³(Q ?#0 ?#2)))`
