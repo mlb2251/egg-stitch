@@ -624,6 +624,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 }
 
+pub fn remove_exceeding_wrap_nesting<F: LanguageFamily, O: StitchOp, T>(successors: &mut Vec<T>, shared: &SharedSearchData<F, O>, max_wrap_nesting: Option<usize>, state_of: impl Fn(&T) -> &SearchState<F, O>) {
+    if !shared.has_cycle {
+        return;
+    }
+    successors.retain(|item| {
+        let c = state_of(item);
+        !c.matches.is_empty() && max_wrap_nesting.is_none_or(|cap| c.within_wrap_nesting_cap(shared, cap))
+    });
+}
+
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {

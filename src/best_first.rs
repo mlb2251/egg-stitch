@@ -9,7 +9,7 @@ use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, comp
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
-use crate::search::{SearchState, SeenTracker, SuccessorEnum, setup_search};
+use crate::search::{SearchState, SeenTracker, SuccessorEnum, remove_exceeding_wrap_nesting, setup_search};
 
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -199,9 +199,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
 
-        if shared.has_cycle {
-            successors.retain(|c| !c.matches.is_empty() && args.max_wrap_nesting.0.is_none_or(|cap| c.within_wrap_nesting_cap(&shared, cap)));
-        }
+        remove_exceeding_wrap_nesting(&mut successors, &shared, args.max_wrap_nesting.0, |c| c);
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow
