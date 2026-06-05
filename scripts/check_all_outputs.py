@@ -30,6 +30,7 @@ RULES_BY_REL = {
     "fv-overapprox/annihilator.out.json": "data/domains/fv-overapprox/annihilator.rewrites",
     "stitch/nested.out.json": "data/domains/stitch/nested.rewrites",
     "conditional/if_branch_unify.out.json": "data/domains/conditional/if_branch.rewrites",
+    "test/crossed_wrap_collapse.out.json": "data/test/crossed_wrap_collapse.rewrites",
     "cogsci/dials.dsr.out.json": "data/domains/cogsci/dials.rewrites",
     "cogsci/furniture.dsr.out.json": "data/domains/cogsci/furniture.rewrites",
     "cogsci/nuts-bolts.dsr.out.json": "data/domains/cogsci/nuts-bolts.rewrites",
