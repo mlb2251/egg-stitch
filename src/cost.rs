@@ -394,25 +394,22 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
 /// `|S_k| > 0` has its body uses applied to the enclosing binders
 /// (`(@ … (@ ?#k $0) … $h-1)`), which adds `h * (app_cost + sym_var_cost)`
 /// per occurrence.
-pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, max_wrap_nesting: Option<usize>) -> usize {
-    compute_cost_and_select(egraph, root, cache, scratch, search_state, check_slow, max_wrap_nesting).cost
+pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
+    compute_cost_and_select(egraph, root, cache, scratch, search_state, check_slow).cost
 }
 
 /// Optimise over every meaningful candidate. Returns the chosen candidate
 /// (variable_indices + kept-subst mask) and its total cost, so callers
 /// downstream (`apply_abstraction`, `build_rewritten_egraph`) can use the
-/// same selection without redoing the optimisation.
-///
-/// `max_wrap_nesting` is `Some(cap)` when the wrap-nesting bound is active
-/// (cyclic egraph + `--opt-strip-wrap`); it filters out candidates that can
-/// only rewrite through over-cap re-wrap towers (see `enumerate_candidates`).
-/// Pass `None` to disable the filter (acyclic, or callers outside that bound).
-pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, max_wrap_nesting: Option<usize>) -> CostSelection {
+/// same selection without redoing the optimisation. The wrap-nesting cap is
+/// enforced at the search frontier (`SearchState::max_var_wrap_nesting_depth`),
+/// not here.
+pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> CostSelection {
     assert!(
         !search_state.matches.is_empty(),
         "compute_cost_and_select: search_state.matches is empty; a pattern with no matches has no rewrite candidates to optimise over. Callers (best_first, smc) must filter empty-match states before scoring."
     );
-    let candidates = enumerate_candidates::<F, O>(egraph, search_state, max_wrap_nesting);
+    let candidates = enumerate_candidates::<F, O>(egraph, search_state);
     let weights = &egraph.analysis.weights;
     // Hoisted: fill once per cost call. `eclass_to_match_idx` depends only on
     // `search_state.matches`, which is the same across every candidate, so

@@ -511,152 +511,60 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         removed
     }
 
-    /// The *minimum* over matches of each subst's stacked-self-loop (spin) depth
-    /// — the search-frontier bound that keeps re-wrap towers finite on cyclic
-    /// e-graphs.
+    /// Search-frontier wrap-nesting bound (`--max-wrap-nesting`): the worst
+    /// variable's *best* stacked-self-loop (spin) depth —
+    /// `max over vars v of (min over matches (r,σ) of spin-depth(v, r, σ))`.
     ///
     /// A node `i` is a self-loop under `σ` iff `ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i).
     /// ec_σ(d) = ec_σ(i)` (it denotes the same e-class as a descendant — a no-op
-    /// wrapper at this subst). A subst's depth is the longest chain of such nodes
-    /// from the root down; this returns the *min* of that over all substs.
+    /// wrapper at this subst). The spin-depth *at a variable* `v` under `σ` is the
+    /// number of self-loop nodes on the path from the root to `v`'s shallowest
+    /// occurrence. A variable is "buried" iff that depth exceeds the cap in
+    /// *every* match; the state is pruned iff some variable is buried — i.e. the
+    /// invariant kept is "∀v ∃(r,σ): spin-depth(v) ≤ cap": every variable has at
+    /// least one shallow rewrite, possibly via a *different* match.
     ///
-    /// Capping the min (see `--max-wrap-nesting`) prunes a pattern only when
-    /// *every* surviving rewrite is over-spun past the cap — i.e. the pattern is
-    /// nothing but a re-wrap tower with no shallow use left. A pattern keeping
-    /// even one within-cap subst is retained. (This is strictly weaker than
-    /// bounding the max-over-substs: it prunes a subset, so it's more complete,
-    /// while still cutting pure towers, whose every subst is over-spun.) The
-    /// count is of loop *closures* only — genuine nesting (each level a distinct
-    /// e-class) contributes nothing — so it trims redundant re-wraps without
-    /// touching real structure. Sound-as-incomplete: it removes whole search
-    /// nodes but never alters the cost of an explored pattern, so it can't change
-    /// a reported optimum — only fail to explore an abstraction whose *every*
-    /// rewrite needs more than the cap of stacked no-ops.
-    pub fn min_wrap_nesting_depth(&self, shared: &SharedSearchData<F, O>) -> usize {
+    /// This `max_v min_σ` (maximin) is strictly weaker than the older `min_σ max_v`
+    /// (minimax, "∃σ shallow for all v"): it keeps *mixed* patterns whose spin
+    /// alternates across variables/matches — e.g. a reused metavar straddling two
+    /// wrappers that collapse on disjoint subsets of matches — so it doesn't drop
+    /// an optimum just because no *single* match is shallow everywhere. Counts
+    /// loop *closures* only (genuine nesting contributes nothing). Termination
+    /// still holds: wrapping any pattern one level deeper buries some variable
+    /// past the cap in *every* match, so the re-wrap tower is finite.
+    pub fn max_var_wrap_nesting_depth(&self, shared: &SharedSearchData<F, O>) -> usize {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
-        let pos_to_var = self.pos_to_var();
         let descendants = self.pattern_descendants();
-        if (0..n).all(|i| descendants[i].is_empty()) {
-            return 0; // single leaf, no interior nodes
+        let nvars = self.pattern.vars.len();
+        if nvars == 0 || (0..n).all(|i| descendants[i].is_empty()) {
+            return 0; // no variables / single leaf: nothing can be buried
         }
+        let pos_to_var = self.pos_to_var();
         let mut ec: Vec<Option<Id>> = vec![None; n];
-        let mut min_depth = usize::MAX;
+        // Per-variable minimum spin-depth over all matches (`MAX` until first seen).
+        let mut per_var_min = vec![usize::MAX; nvars];
         for m in &self.matches {
             for s in &m.substs {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                min_depth = min_depth.min(Self::subst_loop_depth(nodes, &descendants, &ec));
+                // `depth_to[i]` = self-loop count on the root→`i` path (inclusive).
+                // `RevExpr` keeps a node before its children, so a low→high pass
+                // propagates each node's count down to its children.
+                let mut depth_to = vec![0usize; n];
+                for i in 0..n {
+                    let is_loop = ec[i].is_some() && descendants[i].iter().any(|&d| ec[d] == ec[i]);
+                    depth_to[i] += usize::from(is_loop);
+                    for &c in nodes[i].children() {
+                        depth_to[usize::from(c)] = depth_to[i];
+                    }
+                }
+                for (k, positions) in self.pattern.vars.iter().enumerate() {
+                    let d = positions.iter().map(|&p| depth_to[usize::from(p)]).min().unwrap_or(usize::MAX);
+                    per_var_min[k] = per_var_min[k].min(d);
+                }
             }
         }
-        // No substs (shouldn't happen — callers gate on non-empty matches) ⇒ 0.
-        if min_depth == usize::MAX { 0 } else { min_depth }
-    }
-
-    /// Per-subst stacked-self-loop depth: the longest chain of self-loop nodes
-    /// (`ec[i] ≠ ⊥ ∧ ∃ d ∈ Desc(i). ec[d] = ec[i]`) on any root-to-leaf path.
-    /// `ec` must already be filled for the subst. `chain[i]` accumulates the
-    /// deepest self-loop run from `i` down; RevExpr keeps children at higher
-    /// indices than parents, so the high→low pass has child values ready, and
-    /// `chain[0]` (the root) is the answer.
-    fn subst_loop_depth(nodes: &[F::Apply<OpWithVar<O>>], descendants: &[Vec<usize>], ec: &[Option<Id>]) -> usize {
-        let n = nodes.len();
-        let mut chain = vec![0usize; n];
-        for i in (0..n).rev() {
-            let is_loop = ec[i].is_some() && descendants[i].iter().any(|&d| ec[d] == ec[i]);
-            let child_max = nodes[i].children().iter().map(|&c| chain[usize::from(c)]).max().unwrap_or(0);
-            chain[i] = child_max + usize::from(is_loop);
-        }
-        chain[0]
-    }
-
-    /// Per-`(match, subst)` flag — `true` iff this subst's stacked-self-loop
-    /// depth is `≤ cap`. Returned as `out[mi][si]`, aligned with `self.matches`
-    /// (so it indexes the same way `enumerate_candidates` reads `m.substs`).
-    ///
-    /// This is the cost-selection counterpart of [`Self::min_wrap_nesting_depth`]:
-    /// the frontier gate bounds the *min over all substs*, guaranteeing a state
-    /// only that *some* subst is within cap, but the cost optimiser is free to
-    /// pick a candidate whose kept substs are all over-cap. `enumerate_candidates`
-    /// uses this mask to drop such candidates, so a returned abstraction always
-    /// retains a within-cap rewrite (the per-abstraction wrap-nesting guarantee).
-    /// On an acyclic egraph every depth is 0, so every entry is `true` and the
-    /// filter is a no-op.
-    pub fn subst_within_wrap_cap(&self, egraph: &StitchEgraph<F::Apply<O>>, cap: usize) -> Vec<Vec<bool>> {
-        let nodes = &self.pattern.pattern.nodes;
-        let n = nodes.len();
-        let descendants = self.pattern_descendants();
-        if (0..n).all(|i| descendants[i].is_empty()) {
-            return self.matches.iter().map(|m| vec![true; m.substs.len()]).collect(); // no interior nodes ⇒ depth 0
-        }
-        let pos_to_var = self.pos_to_var();
-        let mut ec: Vec<Option<Id>> = vec![None; n];
-        self.matches
-            .iter()
-            .map(|m| {
-                m.substs
-                    .iter()
-                    .map(|s| {
-                        compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, egraph, &mut ec);
-                        Self::subst_loop_depth(nodes, &descendants, &ec) <= cap
-                    })
-                    .collect()
-            })
-            .collect()
-    }
-
-    /// Experimental search-pruning aid. If *exactly one* match root contains a
-    /// subst at the pattern's maximal stacked-self-loop depth `D` (over all
-    /// substs at all roots), drop every subst at that root whose depth is `< D`,
-    /// keeping only the depth-`D` ones.
-    ///
-    /// Rationale: the shallower rewrites of that lone root are also produced by
-    /// shallower patterns reached on sibling branches, so removing them here
-    /// can't lose the optimum (those rewrites are covered elsewhere); meanwhile
-    /// it shrinks this pattern's match set, cutting expansion fan-out — and when
-    /// the root is the pattern's *only* match it raises `min_wrap_nesting_depth`
-    /// to `D`, letting the frontier gate prune the whole tower pattern. Returns
-    /// the number of substs removed.
-    pub fn prune_unique_max_depth_root(&mut self, shared: &SharedSearchData<F, O>) -> usize {
-        let nodes = &self.pattern.pattern.nodes;
-        let n = nodes.len();
-        let pos_to_var = self.pos_to_var();
-        let descendants = self.pattern_descendants();
-        if (0..n).all(|i| descendants[i].is_empty()) {
-            return 0;
-        }
-        let mut ec: Vec<Option<Id>> = vec![None; n];
-        // Per-(match, subst) depth, and the global maximum `d_max`.
-        let mut depths: Vec<Vec<usize>> = Vec::with_capacity(self.matches.len());
-        let mut d_max = 0;
-        for m in &self.matches {
-            let mut row = Vec::with_capacity(m.substs.len());
-            for s in &m.substs {
-                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
-                let d = Self::subst_loop_depth(nodes, &descendants, &ec);
-                d_max = d_max.max(d);
-                row.push(d);
-            }
-            depths.push(row);
-        }
-        if d_max == 0 {
-            return 0; // no self-loops anywhere
-        }
-        // Match roots holding a depth-`d_max` subst; only act when there's one.
-        let mut max_roots = (0..self.matches.len()).filter(|&mi| depths[mi].contains(&d_max));
-        let Some(r) = max_roots.next() else { return 0 };
-        if max_roots.next().is_some() {
-            return 0; // more than one max-depth root
-        }
-        let before = self.matches[r].substs.len();
-        let mut si = 0;
-        self.matches[r].substs.retain(|_| {
-            let keep = depths[r][si] == d_max;
-            si += 1;
-            keep
-        });
-        let removed = before - self.matches[r].substs.len();
-        self.num_substs -= removed;
-        removed
+        per_var_min.into_iter().filter(|&d| d != usize::MAX).max().unwrap_or(0)
     }
 
     /// Returns the enumerable successors of `self`. When dominance pruning

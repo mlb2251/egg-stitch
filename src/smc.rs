@@ -134,9 +134,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 pruned.push(true);
                 continue;
             }
-            // SMC has no wrap-nesting frontier bound, so candidate filtering is
-            // disabled here (`None`) — behaviour is unchanged from before.
-            let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow, None);
+            let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow);
             let cost = selection.cost;
             let arity = s.pattern.vars.len();
             // In `--follow` mode the prefix filter lets cheaper non-matching
@@ -177,7 +175,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
                 // Re-derive the selection for this particle: we didn't keep
                 // selections in `costs`, and exact-match fires at most once.
-                let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &expanded[i], shared.check_slow, None);
+                let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &expanded[i], shared.check_slow);
                 best_so_far = Some((c, SearchStateWithCostSelection { state: expanded[i].clone(), selection }));
                 best_found_at = Some(step);
                 steps_run = step + 1;
