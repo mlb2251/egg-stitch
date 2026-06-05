@@ -198,11 +198,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
-        // Bound the otherwise-infinite tower of equivalent re-wrapped patterns on
-        // cyclic e-graphs: drop any successor in which some pattern variable is
-        // buried under more than `--max-wrap-nesting` stacked self-loops in *every*
-        // match (see `SearchState::max_var_wrap_nesting_depth`). Only fires when
-        // the e-graph has a cycle (the source of those towers).
+        // On cyclic e-graphs, bound the otherwise-infinite re-wrap tower via the
+        // wrap-nesting gate (see `SearchState::max_var_wrap_nesting_depth`).
         if shared.has_cycle {
             successors.retain(|c| !c.matches.is_empty() && c.max_var_wrap_nesting_depth(&shared) <= args.max_wrap_nesting);
         }
