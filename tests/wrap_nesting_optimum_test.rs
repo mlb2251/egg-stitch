@@ -31,10 +31,28 @@ const RULES: &str = "data/test/crossed_wrap_collapse.rewrites";
 fn run(cap: &str) -> Value {
     let out = std::env::temp_dir().join(format!("egg-stitch-wrapcap-{}-{}.json", std::process::id(), cap));
     let out_str = out.to_str().expect("utf-8 temp path");
-    let status = Command::new(BIN)
-        .args(["--search", "best-first", "--language", "op-children", "--input", INPUT, "--rules", RULES, "--num-steps", "60000", "--num-abstractions", "1", "--max-arity", "3", "--max-wrap-nesting", cap, "--output", out_str])
-        .status()
-        .unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
+    let mut cmd = Command::new(BIN);
+    cmd.args([
+        "--search",
+        "best-first",
+        "--language",
+        "op-children",
+        "--input",
+        INPUT,
+        "--rules",
+        RULES,
+        "--num-steps",
+        "60000",
+        "--num-abstractions",
+        "1",
+        "--max-arity",
+        "3",
+        "--max-wrap-nesting",
+        cap,
+        "--output",
+        out_str,
+    ]);
+    let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
     assert!(status.success(), "best-first run failed (cap={cap})");
     let text = fs::read_to_string(&out).unwrap_or_else(|e| panic!("read {}: {e}", out.display()));
     let _ = fs::remove_file(&out);
@@ -60,7 +78,11 @@ fn maximin_gate_keeps_crossed_spin_optimum_at_cap_zero() {
     assert_eq!(v["heap_sizes_at_end"][0].as_u64(), Some(0), "search must terminate (heap drains to 0)");
 
     // The depth-1 crossed optimum survives cap 0 (each variable shallow somewhere).
-    assert_eq!(pattern(&v), "fn_0: (g (da1 (da2 (da3 (P ?#0 ?#1)))) (db1 (db2 (db3 (Q ?#0 ?#2)))))", "maximin gate must keep the crossed optimum at cap 0 (minimax would prune it for a cost-60 abstraction)");
+    assert_eq!(
+        pattern(&v),
+        "fn_0: (g (da1 (da2 (da3 (P ?#0 ?#1)))) (db1 (db2 (db3 (Q ?#0 ?#2)))))",
+        "maximin gate must keep the crossed optimum at cap 0 (minimax would prune it for a cost-60 abstraction)"
+    );
     assert_eq!(cost(&v), 54, "cost drifted (corpus/heuristics changed)");
 
     // Cap-invariant: a looser cap finds the same optimum — the gate never drops it.
