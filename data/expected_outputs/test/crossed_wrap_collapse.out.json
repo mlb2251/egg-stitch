@@ -1,0 +1,44 @@
+{
+  "compression_ratio": 2.0555555555555554,
+  "cost_after_rewrites": 111,
+  "final_cost": 54,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 131,
+  "library": [
+    {
+      "approx_cost": -6,
+      "arity": 3,
+      "lambda": "(lam (lam (lam (g (da1 (da2 (da3 (P $2 $1)))) (db1 (db2 (db3 (Q $2 $0))))))))",
+      "num_matches": 10,
+      "pattern": "fn_0: (g (da1 (da2 (da3 (P ?#0 ?#1)))) (db1 (db2 (db3 (Q ?#0 ?#2)))))",
+      "pattern_size": 13,
+      "usage_matches": 10
+    }
+  ],
+  "original_programs": [
+    "(g (da1 (da2 (da3 (P a0 z)))) (db1 (db2 (db3 (Q a0 w)))))",
+    "(g (da1 (da2 (da3 (P a1 z)))) (db1 (db2 (db3 (Q a1 w)))))",
+    "(g (da1 (da2 (da3 (P a2 z)))) (db1 (db2 (db3 (Q a2 w)))))",
+    "(g (da1 (da2 (da3 (P a3 z)))) (db1 (db2 (db3 (Q a3 w)))))",
+    "(g (da1 (da2 (da3 (P a4 z)))) (db1 (db2 (db3 (Q a4 w)))))",
+    "(g (da1 (da2 (da3 (P b0 w)))) (db1 (db2 (db3 (Q b0 z)))))",
+    "(g (da1 (da2 (da3 (P b1 w)))) (db1 (db2 (db3 (Q b1 z)))))",
+    "(g (da1 (da2 (da3 (P b2 w)))) (db1 (db2 (db3 (Q b2 z)))))",
+    "(g (da1 (da2 (da3 (P b3 w)))) (db1 (db2 (db3 (Q b3 z)))))",
+    "(g (da1 (da2 (da3 (P b4 w)))) (db1 (db2 (db3 (Q b4 z)))))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 a0 z w)",
+    "(fn_0 a1 z w)",
+    "(fn_0 a2 z w)",
+    "(fn_0 a3 z w)",
+    "(fn_0 a4 z w)",
+    "(fn_0 b0 w z)",
+    "(fn_0 b1 w z)",
+    "(fn_0 b2 w z)",
+    "(fn_0 b3 w z)",
+    "(fn_0 b4 w z)"
+  ]
+}

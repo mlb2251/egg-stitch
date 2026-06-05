@@ -112,6 +112,11 @@ pub fn enumerate_kept_subst_subsets(var_captures: &[Vec<Vec<i32>>]) -> Vec<Vec<u
 /// At least one candidate is always returned: when no slot can capture
 /// pattern-internal binders, the result is a single empty-`S` candidate
 /// with every subst kept (signalled by the `None` sentinel).
+///
+/// The wrap-nesting cap is *not* applied here. It restricts which substs the
+/// cost optimiser may select (see `compute_cost_and_select`), a binder-
+/// independent concern handled after enumeration — not which capture sets are
+/// meaningful, which is all this enumerates.
 pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<CostCandidate> {
     let arity = search_state.pattern.var_depth.len();
     let var_depth = &search_state.pattern.var_depth;

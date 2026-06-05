@@ -1,4 +1,4 @@
-use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
+use crate::egraph_util::{build_size_minimal_extraction, compute_eclasses_for_pattern_nodes, compute_usage_counts, egraph_has_cycle};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
@@ -119,6 +119,9 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
+    /// True iff the e-graph contains a cycle: some class reachable from itself by
+    /// following enode children.
+    pub has_cycle: bool,
     /// Precomputed De Bruijn clamp for [`shift_equal`] (see
     /// [`crate::shift_equal::shift_clamp`]). Computed once here because the
     /// e-graph isn't unioned during search, and `shift_equal` is on the hot
@@ -408,6 +411,93 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
+    /// Builds `descendants[i]` = the proper descendants of pattern node `i`
+    /// (the candidate self-loop targets `d` for `ec_σ(d) = ec_σ(i)`). `RevExpr`
+    /// stores children at higher indices than parents, so a single high→low pass
+    /// accumulates them bottom-up. Shared by the wrapper strip and the
+    /// spin-nesting gate.
+    fn pattern_descendants(&self) -> Vec<Vec<usize>> {
+        let nodes = &self.pattern.pattern.nodes;
+        let n = nodes.len();
+        let mut descendants: Vec<Vec<usize>> = vec![Vec::new(); n];
+        for i in (0..n).rev() {
+            for &c in nodes[i].children() {
+                let c = usize::from(c);
+                descendants[i].push(c);
+                let sub = descendants[c].clone();
+                descendants[i].extend(sub);
+            }
+        }
+        descendants
+    }
+
+    /// `pos_to_var[i] = k` iff node `i` is the `Var(k)` leaf (`usize::MAX` = none).
+    fn pos_to_var(&self) -> Vec<usize> {
+        let mut pos_to_var = vec![usize::MAX; self.pattern.pattern.nodes.len()];
+        for (k, positions) in self.pattern.vars.iter().enumerate() {
+            for &p in positions {
+                pos_to_var[usize::from(p)] = k;
+            }
+        }
+        pos_to_var
+    }
+
+    /// Search-frontier wrap-nesting bound (`--max-wrap-nesting`): the worst
+    /// variable's *best* stacked-self-loop (spin) depth —
+    /// `max over vars v of (min over matches (r,σ) of spin-depth(v, r, σ))`.
+    ///
+    /// A node `i` is a self-loop under `σ` iff `ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i).
+    /// ec_σ(d) = ec_σ(i)` (it denotes the same e-class as a descendant — a no-op
+    /// wrapper at this subst). The spin-depth *at a variable* `v` under `σ` is the
+    /// number of self-loop nodes on the path from the root to `v`'s shallowest
+    /// occurrence. A variable is "buried" iff that depth exceeds the cap in
+    /// *every* match; the state is pruned iff some variable is buried — i.e. the
+    /// invariant kept is "∀v ∃(r,σ): spin-depth(v) ≤ cap": every variable has at
+    /// least one shallow rewrite, possibly via a *different* match.
+    ///
+    /// This `max_v min_σ` (maximin) is strictly weaker than the older `min_σ max_v`
+    /// (minimax, "∃σ shallow for all v"): it keeps *mixed* patterns whose spin
+    /// alternates across variables/matches — e.g. a reused metavar straddling two
+    /// wrappers that collapse on disjoint subsets of matches — so it doesn't drop
+    /// an optimum just because no *single* match is shallow everywhere. Counts
+    /// loop *closures* only (genuine nesting contributes nothing). Termination
+    /// still holds: wrapping any pattern one level deeper buries some variable
+    /// past the cap in *every* match, so the re-wrap tower is finite.
+    pub fn max_var_wrap_nesting_depth(&self, shared: &SharedSearchData<F, O>) -> usize {
+        let nodes = &self.pattern.pattern.nodes;
+        let n = nodes.len();
+        let descendants = self.pattern_descendants();
+        let nvars = self.pattern.vars.len();
+        if nvars == 0 || (0..n).all(|i| descendants[i].is_empty()) {
+            return 0; // no variables / single leaf: nothing can be buried
+        }
+        let pos_to_var = self.pos_to_var();
+        let mut ec: Vec<Option<Id>> = vec![None; n];
+        // Per-variable minimum spin-depth over all matches (`MAX` until first seen).
+        let mut per_var_min = vec![usize::MAX; nvars];
+        for m in &self.matches {
+            for s in &m.substs {
+                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
+                // `depth_to[i]` = self-loop count on the root→`i` path (inclusive).
+                // `RevExpr` keeps a node before its children, so a low→high pass
+                // propagates each node's count down to its children.
+                let mut depth_to = vec![0usize; n];
+                for i in 0..n {
+                    let is_loop = ec[i].is_some() && descendants[i].iter().any(|&d| ec[d] == ec[i]);
+                    depth_to[i] += usize::from(is_loop);
+                    for &c in nodes[i].children() {
+                        depth_to[usize::from(c)] = depth_to[i];
+                    }
+                }
+                for (k, positions) in self.pattern.vars.iter().enumerate() {
+                    let d = positions.iter().map(|&p| depth_to[usize::from(p)]).min().unwrap_or(usize::MAX);
+                    per_var_min[k] = per_var_min[k].min(d);
+                }
+            }
+        }
+        per_var_min.into_iter().filter(|&d| d != usize::MAX).max().unwrap_or(0)
+    }
+
     /// Returns the enumerable successors of `self`. When dominance pruning
     /// fires, the single dominant child is built and returned via
     /// `SuccessorEnum::Dominant`; otherwise `SuccessorEnum::All` lists every
@@ -542,6 +632,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
+    let has_cycle = egraph_has_cycle(&egraph);
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let shared = SharedSearchData {
         egraph,
@@ -549,6 +640,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         follow: follow_expr,
         usage_counts,
         check_slow: args.check_slow,
+        has_cycle,
         shift_clamp,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);

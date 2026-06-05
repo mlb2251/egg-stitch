@@ -53,8 +53,14 @@ fn expected_path(input: &str) -> String {
 /// Path for the temporary `--output` JSON of a single backend run. Includes
 /// pid + input stem + search to stay unique across parallel tests.
 fn temp_output_path(input: &str, search: &str) -> std::path::PathBuf {
+    // Per-call counter so two tests sharing the same (input, search) — e.g. the
+    // `conditional_branch_unify_cap{0,2}` pair — don't collide on the temp file
+    // when nextest runs them in parallel.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
     let stem = Path::new(input).file_stem().and_then(|s| s.to_str()).unwrap_or("input");
-    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}.json", std::process::id(), stem, search))
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}-{}.json", std::process::id(), stem, search, seq))
 }
 
 /// Invokes the cargo-built binary, writes its `--output` JSON to a temp file,
@@ -703,17 +709,50 @@ fn cross_depth_forloop_db_var_inline() {
 /// `(f ?#0 ?#1)` would have to pass that subterm at every site, so the
 /// condition-parameterized `if` genuinely wins.
 ///
-/// This pins that the equivalence-driven unification is found (cost 39). It is
-/// a deliberate counter-example to a tempting "self-loop / re-nesting" prune of
-/// identity DSRs: because `(if true x y) => x` unions the `if` node into `x`'s
-/// e-class, that node looks like a self-loop, yet the abstraction containing it
-/// is the optimum — any prune keyed purely on self-loop nesting must not
-/// discard it.
+/// Whether this optimum is found depends on `--max-wrap-nesting`. Because
+/// `(if true x y) => x` unions the `if` node into `x`'s e-class, that node is a
+/// self-loop under every match, burying the condition variable `?#0` at depth 1
+/// everywhere — so the per-variable wrap-nesting gate
+/// (`SearchState::max_var_wrap_nesting_depth`) drops the whole abstraction at the
+/// default `--max-wrap-nesting 0`. The two tests below pin both behaviours: the
+/// default (cap 0) prunes it and a worse abstraction wins (cost 44), and raising
+/// the cap to 2 recovers the `if`-wrapped optimum (cost 39). (This is exactly the
+/// incompleteness of a self-loop prune — keeping it cheap to spot.)
+const IF_INPUT: &str = "data/domains/conditional/if_branch_unify.json";
 const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewrites"];
 
+/// Default `--max-wrap-nesting 0`: the `if` self-loop buries `?#0` in every
+/// match, so the gate prunes the optimum and a worse abstraction wins (cost 44).
+/// As the default behaviour it owns the plain fixture.
 #[test]
-fn conditional_branch_unify() {
-    check_fixture_bf_only("data/domains/conditional/if_branch_unify.json", IF_RULES, true);
+fn conditional_branch_unify_default_drops_if_abstraction() {
+    check_fixture_bf_only(IF_INPUT, IF_RULES, true);
+}
+
+/// Alternate `--max-wrap-nesting 2`: raising the cap past the buried depth
+/// recovers the equivalence-driven `if`-unification optimum (cost 39). Pins the
+/// non-default `.cap2` fixture.
+#[test]
+fn conditional_branch_unify_cap2_recovers_if_abstraction() {
+    let args = &["--rules", "data/domains/conditional/if_branch.rewrites", "--max-wrap-nesting", "2"];
+    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap2.out.json", &bf, "if_branch_unify (cap 2)");
+}
+
+/// Crossed-spin wrap collapse: the optimum `(g (da³(P ?#0 ?#1)) (db³(Q ?#0 ?#2)))`
+/// reuses `?#0` across two wrappers that collapse on disjoint match families
+/// (`P` at the r1 roots, `Q` at the r2 roots). Every match has one wrapper
+/// spinning, so a minimax `min_σ max_v` wrap-nesting gate would prune it even at
+/// cap 0 and settle for a cost-60 abstraction. The actual gate is the
+/// per-variable maximin `max_v min_σ` (`SearchState::max_var_wrap_nesting_depth`):
+/// each of `?#0`/`?#1`/`?#2` is shallow in *some* match, so the optimum survives
+/// at cap 0 (cost 54). Re-blessing this to a cost-60 shape signals a regression
+/// to minimax.
+#[test]
+fn crossed_wrap_collapse_maximin_gate() {
+    let args = &["--language", "op-children", "--rules", "data/test/crossed_wrap_collapse.rewrites", "--max-arity", "3", "--max-wrap-nesting", "0"];
+    check_fixture_bf_only("data/test/crossed_wrap_collapse.json", args, true);
 }
 
 /// Regression: a metavar reused across binder depths keeps a genuine
@@ -748,10 +787,10 @@ fn cross_depth_ho_capture() {
 /// self-loop — a freely re-nestable wrapper (`(+ ?x 0) == ?x`,
 /// `(if ?c ?x ?x) == ?x`, `(repeat ?x 1 ?m) == ?x`, `(f (g ?x)) == ?x`) —
 /// alongside genuine equivalences (`4 == (+ 2 2)`). Best-first only, capped at
-/// `--max-arity 2`: the self-loops make the space unbounded, so the
-/// `--num-steps` cap in `run_backend` is what bounds the towers (`converge_tower`
-/// / `nested_loop_tower` still hit the cap, leaving a non-zero `heap_sizes_at_end`
-/// — the regression these pin until dominated-wrapper stripping drains them).
+/// `--max-arity 2`: the self-loops make the space unbounded, so the per-variable
+/// wrap-nesting gate (`SearchState::max_var_wrap_nesting_depth`, default
+/// `--max-wrap-nesting 0`) is what bounds the towers — the fixtures pin that the
+/// search converges (`heap_sizes_at_end` drains) to a real abstraction.
 fn check_self_loop(input: &str, rules: &str) {
     check_fixture_bf_only(&format!("data/test/{input}.json"), &["--rules", &format!("data/test/{rules}.rewrites"), "--max-arity", "2"], true);
 }

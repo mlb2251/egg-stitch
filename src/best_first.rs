@@ -194,10 +194,18 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         }
 
         let parent_depth = nodes[node_id].depth;
-        let successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
+        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
+        // Bound the otherwise-infinite tower of equivalent re-wrapped patterns on
+        // cyclic e-graphs: drop any successor in which some pattern variable is
+        // buried under more than `--max-wrap-nesting` stacked self-loops in *every*
+        // match (see `SearchState::max_var_wrap_nesting_depth`). Only fires when
+        // the e-graph has a cycle (the source of those towers).
+        if shared.has_cycle {
+            successors.retain(|c| !c.matches.is_empty() && c.max_var_wrap_nesting_depth(&shared) <= args.max_wrap_nesting);
+        }
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow

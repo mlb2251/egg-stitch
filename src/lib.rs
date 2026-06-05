@@ -156,6 +156,27 @@ pub struct Args {
     #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
     pub opt_lower_bound: bool,
 
+    /// Cap on stacked self-loops (no-op re-wraps) on a root-to-leaf path. On
+    /// cyclic e-graphs a self-loop can be re-applied forever, spawning an
+    /// unbounded tower of equivalent wrapped patterns; the frontier gate
+    /// `SearchState::max_var_wrap_nesting_depth` bounds them. The gate is
+    /// per-variable: it drops a successor iff some variable's spin-depth (the
+    /// self-loop count on the root→variable path) exceeds the cap in *every*
+    /// match — i.e. it keeps the invariant `∀v ∃(r,σ): spin-depth(v) ≤ cap`,
+    /// every variable shallow in *some* match. This `max_v min_σ` (maximin) is
+    /// weaker than the older `min_σ max_v` (minimax, "∃σ shallow for all v"): it
+    /// keeps mixed patterns whose spin *alternates* across variables/matches
+    /// (see `tests/wrap_nesting_optimum_test.rs`) rather than dropping them.
+    /// Counts loop *closures* only (genuine nesting contributes nothing).
+    /// Termination still holds — wrapping deeper buries some variable past the
+    /// cap in every match. Default 0: no variable may be buried under *any*
+    /// self-loop in every match. This can forgo a real optimum that puts a
+    /// variable under one collapsed wrapper in every match — e.g. a condition
+    /// captured inside a DSR-collapsed `if` (see `conditional_branch_unify_*`
+    /// tests); raise the cap to recover those. Only active on cyclic e-graphs.
+    #[arg(long = "max-wrap-nesting", default_value_t = 0)]
+    pub max_wrap_nesting: usize,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
