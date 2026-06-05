@@ -176,7 +176,7 @@ pub struct Args {
     /// We restrict our search space to patterns satisfying `∀v ∃(r,σ): spin-depth(v) ≤ cap`,
     /// or in other words, no pattern variable can be buried under more than `cap`
     /// self-loops in the pattern's match graph. This prunes extremely large
-    /// and generally very unpromising patterns like `(+ ?0 (+ ?1 (+ ?2 ?3))) that
+    /// and generally very unpromising patterns like `(+ ?0 (+ ?1 (+ ?2 ?3)))` that
     /// end up matching with ?0 ?1 ?2 all being 0 at various substs, but nowhere actually
     /// having this nested addition structure in the original corpus.
     /// Default 0: no variable may be buried under *any* self-loop in every match.
