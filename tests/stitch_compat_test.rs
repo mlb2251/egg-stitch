@@ -716,6 +716,17 @@ fn conditional_branch_unify() {
     check_fixture_bf_only("data/domains/conditional/if_branch_unify.json", IF_RULES, true);
 }
 
+/// Crossed-spin wrap collapse: the optimum
+/// `(g (da³(P ?#0 ?#1)) (db³(Q ?#0 ?#2)))` reuses `?#0` across two independent
+/// wrappers that collapse on disjoint match families (`P` at the r1 roots, `Q`
+/// at the r2 roots). Pins that the search recovers this cross-wrapper reuse
+/// optimum (cost 54) rather than settling for a per-wrapper abstraction.
+#[test]
+fn crossed_wrap_collapse() {
+    let args = &["--language", "op-children", "--rules", "data/test/crossed_wrap_collapse.rewrites", "--max-arity", "3"];
+    check_fixture_bf_only("data/test/crossed_wrap_collapse.json", args, true);
+}
+
 /// Regression: a metavar reused across binder depths keeps a genuine
 /// higher-order capture, and its η-app body args must be depth-shifted per
 /// occurrence. `build_with_ho` / `display_pattern_as_lambda` applied the raw
