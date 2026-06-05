@@ -162,35 +162,31 @@ pub struct Args {
     /// re-wrapped patterns and never converges. With this on (the default), each
     /// successor has its *vacuous* wrapper substs stripped — a node that is a
     /// no-op in every match, whose unwrapped splice dominates it
-    /// (`SearchState::strip_dominated_wrappers`) — and successors whose stacked
-    /// self-loop nesting exceeds `--max-wrap-nesting` in *every* surviving rewrite
-    /// are dropped from the frontier (`SearchState::min_wrap_nesting_depth`),
-    /// while the cost optimiser may only *select* within-cap rewrites. Together
-    /// these keep the tower finite. Stripping vacuous wrappers is cost-preserving;
-    /// the cap itself is sound-as-*incomplete* (see `--max-wrap-nesting`). Only
-    /// runs when the e-graph actually has self-loops.
+    /// (`SearchState::strip_dominated_wrappers`) — and successors in which some
+    /// pattern variable is buried under more than `--max-wrap-nesting` stacked
+    /// self-loops in *every* match are dropped from the frontier
+    /// (`SearchState::max_var_wrap_nesting_depth`). Together these keep the tower
+    /// finite. Only runs when the e-graph actually has self-loops.
     #[arg(long = "no-opt-strip-wrap", action = clap::ArgAction::SetFalse)]
     pub opt_strip_wrap: bool,
 
     /// Cap on stacked self-loops (no-op re-wraps) on a root-to-leaf path. On
     /// cyclic e-graphs a self-loop can be re-applied forever, spawning an
     /// unbounded tower of equivalent wrapped patterns; `strip_dominated_wrappers`
-    /// only removes the *uniform* (vacuous) ones soundly, so this bounds the rest.
-    /// Two mechanisms share the cap: (1) the frontier drops a successor when
-    /// *every* surviving rewrite exceeds it (min over substs of the per-subst
-    /// depth, `min_wrap_nesting_depth`) — needed so the tower search terminates;
-    /// and (2) the cost optimiser may only *select* within-cap substs
-    /// (`compute_cost_and_select` intersects each candidate's pool with
-    /// `subst_within_wrap_cap`), so the abstraction it returns and applies never
-    /// rewrites through an over-cap tower — a binder-independent guarantee on the
-    /// *used* substs, not just on which states are explored. Counts only loop
-    /// *closures* (a child landing back in an ancestor's e-class), so genuine
-    /// nesting of any depth is unaffected. Sound-as-*incomplete*: at a low enough
-    /// cap it can drop the true optimum and report less compression — a reused
-    /// metavar straddling two wrappers whose spin *alternates* across roots has
-    /// no single splice to fall back on (see `tests/wrap_nesting_optimum_test.rs`).
-    /// Default 2 (covers 0-spin abstractions and the 1-spin body-compresses case
-    /// with headroom). Only active alongside `opt_strip_wrap` on cyclic e-graphs.
+    /// only removes the *uniform* (vacuous) ones soundly, so the frontier gate
+    /// `SearchState::max_var_wrap_nesting_depth` bounds the rest. The gate is
+    /// per-variable: it drops a successor iff some variable's spin-depth (the
+    /// self-loop count on the root→variable path) exceeds the cap in *every*
+    /// match — i.e. it keeps the invariant `∀v ∃(r,σ): spin-depth(v) ≤ cap`,
+    /// every variable shallow in *some* match. This `max_v min_σ` (maximin) is
+    /// weaker than the older `min_σ max_v` (minimax, "∃σ shallow for all v"): it
+    /// keeps mixed patterns whose spin *alternates* across variables/matches
+    /// (see `tests/wrap_nesting_optimum_test.rs`) rather than dropping them.
+    /// Counts loop *closures* only (genuine nesting contributes nothing).
+    /// Termination still holds — wrapping deeper buries some variable past the
+    /// cap in every match. Default 2 (covers 0-spin abstractions and the 1-spin
+    /// body-compresses case with headroom). Only active alongside `opt_strip_wrap`
+    /// on cyclic e-graphs.
     #[arg(long = "max-wrap-nesting", default_value_t = 2)]
     pub max_wrap_nesting: usize,
 

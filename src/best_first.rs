@@ -207,7 +207,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             for child in &mut successors {
                 // Drop vacuous (uniform no-op) wrapper substs — sound, the
                 // unwrapped splice dominates. Mixed (non-uniform) re-wrap towers
-                // are bounded below by the `min_wrap_nesting_depth` frontier gate.
+                // are bounded by the `max_var_wrap_nesting_depth` gate below.
                 strip_wrap_substs += child.strip_dominated_wrappers(&shared);
             }
             successors.retain(|c| !c.matches.is_empty() && c.max_var_wrap_nesting_depth(&shared) <= args.max_wrap_nesting);

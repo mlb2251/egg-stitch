@@ -465,7 +465,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// re-wrap towers on cyclic e-graphs) are NOT droppable soundly at the subst
     /// level (a self-wrap can be the cheapest rewrite of its root; see
     /// `strip_redundant_sibling_unsound_test`). Those are bounded instead by
-    /// [`Self::min_wrap_nesting_depth`] at the search frontier. Returns substs removed.
+    /// [`Self::max_var_wrap_nesting_depth`] at the search frontier. Returns substs removed.
     pub fn strip_dominated_wrappers(&mut self, shared: &SharedSearchData<F, O>) -> usize {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
