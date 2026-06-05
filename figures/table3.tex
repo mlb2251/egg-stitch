@@ -1,10 +1,10 @@
-% source: /home/kavi/mit/egg-stitch/results/table3.json
+% source: /home/kavi/mit/egg-stitch-3/results/table3.json
 % Compression Using Rewrites, Stacked Abstractions: generated from results JSON
 \begin{tabular}{l r r rrrr rrrr}
 \toprule
 & \multicolumn{2}{c}{Size} & \multicolumn{4}{c}{Compression Ratio} & \multicolumn{4}{c}{Time (s)} \\
 \cmidrule(lr){2-3} \cmidrule(lr){4-7} \cmidrule(lr){8-11}
-Domain & Original & E-graph min & Enum & SMC & babble & Stitch & Enum & SMC & babble & Stitch \\
+Domain & Original & E-graph min & BFS & SMC & babble & Stitch & BFS & SMC & babble & Stitch \\
 \midrule
 Nuts \& Bolts & 19008 & 19008 & \textbf{14.86} & 13.43 & 11.76 & \textbf{14.86}$^{\star}$ & 6.330 & 8.188 & 32.997 & \textbf{0.095}$^{\star}$ \\
 Dials & 35712 & 20582 & \textbf{10.53} & 10.52 & 8.37 & 7.94$^{\star}$ & 0.648 & 0.936 & 69.919 & \textbf{0.435}$^{\star}$ \\

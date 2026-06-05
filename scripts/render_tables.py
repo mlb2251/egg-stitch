@@ -3,7 +3,8 @@
 
 Reads ``results/tableN.json`` (per-file records, list per (method, repeat))
 and writes ``figures/tableN.tex`` (LaTeX tabular) plus ``figures/tableN.png``
-(log-log scatter of compression ratio vs time; color = method, marker =
+(log-log scatter of compression ratio against time; time on the x axis,
+compression ratio on the y axis; color = method, marker =
 domain). Sizes shown for DC (dreamcoder) domains are per-file averages;
 cogsci domains have a single file per repeat and show that size directly.
 """
@@ -47,7 +48,15 @@ DOMAIN_LABELS = {
     "towers": "Towers",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
-METHOD_LABELS = {"enum": "Enum", "smc": "SMC", "babble": "babble", "stitch": "Stitch"}
+# Table cells use the bare search-strategy name; plot legends spell out the
+# E-Stitch prefix so each series is unambiguous standalone.
+METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble", "stitch": "Stitch"}
+METHOD_PLOT_LABELS = {
+    "enum": "E-Stitch: BFS",
+    "smc": "E-Stitch: SMC",
+    "babble": "babble",
+    "stitch": "Stitch",
+}
 # The single sweep point each base method contributes to the table cells.
 # Plots use the full sweep regardless.
 TABLE_BFS_STEPS = 10000
@@ -178,66 +187,125 @@ def _stitch_no_dsr_maps(table: int) -> dict[str, tuple[float | None, float | Non
     return out
 
 
-def render(saved: dict, table: int) -> str:
-    """Return a LaTeX ``tabular`` string for the given loaded results dict."""
+def _collect_rows(
+    saved: dict, table: int
+) -> list[tuple[str, float | None, float | None, list[float | None], list[float | None]]]:
+    """Per-domain ``(domain, original_size, egraph_min, crs, ts)`` for the table.
+
+    ``crs``/``ts`` hold the single table-point value per method (in ``METHODS``
+    order); on DSR tables the Stitch entry is spliced from the no-DSR
+    counterpart. Shared by the LaTeX table and the bar-chart renderers.
+    """
+    domains = saved["domains"]
+    stitch_no_dsr = _stitch_no_dsr_maps(table)
+    stitch_idx = METHODS.index("stitch")
+    rows = []
+    for domain in domains_for_table(table):
+        if domain not in domains:
+            continue
+        runs = domains[domain].get("runs", {})
+        cr_map = aggregate_methods_cr(runs)
+        t_map = aggregate_methods_time(runs)
+        crs = [cr_map.get(TABLE_DATA_KEYS[m]) for m in METHODS]
+        ts = [t_map.get(TABLE_DATA_KEYS[m]) for m in METHODS]
+        if domain in stitch_no_dsr:
+            crs[stitch_idx], ts[stitch_idx] = stitch_no_dsr[domain]
+        rows.append((domain, initial_size_for_domain(runs), egraph_min_for_domain(runs), crs, ts))
+    return rows
+
+
+# Percent of the method's named color mixed with white for column shading;
+# small so columns read as subtle background bands, not loud fills.
+COLUMN_TINT_PERCENT = 9
+# Named LaTeX colors (assumed \definecolor'd in the document preamble) per
+# method: the two E-Stitch search methods share the highlight color, while
+# the babble/Stitch baselines get their own.
+PRESENTATION_COLORS = {
+    "enum": "estitchHighlight",
+    "smc": "estitchHighlight",
+    "babble": "ecorange",
+    "stitch": "ecblue",
+}
+
+
+def _shade_cells(cells: list[str], methods: list[str]) -> list[str]:
+    """Prefix each cell with a faint ``\\cellcolor`` tint of its method color.
+
+    The fill is ``<named color>!COLUMN_TINT_PERCENT`` (the rest white), so each
+    method's column reads as a subtle background band. Requires the
+    ``colortbl`` and ``xcolor`` packages plus the ``\\definecolor`` names in
+    ``PRESENTATION_COLORS`` in the document preamble.
+    """
+    return [
+        f"\\cellcolor{{{PRESENTATION_COLORS[m]}!{COLUMN_TINT_PERCENT}}}{cell}"
+        for cell, m in zip(cells, methods)
+    ]
+
+
+def render(saved: dict, table: int, presentation: bool = False) -> str:
+    """Return a LaTeX ``tabular`` string for the given loaded results dict.
+
+    With ``presentation=True`` the Size/E-graph-min columns are dropped and
+    every method column gets a faint background tint of its plot color.
+    """
     domains = saved["domains"]
     # Tables 1 & 3 run with DSRs (which Stitch doesn't accept); fill the
     # Stitch column from the matching no-DSR table and star those cells.
     methods = METHODS
     n = len(methods)
     has_egraph_min = table in TABLES_WITH_EGRAPH_MIN
+    show_size = not presentation
     stitch_no_dsr = _stitch_no_dsr_maps(table)
     stitch_idx = methods.index("stitch")
 
-    # Column layout: domain, original size, (egraph-min for DSR tables,) CRs, times.
-    extra_col = "r" if has_egraph_min else ""
-    col_spec = "l r " + extra_col + " " + ("r" * n) + " " + ("r" * n)
+    # Column layout: domain, (size cols,) CRs, times. Presentation drops sizes
+    # and adds a single vertical rule between the CR and Time groups.
+    size_cols = (2 if has_egraph_min else 1) if show_size else 0
+    size_spec = ("r " + ("r" if has_egraph_min else "")) if show_size else ""
+    mid_sep = "|" if presentation else " "
+    col_spec = ("l " + size_spec + " " + ("r" * n) + mid_sep + ("r" * n))
 
     lines = []
     lines.append(f"% {TABLE_TITLES[table]}: generated from results JSON")
-    lines.append("\\begin{tabular}{" + col_spec.strip() + "}")
+    lines.append("\\begin{tabular}{" + " ".join(col_spec.split()) + "}")
     lines.append("\\toprule")
 
     # Header row 1: group spans.
-    size_cols = 2 if has_egraph_min else 1
-    lines.append(
-        f"& \\multicolumn{{{size_cols}}}{{c}}{{Size}} "
-        f"& \\multicolumn{{{n}}}{{c}}{{Compression Ratio}} "
-        f"& \\multicolumn{{{n}}}{{c}}{{Time (s)}} \\\\"
-    )
-    # cmidrules: cols start at 2.
-    mid = [f"\\cmidrule(lr){{2-{1 + size_cols}}}"]
-    start = 2 + size_cols
-    mid.append(f"\\cmidrule(lr){{{start}-{start + n - 1}}}")
-    start += n
-    mid.append(f"\\cmidrule(lr){{{start}-{start + n - 1}}}")
+    groups = []
+    if show_size:
+        groups.append(f"\\multicolumn{{{size_cols}}}{{c}}{{Size}}")
+    cr_grp_fmt = "c|" if presentation else "c"
+    groups.append(f"\\multicolumn{{{n}}}{{{cr_grp_fmt}}}{{Compression Ratio}}")
+    groups.append(f"\\multicolumn{{{n}}}{{c}}{{Time (s)}}")
+    lines.append("& " + " & ".join(groups) + " \\\\")
+    # cmidrules under each group; data columns start after the Domain column.
+    mid = []
+    col = 2
+    if show_size:
+        mid.append(f"\\cmidrule(lr){{{col}-{col + size_cols - 1}}}")
+        col += size_cols
+    mid.append(f"\\cmidrule(lr){{{col}-{col + n - 1}}}")
+    col += n
+    mid.append(f"\\cmidrule(lr){{{col}-{col + n - 1}}}")
     lines.append(" ".join(mid))
 
-    # Header row 2: column names.
-    size_hdr = "Original & E-graph min" if has_egraph_min else "Original"
-    method_hdr = " & ".join(METHOD_LABELS[m] for m in methods)
-    lines.append(
-        f"Domain & {size_hdr} & {method_hdr} & {method_hdr} \\\\"
-    )
+    # Header row 2: column names (method labels tinted in presentation mode).
+    method_hdr_cells = [METHOD_LABELS[m] for m in methods]
+    if presentation:
+        method_hdr_cells = _shade_cells(method_hdr_cells, methods)
+    method_hdr = " & ".join(method_hdr_cells)
+    hdr = ["Domain"]
+    if show_size:
+        hdr.append("Original & E-graph min" if has_egraph_min else "Original")
+    hdr += [method_hdr, method_hdr]
+    lines.append(" & ".join(hdr) + " \\\\")
     lines.append("\\midrule")
 
     # Collect per-domain aggregates so we can bold the best cell in each row
     # and compute a geometric-mean summary row across benchmarks. Sizes are
     # the per-file geomean within the domain (so DC domains with many files
     # are directly comparable to single-file cogsci domains).
-    rows: list[tuple[str, float | None, float | None, list[float | None], list[float | None]]] = []
-    for domain in domains_for_table(table):
-        if domain not in domains:
-            continue
-        runs = domains[domain].get("runs", {})
-        label = DOMAIN_LABELS.get(domain, domain)
-        cr_map = aggregate_methods_cr(runs)
-        t_map = aggregate_methods_time(runs)
-        crs = [cr_map.get(TABLE_DATA_KEYS[m]) for m in methods]
-        ts = [t_map.get(TABLE_DATA_KEYS[m]) for m in methods]
-        if domain in stitch_no_dsr:
-            crs[stitch_idx], ts[stitch_idx] = stitch_no_dsr[domain]
-        rows.append((label, initial_size_for_domain(runs), egraph_min_for_domain(runs), crs, ts))
+    rows = _collect_rows(saved, table)
 
     def emit(label: str, size_cells: list[str],
              crs: list[float | None], ts: list[float | None]) -> str:
@@ -253,12 +321,18 @@ def render(saved: dict, table: int) -> str:
                 cr_strs[stitch_idx] += STITCH_STAR
             if ts[stitch_idx] is not None:
                 t_strs[stitch_idx] += STITCH_STAR
+        if presentation:
+            cr_strs = _shade_cells(cr_strs, methods)
+            t_strs = _shade_cells(t_strs, methods)
         return " & ".join([label, *size_cells, *cr_strs, *t_strs]) + " \\\\"
 
-    for label, original, egraph_min, crs, ts in rows:
-        size_cells = [fmt(original, ".0f")]
-        if has_egraph_min:
-            size_cells.append(fmt(egraph_min, ".0f"))
+    for domain, original, egraph_min, crs, ts in rows:
+        label = DOMAIN_LABELS.get(domain, domain)
+        size_cells = []
+        if show_size:
+            size_cells = [fmt(original, ".0f")]
+            if has_egraph_min:
+                size_cells.append(fmt(egraph_min, ".0f"))
         lines.append(emit(label, size_cells, crs, ts))
 
     # Geometric mean across benchmarks (per method, skipping missing cells).
@@ -266,7 +340,7 @@ def render(saved: dict, table: int) -> str:
         lines.append("\\midrule")
         agg_cr = [geomean_col([r[3][i] for r in rows]) for i in range(n)]
         agg_t = [geomean_col([r[4][i] for r in rows]) for i in range(n)]
-        size_cells = [""] * (2 if has_egraph_min else 1)
+        size_cells = [""] * size_cols
         lines.append(emit("Geo. mean", size_cells, agg_cr, agg_t))
 
     lines.append("\\bottomrule")
@@ -305,6 +379,9 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path,
 
     fig, ax = plt.subplots(figsize=(6, 4.5))
     methods_seen: set[str] = set()
+    # Sweep-point labels to draw, in plot order. Deferred so we can drop any
+    # whose text box would land on top of an already-placed one (keep first).
+    sweep_labels: list[tuple[float, float, str, object]] = []
 
     for method in METHODS:
         color = METHOD_COLORS.get(method, "black")
@@ -317,7 +394,7 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path,
             methods_seen.add(method)
             marker = "*" if (method == "stitch" and stitch_starred) else "o"
             size = 120 if marker == "*" else 50
-            ax.scatter([cr], [t], color=color, marker=marker, s=size, zorder=2)
+            ax.scatter([t], [cr], color=color, marker=marker, s=size, zorder=2)
             continue
         # Sweep method: collect (cr, t, param) tuples, sorted by parameter
         # so the connecting line follows the sweep order.
@@ -334,24 +411,24 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path,
         methods_seen.add(method)
         crs = [p[0] for p in pts]
         ts = [p[1] for p in pts]
-        ax.plot(crs, ts, "-", color=color, linewidth=1.2, zorder=2)
+        ax.plot(ts, crs, "-", color=color, linewidth=1.2, zorder=2)
         table_n = TABLE_SWEEP_POINT[method]
         for cr, t, n in pts:
             if n == table_n:
-                ax.scatter([cr], [t], color=color, marker="o", s=50, zorder=3)
-            ax.annotate(str(n), xy=(cr, t), xytext=(3, 3),
-                        textcoords="offset points", fontsize=7, color=color)
+                ax.scatter([t], [cr], color=color, marker="o", s=50, zorder=3)
+            sweep_labels.append((t, cr, str(n), color))
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    # Plain numbers on the log axes; the CR axis can span less than a decade
-    # so label minor ticks too. See the original plot() for the rationale.
+    # Plain numbers on the log axes; the CR axis (now y) can span less than a
+    # decade so label its minor ticks too. See the original plot() for the
+    # rationale.
     ax.xaxis.set_major_formatter(ScalarFormatter())
-    ax.xaxis.set_minor_formatter(ScalarFormatter())
+    ax.xaxis.set_minor_formatter(NullFormatter())
     ax.yaxis.set_major_formatter(ScalarFormatter())
-    ax.yaxis.set_minor_formatter(NullFormatter())
-    ax.set_xlabel("Compression ratio")
-    ax.set_ylabel("Time (s)")
+    ax.yaxis.set_minor_formatter(ScalarFormatter())
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Compression ratio")
     ax.set_title(title)
     ax.grid(True, which="both", linewidth=0.3, alpha=0.5)
 
@@ -362,14 +439,28 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path,
             marker="*" if (m == "stitch" and stitch_starred) else "o",
             markersize=12 if (m == "stitch" and stitch_starred) else 6,
             color=METHOD_COLORS[m],
-            label=(METHOD_LABELS[m] + r"$^{\star}$"
-                   if (m == "stitch" and stitch_starred) else METHOD_LABELS[m]),
+            label=(METHOD_PLOT_LABELS[m] + r"$^{\star}$"
+                   if (m == "stitch" and stitch_starred) else METHOD_PLOT_LABELS[m]),
         )
         for m in METHODS if m in methods_seen
     ]
     ax.legend(handles=method_handles, title="Method",
               loc="upper left", bbox_to_anchor=(1.02, 1.0),
               borderaxespad=0.0)
+
+    # Draw sweep labels, skipping any whose box overlaps one already placed.
+    # A draw() is needed first so the axes transform / text extents are final.
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    placed_boxes = []
+    for t, cr, text, color in sweep_labels:
+        ann = ax.annotate(text, xy=(t, cr), xytext=(3, 3),
+                          textcoords="offset points", fontsize=7, color=color)
+        bb = ann.get_window_extent(renderer=renderer)
+        if any(bb.overlaps(pb) for pb in placed_boxes):
+            ann.remove()
+        else:
+            placed_boxes.append(bb)
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=300)
@@ -436,6 +527,14 @@ def main() -> None:
         tex_path = FIGURES_DIR / f"table{table}.tex"
         tex_path.write_text(f"% source: {path}\n" + render(saved, table) + "\n")
         print(f"wrote {tex_path}", file=sys.stderr)
+        # Presentation variants of the stacked-abstraction tables: no size
+        # columns, method columns tinted to match the plots.
+        if table in (3, 4):
+            pres_path = FIGURES_DIR / f"table{table}_presentation.tex"
+            pres_path.write_text(
+                f"% source: {path}\n"
+                + render(saved, table, presentation=True) + "\n")
+            print(f"wrote {pres_path}", file=sys.stderr)
         # Drop the previous single-PNG-per-table output; the per-domain
         # files below replace it. Silent if it was already gone.
         stale = FIGURES_DIR / f"table{table}.png"
