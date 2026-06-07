@@ -152,11 +152,11 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// check in `enumerate_successors` to detect reuses that preserve the
     /// match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
-    /// Best-first canonical-ordering device: `Some(k)` means `?#0..?#(k-1)`
-    /// are committed to never being expanded again. Expanding `?#k` raises this
-    /// to `Some(k)`. Restricts only `Expand`, not `Reuse` (whose ordering uses
-    /// `Pattern::var_reusable`). `None` disables the rule — SMC uses this to
-    /// dedupe purely on the pattern's `RecExpr`.
+    /// Canonical-ordering device: `Some(k)` means `?#0..?#(k-1)` are committed
+    /// to never being expanded again. Expanding `?#k` raises this to `Some(k)`.
+    /// Restricts only `Expand`, not `Reuse` (whose ordering uses
+    /// `Pattern::var_reusable`). `None` disables the rule. Both best-first and
+    /// SMC use `Some(0)`.
     pub frozen_count: Option<usize>,
 }
 
@@ -342,7 +342,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
     /// `frozen_count` enables the freeze-based canonical-ordering rule when `Some(0)`;
-    /// pass `None` to disable the check (e.g. for SMC).
+    /// pass `None` to disable the check. Both best-first and SMC use `Some(0)`.
     pub fn new(shared: &SharedSearchData<F, O>, frozen_count: Option<usize>) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
@@ -422,11 +422,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// reuse — we can return it as the *only* successor and skip enumerating the
     /// rest. Disabled by `--no-opt-dominance-reuse`.
     ///
-    /// Expand actions are filtered against the best-first canonical-ordering
-    /// rule: any `var_idx < self.frozen_count` or `var_idx > max_arity` is
-    /// skipped before the action is even constructed. SMC passes
-    /// `max_arity = usize::MAX` and starts with `frozen_count = None`, so the
-    /// filter is a no-op for it.
+    /// Expand actions are filtered against the canonical-ordering rule: any
+    /// `var_idx < self.frozen_count` or `var_idx > max_arity` is skipped before
+    /// the action is even constructed. SMC passes `max_arity = usize::MAX`, so
+    /// only the `frozen_count` half of the filter constrains it.
     ///
     /// `support` is the (m,s)-pair count feeding the SMC weighting; it equals
     /// the surviving subst count, so `support > 0` ⇒ non-empty child.
@@ -456,9 +455,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // eclass used thousands of times looks like the same support as one
         // that fires on thousands of distinct one-off eclasses.
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
-        // `var_reusable` is a best-first canonical-ordering device, mirroring
-        // `frozen_count`. SMC (frozen_count = None) ignores it so its reuse
-        // exploration stays unrestricted. Reusing two stale (non-reusable)
+        // `var_reusable` is a canonical-ordering device, mirroring
+        // `frozen_count`; active whenever `frozen_count.is_some()` (both
+        // best-first and SMC). Reusing two stale (non-reusable)
         // vars always re-reaches a pattern already obtainable by reusing them
         // earlier — when the later-created of the two was still in the fresh
         // cohort — so we skip it as a duplicate. This holds regardless of the
@@ -492,8 +491,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             // Freezing rule: expanding `?#k` commits to never expanding any
             // `?#j` with j < k; `max_arity` caps the eventual frozen_count
             // (since a successful expand at var_idx raises fc to >= var_idx).
-            // Both checks are no-ops for SMC (frozen_count = None,
-            // max_arity = usize::MAX).
+            // The `max_arity` cap is a no-op for SMC (max_arity = usize::MAX);
+            // the `frozen_count` freeze applies to both searches.
             if var_idx > max_arity {
                 continue;
             }

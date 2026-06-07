@@ -78,7 +78,11 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
-    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared, None), num_particles)];
+    // `Some(0)` enables the freeze-based canonical-ordering rule (shared with
+    // best-first): each distinct pattern is reachable through exactly one
+    // expand/reuse ordering, so particle mass isn't split across redundant
+    // derivations of the same pattern.
+    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared, Some(0)), num_particles)];
     let mut scratch = CostScratch::new(&shared.egraph);
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
