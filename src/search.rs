@@ -166,9 +166,14 @@ fn total_substs(matches: &[MatchAtEClass]) -> usize {
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
-    /// True iff this pattern is a valid prefix of the follow target.
+    /// True iff this pattern is a valid prefix of the follow target that the
+    /// freeze rule hasn't doomed. See [`crate::follow::follow_prefix_reachable`]:
+    /// a frozen var (`< frozen_count`) still covering a non-leaf follow subtree
+    /// can never be grown into it, so the state is pruned even though it remains
+    /// a structural prefix — without this, SMC particle mass leaks to off-canonical
+    /// dead-ends that pass the prefix test but can never complete the target.
     pub fn matches_follow(&self, follow: &RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
-        crate::follow::follow_unify::<F, O>(&self.pattern.pattern, follow).is_some()
+        crate::follow::follow_prefix_reachable::<F, O>(&self.pattern.pattern, follow, self.frozen_count)
     }
 
     /// Builds a fresh `(matches, num_substs)` pair from `parent_matches` by

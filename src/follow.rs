@@ -26,6 +26,28 @@ pub fn follow_unify<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<O
     walk::<F, O>(pattern, Id::from(0), follow, Id::from(0), &mut bindings).then_some(bindings)
 }
 
+/// True iff `pattern` is a structural prefix of `follow` *and* the freeze rule
+/// hasn't doomed it. With `frozen_count = Some(fc)`, vars `?#0..?#(fc-1)` can
+/// never be expanded again ([`crate::search::SearchState::frozen_count`]); a
+/// frozen var still mapping to a non-leaf follow subtree therefore can never be
+/// grown into that subtree, so the state can never complete the target even
+/// though it remains a valid prefix. Pruning these keeps SMC particle mass on
+/// the live canonical-derivation path (the canonical order only freezes vars it
+/// has already finished, which map to follow metavar leaves). `None` (rule
+/// disabled) reduces to a plain prefix check.
+pub fn follow_prefix_reachable<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>>, follow: &RevExpr<F::Apply<OpWithVar<O>>>, frozen_count: Option<usize>) -> bool {
+    let Some(bindings) = follow_unify::<F, O>(pattern, follow) else { return false };
+    let Some(fc) = frozen_count else { return true };
+    // `?#k` is canonically named `egg::Var::from(k)` (see `pattern::var_node`).
+    (0..fc).all(|k| match bindings.get(&egg::Var::from(k as u32)) {
+        Some(&fid) => {
+            let head = F::unwrap_pattern_db_apps::<O>(&follow.nodes, fid);
+            follow[head].discriminant().as_var().is_some()
+        }
+        None => true,
+    })
+}
+
 fn walk<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>>, pid: Id, follow: &RevExpr<F::Apply<OpWithVar<O>>>, fid: Id, bindings: &mut HashMap<egg::Var, Id>) -> bool {
     let (pn, fn_) = (&pattern[pid], &follow[fid]);
     if let Some(v) = pn.discriminant().as_var() {
