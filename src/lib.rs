@@ -38,9 +38,6 @@ pub enum SearchKind {
     BestFirst,
 }
 
-/// `--max-wrap-nesting` value: a depth cap, or `none` to disable the gate
-/// (unbounded — re-wrap towers won't terminate on cyclic e-graphs). Wraps an
-/// `Option<usize>` so clap can parse the `none` sentinel; access via `.0`.
 #[derive(Clone, Copy, Debug)]
 pub struct MaxWrapNesting(pub Option<usize>);
 
