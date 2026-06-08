@@ -170,13 +170,14 @@ pub struct Args {
     #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
     pub opt_lower_bound: bool,
 
-    /// We restrict our search space to patterns satisfying `∀v ∃(r,σ): spin-depth(v) ≤ cap`,
-    /// or in other words, no pattern variable can be buried under more than `cap`
-    /// self-loops in the pattern's match graph. This prunes extremely large
-    /// and generally very unpromising patterns like `(+ ?0 (+ ?1 (+ ?2 ?3)))` that
-    /// end up matching with ?0 ?1 ?2 all being 0 at various substs, but nowhere actually
-    /// having this nested addition structure in the original corpus.
-    /// Default 0: no variable may be buried under *any* self-loop in every match.
+    /// We restrict our search space to patterns satisfying `∀leaf ℓ ∃(r,σ): spin-depth(ℓ) ≤ cap`,
+    /// or in other words, no pattern leaf (variable or constant occurrence) can be
+    /// buried under more than `cap` self-loops in the pattern's match graph. This
+    /// prunes extremely large and generally very unpromising patterns like
+    /// `(+ ?0 (+ ?1 (+ ?2 ?3)))` that end up matching with ?0 ?1 ?2 all being 0 at
+    /// various substs, but nowhere actually having this nested addition structure
+    /// in the original corpus.
+    /// Default 0: no leaf may be buried under *any* self-loop in every match.
     /// Increasing this allows for e.g., a match that unifies a and b into (if #0 a b)
     #[arg(long = "max-wrap-nesting", default_value = "0")]
     pub max_wrap_nesting: MaxWrapNesting,

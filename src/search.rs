@@ -414,8 +414,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Builds `descendants[i]` = the proper descendants of pattern node `i`
     /// (the candidate self-loop targets `d` for `ec_σ(d) = ec_σ(i)`). `RevExpr`
     /// stores children at higher indices than parents, so a single high→low pass
-    /// accumulates them bottom-up. Shared by the wrapper strip and the
-    /// spin-nesting gate.
+    /// accumulates them bottom-up. Used by the wrap-nesting gate.
     fn pattern_descendants(&self) -> Vec<Vec<usize>> {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
@@ -442,30 +441,41 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         pos_to_var
     }
 
-    /// Search-frontier wrap-nesting gate (`--max-wrap-nesting`): true iff the
-    /// worst variable's *best* stacked-self-loop (spin) depth is within `cap` —
-    /// `max over vars v of (min over matches (r,σ) of spin-depth(v, r, σ)) ≤ cap`.
+    /// Search-frontier wrap-nesting gate (`--max-wrap-nesting`): true iff every
+    /// pattern *leaf* — each variable or constant occurrence — has some match
+    /// where its stacked-self-loop (spin) depth is within `cap` —
+    /// `max over leaves ℓ of (min over matches (r,σ) of spin-depth(ℓ, r, σ)) ≤ cap`.
     ///
     /// A node `i` is a self-loop under `σ` iff `ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i).
     /// ec_σ(d) = ec_σ(i)` (it denotes the same e-class as a descendant — a no-op
-    /// wrapper at this subst). The spin-depth *at a variable* `v` under `σ` is the
-    /// number of self-loop nodes on the path from the root to `v`'s shallowest
-    /// occurrence. A variable is "buried" iff that depth exceeds the cap in
-    /// *every* match; the state is pruned iff some variable is buried — i.e. the
-    /// invariant kept is "∀v ∃(r,σ): spin-depth(v) ≤ cap": every variable has at
-    /// least one shallow rewrite, possibly via a *different* match.
+    /// wrapper at this subst). A leaf's spin-depth under `σ` is the number of
+    /// self-loop nodes on the root→leaf path. A leaf is "buried" iff that depth
+    /// exceeds `cap` in *every* match; the state is pruned iff some leaf is buried.
+    ///
+    /// Tracking each leaf *occurrence* — rather than grouping a reused var's
+    /// occurrences and taking their min — is deliberate. A leaf buried under >cap
+    /// no-op wrappers in every match denotes the same e-class as the bare leaf
+    /// there, so the whole pattern is dominated by its wrapper-stripped form
+    /// (which preserves any reuse constraint and is reachable without building the
+    /// wrappers); pruning it loses no optimum. Grouping would instead let one
+    /// shallow occurrence rescue a buried sibling, keeping such dominated re-wraps
+    /// and letting `Reuse` re-open them. Constants are leaves too, so capping a
+    /// buried var to a nullary op (`?v -> c`) can't escape the gate by erasing the
+    /// measured entity. Genuine (non-no-op) nesting contributes no self-loops, so
+    /// it stays unbounded; only redundant towers are capped.
     pub fn within_wrap_nesting_cap(&self, shared: &SharedSearchData<F, O>, cap: usize) -> bool {
         let nodes = &self.pattern.pattern.nodes;
         let n = nodes.len();
         let descendants = self.pattern_descendants();
-        let nvars = self.pattern.vars.len();
-        if nvars == 0 || (0..n).all(|i| descendants[i].is_empty()) {
-            return true; // no variables / single leaf: nothing can be buried
+        if (0..n).all(|i| descendants[i].is_empty()) {
+            return true; // single leaf: nothing above it can bury it
         }
+        // Childless nodes are the tracked leaves (variable and constant alike).
+        let leaves: Vec<usize> = (0..n).filter(|&i| nodes[i].children().is_empty()).collect();
         let pos_to_var = self.pos_to_var();
         let mut ec: Vec<Option<Id>> = vec![None; n];
-        // Per variable: has some match witnessed it at spin-depth ≤ cap?
-        let mut satisfied = vec![false; nvars];
+        // Per leaf: has some match witnessed it at spin-depth ≤ cap?
+        let mut satisfied = vec![false; leaves.len()];
         for m in &self.matches {
             for s in &m.substs {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
@@ -480,17 +490,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         depth_to[usize::from(c)] = depth_to[i];
                     }
                 }
-                for (k, positions) in self.pattern.vars.iter().enumerate() {
-                    if satisfied[k] {
-                        continue; // already has a shallow witness
-                    }
-                    let depth = positions.iter().map(|&p| depth_to[usize::from(p)]).min().expect("every pattern var has ≥1 position");
-                    if depth <= cap {
-                        satisfied[k] = true;
+                for (k, &p) in leaves.iter().enumerate() {
+                    if !satisfied[k] && depth_to[p] <= cap {
+                        satisfied[k] = true; // first shallow witness for this leaf
                     }
                 }
                 if satisfied.iter().all(|&b| b) {
-                    return true; // every var has a shallow witness — verdict locked
+                    return true; // every leaf has a shallow witness — verdict locked
                 }
             }
         }
