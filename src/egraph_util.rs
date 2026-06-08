@@ -9,7 +9,7 @@ use egg::{Id, Language};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// True iff the e-graph contains a cycle — a class reachable from itself by
-/// following enode children. 
+/// following enode children.
 pub fn egraph_has_cycle<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
     // Iterative DFS with white/gray/black coloring over canonical class ids; a back
     // edge (an edge into a gray ancestor still on the stack) means a cycle. Adjacency
@@ -64,7 +64,7 @@ pub fn egraph_has_cycle<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
 ///
 /// where `lookup_G` returns `⊥` (`None`) when the composite enode isn't
 /// hash-consed; `⊥` then propagates upward.
-/// 
+///
 /// - `pos_to_var[i]` is the metavariable index of node `i` if it is a `Var` leaf,
 ///   or `usize::MAX` otherwise.
 /// - `ec` must be ≥ `nodes.len()` long.
