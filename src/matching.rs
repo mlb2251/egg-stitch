@@ -1,6 +1,6 @@
 use crate::lang::{StitchEgraph, StitchLanguage};
 use egg::Id;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Minimum factor row count before [`Factor::decompose`] attempts a split.
 /// Detecting independence costs `O(slots² · rows)`; below this the saved
@@ -108,7 +108,7 @@ impl Factor {
         }
         // Gather positions into components, preserving ascending order.
         let mut blocks: Vec<Vec<usize>> = Vec::new();
-        let mut root_to_block: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+        let mut root_to_block: FxHashMap<usize, usize> = FxHashMap::default();
         for p in 0..n {
             let r = find(&mut parent, p);
             let idx = *root_to_block.entry(r).or_insert_with(|| {
@@ -149,7 +149,7 @@ impl Factor {
 
     /// Convenience wrapper returning a fresh `Vec<Factor>` (used by the non-hot
     /// reuse/concretize paths). The hot expand path uses [`Factor::decompose_into`].
-    fn decompose(self) -> Vec<Factor> {
+    pub fn decompose(self) -> Vec<Factor> {
         let mut out = Vec::new();
         self.decompose_into(&mut out);
         out
@@ -183,12 +183,6 @@ impl MatchAtEClass {
         self.factors.iter().map(|f| f.rows.len()).product()
     }
 
-    /// The pattern arity implied by this match: the total number of slots
-    /// across all factors (they partition `0..arity`).
-    pub fn arity(&self) -> usize {
-        self.factors.iter().map(|f| f.slots.len()).sum()
-    }
-
     /// `(factor_index, position_within_factor)` for `slot`. Panics if no factor
     /// covers it (a broken partition invariant).
     pub fn locate_slot(&self, slot: usize) -> (usize, usize) {
@@ -198,14 +192,6 @@ impl MatchAtEClass {
             }
         }
         panic!("slot {slot} not covered by any factor");
-    }
-
-    /// Materialises the full cartesian product as flat `Vec<Id>` substitutions,
-    /// each indexed by slot. Used by `check_slow` and the rewrite builder — i.e.
-    /// consumers that genuinely need every joint assignment. Hot search/cost
-    /// paths read factors directly.
-    pub fn all_substs(&self) -> Vec<Vec<Id>> {
-        factors_product(&self.factors)
     }
 }
 
@@ -258,9 +244,4 @@ pub fn rebuild_factor(slots: Vec<usize>, src_rows: &[Vec<Id>], mut build: impl F
         return None;
     }
     Some(Factor { slots, rows }.decompose())
-}
-
-/// Public wrapper so search code can decompose a freshly merged factor.
-pub fn decompose_factor(f: Factor) -> Vec<Factor> {
-    f.decompose()
 }

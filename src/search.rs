@@ -1,6 +1,6 @@
 use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
-use crate::matching::{Factor, MatchAtEClass, decompose_factor, identity_matches, rebuild_factor};
+use crate::matching::{Factor, MatchAtEClass, identity_matches, rebuild_factor};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
@@ -187,7 +187,7 @@ fn collapse_reuse(slots: &[usize], mut rows: Vec<Vec<Id>>, shallow_idx: usize, k
         r.remove(pd);
     }
     let new_slots: Vec<usize> = slots.iter().filter(|&&s| s != drop_idx).map(|&s| if s > drop_idx { s - 1 } else { s }).collect();
-    Factor::new(new_slots, rows).map(decompose_factor)
+    Factor::new(new_slots, rows).map(Factor::decompose)
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
@@ -439,7 +439,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if !new_slots.is_empty() {
                 let new_rows: Vec<Vec<Id>> = old.rows.iter().map(|r| r.iter().enumerate().filter(|&(i, _)| i != pos).map(|(_, &v)| v).collect()).collect();
                 if let Some(f) = Factor::new(new_slots, new_rows) {
-                    m.factors.extend(decompose_factor(f));
+                    m.factors.extend(f.decompose());
                 }
             }
             for f in &mut m.factors {
@@ -560,7 +560,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
-        // ABLATION: precompute removed; inline locate_slot/num_substs below.
         // Weight each (match, subst) contribution by how often that match's
         // root e-class appears in the fully-expanded corpus, so popular
         // root-positions sway the action distribution proportionally to the
