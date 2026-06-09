@@ -1,22 +1,42 @@
 //! Canonical-form keying for best-first's seen-set.
 //!
-//! Given a candidate pattern P (a `RecExpr` in `F::Apply<OpWithVar<O>>`), build a
-//! fresh egraph in that language, insert P, saturate with the user's rewrite
-//! rules, and compute a deterministic `u64` "canonical key" for the root
-//! eclass. Two patterns equivalent under the rules return the same key, so
-//! best-first can dedupe semantic duplicates in its seen-set.
+//! Given a candidate pattern P (a `RecExpr` in `F::Apply<OpWithVar<O>>`), compute
+//! a deterministic `u64` "canonical key" that is invariant under the equational
+//! theory the search should quotient by, so best-first can drop semantically
+//! redundant duplicates from its seen-set. Two patterns with the same key are
+//! treated as the same abstraction.
 //!
-//! The key is a recursive hash: for each eclass, among its min-cost enodes,
-//! pick the one whose `hash(disc, [child_canonical_keys...])` is smallest;
-//! that minimum is the eclass's canonical key. The fixed-point iteration
-//! handles cycles introduced by productive rules (e.g. `c => (T c (M …))`)
-//! without ever materialising a string.
+//! ## Theory quotiented (structural, not via saturation)
 //!
-//! No rule file → no equivalences → canonical key equals a plain structural
-//! hash of the pattern and the seen-set adds no extra dedup beyond syntactic.
+//! The previous implementation saturated each pattern in a throwaway egraph and
+//! hashed the min-cost extraction. That was explosive (AC rewriting blows past
+//! any node cap) and unreliable. This version instead computes the normal form
+//! *structurally*, in O(size):
+//!
+//! - **`+` is associative-commutative with constant folding.** Nested sums are
+//!   flattened, numeric-literal operands are summed (subsuming the `two..eight`
+//!   number rules and `add_zero`), and the operand multiset is canonicalised.
+//! - **Metavariables are α-renumbered** by (occurrence-count desc, first-
+//!   occurrence asc), so e.g. `2·?a + ?b` and `?a + 2·?b` map to one key.
+//!
+//! `*` is left ordered: the current rule set has `mul_comm` but no `mult_assoc`,
+//! so the corpus egraph is not `*`-associative-closed and flattening it would be
+//! unsound. Extend [`is_ac`] to include `"*"` if/when `mult_assoc` is added.
+//!
+//! ## Soundness
+//!
+//! Dedup skips costing the dropped pattern, so it is sound only if AC-variant
+//! patterns match the *same* e-classes — i.e. the corpus egraph is closed under
+//! the same theory (`add_assoc`/`add_comm`). We assume that closure (the egraph
+//! is built by saturating with these rules). α-renaming is unconditionally sound.
+//! Non-arithmetic rule equivalences (`t_1`, `t_compose`, `repeat_unroll`, …) are
+//! deliberately *not* modelled here; this normal form targets the AC arithmetic
+//! blow-up only.
+//!
+//! No rule file → the seen-set is disabled ([`CanonicalChecker::trivial`]).
 
-use crate::lang::{LanguageFamily, OpWithVar, StitchAnalysis, StitchDisc, StitchLanguage, StitchOp, Weights};
-use egg::{EGraph, Id, RecExpr, Rewrite, Runner};
+use crate::lang::{LanguageFamily, OpWithVar, StitchAnalysis, StitchDisc, StitchLanguage, StitchOp};
+use egg::{Id, RecExpr, Rewrite, Var};
 use rustc_hash::{FxHashMap, FxHasher};
 use std::hash::{Hash, Hasher};
 
@@ -24,76 +44,209 @@ use std::hash::{Hash, Hasher};
 pub type PatternLang<F, O> = <F as LanguageFamily>::Apply<OpWithVar<O>>;
 pub type PatternRules<F, O> = Vec<Rewrite<PatternLang<F, O>, StitchAnalysis>>;
 
-/// Holds the rewrite rules (parsed against the pattern language) and a memo
-/// from pattern-structure hash → canonical-form hash. Used by best-first to
-/// dedupe patterns by *semantic* equivalence under the rules (not just
-/// syntactic equality): two patterns that saturate to the same eclass return
-/// the same `u64` canonical key, so the seen-set drops the second.
+/// True iff `name` is an associative-commutative operator we canonicalise.
+/// Only `+` for now — see the module docs for why `*` is excluded.
+fn is_ac(name: &str) -> bool {
+    name == "+"
+}
+
+/// Holds whether canonical dedup is active (a rule file was supplied) plus a
+/// memo from a pattern's plain structural hash → its canonical key, so the
+/// normal form is computed once per distinct pattern.
 pub struct CanonicalChecker<F: LanguageFamily, O: StitchOp> {
-    rules: PatternRules<F, O>,
-    weights: Weights,
+    enabled: bool,
     memo: FxHashMap<u64, u64>,
-    /// Memo hits (saturation work avoided).
+    /// Memo hits (canonicalisation work avoided).
     pub memo_hits: usize,
+    _marker: std::marker::PhantomData<(F, O)>,
 }
 
 impl<F: LanguageFamily, O: StitchOp> CanonicalChecker<F, O> {
-    pub fn new(rules: PatternRules<F, O>, weights: Weights) -> Self {
+    /// `rules` is used only to decide whether to enable the seen-set; its
+    /// content does not affect the (structural) canonical key. `weights` is
+    /// unused — folding is exact arithmetic — but kept for call-site stability.
+    pub fn new(rules: PatternRules<F, O>, _weights: crate::lang::Weights) -> Self {
         Self {
-            rules,
-            weights,
+            enabled: !rules.is_empty(),
             memo: FxHashMap::default(),
             memo_hits: 0,
+            _marker: std::marker::PhantomData,
         }
     }
 
-    /// True when the user supplied no rule file: canonical key == pattern key,
-    /// so the canonical step is a pass-through.
+    /// True when canonical dedup is off (no rule file): callers skip the check.
     pub fn trivial(&self) -> bool {
-        self.rules.is_empty()
+        !self.enabled
     }
 
-    /// Returns the canonical-form hash of `pattern`'s eclass after rule
-    /// saturation. Patterns in the same equivalence class return identical
-    /// keys; with no rules, just returns the pattern's own structural hash.
+    /// Canonical key of `pattern` under the AC + α normal form. Memoised on the
+    /// pattern's structural hash.
     pub fn canonical_key(&mut self, pattern: &RecExpr<PatternLang<F, O>>) -> u64 {
         let pkey = hash_recexpr::<PatternLang<F, O>>(pattern);
-        if self.rules.is_empty() {
-            return pkey;
-        }
         if let Some(&v) = self.memo.get(&pkey) {
             self.memo_hits += 1;
             return v;
         }
-        let canonical = canonical_hash::<F, O>(pattern, &self.rules, self.weights);
+        let canonical = structural_canonical_hash::<PatternLang<F, O>>(pattern);
         self.memo.insert(pkey, canonical);
         canonical
     }
 }
 
-/// Build a fresh egraph, add `pattern`, saturate `rules`, return the canonical
-/// hash of the resulting root eclass.
-fn canonical_hash<F: LanguageFamily, O: StitchOp>(pattern: &RecExpr<PatternLang<F, O>>, rules: &PatternRules<F, O>, weights: Weights) -> u64 {
-    let mut egraph: EGraph<PatternLang<F, O>, StitchAnalysis> = EGraph::new(StitchAnalysis::new(weights));
-    let root = egraph.add_expr(pattern);
-    egraph.rebuild();
-    // Tight saturation budget: per-pattern saturation runs once per distinct
-    // pattern explored by best-first (which can be thousands). Productive rules
-    // (e.g. nuts-bolts' `c => (T c (M …))`) explode the egraph; the caps below
-    // prevent any single check from dominating the search.
-    let mut runner: Runner<PatternLang<F, O>, StitchAnalysis> = Runner::new(StitchAnalysis::new(weights)).with_egraph(egraph).with_iter_limit(4).with_node_limit(2_000).with_time_limit(std::time::Duration::from_millis(50));
-    runner = runner.run(rules);
-    runner.egraph.rebuild();
-    let root = runner.egraph.find(root);
-    let cost = compute_min_costs::<PatternLang<F, O>>(&runner.egraph, &weights);
-    let hashes = build_class_hashes::<PatternLang<F, O>>(&runner.egraph, &weights, &cost);
-    *hashes.get(&root).expect("root eclass has no canonical hash")
+/// Intermediate canonical term: metavars keep their identity (`Var`) until the
+/// global α-renumbering, constants are folded, and `+` nodes hold a canonicalised
+/// operand multiset.
+enum Term {
+    Var(Var),
+    Const(f64),
+    Node { name: String, ac: bool, kids: Vec<Term> },
 }
 
-/// Tree-walk a `RecExpr` from its last (root) node and produce a recursive
-/// hash of `(discriminant, [child_hashes...])`. The vec layout is irrelevant —
-/// we always walk children via id, so DAG-shared subtrees are unfolded into
-/// the resulting tree hash just as the egraph extraction would.
+/// Structural AC + α + constant-fold canonical hash of `pattern`.
+fn structural_canonical_hash<L: StitchLanguage>(pattern: &RecExpr<L>) -> u64 {
+    let root = Id::from(pattern.as_ref().len() - 1);
+    let term = build_term::<L>(pattern, root);
+    // Canonical metavar ids: order by occurrence count (desc), ties broken by
+    // first-occurrence order. `order` is already in first-occurrence order and
+    // `sort_by` is stable, so the tie-break falls out for free.
+    let mut order: Vec<Var> = Vec::new();
+    let mut counts: FxHashMap<Var, usize> = FxHashMap::default();
+    collect_vars(&term, &mut order, &mut counts);
+    order.sort_by(|a, b| counts[b].cmp(&counts[a]));
+    let var_id: FxHashMap<Var, u32> = order.iter().enumerate().map(|(i, v)| (*v, i as u32)).collect();
+    hash_term(&term, &var_id)
+}
+
+/// Lowers `expr[id]` into a [`Term`], flattening/folding/sorting `+` nodes.
+/// Children are built first, so each `+` child is already flattened — one level
+/// of splicing suffices to fully flatten.
+fn build_term<L: StitchLanguage>(expr: &RecExpr<L>, id: Id) -> Term {
+    let n = &expr[id];
+    let disc = n.discriminant();
+    if let Some(v) = disc.as_var() {
+        return Term::Var(v);
+    }
+    let name = disc.to_string();
+    let kids_ids = n.children();
+    if kids_ids.is_empty() {
+        if let Ok(f) = name.parse::<f64>() {
+            return Term::Const(f);
+        }
+        return Term::Node { name, ac: false, kids: Vec::new() };
+    }
+    let kids: Vec<Term> = kids_ids.iter().map(|&c| build_term::<L>(expr, c)).collect();
+    if !is_ac(&name) {
+        return Term::Node { name, ac: false, kids };
+    }
+    // Flatten same-op children.
+    let mut flat: Vec<Term> = Vec::new();
+    for k in kids {
+        if let Term::Node { name: kn, ac: true, kids: kk } = k {
+            if kn == name {
+                flat.extend(kk);
+            } else {
+                flat.push(Term::Node { name: kn, ac: true, kids: kk });
+            }
+        } else {
+            flat.push(k);
+        }
+    }
+    // Fold constant operands (additive identity 0).
+    let mut acc = 0.0;
+    let mut saw_const = false;
+    let mut rest: Vec<Term> = Vec::new();
+    for k in flat {
+        match k {
+            Term::Const(c) => {
+                saw_const = true;
+                acc += c;
+            }
+            other => rest.push(other),
+        }
+    }
+    if saw_const && (acc != 0.0 || rest.is_empty()) {
+        rest.push(Term::Const(acc));
+    }
+    // Canonical operand order: var-blind shape hash (final multiset hash is
+    // order-independent, but a deterministic order keeps the structure stable).
+    rest.sort_by_key(shape_hash);
+    if rest.len() == 1 {
+        return rest.pop().expect("len checked");
+    }
+    Term::Node { name, ac: true, kids: rest }
+}
+
+/// Var-blind structural hash: every metavar collapses to one sentinel, so it
+/// orders operands by shape without committing to metavar identities.
+fn shape_hash(t: &Term) -> u64 {
+    let mut h = FxHasher::default();
+    match t {
+        Term::Var(_) => 0u8.hash(&mut h),
+        Term::Const(c) => {
+            1u8.hash(&mut h);
+            c.to_bits().hash(&mut h);
+        }
+        Term::Node { name, ac, kids } => {
+            2u8.hash(&mut h);
+            name.hash(&mut h);
+            let mut ks: Vec<u64> = kids.iter().map(shape_hash).collect();
+            if *ac {
+                ks.sort_unstable();
+            }
+            ks.hash(&mut h);
+        }
+    }
+    h.finish()
+}
+
+/// Records each metavar's first-occurrence order and total count.
+fn collect_vars(t: &Term, order: &mut Vec<Var>, counts: &mut FxHashMap<Var, usize>) {
+    match t {
+        Term::Var(v) => {
+            if !counts.contains_key(v) {
+                order.push(*v);
+            }
+            *counts.entry(*v).or_insert(0) += 1;
+        }
+        Term::Const(_) => {}
+        Term::Node { kids, .. } => {
+            for k in kids {
+                collect_vars(k, order, counts);
+            }
+        }
+    }
+}
+
+/// Final canonical hash with metavars mapped to their canonical ids. AC nodes
+/// hash the sorted multiset of child hashes (order-independent, multiplicity-
+/// sensitive); other nodes hash children in order.
+fn hash_term(t: &Term, var_id: &FxHashMap<Var, u32>) -> u64 {
+    let mut h = FxHasher::default();
+    match t {
+        Term::Var(v) => {
+            0u8.hash(&mut h);
+            var_id[v].hash(&mut h);
+        }
+        Term::Const(c) => {
+            1u8.hash(&mut h);
+            c.to_bits().hash(&mut h);
+        }
+        Term::Node { name, ac, kids } => {
+            2u8.hash(&mut h);
+            name.hash(&mut h);
+            let mut ks: Vec<u64> = kids.iter().map(|k| hash_term(k, var_id)).collect();
+            if *ac {
+                ks.sort_unstable();
+            }
+            ks.hash(&mut h);
+        }
+    }
+    h.finish()
+}
+
+/// Tree-walk a `RecExpr` from its root and produce a recursive structural hash
+/// of `(discriminant, [child_hashes...])`. Used to memoise canonical keys per
+/// distinct pattern (no normalisation — plain syntactic identity).
 fn hash_recexpr<L: StitchLanguage>(expr: &RecExpr<L>) -> u64 {
     let nodes = expr.as_ref();
     let root = Id::from(nodes.len() - 1);
@@ -107,92 +260,4 @@ fn hash_recexpr<L: StitchLanguage>(expr: &RecExpr<L>) -> u64 {
         hasher.finish()
     }
     walk::<L>(nodes, root)
-}
-
-/// Standard fixed-point cost DP: per-eclass min weighted size over enodes whose
-/// children all have costs. Eclasses reachable only via cycles get no entry.
-fn compute_min_costs<L: StitchLanguage>(egraph: &EGraph<L, StitchAnalysis>, weights: &Weights) -> FxHashMap<Id, u64> {
-    let mut cost: FxHashMap<Id, u64> = FxHashMap::default();
-    loop {
-        let mut changed = false;
-        for ec in egraph.classes() {
-            let id = egraph.find(ec.id);
-            let best = ec.nodes.iter().filter_map(|n| node_cost::<L>(n, weights, &cost, egraph)).min();
-            if let Some(b) = best {
-                match cost.get(&id) {
-                    Some(&prev) if prev <= b => {}
-                    _ => {
-                        cost.insert(id, b);
-                        changed = true;
-                    }
-                }
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-    cost
-}
-
-fn node_cost<L: StitchLanguage>(n: &L, weights: &Weights, cost: &FxHashMap<Id, u64>, egraph: &EGraph<L, StitchAnalysis>) -> Option<u64> {
-    let mut total = n.discriminant().intrinsic_size(weights) as u64;
-    for &c in n.children() {
-        let c = egraph.find(c);
-        total = total.checked_add(*cost.get(&c)?)?;
-    }
-    Some(total)
-}
-
-/// For each eclass that has a min cost, compute its canonical `u64` hash:
-/// among min-cost enodes whose child hashes are all known, take the smallest
-/// `hash(disc, [child_hash...])`. Fixed-point iteration — cyclic egraphs (e.g.
-/// from productive rules) need multiple passes before all hashes stabilise.
-fn build_class_hashes<L: StitchLanguage>(egraph: &EGraph<L, StitchAnalysis>, weights: &Weights, cost: &FxHashMap<Id, u64>) -> FxHashMap<Id, u64> {
-    let mut memo: FxHashMap<Id, u64> = FxHashMap::default();
-    loop {
-        let mut changed = false;
-        for ec in egraph.classes() {
-            let id = egraph.find(ec.id);
-            let Some(&target) = cost.get(&id) else { continue };
-            let mut best: Option<u64> = None;
-            for n in &ec.nodes {
-                if node_cost::<L>(n, weights, cost, egraph) != Some(target) {
-                    continue;
-                }
-                let mut hasher = FxHasher::default();
-                n.discriminant().hash(&mut hasher);
-                let mut ok = true;
-                for &c in n.children() {
-                    let c = egraph.find(c);
-                    match memo.get(&c) {
-                        Some(&h) => h.hash(&mut hasher),
-                        None => {
-                            ok = false;
-                            break;
-                        }
-                    }
-                }
-                if !ok {
-                    continue;
-                }
-                let h = hasher.finish();
-                match best {
-                    None => best = Some(h),
-                    Some(cur) if h < cur => best = Some(h),
-                    _ => {}
-                }
-            }
-            if let Some(h) = best
-                && memo.get(&id) != Some(&h)
-            {
-                memo.insert(id, h);
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-    memo
 }

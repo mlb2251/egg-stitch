@@ -189,6 +189,16 @@ pub struct Args {
     #[arg(long = "max-wrap-nesting", default_value = "0")]
     pub max_wrap_nesting: MaxWrapNesting,
 
+    /// Prune patterns whose committed skeleton is non-minimal — its "minimality
+    /// excess" (matched-form tree cost minus the e-class's minimal extraction
+    /// cost) exceeds this at *every* match site. `Some(k)` keeps only patterns
+    /// matching within `k` of minimal somewhere; `k=0` requires an exactly-minimal
+    /// witness (e.g. the `+` of `(+ 2 2)` must genuinely exist at some match, not
+    /// just as a rewrite of `4`). Generalizes `--max-wrap-nesting` (a cycle is
+    /// infinite excess). Off when unset.
+    #[arg(long = "max-excess")]
+    pub max_excess: Option<usize>,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,

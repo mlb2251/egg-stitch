@@ -211,7 +211,11 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         expansion_order.push(node_id);
 
         if args.verbose {
-            println!("{} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan());
+            let excess_str = match nodes[node_id].state.minimality_excess_argmin(&shared) {
+                Some((e, root)) => format!("[excess={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
+                None => "[excess=- (no matches)]".to_string(),
+            };
+            println!("{} {} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan(), excess_str.yellow());
         }
 
         let parent_depth = nodes[node_id].depth;
@@ -221,6 +225,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         };
 
         remove_exceeding_wrap_nesting(&mut successors, &shared, args.max_wrap_nesting.0, |c| c);
+        if let Some(k) = args.max_excess {
+            successors.retain(|c| c.minimality_excess_min(&shared) <= k as i64);
+        }
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow

@@ -740,6 +740,68 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         false
     }
 
+    /// Minimum over match locations of the pattern's *minimality excess*: how
+    /// much more the committed skeleton (extracting the captured args minimally)
+    /// costs than the e-class's own minimal extraction. Zero means the pattern
+    /// matches a genuinely minimal form at some site; a large value means it only
+    /// ever matches non-minimal (rewrite-phantom) forms — e.g. matching `4` as
+    /// `(+ 2 2)` everywhere, or a cyclic tower (infinite excess).
+    ///
+    /// Factored, so it's `O(Σ|factor|)` with no materialisation: the matched
+    /// form's tree cost is `skeleton + Σ_occ minsize(arg)`, and the min over the
+    /// product of args factors over the (independent) factors. Monotone
+    /// non-decreasing under expand/reuse (a hole has zero excess; committing
+    /// structure only adds non-negative per-node excess, and substs only shrink),
+    /// so a state above a cap can never drop below it — a sound prune.
+    pub fn minimality_excess_min(&self, shared: &SharedSearchData<F, O>) -> i64 {
+        self.minimality_excess_argmin(shared).map_or(i64::MAX, |(e, _)| e)
+    }
+
+    /// Tree-expanded cost of the pattern's concrete (non-var) skeleton. Computed
+    /// via `compute_pattern_size` (which walks from the root, counting hash-consed
+    /// subterms once *per reference*) minus the var-leaf placeholders — NOT by
+    /// summing the deduplicated node list, which would undercount shared concrete
+    /// subterms and disagree with the tree-expanded `data.size` baseline.
+    fn concrete_skeleton_cost(&self, weights: &crate::lang::Weights) -> i64 {
+        let var_placeholder: i64 = self.pattern.var_occurrences.iter().map(|&o| o as i64).sum::<i64>() * weights.sym_var_cost as i64;
+        crate::cost::compute_pattern_size(&self.pattern, weights) as i64 - var_placeholder
+    }
+
+    /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
+    /// Verbose-diagnostics only.
+    pub fn min_term(&self, shared: &SharedSearchData<F, O>, eclass: Id) -> String {
+        let mut out = Vec::new();
+        let mut memo = rustc_hash::FxHashMap::default();
+        crate::egraph_util::build_size_minimal_extraction::<F, O>(&shared.egraph, eclass, &mut out, &mut memo);
+        let rec: egg::RecExpr<F::Apply<OpWithVar<O>>> = out.into();
+        rec.to_string()
+    }
+
+    /// Like [`Self::minimality_excess_min`] but also returns the match root
+    /// e-class achieving the minimum (the site where the pattern is closest to
+    /// minimal). `None` when the pattern has no matches.
+    pub fn minimality_excess_argmin(&self, shared: &SharedSearchData<F, O>) -> Option<(i64, Id)> {
+        let weights = &shared.egraph.analysis.weights;
+        let skel = self.concrete_skeleton_cost(weights);
+        let occ = &self.pattern.var_occurrences;
+        let mut best: Option<(i64, Id)> = None;
+        for m in &self.matches {
+            // Captured-arg cost, weighted by each slot's occurrence count and
+            // minimised over the factored substitution product.
+            let holes_min: i64 = m
+                .factors
+                .iter()
+                .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&slot, &id)| occ[slot] as i64 * shared.egraph[id].data.size as i64).sum::<i64>()).min().expect("factor rows are non-empty"))
+                .sum();
+            let root_min = shared.egraph[m.root_eclass].data.size as i64;
+            let excess = skel + holes_min - root_min;
+            if best.is_none_or(|(b, _)| excess < b) {
+                best = Some((excess, m.root_eclass));
+            }
+        }
+        best
+    }
+
     /// Returns the enumerable successors of `self`. When dominance pruning
     /// fires, the single dominant child is built and returned via
     /// `SuccessorEnum::Dominant`; otherwise `SuccessorEnum::All` lists every
