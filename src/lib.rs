@@ -3,6 +3,7 @@ pub mod candidates;
 pub mod cost;
 pub mod debug_log;
 pub mod egraph_util;
+pub mod factor;
 pub mod follow;
 pub mod io;
 pub mod lang;

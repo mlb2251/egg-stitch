@@ -1,6 +1,7 @@
 use crate::candidates::enumerate_candidates;
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
-use crate::matching::{Factor, MatchAtEClass, factored_min};
+use crate::factor::{Factor, factored_min};
+use crate::matching::MatchAtEClass;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
 use egg::{CostFunction, Id, Language, RecExpr};
@@ -653,7 +654,7 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(mut egraph: Stitch
         let Some(kept) = filter_factors_by_candidate(&egraph, m, variable_indices, var_depth) else {
             continue;
         };
-        for vars in crate::matching::factors_product(&kept) {
+        for vars in crate::factor::factors_product(&kept) {
             let wrapped = wrap_subst_args::<F, O>(&mut egraph, &vars, variable_indices, var_depth);
             let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
             pending.push((x, m.root_eclass));

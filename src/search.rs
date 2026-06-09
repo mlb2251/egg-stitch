@@ -1,6 +1,7 @@
 use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
-use crate::matching::{Factor, MatchAtEClass, identity_matches, rebuild_factor};
+use crate::factor::{Factor, rebuild_factor};
+use crate::matching::{MatchAtEClass, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
