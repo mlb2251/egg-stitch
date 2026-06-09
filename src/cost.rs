@@ -1,6 +1,6 @@
 use crate::candidates::enumerate_candidates;
-use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
 use crate::factor::{Factor, factored_min};
+use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
 use crate::matching::MatchAtEClass;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
