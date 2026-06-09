@@ -140,17 +140,14 @@ impl Factor {
             out.push(self);
             return;
         }
-        blocks
-            .into_iter()
-            .map(|b| {
-                let slots: Vec<usize> = b.iter().map(|&p| self.slots[p]).collect();
-                let rows: Vec<Vec<Id>> = self.rows.iter().map(|r| b.iter().map(|&p| r[p]).collect()).collect();
-                Factor::new(slots, rows).expect("non-empty source rows ⇒ non-empty projection")
-            })
-            .for_each(|f| out.push(f));
+        for b in blocks {
+            let slots: Vec<usize> = b.iter().map(|&p| self.slots[p]).collect();
+            let rows: Vec<Vec<Id>> = self.rows.iter().map(|r| b.iter().map(|&p| r[p]).collect()).collect();
+            out.push(Factor::new(slots, rows).expect("non-empty source rows ⇒ non-empty projection"));
+        }
     }
 
-    /// Convenience wrapper returning a fresh `Vec` (used by the non-hot
+    /// Convenience wrapper returning a fresh `Vec<Factor>` (used by the non-hot
     /// reuse/concretize paths). The hot expand path uses [`Factor::decompose_into`].
     fn decompose(self) -> Vec<Factor> {
         let mut out = Vec::new();

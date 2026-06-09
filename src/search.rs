@@ -560,18 +560,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
-        // Precompute, once per match, each slot's owning `(factor, pos)` and the
-        // product size — so the O(n²) reuse pairing and the expand scan below do
-        // O(1) lookups instead of re-scanning the factor list per slot. `slot_loc`
-        // is a single flat `matches × n` table (row `mi`, column `k`).
-        let mut slot_loc: Vec<(usize, usize)> = Vec::with_capacity(self.matches.len() * n);
-        let mut match_substs: Vec<usize> = Vec::with_capacity(self.matches.len());
-        for m in &self.matches {
-            for k in 0..n {
-                slot_loc.push(m.locate_slot(k));
-            }
-            match_substs.push(m.num_substs());
-        }
+        // ABLATION: precompute removed; inline locate_slot/num_substs below.
         // Weight each (match, subst) contribution by how often that match's
         // root e-class appears in the fully-expanded corpus, so popular
         // root-positions sway the action distribution proportionally to the
@@ -603,10 +592,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // different factors it's a filtered cross-product of the two,
                 // scaled by the rest. Avoids materialising the product.
                 let pred = |a: Id, b: Id| shift_equal(a, b, di, dj, &shared.egraph, shared.shift_clamp);
-                let (support, raw_count): (usize, usize) = self.matches.iter().enumerate().fold((0, 0), |(s, r), (mi, m)| {
-                    let (fi, pi) = slot_loc[mi * n + i];
-                    let (fj, pj) = slot_loc[mi * n + j];
-                    let total = match_substs[mi];
+                let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
+                    let (fi, pi) = m.locate_slot(i);
+                    let (fj, pj) = m.locate_slot(j);
+                    let total = m.num_substs();
                     let c = if fi == fj {
                         let f = &m.factors[fi];
                         let hits = f.rows.iter().filter(|row| pred(row[pi], row[pj])).count();
@@ -653,13 +642,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let d_k = self.pattern.var_depth[var_idx];
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
             let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
-            for (mi, m) in self.matches.iter().enumerate() {
-                let (fi, pos) = slot_loc[mi * n + var_idx];
+            for m in &self.matches {
+                let (fi, pos) = m.locate_slot(var_idx);
                 let f = &m.factors[fi];
                 // Each row of the owning factor stands in for `total/|f.rows|`
                 // full substs (the product of the other factors), so weight the
                 // per-row node contributions by that multiplier.
-                let w = usage(m.root_eclass) * (match_substs[mi] / f.rows.len());
+                let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
                 for row in &f.rows {
                     for node in &shared.egraph[row[pos]].nodes {
                         if invalid_literal_expansion(node, d_k) {
