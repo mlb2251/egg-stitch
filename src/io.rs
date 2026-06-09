@@ -10,7 +10,7 @@ use std::{fs, path::Path};
 /// Returns the egraph, the root e-class Id of the programs node, the
 /// minimum AST cost of that root *before* any rewrites were applied, and
 /// the original program strings as parsed from the input file.
-pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, weights: Weights) -> (SharedData<F, O>, usize, Vec<String>) {
+pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, only_use_dsrs_at_start: bool, weights: Weights) -> (SharedData<F, O>, usize, Vec<String>) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
     println!("Loaded {} programs", exprs.len());
@@ -32,7 +32,25 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     runner.egraph.rebuild();
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
+
+    // With `--only-use-dsrs-at-start`, the rules only serve to find a better
+    // initial representation: extract the normalized min-term and rebuild a
+    // fresh rule-free egraph for the search to run over.
+    if only_use_dsrs_at_start {
+        let programs = extract_programs::<F::Apply<O>>(&runner.egraph, root);
+        let data = egraph_from_programs::<F, O>(&programs, None, weights);
+        println!("Egraph size after dropping rules: {}", data.egraph.classes().len());
+        return (data, cost_before_rewrites, exprs);
+    }
     (SharedData::new(runner.egraph, root), cost_before_rewrites, exprs)
+}
+
+/// Extracts the size-minimal program string for each child of the `programs`
+/// root e-class, using `WeightedSize` extraction.
+pub fn extract_programs<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id) -> Vec<String> {
+    let extractor = egg::Extractor::new(egraph, crate::cost::WeightedSize { weights: egraph.analysis.weights });
+    let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
+    programs_node.children().iter().map(|&child| L::display_recexpr(&extractor.find_best(child).1)).collect()
 }
 
 /// Builds a fresh egraph from program strings, applies rewrite rules, and returns it with its root.
