@@ -201,10 +201,7 @@ impl MatchAtEClass {
 /// minimum total cost over the full cartesian product — computed without
 /// materialising it. Factors are non-empty, so every `min` is defined.
 pub fn factored_min(factors: &[Factor], cost: impl Fn(usize, Id) -> i64) -> i64 {
-    factors
-        .iter()
-        .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&k, &v)| cost(k, v)).sum::<i64>()).min().expect("factor rows are non-empty"))
-        .sum()
+    factors.iter().map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&k, &v)| cost(k, v)).sum::<i64>()).min().expect("factor rows are non-empty")).sum()
 }
 
 /// Materialises the cartesian product of `factors` as flat slot-indexed
