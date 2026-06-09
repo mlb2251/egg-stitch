@@ -2,6 +2,13 @@ use crate::lang::{StitchEgraph, StitchLanguage};
 use egg::Id;
 use rustc_hash::FxHashSet;
 
+/// Minimum factor row count before [`Factor::decompose`] attempts a split.
+/// Detecting independence costs `O(slots² · rows)`; below this the saved
+/// cost-evaluation work doesn't repay that scan, so we keep the factor whole
+/// (correctness is independent of factoring granularity). Large factors — the
+/// ones whose `∏` blow-up actually hurts — are well above this.
+const DECOMPOSE_MIN_ROWS: usize = 48;
+
 /// One factor of a match location's substitution set: a relation over a subset
 /// of the pattern's variable slots. The full substitution set at a match
 /// location is the cartesian product of its factors (see [`MatchAtEClass`]).
@@ -52,19 +59,23 @@ impl Factor {
     /// product of the blocks' projections, since `rows ⊆ ∏ proj` always).
     fn decompose(self) -> Vec<Factor> {
         let n = self.slots.len();
-        if n <= 1 {
+        let nrows = self.rows.len();
+        if n <= 1 || nrows < DECOMPOSE_MIN_ROWS {
             return vec![self];
         }
-        let nrows = self.rows.len();
-        // Distinct value count of the projection onto `cols` (positions).
-        let proj_size = |cols: &[usize]| -> usize {
-            let mut set: FxHashSet<Vec<Id>> = FxHashSet::default();
-            for r in &self.rows {
-                set.insert(cols.iter().map(|&c| r[c]).collect());
-            }
-            set.len()
-        };
-        let single: Vec<usize> = (0..n).map(|p| proj_size(&[p])).collect();
+        // Packed-int projections on the hot pairwise scan: an `Id` is a `u32`,
+        // so a single column packs into a `u64` and a column pair into a `u64`
+        // (`a << 32 | b`), avoiding a `Vec` allocation per row per projection.
+        let id = |x: Id| usize::from(x) as u64;
+        let single: Vec<usize> = (0..n)
+            .map(|p| {
+                let mut set: FxHashSet<u64> = FxHashSet::default();
+                for r in &self.rows {
+                    set.insert(id(r[p]));
+                }
+                set.len()
+            })
+            .collect();
         // Union-find over positions, joining entangled pairs.
         let mut parent: Vec<usize> = (0..n).collect();
         fn find(parent: &mut [usize], x: usize) -> usize {
@@ -81,7 +92,11 @@ impl Factor {
                 if rp == rq {
                     continue;
                 }
-                if proj_size(&[p, q]) < single[p] * single[q] {
+                let mut set: FxHashSet<u64> = FxHashSet::default();
+                for r in &self.rows {
+                    set.insert((id(r[p]) << 32) | id(r[q]));
+                }
+                if set.len() < single[p] * single[q] {
                     parent[rp] = rq;
                 }
             }
@@ -105,7 +120,16 @@ impl Factor {
         // `∏|proj_block| == nrows` exactly (no overflow, since it equals
         // `nrows`); `checked_mul` returning `None` means the product already
         // exceeds `usize`, which is `> nrows`, so we bail in that case too.
-        let prod = blocks.iter().map(|b| proj_size(b)).try_fold(1usize, |acc, x| acc.checked_mul(x));
+        // Multi-slot block projection needs a `Vec` key, but this runs only
+        // once a split candidate exists — off the hot pairwise path.
+        let proj_block = |cols: &[usize]| -> usize {
+            let mut set: FxHashSet<Vec<Id>> = FxHashSet::default();
+            for r in &self.rows {
+                set.insert(cols.iter().map(|&c| r[c]).collect());
+            }
+            set.len()
+        };
+        let prod = blocks.iter().map(|b| proj_block(b)).try_fold(1usize, |acc, x| acc.checked_mul(x));
         if prod != Some(nrows) {
             return vec![self];
         }
@@ -208,12 +232,20 @@ pub fn identity_matches<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -
 /// more output rows, then runs decomposition so any independence the
 /// transformation exposed is captured. Returns the resulting (possibly split)
 /// factors, or `None` when no output rows survive (caller drops the match).
+///
+/// The caller (expand) is responsible for producing distinct rows — expanding a
+/// slot to an enode's children can't collide two rows, since an enode lives in a
+/// single e-class — so this skips the sort/dedup `Factor::new` does. (Row order
+/// is unobservable: every consumer treats the rows as a set.)
 pub fn rebuild_factor(slots: Vec<usize>, src_rows: &[Vec<Id>], mut build: impl FnMut(&[Id], &mut Vec<Vec<Id>>)) -> Option<Vec<Factor>> {
     let mut rows: Vec<Vec<Id>> = Vec::new();
     for r in src_rows {
         build(r, &mut rows);
     }
-    Factor::new(slots, rows).map(Factor::decompose)
+    if rows.is_empty() {
+        return None;
+    }
+    Some(Factor { slots, rows }.decompose())
 }
 
 /// Public wrapper so search code can decompose a freshly merged factor.

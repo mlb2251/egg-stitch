@@ -226,19 +226,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     // (k may be 0 for a leaf, shifting them down — hence isize).
                     let arity_e = target.children().len();
                     let delta = arity_e as isize - 1;
-                    let new_slots: Vec<usize> = f
-                        .slots
-                        .iter()
-                        .flat_map(|&s| {
-                            if s == var_idx {
-                                (var_idx..var_idx + arity_e).collect::<Vec<_>>()
-                            } else if s > var_idx {
-                                vec![(s as isize + delta) as usize]
-                            } else {
-                                vec![s]
-                            }
-                        })
-                        .collect();
+                    let mut new_slots: Vec<usize> = Vec::with_capacity(f.slots.len() + arity_e.saturating_sub(1));
+                    for &s in &f.slots {
+                        if s == var_idx {
+                            new_slots.extend(var_idx..var_idx + arity_e);
+                        } else if s > var_idx {
+                            new_slots.push((s as isize + delta) as usize);
+                        } else {
+                            new_slots.push(s);
+                        }
+                    }
                     let built = rebuild_factor(new_slots, &f.rows, |row, rows| {
                         for node in &shared.egraph[row[pos]].nodes {
                             if !node.matches(target) {
