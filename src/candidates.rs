@@ -1,6 +1,7 @@
 use crate::cost::CostCandidate;
 use crate::lang::{LanguageFamily, StitchEgraph, StitchOp};
 use crate::search::SearchState;
+use egg::Id;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Maximum number of distinct (slot, fv) pairs `enumerate_kept_subst_subsets`
@@ -127,13 +128,18 @@ pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgrap
     // Flatten (match_idx, subst_idx) to a single index and collect per-slot
     // captures. `var_captures[k][flat] = sorted-unique pattern-internal fv
     // referenced by that subst's arg at slot k`.
-    let n_substs: usize = search_state.matches.iter().map(|m| m.substs.len()).sum();
+    // This path only fires when some slot can capture a pattern-internal binder
+    // (`var_depth > 0`), i.e. lambda-bearing domains; materialising the factored
+    // product is acceptable here. Flat indices match `all_substs` order, which
+    // is the same order `build_rewritten_egraph` and the cost path consume.
+    let per_match: Vec<Vec<Vec<Id>>> = search_state.matches.iter().map(|m| m.all_substs()).collect();
+    let n_substs: usize = per_match.iter().map(|s| s.len()).sum();
     let mut flat_to_pair: Vec<(usize, usize)> = Vec::with_capacity(n_substs);
     let mut var_captures: Vec<Vec<Vec<i32>>> = (0..arity).map(|_| Vec::with_capacity(n_substs)).collect();
-    for (mi, m) in search_state.matches.iter().enumerate() {
-        for (si, subst) in m.substs.iter().enumerate() {
+    for (mi, substs) in per_match.iter().enumerate() {
+        for (si, vars) in substs.iter().enumerate() {
             flat_to_pair.push((mi, si));
-            for (k, &arg_id) in subst.vars.iter().enumerate() {
+            for (k, &arg_id) in vars.iter().enumerate() {
                 let d_k = var_depth[k];
                 // `data.fv` is already a set, so no dedup needed; sort to
                 // give `enumerate_kept_subst_subsets` the canonical order it
