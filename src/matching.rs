@@ -165,27 +165,33 @@ impl MatchAtEClass {
     }
 
     /// Materialises the full cartesian product as flat `Vec<Id>` substitutions,
-    /// each indexed by slot. Used by the lambda-capture candidate path, the
-    /// rewrite builder, and `check_slow` — i.e. consumers that genuinely need
-    /// every joint assignment. Hot search/cost paths read factors directly.
+    /// each indexed by slot. Used by `check_slow` and the rewrite builder — i.e.
+    /// consumers that genuinely need every joint assignment. Hot search/cost
+    /// paths read factors directly.
     pub fn all_substs(&self) -> Vec<Vec<Id>> {
-        let arity = self.arity();
-        let mut acc: Vec<Vec<Id>> = vec![vec![Id::from(0); arity]];
-        for f in &self.factors {
-            let mut next: Vec<Vec<Id>> = Vec::with_capacity(acc.len() * f.rows.len());
-            for base in &acc {
-                for row in &f.rows {
-                    let mut t = base.clone();
-                    for (p, &slot) in f.slots.iter().enumerate() {
-                        t[slot] = row[p];
-                    }
-                    next.push(t);
-                }
-            }
-            acc = next;
-        }
-        acc
+        factors_product(&self.factors)
     }
+}
+
+/// Materialises the cartesian product of `factors` as flat slot-indexed
+/// substitutions. The factors' slots must partition `0..Σ|slots|`.
+pub fn factors_product(factors: &[Factor]) -> Vec<Vec<Id>> {
+    let arity: usize = factors.iter().map(|f| f.slots.len()).sum();
+    let mut acc: Vec<Vec<Id>> = vec![vec![Id::from(0); arity]];
+    for f in factors {
+        let mut next: Vec<Vec<Id>> = Vec::with_capacity(acc.len() * f.rows.len());
+        for base in &acc {
+            for row in &f.rows {
+                let mut t = base.clone();
+                for (p, &slot) in f.slots.iter().enumerate() {
+                    t[slot] = row[p];
+                }
+                next.push(t);
+            }
+        }
+        acc = next;
+    }
+    acc
 }
 
 /// Returns one identity match per e-class in the egraph, skipping the root

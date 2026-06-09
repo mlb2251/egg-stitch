@@ -1,7 +1,6 @@
 use crate::cost::CostCandidate;
 use crate::lang::{LanguageFamily, StitchEgraph, StitchOp};
 use crate::search::SearchState;
-use egg::Id;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Maximum number of distinct (slot, fv) pairs `enumerate_kept_subst_subsets`
@@ -105,74 +104,123 @@ pub fn enumerate_kept_subst_subsets(var_captures: &[Vec<Vec<i32>>]) -> Vec<Vec<u
     out
 }
 
-/// Enumerate every "meaningful" candidate. Thin wrapper around
-/// [`enumerate_kept_subst_subsets`] that extracts per-(match, subst)
-/// capture sets from the egraph and translates returned flat-subst-index
-/// subsets back into `CostCandidate`s.
+/// Enumerate every "meaningful" candidate `S` (the per-slot fv-sets), directly
+/// from the factored match set — never materialising the product.
 ///
-/// At least one candidate is always returned: when no slot can capture
-/// pattern-internal binders, the result is a single empty-`S` candidate
-/// with every subst kept (signalled by the `None` sentinel).
+/// The candidate space is the OR-closure of the substs' per-slot capture masks
+/// (see [`enumerate_kept_subst_subsets`] for the spec). Each subst's full mask
+/// is the OR of its factors' per-row masks, so we OR-close the **per-(factor,
+/// row) masks** instead — a `Σ`-sized generating set whose closure is a superset
+/// of the per-subst closure. Every extra mask it contributes keeps a strict
+/// subset of substs and is therefore cost-dominated by its canonical tightening
+/// (`S'' = ⋃captures(kept) ⊆ S`, smaller body, same kept set), so the
+/// cost-minimising selection is identical. The kept set for any candidate is
+/// recovered later, per-factor, by `filter_factors_by_candidate`.
+///
+/// At least one candidate is always returned: the empty-`S` mask `0` is always
+/// in the closure, and on lambda-free domains it's the sole candidate.
 pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<CostCandidate> {
-    let arity = search_state.pattern.var_depth.len();
     let var_depth = &search_state.pattern.var_depth;
-    // Fast path: no slot can capture pattern-internal binders. Emit the
-    // `None` sentinel to skip allocating the dense (0..len) kept list —
-    // this fires on lambda-free domains and most calls elsewhere.
+    let arity = var_depth.len();
+    // Fast path: no slot can capture pattern-internal binders.
     if var_depth.iter().all(|&d| d == 0) {
-        return vec![CostCandidate {
-            variable_indices: vec![Vec::new(); arity],
-            kept_substs: None,
-        }];
+        return vec![CostCandidate { variable_indices: vec![Vec::new(); arity] }];
     }
-    // Flatten (match_idx, subst_idx) to a single index and collect per-slot
-    // captures. `var_captures[k][flat] = sorted-unique pattern-internal fv
-    // referenced by that subst's arg at slot k`.
-    // This path only fires when some slot can capture a pattern-internal binder
-    // (`var_depth > 0`), i.e. lambda-bearing domains; materialising the factored
-    // product is acceptable here. Flat indices match `all_substs` order, which
-    // is the same order `build_rewritten_egraph` and the cost path consume.
-    let per_match: Vec<Vec<Vec<Id>>> = search_state.matches.iter().map(|m| m.all_substs()).collect();
-    let n_substs: usize = per_match.iter().map(|s| s.len()).sum();
-    let mut flat_to_pair: Vec<(usize, usize)> = Vec::with_capacity(n_substs);
-    let mut var_captures: Vec<Vec<Vec<i32>>> = (0..arity).map(|_| Vec::with_capacity(n_substs)).collect();
-    for (mi, substs) in per_match.iter().enumerate() {
-        for (si, vars) in substs.iter().enumerate() {
-            flat_to_pair.push((mi, si));
-            for (k, &arg_id) in vars.iter().enumerate() {
+    // Per-slot sorted-unique captured fv — the candidate bit alphabet — gathered
+    // straight from the factors. Captured fv of arg `v` at slot `k` is
+    // `fv(v) ∩ [0, d_k)`.
+    let mut vsets: Vec<FxHashSet<i32>> = vec![FxHashSet::default(); arity];
+    for m in &search_state.matches {
+        for f in &m.factors {
+            for (pos, &k) in f.slots.iter().enumerate() {
                 let d_k = var_depth[k];
-                // `data.fv` is already a set, so no dedup needed; sort to
-                // give `enumerate_kept_subst_subsets` the canonical order it
-                // expects.
-                let mut caps: Vec<i32> = if d_k == 0 { Vec::new() } else { egraph[arg_id].data.fv.iter().copied().filter(|&i| i >= 0 && (i as u32) < d_k).collect() };
-                caps.sort_unstable();
-                var_captures[k].push(caps);
+                if d_k == 0 {
+                    continue;
+                }
+                for row in &f.rows {
+                    for &i in &egraph[row[pos]].data.fv {
+                        if i >= 0 && (i as u32) < d_k {
+                            vsets[k].insert(i);
+                        }
+                    }
+                }
             }
         }
     }
-    let n_matches = search_state.matches.len();
-    enumerate_kept_subst_subsets(&var_captures)
+    let v: Vec<Vec<i32>> = vsets
         .into_iter()
-        .map(|subset| {
-            // Re-derive `variable_indices` as the union of captures across
-            // the kept substs, and unflatten the kept indices per match.
+        .map(|s| {
+            let mut x: Vec<i32> = s.into_iter().collect();
+            x.sort_unstable();
+            x
+        })
+        .collect();
+    let total_bits: u32 = v.iter().map(|vk| vk.len() as u32).sum();
+    if total_bits > MAX_PACKED_FV_BITS {
+        // Fallback: too many distinct fv to enumerate — keep every subst, i.e.
+        // `S_k = all captures at slot k`.
+        return vec![CostCandidate { variable_indices: v }];
+    }
+    let mut slot_offset: Vec<u32> = Vec::with_capacity(arity);
+    let mut off = 0u32;
+    for vk in &v {
+        slot_offset.push(off);
+        off += vk.len() as u32;
+    }
+    // Generator masks: one per (factor, row), bits set for that row's captures.
+    // Each touches only its factor's slots, so OR-closing these reproduces the
+    // per-subst closure (see fn docs). Collect distinct.
+    let mut generators: FxHashSet<u64> = FxHashSet::default();
+    for m in &search_state.matches {
+        for f in &m.factors {
+            for row in &f.rows {
+                let mut mask = 0u64;
+                for (pos, &k) in f.slots.iter().enumerate() {
+                    let d_k = var_depth[k];
+                    if d_k == 0 {
+                        continue;
+                    }
+                    for &i in &egraph[row[pos]].data.fv {
+                        if i >= 0 && (i as u32) < d_k {
+                            let b = v[k].binary_search(&i).expect("captured fv missing from v[k]");
+                            mask |= 1u64 << (slot_offset[k] + b as u32);
+                        }
+                    }
+                }
+                generators.insert(mask);
+            }
+        }
+    }
+    // OR-closure (DFS from the empty mask).
+    let distinct: Vec<u64> = generators.into_iter().collect();
+    let mut canonical: Vec<u64> = Vec::new();
+    let mut seen: FxHashSet<u64> = FxHashSet::default();
+    let mut frontier: Vec<u64> = vec![0];
+    seen.insert(0);
+    while let Some(cur) = frontier.pop() {
+        canonical.push(cur);
+        for &g in &distinct {
+            let nw = cur | g;
+            if seen.insert(nw) {
+                frontier.push(nw);
+            }
+        }
+    }
+    canonical.sort_unstable();
+    // Decode each canonical mask into per-slot `S_k` (already sorted, since
+    // `v[k]` is sorted and bits are visited in order).
+    canonical
+        .into_iter()
+        .map(|s_mask| {
             let mut variable_indices: Vec<Vec<i32>> = vec![Vec::new(); arity];
-            let mut kept_per_match: Vec<Vec<usize>> = vec![Vec::new(); n_matches];
-            for &flat in &subset {
-                let (mi, si) = flat_to_pair[flat];
-                kept_per_match[mi].push(si);
-                for k in 0..arity {
-                    variable_indices[k].extend(&var_captures[k][flat]);
+            for (k, vk) in v.iter().enumerate() {
+                for (b, &i) in vk.iter().enumerate() {
+                    if s_mask & (1u64 << (slot_offset[k] + b as u32)) != 0 {
+                        variable_indices[k].push(i);
+                    }
                 }
             }
-            for vk in &mut variable_indices {
-                vk.sort_unstable();
-                vk.dedup();
-            }
-            for ks in &mut kept_per_match {
-                ks.sort_unstable();
-            }
-            CostCandidate { variable_indices, kept_substs: Some(kept_per_match) }
+            CostCandidate { variable_indices }
         })
         .collect()
 }
