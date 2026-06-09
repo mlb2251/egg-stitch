@@ -1,0 +1,40 @@
+// transformations are matrix operations
+t_1: ?x <=> (T ?x (M 1 0 0 0))
+t_compose: (T (T ?x ?m1) ?m2) => (T ?x (* ?m2 ?m1))
+
+// repeat operations
+repeat_unroll: (repeat ?x (+ ?n 1) ?m) => (C ?x (T (repeat ?x ?n ?m) ?m))
+repeat_unroll_zero: (repeat ?x 0 ?m) => ?x
+// operations on matrices
+mult_identity_r: (* ?m (M 1 0 0 0)) => ?m
+mult_identity_l: (* (M 1 0 0 0) ?m) => ?m
+// do anything, then translate just means we do anything with the additional translation
+mult_trans_combine: (* (M 1 0 ?x2 ?y2) (M ?s ?r ?x1 ?y1)) => (M ?s ?r (+ ?x1 ?x2) (+ ?y1 ?y2))
+// do anything, then scale just means we do anything with the additional scaling. but the scaling affects the translation as well, so we have to scale the translation by the scaling factor
+mult_scale_combine: (* (M ?s2 ?r ?x ?y) (M ?s1 ?r ?x ?y)) => (M (* ?s1 ?s2) ?r (* ?x ?s2) (* ?y ?s2))
+
+// arithmetic
+add_zero_r: (+ ?x 0) => ?x
+add_zero_l: (+ 0 ?x) => ?x
+mult_one_r: (* ?x 1) => ?x
+mult_one_l: (* 1 ?x) => ?x
+add_comm: (+ ?x ?y) => (+ ?y ?x)
+mul_comm: (* ?x ?y) => (* ?y ?x)
+
+// natural numbers
+two: 2 <=> (+ 1 1)
+three: 3 <=> (+ 1 2)
+four: 4 <=> (+ 1 3)
+five: 5 <=> (+ 1 4)
+six: 6 <=> (+ 1 5)
+seven: 7 <=> (+ 1 6)
+eight: 8 <=> (+ 1 7)
+
+// half_pi: 1.5708 => (/ (* 2 pi) 4)
+// quarter_pi: 0.785398 => (/ (* 2 pi) 8)
+
+// trans_combine: (T (T ?p (M ?s ?r ?x1 ?y1)) (M 1 0 ?x2 ?y2)) => (T ?p (M ?s ?r (+ ?x1 ?x2) (+ ?y1 ?y2)))
+// scale_combine: (T (T ?p (M ?s1 ?r ?x ?y)) (M ?s2 ?r ?x ?y)) => (T ?p (M (* ?s1 ?s2) ?r ?x ?y)))
+// 
+// scale_trans_interchange: (T (T ?p (M 1 0 ?x ?y)) (M ?s 0 0 0)) => (T (T ?p (M ?s 0 0 0)) (M 1 0 (* ?x ?s) (* ?y ?s)))
+// trans_scale_interchange: (T (T ?p (M ?s 0 0 0)) (M 1 0 ?x ?y)) => (T (T ?p (M 1 0 (/ ?x ?s) (/ ?y ?s))) (M ?s 0 1 1))  
