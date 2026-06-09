@@ -16,13 +16,13 @@ fn fixtures_present() -> bool {
 }
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
-    let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default());
+    let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), Weights::default());
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
     smc::smc(data, args, &mut rng)
 }
 
 fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
-    let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default());
+    let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), Weights::default());
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
     smc::smc(data, args, &mut rng)
 }
