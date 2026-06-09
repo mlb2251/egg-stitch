@@ -709,24 +709,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // Per leaf: has some match witnessed it at spin-depth ≤ cap?
         let mut satisfied = vec![false; leaves.len()];
         let mut depth_to = vec![0usize; n];
-        // Exact fallback. The product fits the budget (checked above), so a full
-        // lazy scan is affordable; it prunes if a leaf is buried, else keeps via
-        // the early-exit once every leaf has a shallow witness.
+        // Exact fallback. The total product fits the budget (checked above), so
+        // materialising each match's substitutions is affordable; we scan them,
+        // pruning if a leaf is buried and keeping (via early-exit) once every
+        // leaf has a shallow witness.
         for m in &self.matches {
-            // Iterate this match's substitution product *lazily* — an odometer
-            // over the factors' rows scattered into `subst` by slot — so the
-            // early-exit below can stop at the first satisfying subst without
-            // materialising the whole product.
-            let arity = m.arity();
-            let mut subst = vec![Id::from(0); arity];
-            let nf = m.factors.len();
-            let mut ridx = vec![0usize; nf];
-            for f in &m.factors {
-                for (p, &slot) in f.slots.iter().enumerate() {
-                    subst[slot] = f.rows[0][p];
-                }
-            }
-            loop {
+            for subst in m.all_substs() {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, &subst, &shared.egraph, &mut ec);
                 // `depth_to[i]` = self-loop count on the root→`i` path (inclusive).
                 // `RevExpr` keeps a node before its children, so a low→high pass
@@ -746,26 +734,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if satisfied.iter().all(|&b| b) {
                     return true; // every leaf has a shallow witness — verdict locked
-                }
-                // Advance the odometer, updating only the changed factor's columns.
-                let mut carry = 0;
-                while carry < nf {
-                    ridx[carry] += 1;
-                    let f = &m.factors[carry];
-                    if ridx[carry] < f.rows.len() {
-                        for (p, &slot) in f.slots.iter().enumerate() {
-                            subst[slot] = f.rows[ridx[carry]][p];
-                        }
-                        break;
-                    }
-                    ridx[carry] = 0;
-                    for (p, &slot) in f.slots.iter().enumerate() {
-                        subst[slot] = f.rows[0][p];
-                    }
-                    carry += 1;
-                }
-                if carry == nf {
-                    break; // exhausted this match's product
                 }
             }
         }
