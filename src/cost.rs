@@ -1,6 +1,6 @@
 use crate::candidates::enumerate_candidates;
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
-use crate::matching::{Factor, MatchAtEClass};
+use crate::matching::{Factor, MatchAtEClass, factored_min};
 use crate::pattern::Pattern;
 use crate::search::SearchState;
 use egg::{CostFunction, Id, Language, RecExpr};
@@ -381,7 +381,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
                 wrap + sizes.get(v)
             };
             // Separable min over a factor list: stub + Σfactors (min over rows of Σslots).
-            let min_over = |factors: &[Factor]| -> i64 { stub_size + factors.iter().map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&k, &v)| arg_cost(k, v)).sum::<i64>()).min().expect("factor rows are non-empty")).sum::<i64>() };
+            let min_over = |factors: &[Factor]| -> i64 { stub_size + factored_min(factors, arg_cost) };
             let rewrite_size = match &sizes.analysis.kept {
                 KeptArgs::AllFactored => Some(min_over(&sizes.analysis.search_state.matches[i].factors)),
                 KeptArgs::Filtered(per) => per[i].as_deref().map(min_over),
@@ -586,10 +586,8 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
             // Only frozen slots (`k < frozen`) contribute; their arg sizes are
             // additively separable, so the min over the product factors into a
             // sum of per-factor minima (factors with no frozen slot add 0).
-            let mut rewrite_size = stub_size;
-            for f in &sizes.analysis.search_state.matches[i].factors {
-                rewrite_size += f.rows.iter().map(|row| f.slots.iter().zip(row).filter(|&(&k, _)| k < frozen).map(|(_, &v)| sizes.get(sizes.egraph.find(v))).sum::<i64>()).min().expect("factor rows are non-empty");
-            }
+            let factors = &sizes.analysis.search_state.matches[i].factors;
+            let rewrite_size = stub_size + factored_min(factors, |k, v| if k < frozen { sizes.get(sizes.egraph.find(v)) } else { 0 });
             best = best.min(rewrite_size);
         }
         best

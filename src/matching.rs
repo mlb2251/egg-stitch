@@ -195,6 +195,18 @@ impl MatchAtEClass {
     }
 }
 
+/// Separable minimum of an additive per-slot cost over a factored substitution
+/// set: `Σ over factors of (min over that factor's rows of Σ over its slots of
+/// cost(slot, value))`. Since the cost is additive across slots, this equals the
+/// minimum total cost over the full cartesian product — computed without
+/// materialising it. Factors are non-empty, so every `min` is defined.
+pub fn factored_min(factors: &[Factor], cost: impl Fn(usize, Id) -> i64) -> i64 {
+    factors
+        .iter()
+        .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&k, &v)| cost(k, v)).sum::<i64>()).min().expect("factor rows are non-empty"))
+        .sum()
+}
+
 /// Materialises the cartesian product of `factors` as flat slot-indexed
 /// substitutions. The factors' slots must partition `0..Σ|slots|`.
 pub fn factors_product(factors: &[Factor]) -> Vec<Vec<Id>> {
