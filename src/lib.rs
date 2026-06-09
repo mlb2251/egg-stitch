@@ -21,7 +21,6 @@ pub mod smc;
 
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
-use egg::Language;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -53,6 +52,13 @@ pub struct Args {
     /// Path to rewrite rules file.
     #[arg(short, long)]
     pub rules: Option<String>,
+
+    /// Apply DSRs (rewrite rules) only when building the initial egraph, not
+    /// during search. With this set, the initial egraph is normalized by the
+    /// rules, its min-term is extracted, and a fresh rule-free egraph is rebuilt
+    /// from that min-term for the actual search (and between abstractions).
+    #[arg(long, default_value_t = false)]
+    pub only_use_dsrs_at_start: bool,
 
     /// Follow pattern to constrain particle expansion.
     #[arg(short, long)]
@@ -267,7 +273,10 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                     .sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, args.rules.as_deref());
+                // With `--only-use-dsrs-at-start` the rules are not re-applied to
+                // the fresh egraph between abstractions.
+                let rule_file = if args.only_use_dsrs_at_start { None } else { args.rules.as_deref() };
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file);
 
                 // `best_cost` is the search's score for this iteration: rewritten
                 // corpus + this abstraction's body. Earlier iterations rewrote the
@@ -334,9 +343,7 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { egraph, root } = data;
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
-    let extractor = egg::Extractor::new(&egraph, cost::WeightedSize { weights: egraph.analysis.weights });
-    let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
-    let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
+    let programs = io::extract_programs::<F::Apply<O>>(&egraph, root);
     let weights = egraph.analysis.weights;
     let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
     (fresh, programs)
