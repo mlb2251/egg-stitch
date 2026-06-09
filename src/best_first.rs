@@ -9,7 +9,7 @@ use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, comp
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
-use crate::search::{SearchState, SeenTracker, SuccessorEnum, setup_search};
+use crate::search::{SearchState, SeenTracker, SuccessorEnum, remove_exceeding_wrap_nesting, setup_search};
 
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -194,10 +194,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         }
 
         let parent_depth = nodes[node_id].depth;
-        let successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
+        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
+
+        remove_exceeding_wrap_nesting(&mut successors, &shared, args.max_wrap_nesting.0, |c| c);
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow

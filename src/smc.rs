@@ -7,7 +7,7 @@ use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::math::logaddexp;
 use crate::pattern::Pattern;
-use crate::search::{Action, SearchState, SuccessorEnum, setup_search};
+use crate::search::{Action, SearchState, SuccessorEnum, remove_exceeding_wrap_nesting, setup_search};
 use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
@@ -113,11 +113,12 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             for _ in 0..mult {
                 counts[weighted_choice(&acc, rng)] += 1;
             }
-            for ((action, _), count) in actions.into_iter().zip(counts) {
-                if count > 0 {
-                    let child = state.apply_action(&action, &shared);
-                    dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
-                }
+            // Materialise the sampled children with their counts, then gate the
+            // batch via the shared wrap-nesting filter before deduping survivors.
+            let mut children: Vec<(SearchState<F, O>, usize)> = actions.into_iter().zip(counts).filter(|(_, count)| *count > 0).map(|((action, _), count)| (state.apply_action(&action, &shared), count)).collect();
+            remove_exceeding_wrap_nesting(&mut children, &shared, args.max_wrap_nesting.0, |(c, _)| c);
+            for (child, count) in children {
+                dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
             }
         }
         drop(dedup);

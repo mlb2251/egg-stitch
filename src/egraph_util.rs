@@ -4,8 +4,83 @@
 //! the search state.
 
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
+use crate::matching::Subst;
 use egg::{Id, Language};
 use rustc_hash::{FxHashMap, FxHashSet};
+
+/// True iff the e-graph contains a cycle — a class reachable from itself by
+/// following enode children.
+pub fn egraph_has_cycle<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
+    // Iterative DFS with white/gray/black coloring over canonical class ids; a back
+    // edge (an edge into a gray ancestor still on the stack) means a cycle. Adjacency
+    // is the union of each class's enodes' (canonicalized) children.
+    let mut adj: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
+    for class in egraph.classes() {
+        let succ = adj.entry(egraph.find(class.id)).or_default();
+        for node in &class.nodes {
+            succ.extend(node.children().iter().map(|&c| egraph.find(c)));
+        }
+    }
+    #[derive(Clone, Copy, PartialEq)]
+    enum Color {
+        Gray,
+        Black,
+    }
+    let mut color: FxHashMap<Id, Color> = FxHashMap::default();
+    let starts: Vec<Id> = adj.keys().copied().collect();
+    for start in starts {
+        if color.contains_key(&start) {
+            continue;
+        }
+        color.insert(start, Color::Gray);
+        let mut stack: Vec<(Id, usize)> = vec![(start, 0)];
+        while let Some(&(id, idx)) = stack.last() {
+            let succs = &adj[&id];
+            if idx < succs.len() {
+                stack.last_mut().unwrap().1 += 1;
+                let next = succs[idx];
+                match color.get(&next).copied() {
+                    Some(Color::Gray) => return true, // back edge ⇒ cycle
+                    Some(Color::Black) => {}
+                    None => {
+                        color.insert(next, Color::Gray);
+                        stack.push((next, 0));
+                    }
+                }
+            } else {
+                color.insert(id, Color::Black);
+                stack.pop();
+            }
+        }
+    }
+    false
+}
+
+/// Fills `ec[i]` with `ec_σ(i)` — the e-class the subpattern at node `i` denotes
+/// under the substitution `subst = σ`, in the paper's notation:
+///
+///   ec_σ(?v)         = σ(v)                              (a `Var(k)` leaf)
+///   ec_σ(op(i₁..iₖ)) = lookup_G(op(ec_σ(i₁)..ec_σ(iₖ)))  (interior node)
+///
+/// where `lookup_G` returns `⊥` (`None`) when the composite enode isn't
+/// hash-consed; `⊥` then propagates upward.
+///
+/// - `pos_to_var[i]` is the metavariable index of node `i` if it is a `Var` leaf,
+///   or `usize::MAX` otherwise.
+/// - `ec` must be ≥ `nodes.len()` long.
+pub fn compute_eclasses_for_pattern_nodes<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], pos_to_var: &[usize], subst: &Subst, egraph: &StitchEgraph<F::Apply<O>>, ec: &mut [Option<Id>]) {
+    for i in (0..nodes.len()).rev() {
+        ec[i] = if pos_to_var[i] != usize::MAX {
+            Some(egraph.find(subst.vars[pos_to_var[i]]))
+        } else {
+            let disc = F::map_discriminant(nodes[i].discriminant(), |ov| match ov {
+                OpWithVar::Node(o) => o,
+                OpWithVar::Var(_) => unreachable!("var leaf handled via pos_to_var"),
+            });
+            nodes[i].children().iter().map(|&c| ec[usize::from(c)]).collect::<Option<Vec<Id>>>().and_then(|kids| egraph.lookup(F::make(disc, kids)))
+        };
+    }
+}
 
 /// Walks `eclass` picking the size-minimal enode at each step (same cost
 /// rule as `extract_root_size`: intrinsic node weight + sum of child eclass
