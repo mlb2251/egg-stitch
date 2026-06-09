@@ -21,7 +21,6 @@ pub mod smc;
 
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
-use egg::Language;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
