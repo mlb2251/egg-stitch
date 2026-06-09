@@ -5,11 +5,13 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::{Duration, Instant};
 
+use crate::canonical::CanonicalChecker;
 use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, compute_cost_and_select, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::search::{SearchState, SeenTracker, SuccessorEnum, remove_exceeding_wrap_nesting, setup_search};
+use egg::RecExpr;
 
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -134,6 +136,21 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
 
+    // Canonical-form seen-set: re-parse the rule file (if any) under the
+    // pattern language (F::Apply<OpWithVar<O>>) so we can compute, for each
+    // candidate pattern, the canonical extraction of its eclass under rule
+    // saturation. Patterns sharing a canonical key are equivalent under the
+    // rules, so we dedupe by that key (alongside the syntactic SeenTracker
+    // pre-filter). Empty rule list → canonical key == pattern serialization
+    // and this set adds no real deduplication.
+    let pattern_rules: crate::canonical::PatternRules<F, O> = match args.rules.as_deref() {
+        Some(path) => crate::io::from_file(path, &shared.egraph.analysis.weights).expect("failed to re-parse rules under pattern language for canonical seen-set"),
+        None => Vec::new(),
+    };
+    let mut canonical_checker: CanonicalChecker<F, O> = CanonicalChecker::new(pattern_rules, shared.egraph.analysis.weights);
+    let mut canonical_seen: rustc_hash::FxHashMap<u64, usize> = rustc_hash::FxHashMap::default();
+    let mut canonical_hits: usize = 0;
+
     nodes.push(Node {
         parent: None,
         state: initial_state.clone(),
@@ -145,6 +162,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
         s.check_and_insert(initial_state.pattern.clone(), initial_state.frozen_count.unwrap_or(0));
+    }
+    if !canonical_checker.trivial() {
+        let initial_recexpr: RecExpr<_> = initial_state.pattern.pattern.clone().into();
+        canonical_seen.insert(canonical_checker.canonical_key(&initial_recexpr), initial_state.frozen_count.unwrap_or(0));
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -230,6 +251,26 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 PruneResult::Keep(lb) => Some(lb),
                 PruneResult::Disabled => None,
             };
+
+            // Canonical-form seen-set: dedupe patterns equivalent under the
+            // rewrite rules. Mirrors SeenTracker's frozen-count semantics —
+            // a prior visit at lower-or-equal frozen_count subsumes this one.
+            // Placed *after* the cheap pruners (useless-frozen, lower-bound)
+            // since per-pattern saturation is the most expensive check here.
+            if !canonical_checker.trivial() {
+                let recexpr: RecExpr<_> = child_state.pattern.pattern.clone().into();
+                let key = canonical_checker.canonical_key(&recexpr);
+                let frozen = child_state.frozen_count.unwrap_or(0);
+                match canonical_seen.get(&key) {
+                    Some(&existing) if existing <= frozen => {
+                        canonical_hits += 1;
+                        continue;
+                    }
+                    _ => {
+                        canonical_seen.insert(key, frozen);
+                    }
+                }
+            }
 
             let cost_t = Instant::now();
             // Capture the selection here so updates to `best` can stash it
@@ -330,6 +371,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
+    if !canonical_checker.trivial() {
+        println!("{} {} {}", "canonical-seen hits:".dimmed(), canonical_hits.to_string().bold(), format!("(memo hits: {})", canonical_checker.memo_hits).dimmed());
+    }
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
