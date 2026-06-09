@@ -4,7 +4,6 @@
 //! the search state.
 
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
-use crate::matching::Subst;
 use egg::{Id, Language};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -68,10 +67,10 @@ pub fn egraph_has_cycle<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> bool {
 /// - `pos_to_var[i]` is the metavariable index of node `i` if it is a `Var` leaf,
 ///   or `usize::MAX` otherwise.
 /// - `ec` must be ≥ `nodes.len()` long.
-pub fn compute_eclasses_for_pattern_nodes<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], pos_to_var: &[usize], subst: &Subst, egraph: &StitchEgraph<F::Apply<O>>, ec: &mut [Option<Id>]) {
+pub fn compute_eclasses_for_pattern_nodes<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], pos_to_var: &[usize], subst: &[Id], egraph: &StitchEgraph<F::Apply<O>>, ec: &mut [Option<Id>]) {
     for i in (0..nodes.len()).rev() {
         ec[i] = if pos_to_var[i] != usize::MAX {
-            Some(egraph.find(subst.vars[pos_to_var[i]]))
+            Some(egraph.find(subst[pos_to_var[i]]))
         } else {
             let disc = F::map_discriminant(nodes[i].discriminant(), |ov| match ov {
                 OpWithVar::Node(o) => o,

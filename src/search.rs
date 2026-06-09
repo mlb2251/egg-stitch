@@ -589,8 +589,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // Per leaf: has some match witnessed it at spin-depth ≤ cap?
         let mut satisfied = vec![false; leaves.len()];
         for m in &self.matches {
-            for s in &m.substs {
-                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, s, &shared.egraph, &mut ec);
+            for s in m.all_substs() {
+                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, &s, &shared.egraph, &mut ec);
                 // `depth_to[i]` = self-loop count on the root→`i` path (inclusive).
                 // `RevExpr` keeps a node before its children, so a low→high pass
                 // propagates each node's count down to its children.
