@@ -5,8 +5,16 @@ use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::time::{Duration, Instant};
+
+/// Largest substitution product the wrap-nesting gate's exact fallback will
+/// scan. A prune requires scanning the *entire* product, so a state with more
+/// than this many substs can only ever be kept by the scan — we detect that
+/// up front from the cached count and keep it without scanning at all (see
+/// `within_wrap_nesting_cap`). Comfortably covers realistic small-product
+/// states while bounding the worst case on dense e-graphs.
+const GATE_SCAN_BUDGET: usize = 10_000;
 
 /// Tracks already-explored canonical patterns to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
@@ -553,6 +561,101 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         pos_to_var
     }
 
+    /// Exact-on-confirmed-data lower bound: returns `true` when some leaf is
+    /// *provably* buried (has more than `cap` ancestors that self-loop in **every**
+    /// subst) — so the state can be pruned without scanning the product.
+    ///
+    /// A node "always self-loops" if it denotes the same e-class as one of its
+    /// children for *every* substitution. We detect that during a per-node
+    /// e-class-set pass: each node's possible-e-class set is the lookups of its
+    /// children's e-class sets (siblings in other factors enter only as their
+    /// deduped sets — independent, so this is the cartesian of the sets, not the
+    /// `∏` of factor rows); while enumerating those combinations we check whether
+    /// the result always equals one fixed child. Variable leaves take the union
+    /// of their column values over all matches, and children are combined
+    /// independently — both *over*-approximate the real substitution set, which
+    /// only makes "always" *harder* to satisfy, so a positive result is sound.
+    /// Nodes whose set enumeration would exceed the budget are left undetermined
+    /// (never counted), keeping this a sound under-approximation of burial.
+    fn provably_buried(&self, nodes: &[F::Apply<OpWithVar<O>>], descendants: &[Vec<usize>], pos_to_var: &[usize], cap: usize, shared: &SharedSearchData<F, O>) -> bool {
+        const SET_BUDGET: usize = 4096;
+        let n = nodes.len();
+        // Per-variable denotable e-classes: distinct column values over all
+        // factors of all matches (cheap — proportional to stored rows).
+        let mut var_ec: Vec<FxHashSet<Id>> = vec![FxHashSet::default(); self.pattern.vars.len()];
+        for m in &self.matches {
+            for f in &m.factors {
+                for (pos, &slot) in f.slots.iter().enumerate() {
+                    for row in &f.rows {
+                        var_ec[slot].insert(shared.egraph.find(row[pos]));
+                    }
+                }
+            }
+        }
+        let mut set: Vec<Vec<Id>> = vec![Vec::new(); n]; // possible e-classes (sorted-unique)
+        let mut known = vec![true; n]; // set fully computed (budget not blown)
+        let mut always_loop = vec![false; n]; // node == some fixed child in every subst
+        for i in (0..n).rev() {
+            if pos_to_var[i] != usize::MAX {
+                set[i] = var_ec[pos_to_var[i]].iter().copied().collect();
+                continue;
+            }
+            let kids = nodes[i].children();
+            if kids.iter().any(|&c| !known[usize::from(c)]) {
+                known[i] = false;
+                continue;
+            }
+            let child_sets: Vec<&Vec<Id>> = kids.iter().map(|&c| &set[usize::from(c)]).collect();
+            if child_sets.iter().any(|v| v.is_empty()) {
+                continue; // denotes nothing → empty set, never a self-loop
+            }
+            if child_sets.iter().map(|v| v.len()).product::<usize>() > SET_BUDGET {
+                known[i] = false;
+                continue;
+            }
+            let disc = F::map_discriminant(nodes[i].discriminant(), |ov| match ov {
+                OpWithVar::Node(o) => o,
+                OpWithVar::Var(_) => unreachable!("var leaf handled via pos_to_var"),
+            });
+            let mut sset: FxHashSet<Id> = FxHashSet::default();
+            let mut matched = vec![true; kids.len()]; // child j equals the lookup in every combo so far
+            let mut idx = vec![0usize; kids.len()];
+            loop {
+                let combo: Vec<Id> = idx.iter().enumerate().map(|(j, &ix)| child_sets[j][ix]).collect();
+                match shared.egraph.lookup(F::make(disc.clone(), combo.clone())) {
+                    Some(e) => {
+                        sset.insert(e);
+                        for (j, &cj) in combo.iter().enumerate() {
+                            if cj != e {
+                                matched[j] = false;
+                            }
+                        }
+                    }
+                    None => matched.iter_mut().for_each(|x| *x = false), // no e-class ⇒ not a self-loop here
+                }
+                let mut j = 0;
+                while j < kids.len() {
+                    idx[j] += 1;
+                    if idx[j] < child_sets[j].len() {
+                        break;
+                    }
+                    idx[j] = 0;
+                    j += 1;
+                }
+                if j == kids.len() {
+                    break;
+                }
+            }
+            set[i] = {
+                let mut v: Vec<Id> = sset.into_iter().collect();
+                v.sort_unstable();
+                v
+            };
+            always_loop[i] = matched.iter().any(|&b| b);
+        }
+        (0..n).filter(|&i| nodes[i].children().is_empty()).any(|leaf| (0..n).filter(|&a| always_loop[a] && descendants[a].contains(&leaf)).count() > cap)
+    }
+
     /// Search-frontier wrap-nesting gate (`--max-wrap-nesting`): true iff every
     /// pattern *leaf* — each variable or constant occurrence — has some match
     /// where its stacked-self-loop (spin) depth is within `cap` —
@@ -582,19 +685,53 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         if (0..n).all(|i| descendants[i].is_empty()) {
             return true; // single leaf: nothing above it can bury it
         }
-        // Childless nodes are the tracked leaves (variable and constant alike).
         let leaves: Vec<usize> = (0..n).filter(|&i| nodes[i].children().is_empty()).collect();
         let pos_to_var = self.pos_to_var();
+        // Cheap, scan-free pre-prune: if some leaf is provably buried (an ancestor
+        // self-loops in every subst, detected from per-node e-class sets), drop it
+        // now. This catches almost all prunes — including huge-product ones the
+        // exact scan below would have to abandon to its budget — but it's a sound
+        // *lower bound* (its set approximation can miss burial), so a negative
+        // result falls through to the exact scan rather than keeping the state.
+        if self.provably_buried(nodes, &descendants, &pos_to_var, cap, shared) {
+            return false;
+        }
+        // A prune requires scanning the *entire* product, so any state whose
+        // product exceeds the budget can only ever be kept by the scan below —
+        // detect that from the cached count and keep it now, never scanning.
+        // (Exactly equivalent to letting the scan run and hit the budget, but
+        // without the wasted partial walk.) The product is dominated, so leaving
+        // it in the frontier is harmless.
+        if self.num_substs > GATE_SCAN_BUDGET {
+            return true;
+        }
         let mut ec: Vec<Option<Id>> = vec![None; n];
         // Per leaf: has some match witnessed it at spin-depth ≤ cap?
         let mut satisfied = vec![false; leaves.len()];
+        let mut depth_to = vec![0usize; n];
+        // Exact fallback. The product fits the budget (checked above), so a full
+        // lazy scan is affordable; it prunes if a leaf is buried, else keeps via
+        // the early-exit once every leaf has a shallow witness.
         for m in &self.matches {
-            for s in m.all_substs() {
-                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, &s, &shared.egraph, &mut ec);
+            // Iterate this match's substitution product *lazily* — an odometer
+            // over the factors' rows scattered into `subst` by slot — so the
+            // early-exit below can stop at the first satisfying subst without
+            // materialising the whole product.
+            let arity = m.arity();
+            let mut subst = vec![Id::from(0); arity];
+            let nf = m.factors.len();
+            let mut ridx = vec![0usize; nf];
+            for f in &m.factors {
+                for (p, &slot) in f.slots.iter().enumerate() {
+                    subst[slot] = f.rows[0][p];
+                }
+            }
+            loop {
+                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, &subst, &shared.egraph, &mut ec);
                 // `depth_to[i]` = self-loop count on the root→`i` path (inclusive).
                 // `RevExpr` keeps a node before its children, so a low→high pass
                 // propagates each node's count down to its children.
-                let mut depth_to = vec![0usize; n];
+                depth_to.iter_mut().for_each(|d| *d = 0);
                 for i in 0..n {
                     let is_loop = ec[i].is_some() && descendants[i].iter().any(|&d| ec[d] == ec[i]);
                     depth_to[i] += usize::from(is_loop);
@@ -609,6 +746,26 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if satisfied.iter().all(|&b| b) {
                     return true; // every leaf has a shallow witness — verdict locked
+                }
+                // Advance the odometer, updating only the changed factor's columns.
+                let mut carry = 0;
+                while carry < nf {
+                    ridx[carry] += 1;
+                    let f = &m.factors[carry];
+                    if ridx[carry] < f.rows.len() {
+                        for (p, &slot) in f.slots.iter().enumerate() {
+                            subst[slot] = f.rows[ridx[carry]][p];
+                        }
+                        break;
+                    }
+                    ridx[carry] = 0;
+                    for (p, &slot) in f.slots.iter().enumerate() {
+                        subst[slot] = f.rows[0][p];
+                    }
+                    carry += 1;
+                }
+                if carry == nf {
+                    break; // exhausted this match's product
                 }
             }
         }
@@ -655,7 +812,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
-        // ABLATION: precompute removed; inline locate_slot/num_substs below.
         // Weight each (match, subst) contribution by how often that match's
         // root e-class appears in the fully-expanded corpus, so popular
         // root-positions sway the action distribution proportionally to the
