@@ -473,8 +473,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Applies an action to `self` and returns the resulting child without
-    /// cloning the parent's matches/substs (only the surviving filtered
-    /// substs get allocated in the child — the parent's `Vec<Subst>` data is
+    /// cloning the parent's matches (only the surviving transformed factor
+    /// rows get allocated in the child — the parent's `Vec<Factor>` data is
     /// not cloned-then-discarded). The pattern is cloned and mutated in
     /// place; `frozen_count` is recomputed inline.
     /// Used by best-first and by SMC after sampling so we don't materialise

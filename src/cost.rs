@@ -318,7 +318,7 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
 }
 
 /// Reusable index map: match-root eclass → index into `search_state.matches`.
-/// We store an index (not a `&Vec<Subst>`) so the map is `'static`-friendly and can
+/// We store an index (not a `&MatchAtEClass`) so the map is `'static`-friendly and can
 /// be reused across calls bound to different `SearchState`s.
 #[derive(Default)]
 pub struct RewriteScratch {

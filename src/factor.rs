@@ -205,3 +205,141 @@ pub fn rebuild_factor(slots: Vec<usize>, src_rows: &[Vec<Id>], mut build: impl F
     }
     Some(Factor { slots, rows }.decompose())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Builds a row of `Id`s from `u32` values.
+    fn ids(vs: &[u32]) -> Vec<Id> {
+        vs.iter().map(|&v| Id::from(v as usize)).collect()
+    }
+
+    /// Returns each factor as `(slots, rows-as-u32)` for order-independent assertions.
+    fn shape(factors: &[Factor]) -> Vec<(Vec<usize>, Vec<Vec<u32>>)> {
+        factors.iter().map(|f| (f.slots.clone(), f.rows.iter().map(|r| r.iter().map(|&v| usize::from(v) as u32).collect()).collect())).collect()
+    }
+
+    /// `Factor::new` sorts rows, deduplicates them, and rejects an empty set.
+    #[test]
+    fn new_sorts_dedups_and_rejects_empty() {
+        let f = Factor::new(vec![0], vec![ids(&[2]), ids(&[1]), ids(&[2])]).unwrap();
+        assert_eq!(shape(&[f]), vec![(vec![0], vec![vec![1], vec![2]])]);
+        assert!(Factor::new(vec![0], vec![]).is_none());
+    }
+
+    /// `pos_of` finds a slot's column index and reports absence.
+    #[test]
+    fn pos_of_locates_slots() {
+        let f = Factor::new(vec![1, 3, 5], vec![ids(&[0, 0, 0])]).unwrap();
+        assert_eq!(f.pos_of(3), Some(1));
+        assert_eq!(f.pos_of(2), None);
+    }
+
+    /// Small factors (`< DECOMPOSE_MIN_ROWS`) are kept whole — the scan cost
+    /// wouldn't repay itself, and correctness is independent of granularity.
+    #[test]
+    fn decompose_keeps_small_factor_whole() {
+        let rows: Vec<Vec<Id>> = (0..8).map(|a| ids(&[a, a + 100])).collect();
+        let out = Factor::new(vec![0, 1], rows).unwrap().decompose();
+        assert_eq!(out.len(), 1);
+    }
+
+    /// A genuine product of two independent columns splits into the finest
+    /// single-slot factors.
+    #[test]
+    fn decompose_splits_independent_columns() {
+        let rows: Vec<Vec<Id>> = (0..8).flat_map(|a| (0..8).map(move |b| ids(&[a, b]))).collect();
+        let out = Factor::new(vec![0, 1], rows).unwrap().decompose();
+        let cols: Vec<Vec<u32>> = (0..8).map(|x| vec![x]).collect();
+        assert_eq!(shape(&out), vec![(vec![0], cols.clone()), (vec![1], cols)]);
+    }
+
+    /// A relation that's a product of one coupled block and one free column
+    /// splits into exactly those two blocks.
+    #[test]
+    fn decompose_separates_coupled_block_from_free_column() {
+        // slot0 == slot1 (a coupled diagonal), slot2 free over 0..8.
+        let rows: Vec<Vec<Id>> = (0..8).flat_map(|a| (0..8).map(move |b| ids(&[a, a, b]))).collect();
+        let out = Factor::new(vec![0, 1, 2], rows).unwrap().decompose();
+        let diag: Vec<Vec<u32>> = (0..8).map(|a| vec![a, a]).collect();
+        let free: Vec<Vec<u32>> = (0..8).map(|b| vec![b]).collect();
+        assert_eq!(shape(&out), vec![(vec![0, 1], diag), (vec![2], free)]);
+    }
+
+    /// A fully-coupled relation (the diagonal) above the threshold stays whole:
+    /// every pair is entangled, so the single block is kept.
+    #[test]
+    fn decompose_keeps_entangled_relation_whole() {
+        let rows: Vec<Vec<Id>> = (0..50).map(|a| ids(&[a, a])).collect();
+        let out = Factor::new(vec![0, 1], rows).unwrap().decompose();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].slots, vec![0, 1]);
+    }
+
+    /// Higher-order entanglement the pairwise scan can't see: `c = (a+b) mod 8`
+    /// makes every *pair* of columns independent (each takes all 64 combos), yet
+    /// the triple is not a product. The exact `∏|proj| == nrows` check rejects
+    /// the bogus 3-way split and keeps the factor whole.
+    #[test]
+    fn decompose_rejects_higher_order_split_via_exact_check() {
+        let rows: Vec<Vec<Id>> = (0..8).flat_map(|a| (0..8).map(move |b| ids(&[a, b, (a + b) % 8]))).collect();
+        assert_eq!(rows.len(), 64);
+        let out = Factor::new(vec![0, 1, 2], rows).unwrap().decompose();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].slots, vec![0, 1, 2]);
+    }
+
+    /// `factored_min` is the separable minimum: `Σ over factors of (min row sum)`,
+    /// equal to the min total cost over the full product without materialising it.
+    #[test]
+    fn factored_min_is_separable() {
+        let f0 = Factor::new(vec![0], vec![ids(&[3]), ids(&[1]), ids(&[2])]).unwrap();
+        let f1 = Factor::new(vec![1], vec![ids(&[20]), ids(&[10])]).unwrap();
+        // cost(slot, value) = value; min is 1 (slot 0) + 10 (slot 1).
+        assert_eq!(factored_min(&[f0, f1], |_, v| usize::from(v) as i64), 11);
+    }
+
+    /// `factors_product` materialises the cartesian product as flat slot-indexed
+    /// rows; the factors' slots must partition `0..arity`.
+    #[test]
+    fn factors_product_materialises_cartesian() {
+        let f0 = Factor::new(vec![0], vec![ids(&[5]), ids(&[6])]).unwrap();
+        let f1 = Factor::new(vec![1], vec![ids(&[7]), ids(&[8])]).unwrap();
+        let mut got: Vec<Vec<u32>> = factors_product(&[f0, f1]).iter().map(|r| r.iter().map(|&v| usize::from(v) as u32).collect()).collect();
+        got.sort();
+        assert_eq!(got, vec![vec![5, 7], vec![5, 8], vec![6, 7], vec![6, 8]]);
+    }
+
+    /// `factors_product` honours slot positions when factors are out of slot
+    /// order: a factor over slot 2 fills column 2 regardless of factor order.
+    #[test]
+    fn factors_product_places_by_slot_not_factor_order() {
+        let hi = Factor::new(vec![2], vec![ids(&[9])]).unwrap();
+        let lo = Factor::new(vec![0, 1], vec![ids(&[1, 2])]).unwrap();
+        assert_eq!(factors_product(&[hi, lo]), vec![ids(&[1, 2, 9])]);
+    }
+
+    /// `rebuild_factor` maps each source row to zero+ output rows, then
+    /// re-decomposes; here each row fans out to two, staying one factor.
+    #[test]
+    fn rebuild_factor_expands_rows() {
+        let src = vec![ids(&[1]), ids(&[2])];
+        let out = rebuild_factor(vec![0], &src, |row, rows| {
+            rows.push(row.to_vec());
+            rows.push(vec![Id::from(usize::from(row[0]) + 10)]);
+        })
+        .unwrap();
+        // rebuild_factor preserves insertion order (no sort/dedup): each src row
+        // emits itself then its +10 variant, in turn.
+        assert_eq!(shape(&out), vec![(vec![0], vec![vec![1], vec![11], vec![2], vec![12]])]);
+    }
+
+    /// `rebuild_factor` returns `None` when the transform yields no rows, so the
+    /// caller drops the match.
+    #[test]
+    fn rebuild_factor_drops_when_empty() {
+        let src = vec![ids(&[1]), ids(&[2])];
+        assert!(rebuild_factor(vec![0], &src, |_, _| {}).is_none());
+    }
+}
