@@ -29,18 +29,12 @@ add_assoc: (+ ?x (+ ?y ?z)) <=> (+ (+ ?x ?y) ?z)
 mul_assoc: (* ?x (* ?y ?z)) <=> (* (* ?x ?y) ?z)
 // mul_zero: (* ?x 0) => 0
 
-// natural numbers
-two: 2 <=> (+ 1 1)
-three: 3 <=> (+ 1 2)
-four: 4 <=> (+ 1 3)
-five: 5 <=> (+ 1 4)
-six: 6 <=> (+ 1 5)
-seven: 7 <=> (+ 1 6)
-eight: 8 <=> (+ 1 7)
-
-// folding
-
-halfhalf: (+ 0.5 0.5) => 1
+// natural numbers + folding: `!numbers` collapses `(+ k 1) => k+1` (and folds
+// `(+ 0.5 0.5) => 1`), `!successors` expands `n => (+ 1 (n-1))` so successor-form
+// rules (e.g. repeat_unroll) still fire on literal counts. Together they replace
+// the enumerated `two`..`eight <=>` rules for any count.
+constant_folding: !numbers
+constant_folding: !successors
 
 // half_pi: 1.5708 => (/ (* 2 pi) 4)
 // quarter_pi: 0.785398 => (/ (* 2 pi) 8)
@@ -49,6 +43,4 @@ halfhalf: (+ 0.5 0.5) => 1
 // scale_combine: (T (T ?p (M ?s1 ?r ?x ?y)) (M ?s2 ?r ?x ?y)) => (T ?p (M (* ?s1 ?s2) ?r ?x ?y)))
 // 
 // scale_trans_interchange: (T (T ?p (M 1 0 ?x ?y)) (M ?s 0 0 0)) => (T (T ?p (M ?s 0 0 0)) (M 1 0 (* ?x ?s) (* ?y ?s)))
-// trans_scale_interchange: (T (T ?p (M ?s 0 0 0)) (M 1 0 ?x ?y)) => (T (T ?p (M 1 0 (/ ?x ?s) (/ ?y ?s))) (M ?s 0 1 1))  
-
-constant_folding: !numbers
+// trans_scale_interchange: (T (T ?p (M ?s 0 0 0)) (M 1 0 ?x ?y)) => (T (T ?p (M 1 0 (/ ?x ?s) (/ ?y ?s))) (M ?s 0 1 1))
