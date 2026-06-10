@@ -189,12 +189,19 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
-        if args.verbose {
-            let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared) {
-                Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
-                None => "[forced-expansion=- (no matches)]".to_string(),
-            };
-            println!("{} {} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan(), forced_str.yellow());
+        if args.verbose || args.verbose_forced_expansion {
+            let tag = format!("[expansion {}]", num_expansions);
+            let pat = nodes[node_id].state.pattern.to_string();
+            if args.verbose {
+                println!("{} {} {}", tag.dimmed(), "expanding:".dimmed(), pat.clone().cyan());
+            }
+            if args.verbose_forced_expansion {
+                let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared) {
+                    Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
+                    None => "[forced-expansion=- (no matches)]".to_string(),
+                };
+                println!("{} {} {}", tag.dimmed(), pat.cyan(), forced_str.yellow());
+            }
         }
 
         let parent_depth = nodes[node_id].depth;

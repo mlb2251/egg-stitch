@@ -194,8 +194,8 @@ pub struct Args {
     ///
     /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
     ///
-    /// To turn off this prune, set to `none`. Default 0.
-    #[arg(long = "max-forced-expansion", default_value = "0")]
+    /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
+    #[arg(long = "max-forced-expansion", default_value = "none")]
     pub max_forced_expansion: MaxForcedExpansion,
 
     /// Path to write JSON output.
@@ -209,6 +209,13 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+
+    /// Print each best-first expansion's forced expansion (its argmin value and
+    /// the min-term of the closest-to-minimal match root). Independent of
+    /// `--verbose`; the min-term extraction makes it non-trivial, so it's its own
+    /// flag.
+    #[arg(long = "verbose-forced-expansion", default_value_t = false)]
+    pub verbose_forced_expansion: bool,
 
     /// Selects the language family the pipeline runs over. Patterns/programs/rules
     /// are always written in user-facing flat form; the language layer handles any
