@@ -38,6 +38,22 @@ pub enum SearchKind {
     BestFirst,
 }
 
+/// `--max-forced-expansion` value: a slack bound `Some(k)`, or `none` to disable
+/// the forced-expansion prune entirely.
+#[derive(Clone, Copy, Debug)]
+pub struct MaxForcedExpansion(pub Option<usize>);
+
+impl std::str::FromStr for MaxForcedExpansion {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("none") {
+            Ok(Self(None))
+        } else {
+            s.parse::<usize>().map(|n| Self(Some(n))).map_err(|_| format!("expected a non-negative integer or `none`, got {s:?}"))
+        }
+    }
+}
+
 /// E-graph based program synthesis via SMC.
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -165,12 +181,14 @@ pub struct Args {
 
     /// Prune patterns whose committed skeleton is non-minimal — its "forced
     /// expansion" (matched-form tree cost minus the e-class's minimal extraction
-    /// cost) exceeds this at *every* match site. `Some(k)` keeps only patterns
-    /// matching within `k` of minimal somewhere; `k=0` requires an exactly-minimal
+    /// cost) exceeds this at *every* match site. The cap is in symbols (scaled by
+    /// the language's per-symbol cost). Keeps only patterns matching within `k`
+    /// symbols of minimal somewhere (default `10`); `0` requires an exactly-minimal
     /// witness (e.g. the `+` of `(+ 2 2)` must genuinely exist at some match, not
-    /// just as a rewrite of `4`). A cyclic tower forces infinite expansion. Off when unset.
-    #[arg(long = "max-forced-expansion")]
-    pub max_forced_expansion: Option<usize>,
+    /// just as a rewrite of `4`). A cyclic tower forces infinite expansion. Lower
+    /// to prune harder; pass `none` to disable the prune.
+    #[arg(long = "max-forced-expansion", default_value = "10")]
+    pub max_forced_expansion: MaxForcedExpansion,
 
     /// Path to write JSON output.
     #[arg(short, long)]
