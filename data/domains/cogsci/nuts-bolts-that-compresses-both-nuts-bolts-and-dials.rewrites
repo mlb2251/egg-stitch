@@ -50,3 +50,5 @@ halfhalf: (+ 0.5 0.5) => 1
 // 
 // scale_trans_interchange: (T (T ?p (M 1 0 ?x ?y)) (M ?s 0 0 0)) => (T (T ?p (M ?s 0 0 0)) (M 1 0 (* ?x ?s) (* ?y ?s)))
 // trans_scale_interchange: (T (T ?p (M ?s 0 0 0)) (M 1 0 ?x ?y)) => (T (T ?p (M 1 0 (/ ?x ?s) (/ ?y ?s))) (M ?s 0 1 1))  
+
+constant_folding: !numbers
