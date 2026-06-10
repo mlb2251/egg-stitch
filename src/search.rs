@@ -526,6 +526,103 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
+    /// Minimum over match locations of the pattern's *forced expansion*: how much
+    /// extra structure the committed skeleton (extracting the captured args
+    /// minimally) forces beyond the e-class's own minimal extraction. Zero means
+    /// the pattern matches a genuinely minimal form at some site; a large value
+    /// means it only ever matches non-minimal (rewrite-phantom) forms — e.g.
+    /// matching `4` as `(+ 2 2)` everywhere, or a cyclic tower (infinite).
+    ///
+    /// Factored, so it's `O(Σ|factor|)` with no materialisation: the matched
+    /// form's tree cost is `skeleton + Σ_occ minsize(arg)`, and the min over the
+    /// product of args factors over the (independent) factors. Monotone
+    /// non-decreasing under expand/reuse (a hole forces nothing; committing
+    /// structure only adds non-negative per-node forcing, and substs only shrink),
+    /// so a state above a cap can never drop below it — a sound prune.
+    pub fn forced_expansion_min(&self, shared: &SharedSearchData<F, O>) -> i64 {
+        self.forced_expansion_argmin(shared).map_or(i64::MAX, |(e, _)| e)
+    }
+
+    /// Tree-expanded cost of the pattern's concrete (non-var) skeleton: each node
+    /// weighted by how many times a walk from the root reaches it (its reference
+    /// count), so hash-consed shared subterms count per reference — matching the
+    /// tree-expanded `data.size` baseline. Summing the deduplicated node list
+    /// would undercount sharing (the source of the earlier negative forcing); a
+    /// naive recursive walk would tree-expand and blow up on DAGs. The ref-count
+    /// pass is `O(nodes + edges)` and exact.
+    fn concrete_skeleton_cost(&self, weights: &crate::lang::Weights) -> i64 {
+        let rec: egg::RecExpr<F::Apply<OpWithVar<O>>> = self.pattern.pattern.clone().into();
+        let nodes = rec.as_ref();
+        let n = nodes.len();
+        // Root is the last node; children always precede parents, so a descending
+        // pass has each node's ref count finalised before it is read.
+        let mut refc = vec![0i64; n];
+        refc[n - 1] = 1;
+        for i in (0..n).rev() {
+            let r = refc[i];
+            for &c in nodes[i].children() {
+                refc[usize::from(c)] += r;
+            }
+        }
+        nodes.iter().zip(&refc).filter(|(node, _)| node.discriminant().as_var().is_none()).map(|(node, &r)| node.discriminant().intrinsic_size(weights) as i64 * r).sum()
+    }
+
+    /// True iff some match site has forced expansion ≤ `cap` — the validity test
+    /// used as a prune (`--max-forced-expansion`). Early-exits at the first
+    /// qualifying site, so a valid pattern (the common case) costs about one
+    /// match's worth of work rather than scanning every match.
+    pub fn within_forced_expansion_cap(&self, shared: &SharedSearchData<F, O>, cap: i64) -> bool {
+        let weights = &shared.egraph.analysis.weights;
+        let skel = self.concrete_skeleton_cost(weights);
+        let occ = &self.pattern.var_occurrences;
+        for m in &self.matches {
+            let holes_min: i64 = m
+                .factors
+                .iter()
+                .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&slot, &id)| occ[slot] as i64 * shared.egraph[id].data.size as i64).sum::<i64>()).min().expect("factor rows are non-empty"))
+                .sum();
+            if skel + holes_min - shared.egraph[m.root_eclass].data.size as i64 <= cap {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
+    /// Verbose-diagnostics only.
+    pub fn min_term(&self, shared: &SharedSearchData<F, O>, eclass: Id) -> String {
+        let mut out = Vec::new();
+        let mut memo = rustc_hash::FxHashMap::default();
+        crate::egraph_util::build_size_minimal_extraction::<F, O>(&shared.egraph, eclass, &mut out, &mut memo);
+        let rec: egg::RecExpr<F::Apply<OpWithVar<O>>> = out.into();
+        rec.to_string()
+    }
+
+    /// Like [`Self::forced_expansion_min`] but also returns the match root
+    /// e-class achieving the minimum (the site where the pattern is closest to
+    /// minimal). `None` when the pattern has no matches.
+    pub fn forced_expansion_argmin(&self, shared: &SharedSearchData<F, O>) -> Option<(i64, Id)> {
+        let weights = &shared.egraph.analysis.weights;
+        let skel = self.concrete_skeleton_cost(weights);
+        let occ = &self.pattern.var_occurrences;
+        let mut best: Option<(i64, Id)> = None;
+        for m in &self.matches {
+            // Captured-arg cost, weighted by each slot's occurrence count and
+            // minimised over the factored substitution product.
+            let holes_min: i64 = m
+                .factors
+                .iter()
+                .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&slot, &id)| occ[slot] as i64 * shared.egraph[id].data.size as i64).sum::<i64>()).min().expect("factor rows are non-empty"))
+                .sum();
+            let root_min = shared.egraph[m.root_eclass].data.size as i64;
+            let forced = skel + holes_min - root_min;
+            if best.is_none_or(|(b, _)| forced < b) {
+                best = Some((forced, m.root_eclass));
+            }
+        }
+        best
+    }
+
     /// Returns the enumerable successors of `self`. When dominance pruning
     /// fires, the single dominant child is built and returned via
     /// `SuccessorEnum::Dominant`; otherwise `SuccessorEnum::All` lists every

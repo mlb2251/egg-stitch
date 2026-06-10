@@ -190,14 +190,22 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         expansion_order.push(node_id);
 
         if args.verbose {
-            println!("{} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan());
+            let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared) {
+                Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
+                None => "[forced-expansion=- (no matches)]".to_string(),
+            };
+            println!("{} {} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan(), forced_str.yellow());
         }
 
         let parent_depth = nodes[node_id].depth;
-        let successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
+        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
+
+        if let Some(k) = args.max_forced_expansion {
+            successors.retain(|c| c.within_forced_expansion_cap(&shared, k as i64));
+        }
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow

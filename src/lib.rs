@@ -163,6 +163,15 @@ pub struct Args {
     #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
     pub opt_lower_bound: bool,
 
+    /// Prune patterns whose committed skeleton is non-minimal — its "forced
+    /// expansion" (matched-form tree cost minus the e-class's minimal extraction
+    /// cost) exceeds this at *every* match site. `Some(k)` keeps only patterns
+    /// matching within `k` of minimal somewhere; `k=0` requires an exactly-minimal
+    /// witness (e.g. the `+` of `(+ 2 2)` must genuinely exist at some match, not
+    /// just as a rewrite of `4`). A cyclic tower forces infinite expansion. Off when unset.
+    #[arg(long = "max-forced-expansion")]
+    pub max_forced_expansion: Option<usize>,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
