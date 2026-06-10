@@ -175,6 +175,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut num_expansions: usize = 0;
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
+    let mut gen_time: Duration = Duration::ZERO;
+    let mut filter_time: Duration = Duration::ZERO;
     let mut dominance_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
     let mut useless_frozen_hits: usize = 0;
@@ -219,15 +221,22 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         }
 
         let parent_depth = nodes[node_id].depth;
+        let gen_t = Instant::now();
         let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
+        gen_time += gen_t.elapsed();
 
-        remove_exceeding_wrap_nesting(&mut successors, &shared, args.max_wrap_nesting.0, |c| c);
+        let filter_t = Instant::now();
+        // `--max-excess` subsumes wrap-nesting (a cyclic match has unbounded
+        // excess), so skip the costly subst-scanning wrap-nesting pass when it's on.
         if let Some(k) = args.max_excess {
-            successors.retain(|c| c.minimality_excess_min(&shared) <= k as i64);
+            successors.retain(|c| c.passes_excess_cap(&shared, k as i64));
+        } else {
+            remove_exceeding_wrap_nesting(&mut successors, &shared, args.max_wrap_nesting.0, |c| c);
         }
+        filter_time += filter_t.elapsed();
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow
@@ -383,6 +392,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     }
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
+    println!("{} {}", "successor-gen time:".dimmed(), format!("{:.3}s", gen_time.as_secs_f64()).bold());
+    println!("{} {}", "wrap+excess filter time:".dimmed(), format!("{:.3}s", filter_time.as_secs_f64()).bold());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
     println!("\n{}", "═══ RESULT ═══".green().bold());

@@ -757,14 +757,49 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.minimality_excess_argmin(shared).map_or(i64::MAX, |(e, _)| e)
     }
 
-    /// Tree-expanded cost of the pattern's concrete (non-var) skeleton. Computed
-    /// via `compute_pattern_size` (which walks from the root, counting hash-consed
-    /// subterms once *per reference*) minus the var-leaf placeholders — NOT by
-    /// summing the deduplicated node list, which would undercount shared concrete
-    /// subterms and disagree with the tree-expanded `data.size` baseline.
+    /// Tree-expanded cost of the pattern's concrete (non-var) skeleton: each node
+    /// weighted by how many times a walk from the root reaches it (its reference
+    /// count), so hash-consed shared subterms count per reference — matching the
+    /// tree-expanded `data.size` baseline. Summing the deduplicated node list
+    /// would undercount sharing (the source of the earlier negative excess); a
+    /// naive recursive walk would tree-expand and blow up on DAGs. The ref-count
+    /// pass is `O(nodes + edges)` and exact.
     fn concrete_skeleton_cost(&self, weights: &crate::lang::Weights) -> i64 {
-        let var_placeholder: i64 = self.pattern.var_occurrences.iter().map(|&o| o as i64).sum::<i64>() * weights.sym_var_cost as i64;
-        crate::cost::compute_pattern_size(&self.pattern, weights) as i64 - var_placeholder
+        let rec: egg::RecExpr<F::Apply<OpWithVar<O>>> = self.pattern.pattern.clone().into();
+        let nodes = rec.as_ref();
+        let n = nodes.len();
+        // Root is the last node; children always precede parents, so a descending
+        // pass has each node's ref count finalised before it is read.
+        let mut refc = vec![0i64; n];
+        refc[n - 1] = 1;
+        for i in (0..n).rev() {
+            let r = refc[i];
+            for &c in nodes[i].children() {
+                refc[usize::from(c)] += r;
+            }
+        }
+        nodes.iter().zip(&refc).filter(|(node, _)| node.discriminant().as_var().is_none()).map(|(node, &r)| node.discriminant().intrinsic_size(weights) as i64 * r).sum()
+    }
+
+    /// True iff some match site has minimality excess ≤ `cap` — the validity test
+    /// used as a prune (`--max-excess`). Early-exits at the first qualifying site,
+    /// so a valid pattern (the common case) costs about one match's worth of work
+    /// rather than scanning every match.
+    pub fn passes_excess_cap(&self, shared: &SharedSearchData<F, O>, cap: i64) -> bool {
+        let weights = &shared.egraph.analysis.weights;
+        let skel = self.concrete_skeleton_cost(weights);
+        let occ = &self.pattern.var_occurrences;
+        for m in &self.matches {
+            let holes_min: i64 = m
+                .factors
+                .iter()
+                .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&slot, &id)| occ[slot] as i64 * shared.egraph[id].data.size as i64).sum::<i64>()).min().expect("factor rows are non-empty"))
+                .sum();
+            if skel + holes_min - shared.egraph[m.root_eclass].data.size as i64 <= cap {
+                return true;
+            }
+        }
+        false
     }
 
     /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
