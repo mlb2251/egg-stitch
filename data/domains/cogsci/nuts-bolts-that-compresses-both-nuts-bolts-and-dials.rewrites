@@ -11,7 +11,7 @@ mult_identity_l: (* (M 1 0 0 0) ?m) => ?m
 // do anything, then translate just means we do anything with the additional translation
 // mult_trans_combine: (* (M 1 0 ?x2 ?y2) (M ?s ?r ?x1 ?y1)) => (M ?s ?r (+ ?x1 ?x2) (+ ?y1 ?y2))
 // do anything, then scale just means we do anything with the additional scaling. but the scaling affects the translation as well, so we have to scale the translation by the scaling factor
-mult_scale_combine: (* (M ?s2 ?r ?x1 ?y1) (M ?s1 ?r ?x2 ?y2)) => (M (* ?s1 ?s2) ?r (+ ?x1 (* ?x2 ?s2)) (+ ?y1 (* ?y2 ?s2)))
+mult_scale_combine: (* (M ?s2 0 ?x1 ?y1) (M ?s1 0 ?x2 ?y2)) => (M (* ?s1 ?s2) 0 (+ ?x1 (* ?x2 ?s2)) (+ ?y1 (* ?y2 ?s2)))
 
 // compose operations
 compose_assoc: (C ?x (C ?y ?z)) => (C (C ?x ?y) ?z)
@@ -39,6 +39,8 @@ seven: 7 <=> (+ 1 6)
 eight: 8 <=> (+ 1 7)
 
 // folding
+
+halfhalf: (+ 0.5 0.5) => 1
 
 // half_pi: 1.5708 => (/ (* 2 pi) 4)
 // quarter_pi: 0.785398 => (/ (* 2 pi) 8)
