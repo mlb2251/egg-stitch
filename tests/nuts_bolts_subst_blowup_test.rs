@@ -49,7 +49,37 @@ fn factored_substs_stay_under_memory_cap() {
         .arg("-c")
         .arg(&script)
         .arg(BIN)
-        .args(["--search", "best-first", "--input", INPUT, "--rules", RULES, "--num-abstractions", "1", "--max-arity", "2", "--num-steps", "300"])
+        // Pin `--iter-limit`/`--node-limit` to the saturation bounds this test
+        // was calibrated against (the former hardcoded defaults). The production
+        // defaults are far larger, which would saturate the fixture into a much
+        // bigger egraph and trip the cap on the build alone, independent of how
+        // substitution sets are stored.
+        //
+        // `--no-opt-canonical-seen` pins the search trajectory too: the canonical
+        // seen-set's dedup reorders the best-first frontier, and on this corpus —
+        // engineered to contain patterns with huge cartesian-product subst sets —
+        // that reordering pops a heavy node within the step budget and balloons
+        // memory (~1.5 GB), masking the factored-vs-flat property this test
+        // actually measures. It's a no-op on normal corpora (see canonical.rs).
+        .args([
+            "--search",
+            "best-first",
+            "--input",
+            INPUT,
+            "--rules",
+            RULES,
+            "--num-abstractions",
+            "1",
+            "--max-arity",
+            "2",
+            "--num-steps",
+            "300",
+            "--iter-limit",
+            "10",
+            "--node-limit",
+            "10000",
+            "--no-opt-canonical-seen",
+        ])
         .status()
         .expect("spawn egg-stitch under ulimit");
 

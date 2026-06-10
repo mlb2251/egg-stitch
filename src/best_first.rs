@@ -144,8 +144,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     // pre-filter). Empty rule list → canonical key == pattern serialization
     // and this set adds no real deduplication.
     let pattern_rules: crate::canonical::PatternRules<F, O> = match args.rules.as_deref() {
-        Some(path) => crate::io::from_file(path, &shared.egraph.analysis.weights).expect("failed to re-parse rules under pattern language for canonical seen-set"),
-        None => Vec::new(),
+        Some(path) if args.opt_canonical_seen => crate::io::from_file(path, &shared.egraph.analysis.weights).expect("failed to re-parse rules under pattern language for canonical seen-set"),
+        _ => Vec::new(),
     };
     let mut canonical_checker: CanonicalChecker<F, O> = CanonicalChecker::new(pattern_rules, shared.egraph.analysis.weights);
     let mut canonical_seen: rustc_hash::FxHashMap<u64, usize> = rustc_hash::FxHashMap::default();

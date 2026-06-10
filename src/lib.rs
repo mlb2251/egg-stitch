@@ -79,6 +79,16 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub only_use_dsrs_at_start: bool,
 
+    /// Maximum number of e-saturation iterations when applying rewrite rules to
+    /// the egraph (initial build and between abstractions).
+    #[arg(long, default_value_t = 100)]
+    pub iter_limit: usize,
+
+    /// Maximum number of e-nodes the egraph may grow to during e-saturation
+    /// before the runner stops (initial build and between abstractions).
+    #[arg(long, default_value_t = 50_000_000)]
+    pub node_limit: usize,
+
     /// Follow pattern to constrain particle expansion.
     #[arg(short, long)]
     pub follow: Option<String>,
@@ -148,6 +158,14 @@ pub struct Args {
     /// expansions but cheaper per-expansion overall).
     #[arg(long = "opt-seen", default_value_t = false)]
     pub opt_seen: bool,
+
+    /// Disable the canonical-form seen-set in best-first (on by default when a
+    /// rule file is supplied). It dedupes patterns sharing the rules' AC-arithmetic
+    /// normal form; like `--opt-seen` it costs a clone+hash per successor, so on
+    /// large-frontier corpora it can dominate memory/time. Turn it off for
+    /// memory- or throughput-sensitive runs.
+    #[arg(long = "no-opt-canonical-seen", action = clap::ArgAction::SetFalse)]
+    pub opt_canonical_seen: bool,
 
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
@@ -263,6 +281,10 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let mut final_cost = None;
     let mut final_rewritten: Option<Vec<String>> = None;
     let mut heap_sizes_at_end: Option<Vec<usize>> = None; // best-first frontier size at stop, one per search iteration
+    // (fn name, cumulative corpus+library cost, usage matches in the minimal
+    // corpus, body) after each abstraction, for the end-of-run summary of cost,
+    // cumulative compression, match count, and the abstraction body.
+    let mut summary: Vec<(String, usize, usize, String)> = Vec::new();
 
     let seed = args.seed.unwrap_or_else(|| rand::rng().random());
     println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
@@ -321,7 +343,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 // With `--only-use-dsrs-at-start` the rules are not re-applied to
                 // the fresh egraph between abstractions.
                 let rule_file = if args.only_use_dsrs_at_start { None } else { args.rules.as_deref() };
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file);
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file, args.iter_limit, args.node_limit);
 
                 // `best_cost` is the search's score for this iteration: rewritten
                 // corpus + this abstraction's body. Earlier iterations rewrote the
@@ -329,6 +351,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 // the library and must be added separately.
                 let prev_bodies: usize = library.iter().map(|a: &results::AbstractionResult| a.pattern_size).sum();
                 final_cost = Some(best_cost + prev_bodies);
+                summary.push((fn_name.clone(), best_cost + prev_bodies, usage_matches, body_str.clone()));
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
@@ -350,6 +373,28 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                     break;
                 }
             }
+        }
+    }
+
+    if !summary.is_empty() {
+        // Right-align every number to its column's widest entry so the costs,
+        // ratios, and match counts line up across abstractions. Pad the plain
+        // strings *before* coloring — ANSI escapes would otherwise throw off the
+        // width counts that `format!` uses.
+        let name_w = summary.iter().map(|(n, ..)| n.len() + 1).max().unwrap_or(0);
+        let cost_w = summary.iter().map(|(_, c, ..)| c.to_string().len()).max().unwrap_or(0).max(original_size.to_string().len());
+        let ratio_w = summary.iter().map(|(_, c, ..)| format!("{:.2}x", original_size as f64 / *c as f64).len()).max().unwrap_or(0);
+        let match_w = summary.iter().map(|(.., m, _)| m.to_string().len()).max().unwrap_or(0);
+        println!("\n{}", "═══ LIBRARY SUMMARY ═══".green().bold());
+        println!("{} {}", "initial cost:".dimmed(), format!("{:>cost_w$}", original_size).bold());
+        for (name, cost, matches, body) in &summary {
+            let ratio = original_size as f64 / *cost as f64;
+            let name_s = format!("{:<name_w$}", format!("{name}:"));
+            let cost_s = format!("{cost:>cost_w$}");
+            let ratio_s = format!("{:>ratio_w$}", format!("{ratio:.2}x"));
+            let match_s = format!("{matches:>match_w$}");
+            println!("  {} cost {}  cumulative {}  matches {}", name_s.cyan().bold(), cost_s.dimmed(), ratio_s.green().bold(), match_s.bold(),);
+            println!("    {}", body.dimmed());
         }
     }
 
@@ -385,11 +430,11 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// rules re-applied).
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
-pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
+pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, iter_limit: usize, node_limit: usize) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { egraph, root } = data;
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
     let programs = io::extract_programs::<F::Apply<O>>(&egraph, root);
     let weights = egraph.analysis.weights;
-    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
+    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit);
     (fresh, programs)
 }
