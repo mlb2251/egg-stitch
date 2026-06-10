@@ -179,14 +179,22 @@ pub struct Args {
     #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
     pub opt_lower_bound: bool,
 
-    /// Prune patterns whose committed skeleton is non-minimal — its "forced
-    /// expansion" (matched-form tree cost minus the e-class's minimal extraction
-    /// cost) exceeds this at *every* match site. The cap is in symbols (scaled by
-    /// the language's per-symbol cost). Keeps only patterns matching within `k`
-    /// symbols of minimal somewhere (default `10`); `0` requires an exactly-minimal
-    /// witness (e.g. the `+` of `(+ 2 2)` must genuinely exist at some match, not
-    /// just as a rewrite of `4`). A cyclic tower forces infinite expansion. Lower
-    /// to prune harder; pass `none` to disable the prune.
+    /// Prune patterns which force "expansions" (e.g., 4 -> (+ 4 0)) at *every*
+    /// match site.
+    ///
+    /// Specifically for a match location r of p, let
+    ///     - Cost(r) = min_{t in r} Cost(t)
+    ///     - Cost(r | p) = min_{t in r, t matches p} Cost(t)
+    ///     - ForcedExpansion(r, p) = Cost(r | p) - Cost(r)
+    ///     - ForcedExpansion(p) = min_{r | p matches at r} ForcedExpansion(r, p)
+    /// Each t that matches p matches at some (r, σ), and at this point,
+    ///     Cost(t) = CostWithoutVars(p) + sum_{s in σ} Cost(s)
+    /// As such, we can compute
+    ///     Cost(r | p) = CostWithoutVars(p) + min_{σ | r matches at p with σ} sum_{s in σ} Cost(s)
+    ///
+    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
+    ///
+    /// To turn off this prune, set to `none`. Default 10.
     #[arg(long = "max-forced-expansion", default_value = "10")]
     pub max_forced_expansion: MaxForcedExpansion,
 
