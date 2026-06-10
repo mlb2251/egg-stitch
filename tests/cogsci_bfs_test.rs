@@ -17,6 +17,14 @@
 //! in-repo `data/domains/cogsci/<domain>.rewrites` rule files (copied from
 //! babble's `benchmark-dsrs/drawings.<domain>.rewrites`).
 //!
+//! A third variant pins the `--max-forced-expansion` prune (DSR + cap; tag
+//! `dsr-mfe<cap>`). The cap is chosen so the prune genuinely fires across the
+//! stacked rounds: at `cap = 3` it drops forced-expansion abstractions on
+//! `wheels` and `furniture` (changing the result vs. the uncapped DSR run) while
+//! being a safe no-op on `dials` / `nuts-bolts`. These snapshots are the
+//! regression guard for `within_forced_expansion_cap` — breaking the prune (so
+//! it never fires, or over-fires) shifts these costs off their frozen values.
+//!
 //! To regenerate all fixtures after a legitimate behavior change, run with
 //! `BLESS=1`:
 //!
@@ -39,6 +47,11 @@ const DSR_DIR: &str = "data/domains/cogsci";
 /// the stack: rounds 2 and 3 search the corpus rewritten by the prior round(s).
 const NUM_ABSTRACTIONS: &str = "3";
 
+/// `--max-forced-expansion` cap for the `dsr-mfe` variant, in symbols. Tuned so
+/// the prune fires on at least one domain over the three stacked rounds; see the
+/// module docstring.
+const MFE_CAP: &str = "3";
+
 /// Fixture path for a domain + variant tag (`nodsr` / `dsr`), mirroring the
 /// `data/expected_outputs/<...>` layout used by the other snapshot suites.
 fn expected_path(domain: &str, tag: &str) -> String {
@@ -48,7 +61,7 @@ fn expected_path(domain: &str, tag: &str) -> String {
 /// Runs best-first on a cogsci domain (optionally with DSR rules), writes its
 /// `--output` JSON to a unique temp file, reads it back, and strips the
 /// non-deterministic / bookkeeping fields so the result is a stable snapshot.
-fn run_bfs(domain: &str, rules: Option<&str>, tag: &str) -> Value {
+fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, tag: &str) -> Value {
     let input = format!("data/domains/cogsci/{domain}.json");
     let out = std::env::temp_dir().join(format!("egg-stitch-cogsci-{}-{}-{}.json", std::process::id(), domain, tag));
     let out_str = out.to_str().expect("utf-8 temp path");
@@ -56,6 +69,9 @@ fn run_bfs(domain: &str, rules: Option<&str>, tag: &str) -> Value {
     cmd.args(["--search", "best-first", "--input", &input, "--num-steps", "50000", "--num-abstractions", NUM_ABSTRACTIONS, "--max-arity", "2", "--output", out_str]);
     if let Some(r) = rules {
         cmd.args(["--rules", r]);
+    }
+    if let Some(cap) = mfe {
+        cmd.args(["--max-forced-expansion", cap]);
     }
     let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
     assert!(status.success(), "best-first run failed for {input}");
@@ -97,15 +113,24 @@ fn bless_or_check(path: &str, value: &Value) {
 
 /// No-DSR variant: the input lives in-repo, so this always runs.
 fn check_nodsr(domain: &str) {
-    let v = run_bfs(domain, None, "nodsr");
+    let v = run_bfs(domain, None, None, "nodsr");
     bless_or_check(&expected_path(domain, "nodsr"), &v);
 }
 
 /// DSR variant: runs best-first with the in-repo per-domain rewrite rules.
 fn check_dsr(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
-    let v = run_bfs(domain, Some(&rules), "dsr");
+    let v = run_bfs(domain, Some(&rules), None, "dsr");
     bless_or_check(&expected_path(domain, "dsr"), &v);
+}
+
+/// Forced-expansion-pruned DSR variant: the DSR run with `--max-forced-expansion
+/// MFE_CAP`. Pins that the prune behaves consistently across the stacked rounds.
+fn check_dsr_mfe(domain: &str) {
+    let rules = format!("{DSR_DIR}/{domain}.rewrites");
+    let tag = format!("dsr-mfe{MFE_CAP}");
+    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), &tag);
+    bless_or_check(&expected_path(domain, &tag), &v);
 }
 
 #[test]
@@ -146,4 +171,24 @@ fn nuts_bolts_nodsr() {
 #[test]
 fn nuts_bolts_dsr() {
     check_dsr("nuts-bolts");
+}
+
+#[test]
+fn dials_dsr_mfe() {
+    check_dsr_mfe("dials");
+}
+
+#[test]
+fn wheels_dsr_mfe() {
+    check_dsr_mfe("wheels");
+}
+
+#[test]
+fn furniture_dsr_mfe() {
+    check_dsr_mfe("furniture");
+}
+
+#[test]
+fn nuts_bolts_dsr_mfe() {
+    check_dsr_mfe("nuts-bolts");
 }
