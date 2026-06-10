@@ -194,8 +194,8 @@ pub struct Args {
     ///
     /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
     ///
-    /// To turn off this prune, set to `none`. Default 5.
-    #[arg(long = "max-forced-expansion", default_value = "5")]
+    /// To turn off this prune, set to `none`. Default 0.
+    #[arg(long = "max-forced-expansion", default_value = "0")]
     pub max_forced_expansion: MaxForcedExpansion,
 
     /// Path to write JSON output.

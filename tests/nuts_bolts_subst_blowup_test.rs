@@ -49,7 +49,12 @@ fn factored_substs_stay_under_memory_cap() {
         .arg("-c")
         .arg(&script)
         .arg(BIN)
-        .args(["--search", "best-first", "--input", INPUT, "--rules", RULES, "--num-abstractions", "1", "--max-arity", "2", "--num-steps", "300"])
+        // `--max-forced-expansion none` disables the forced-expansion prune: this
+        // test isolates factored-vs-flat substitution storage, and the prune is an
+        // orthogonal axis whose default steers best-first toward the broadly-matching
+        // patterns with the largest factored sets (peak ~360 MB here), which would
+        // blow the cap for reasons unrelated to what this test pins.
+        .args(["--search", "best-first", "--input", INPUT, "--rules", RULES, "--num-abstractions", "1", "--max-arity", "2", "--num-steps", "300", "--max-forced-expansion", "none"])
         .status()
         .expect("spawn egg-stitch under ulimit");
 
