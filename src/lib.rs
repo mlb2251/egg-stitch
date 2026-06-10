@@ -40,10 +40,12 @@ pub enum SearchKind {
     BestFirst,
 }
 
+/// `--max-forced-expansion` value: a slack bound `Some(k)`, or `none` to disable
+/// the forced-expansion prune entirely.
 #[derive(Clone, Copy, Debug)]
-pub struct MaxWrapNesting(pub Option<usize>);
+pub struct MaxForcedExpansion(pub Option<usize>);
 
-impl std::str::FromStr for MaxWrapNesting {
+impl std::str::FromStr for MaxForcedExpansion {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.eq_ignore_ascii_case("none") {
@@ -179,27 +181,24 @@ pub struct Args {
     #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
     pub opt_lower_bound: bool,
 
-    /// We restrict our search space to patterns satisfying `∀leaf ℓ ∃(r,σ): spin-depth(ℓ) ≤ cap`,
-    /// or in other words, no pattern leaf (variable or constant occurrence) can be
-    /// buried under more than `cap` self-loops in the pattern's match graph. This
-    /// prunes extremely large and generally very unpromising patterns like
-    /// `(+ ?0 (+ ?1 (+ ?2 ?3)))` that end up matching with ?0 ?1 ?2 all being 0 at
-    /// various substs, but nowhere actually having this nested addition structure
-    /// in the original corpus.
-    /// Default 0: no leaf may be buried under *any* self-loop in every match.
-    /// Increasing this allows for e.g., a match that unifies a and b into (if #0 a b)
-    #[arg(long = "max-wrap-nesting", default_value = "0")]
-    pub max_wrap_nesting: MaxWrapNesting,
-
-    /// Prune patterns whose committed skeleton is non-minimal — its "minimality
-    /// excess" (matched-form tree cost minus the e-class's minimal extraction
-    /// cost) exceeds this at *every* match site. `Some(k)` keeps only patterns
-    /// matching within `k` of minimal somewhere; `k=0` requires an exactly-minimal
-    /// witness (e.g. the `+` of `(+ 2 2)` must genuinely exist at some match, not
-    /// just as a rewrite of `4`). Generalizes `--max-wrap-nesting` (a cycle is
-    /// infinite excess). Off when unset.
-    #[arg(long = "max-excess")]
-    pub max_excess: Option<usize>,
+    /// Prune patterns which force "expansions" (e.g., 4 -> (+ 4 0)) at *every*
+    /// match site.
+    ///
+    /// Specifically for a match location r of p, let
+    ///     - Cost(r) = min_{t in r} Cost(t)
+    ///     - Cost(r | p) = min_{t in r, t matches p} Cost(t)
+    ///     - ForcedExpansion(r, p) = Cost(r | p) - Cost(r)
+    ///     - ForcedExpansion(p) = min_{r | p matches at r} ForcedExpansion(r, p)
+    /// Each t that matches p matches at some (r, σ), and at this point,
+    ///     Cost(t) = CostWithoutVars(p) + sum_{s in σ} Cost(s)
+    /// As such, we can compute
+    ///     Cost(r | p) = CostWithoutVars(p) + min_{σ | r matches at p with σ} sum_{s in σ} Cost(s)
+    ///
+    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
+    ///
+    /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
+    #[arg(long = "max-forced-expansion", default_value = "none")]
+    pub max_forced_expansion: MaxForcedExpansion,
 
     /// Path to write JSON output.
     #[arg(short, long)]
@@ -212,6 +211,13 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+
+    /// Print each best-first expansion's forced expansion (its argmin value and
+    /// the min-term of the closest-to-minimal match root). Independent of
+    /// `--verbose`; the min-term extraction makes it non-trivial, so it's its own
+    /// flag.
+    #[arg(long = "verbose-forced-expansion", default_value_t = false)]
+    pub verbose_forced_expansion: bool,
 
     /// Selects the language family the pipeline runs over. Patterns/programs/rules
     /// are always written in user-facing flat form; the language layer handles any

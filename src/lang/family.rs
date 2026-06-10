@@ -47,6 +47,11 @@ pub trait LanguageFamily: Clone + 'static {
     /// head plus any spine nodes (e.g. curried `App`s) the family inserts.
     fn stub_application_size(arity: usize, weights: &Weights) -> u32;
 
+    /// Cost of a single symbol (leaf) in this family — the unit that the
+    /// `--max-forced-expansion` slack is denominated in, so a cap of `k` means
+    /// "`k` symbols' worth of forced expansion".
+    fn symbol_cost(weights: &Weights) -> u32;
+
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
 
@@ -132,6 +137,10 @@ impl LanguageFamily for OpChildren {
 
     fn stub_application_size(_arity: usize, weights: &Weights) -> u32 {
         // OpChildren has no application spine: a stub is a single leaf node.
+        weights.sym_var_cost
+    }
+
+    fn symbol_cost(weights: &Weights) -> u32 {
         weights.sym_var_cost
     }
 
@@ -231,6 +240,10 @@ impl LanguageFamily for LambdaCalc {
     fn stub_application_size(arity: usize, weights: &Weights) -> u32 {
         // Leaf head plus one curried `App` per argument.
         weights.sym_var_cost + arity as u32 * weights.app_cost
+    }
+
+    fn symbol_cost(weights: &Weights) -> u32 {
+        weights.sym_var_cost
     }
 
     fn check_fast_vs_slow(fast: i64, slow: i64) {

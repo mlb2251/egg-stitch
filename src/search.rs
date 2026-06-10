@@ -1,21 +1,13 @@
-use crate::egraph_util::{build_size_minimal_extraction, compute_eclasses_for_pattern_nodes, compute_usage_counts, egraph_has_cycle};
-use crate::factor::{Factor, factors_product, rebuild_factor};
+use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
+use crate::factor::{Factor, rebuild_factor};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
-
-/// Largest substitution product the wrap-nesting gate's exact fallback will
-/// scan. A prune requires scanning the *entire* product, so a state with more
-/// than this many substs can only ever be kept by the scan — we detect that
-/// up front from the cached count and keep it without scanning at all (see
-/// `within_wrap_nesting_cap`). Comfortably covers realistic small-product
-/// states while bounding the worst case on dense e-graphs.
-const GATE_SCAN_BUDGET: usize = 10_000;
 
 /// Tracks already-explored canonical patterns to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
@@ -128,9 +120,6 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.
     pub usage_counts: FxHashMap<Id, usize>,
-    /// True iff the e-graph contains a cycle: some class reachable from itself by
-    /// following enode children.
-    pub has_cycle: bool,
     /// Precomputed De Bruijn clamp for [`shift_equal`] (see
     /// [`crate::shift_equal::shift_clamp`]). Computed once here because the
     /// e-graph isn't unioned during search, and `shift_equal` is on the hot
@@ -537,275 +526,42 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
-    /// Builds `descendants[i]` = the proper descendants of pattern node `i`
-    /// (the candidate self-loop targets `d` for `ec_σ(d) = ec_σ(i)`). `RevExpr`
-    /// stores children at higher indices than parents, so a single high→low pass
-    /// accumulates them bottom-up. Used by the wrap-nesting gate.
-    fn pattern_descendants(&self) -> Vec<Vec<usize>> {
-        let nodes = &self.pattern.pattern.nodes;
-        let n = nodes.len();
-        let mut descendants: Vec<Vec<usize>> = vec![Vec::new(); n];
-        for i in (0..n).rev() {
-            for &c in nodes[i].children() {
-                let c = usize::from(c);
-                descendants[i].push(c);
-                let sub = descendants[c].clone();
-                descendants[i].extend(sub);
-            }
-        }
-        descendants
-    }
-
-    /// `pos_to_var[i] = k` iff node `i` is the `Var(k)` leaf (`usize::MAX` = none).
-    fn pos_to_var(&self) -> Vec<usize> {
-        let mut pos_to_var = vec![usize::MAX; self.pattern.pattern.nodes.len()];
-        for (k, positions) in self.pattern.vars.iter().enumerate() {
-            for &p in positions {
-                pos_to_var[usize::from(p)] = k;
-            }
-        }
-        pos_to_var
-    }
-
-    /// Exact-on-confirmed-data lower bound: returns `true` when some leaf is
-    /// *provably* buried (has more than `cap` ancestors that self-loop in **every**
-    /// subst) — so the state can be pruned without scanning the product.
-    ///
-    /// A node "always self-loops" if it denotes the same e-class as one of its
-    /// children for *every* substitution. We detect that during a per-node
-    /// e-class-set pass: each node's possible-e-class set is the lookups of its
-    /// children's e-class sets (siblings in other factors enter only as their
-    /// deduped sets — independent, so this is the cartesian of the sets, not the
-    /// `∏` of factor rows); while enumerating those combinations we check whether
-    /// the result always equals one fixed child. Variable leaves take the union
-    /// of their column values over all matches, and children are combined
-    /// independently — both *over*-approximate the real substitution set, which
-    /// only makes "always" *harder* to satisfy, so a positive result is sound.
-    /// Nodes whose set enumeration would exceed the budget are left undetermined
-    /// (never counted), keeping this a sound under-approximation of burial.
-    fn provably_buried(&self, nodes: &[F::Apply<OpWithVar<O>>], descendants: &[Vec<usize>], pos_to_var: &[usize], cap: usize, shared: &SharedSearchData<F, O>) -> bool {
-        const SET_BUDGET: usize = 4096;
-        let n = nodes.len();
-        // Per-variable denotable e-classes: distinct column values over all
-        // factors of all matches (cheap — proportional to stored rows).
-        let mut var_ec: Vec<FxHashSet<Id>> = vec![FxHashSet::default(); self.pattern.vars.len()];
-        for m in &self.matches {
-            for f in &m.factors {
-                for (pos, &slot) in f.slots.iter().enumerate() {
-                    for row in &f.rows {
-                        var_ec[slot].insert(shared.egraph.find(row[pos]));
-                    }
-                }
-            }
-        }
-        let mut set: Vec<Vec<Id>> = vec![Vec::new(); n]; // possible e-classes (sorted-unique)
-        let mut known = vec![true; n]; // set fully computed (budget not blown)
-        let mut always_loop = vec![false; n]; // node == some fixed child in every subst
-        for i in (0..n).rev() {
-            if pos_to_var[i] != usize::MAX {
-                set[i] = var_ec[pos_to_var[i]].iter().copied().collect();
-                continue;
-            }
-            let kids = nodes[i].children();
-            if kids.iter().any(|&c| !known[usize::from(c)]) {
-                known[i] = false;
-                continue;
-            }
-            let child_sets: Vec<&Vec<Id>> = kids.iter().map(|&c| &set[usize::from(c)]).collect();
-            if child_sets.iter().any(|v| v.is_empty()) {
-                continue; // denotes nothing → empty set, never a self-loop
-            }
-            if child_sets.iter().map(|v| v.len()).product::<usize>() > SET_BUDGET {
-                known[i] = false;
-                continue;
-            }
-            let disc = F::map_discriminant(nodes[i].discriminant(), |ov| match ov {
-                OpWithVar::Node(o) => o,
-                OpWithVar::Var(_) => unreachable!("var leaf handled via pos_to_var"),
-            });
-            let mut sset: FxHashSet<Id> = FxHashSet::default();
-            let mut matched = vec![true; kids.len()]; // child j equals the lookup in every combo so far
-            let mut idx = vec![0usize; kids.len()];
-            loop {
-                let combo: Vec<Id> = idx.iter().enumerate().map(|(j, &ix)| child_sets[j][ix]).collect();
-                match shared.egraph.lookup(F::make(disc.clone(), combo.clone())) {
-                    Some(e) => {
-                        sset.insert(e);
-                        for (j, &cj) in combo.iter().enumerate() {
-                            if cj != e {
-                                matched[j] = false;
-                            }
-                        }
-                    }
-                    None => matched.iter_mut().for_each(|x| *x = false), // no e-class ⇒ not a self-loop here
-                }
-                let mut j = 0;
-                while j < kids.len() {
-                    idx[j] += 1;
-                    if idx[j] < child_sets[j].len() {
-                        break;
-                    }
-                    idx[j] = 0;
-                    j += 1;
-                }
-                if j == kids.len() {
-                    break;
-                }
-            }
-            set[i] = {
-                let mut v: Vec<Id> = sset.into_iter().collect();
-                v.sort_unstable();
-                v
-            };
-            always_loop[i] = matched.iter().any(|&b| b);
-        }
-        (0..n).filter(|&i| nodes[i].children().is_empty()).any(|leaf| (0..n).filter(|&a| always_loop[a] && descendants[a].contains(&leaf)).count() > cap)
-    }
-
-    /// Search-frontier wrap-nesting gate (`--max-wrap-nesting`): true iff every
-    /// pattern *leaf* — each variable or constant occurrence — has some match
-    /// where its stacked-self-loop (spin) depth is within `cap` —
-    /// `max over leaves ℓ of (min over matches (r,σ) of spin-depth(ℓ, r, σ)) ≤ cap`.
-    ///
-    /// A node `i` is a self-loop under `σ` iff `ec_σ(i) ≠ ⊥ ∧ ∃ d ∈ Desc(i).
-    /// ec_σ(d) = ec_σ(i)` (it denotes the same e-class as a descendant — a no-op
-    /// wrapper at this subst). A leaf's spin-depth under `σ` is the number of
-    /// self-loop nodes on the root→leaf path. A leaf is "buried" iff that depth
-    /// exceeds `cap` in *every* match; the state is pruned iff some leaf is buried.
-    ///
-    /// Tracking each leaf *occurrence* — rather than grouping a reused var's
-    /// occurrences and taking their min — is deliberate. A leaf buried under >cap
-    /// no-op wrappers in every match denotes the same e-class as the bare leaf
-    /// there, so the whole pattern is dominated by its wrapper-stripped form
-    /// (which preserves any reuse constraint and is reachable without building the
-    /// wrappers); pruning it loses no optimum. Grouping would instead let one
-    /// shallow occurrence rescue a buried sibling, keeping such dominated re-wraps
-    /// and letting `Reuse` re-open them. Constants are leaves too, so capping a
-    /// buried var to a nullary op (`?v -> c`) can't escape the gate by erasing the
-    /// measured entity. Genuine (non-no-op) nesting contributes no self-loops, so
-    /// it stays unbounded; only redundant towers are capped.
-    pub fn within_wrap_nesting_cap(&self, shared: &SharedSearchData<F, O>, cap: usize) -> bool {
-        let nodes = &self.pattern.pattern.nodes;
-        let n = nodes.len();
-        let descendants = self.pattern_descendants();
-        if (0..n).all(|i| descendants[i].is_empty()) {
-            return true; // single leaf: nothing above it can bury it
-        }
-        let leaves: Vec<usize> = (0..n).filter(|&i| nodes[i].children().is_empty()).collect();
-        let pos_to_var = self.pos_to_var();
-        // Cheap, scan-free pre-prune: if some leaf is provably buried (an ancestor
-        // self-loops in every subst, detected from per-node e-class sets), drop it
-        // now. This catches almost all prunes — including huge-product ones the
-        // exact scan below would have to abandon to its budget — but it's a sound
-        // *lower bound* (its set approximation can miss burial), so a negative
-        // result falls through to the exact scan rather than keeping the state.
-        if self.provably_buried(nodes, &descendants, &pos_to_var, cap, shared) {
-            return false;
-        }
-        // A prune requires scanning the *entire* product, so any state whose
-        // product exceeds the budget can only ever be kept by the scan below —
-        // detect that from the cached count and keep it now, never scanning.
-        // (Exactly equivalent to letting the scan run and hit the budget, but
-        // without the wasted partial walk.) The product is dominated, so leaving
-        // it in the frontier is harmless.
-        if self.num_substs > GATE_SCAN_BUDGET {
-            return true;
-        }
-        let mut ec: Vec<Option<Id>> = vec![None; n];
-        // Per leaf: has some match witnessed it at spin-depth ≤ cap?
-        let mut satisfied = vec![false; leaves.len()];
-        let mut depth_to = vec![0usize; n];
-        // Exact fallback. The total product fits the budget (checked above), so
-        // materialising each match's substitutions is affordable; we scan them,
-        // pruning if a leaf is buried and keeping (via early-exit) once every
-        // leaf has a shallow witness.
-        for m in &self.matches {
-            for subst in factors_product(&m.factors) {
-                compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, &subst, &shared.egraph, &mut ec);
-                // `depth_to[i]` = self-loop count on the root→`i` path (inclusive).
-                // `RevExpr` keeps a node before its children, so a low→high pass
-                // propagates each node's count down to its children.
-                depth_to.iter_mut().for_each(|d| *d = 0);
-                for i in 0..n {
-                    let is_loop = ec[i].is_some() && descendants[i].iter().any(|&d| ec[d] == ec[i]);
-                    depth_to[i] += usize::from(is_loop);
-                    for &c in nodes[i].children() {
-                        depth_to[usize::from(c)] = depth_to[i];
-                    }
-                }
-                for (k, &p) in leaves.iter().enumerate() {
-                    if !satisfied[k] && depth_to[p] <= cap {
-                        satisfied[k] = true; // first shallow witness for this leaf
-                    }
-                }
-                if satisfied.iter().all(|&b| b) {
-                    return true; // every leaf has a shallow witness — verdict locked
-                }
-            }
-        }
-        false
-    }
-
-    /// Minimum over match locations of the pattern's *minimality excess*: how
-    /// much more the committed skeleton (extracting the captured args minimally)
-    /// costs than the e-class's own minimal extraction. Zero means the pattern
-    /// matches a genuinely minimal form at some site; a large value means it only
-    /// ever matches non-minimal (rewrite-phantom) forms — e.g. matching `4` as
-    /// `(+ 2 2)` everywhere, or a cyclic tower (infinite excess).
-    ///
-    /// Factored, so it's `O(Σ|factor|)` with no materialisation: the matched
-    /// form's tree cost is `skeleton + Σ_occ minsize(arg)`, and the min over the
-    /// product of args factors over the (independent) factors. Monotone
-    /// non-decreasing under expand/reuse (a hole has zero excess; committing
-    /// structure only adds non-negative per-node excess, and substs only shrink),
-    /// so a state above a cap can never drop below it — a sound prune.
-    pub fn minimality_excess_min(&self, shared: &SharedSearchData<F, O>) -> i64 {
-        self.minimality_excess_argmin(shared).map_or(i64::MAX, |(e, _)| e)
-    }
-
-    /// Tree-expanded cost of the pattern's concrete (non-var) skeleton: each node
-    /// weighted by how many times a walk from the root reaches it (its reference
-    /// count), so hash-consed shared subterms count per reference — matching the
-    /// tree-expanded `data.size` baseline. Summing the deduplicated node list
-    /// would undercount sharing (the source of the earlier negative excess); a
-    /// naive recursive walk would tree-expand and blow up on DAGs. The ref-count
-    /// pass is `O(nodes + edges)` and exact.
+    /// `CostWithoutVars(p)`: the tree-expanded pattern cost minus its var leaves.
+    /// `compute_pattern_size` already tree-expands (counting each `?#k` as one
+    /// `sym_var_cost` leaf per occurrence), and `var_occurrences` counts those
+    /// occurrences the same way, so subtracting them leaves exactly the concrete
+    /// (non-var) skeleton.
     fn concrete_skeleton_cost(&self, weights: &crate::lang::Weights) -> i64 {
-        let rec: egg::RecExpr<F::Apply<OpWithVar<O>>> = self.pattern.pattern.clone().into();
-        let nodes = rec.as_ref();
-        let n = nodes.len();
-        // Root is the last node; children always precede parents, so a descending
-        // pass has each node's ref count finalised before it is read.
-        let mut refc = vec![0i64; n];
-        refc[n - 1] = 1;
-        for i in (0..n).rev() {
-            let r = refc[i];
-            for &c in nodes[i].children() {
-                refc[usize::from(c)] += r;
-            }
-        }
-        nodes.iter().zip(&refc).filter(|(node, _)| node.discriminant().as_var().is_none()).map(|(node, &r)| node.discriminant().intrinsic_size(weights) as i64 * r).sum()
+        let vars: i64 = self.pattern.var_occurrences.iter().sum::<usize>() as i64 * weights.sym_var_cost as i64;
+        crate::cost::compute_pattern_size::<F, O>(&self.pattern, weights) as i64 - vars
     }
 
-    /// True iff some match site has minimality excess ≤ `cap` — the validity test
-    /// used as a prune (`--max-excess`). Early-exits at the first qualifying site,
-    /// so a valid pattern (the common case) costs about one match's worth of work
-    /// rather than scanning every match.
-    pub fn passes_excess_cap(&self, shared: &SharedSearchData<F, O>, cap: i64) -> bool {
-        let weights = &shared.egraph.analysis.weights;
-        let skel = self.concrete_skeleton_cost(weights);
+    /// `ForcedExpansion(r, p) = Cost(r | p) - Cost(r)` for a single match `r`, given
+    /// the precomputed skeleton cost `skel = CostWithoutVars(p)`. Here `Cost(r | p) =
+    /// skel + min_σ Σ_{s∈σ} Cost(s)`, the inner min factored over the independent
+    /// substitution factors (per factor, the min over its rows of the
+    /// occurrence-weighted arg sizes), and `Cost(r)` is the e-class's minimal size.
+    fn forced_expansion_at(&self, shared: &SharedSearchData<F, O>, skel: i64, m: &crate::matching::MatchAtEClass) -> i64 {
         let occ = &self.pattern.var_occurrences;
-        for m in &self.matches {
-            let holes_min: i64 = m
-                .factors
-                .iter()
-                .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&slot, &id)| occ[slot] as i64 * shared.egraph[id].data.size as i64).sum::<i64>()).min().expect("factor rows are non-empty"))
-                .sum();
-            if skel + holes_min - shared.egraph[m.root_eclass].data.size as i64 <= cap {
-                return true;
-            }
-        }
-        false
+        let holes_min: i64 = m
+            .factors
+            .iter()
+            .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&slot, &id)| occ[slot] as i64 * shared.egraph[id].data.size as i64).sum::<i64>()).min().expect("factor rows are non-empty"))
+            .sum();
+        skel + holes_min - shared.egraph[m.root_eclass].data.size as i64
+    }
+
+    /// `ForcedExpansion(p) ≤ cap`. Per match `r` computes `ForcedExpansion(r, p)` (see
+    /// [`Self::forced_expansion_at`]) and early-exits at the first `r` with `≤ cap`
+    /// (one match's work for a valid `p`).
+    ///
+    /// Sound to prune on: `ForcedExpansion(p)` is monotone non-decreasing under
+    /// expand/reuse — committing a hole swaps a `Cost(r)`-minimal arg for `≥`-cost
+    /// structure (`Cost(r | p)` rises, `Cost(r)` fixed) and substs only shrink — so
+    /// `ForcedExpansion(p) > cap` ⇒ every descendant `> cap`.
+    pub fn within_forced_expansion_cap(&self, shared: &SharedSearchData<F, O>, cap: i64) -> bool {
+        let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
+        self.matches.iter().any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
     }
 
     /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
@@ -818,26 +574,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         rec.to_string()
     }
 
-    /// Like [`Self::minimality_excess_min`] but also returns the match root
-    /// e-class achieving the minimum (the site where the pattern is closest to
-    /// minimal). `None` when the pattern has no matches.
-    pub fn minimality_excess_argmin(&self, shared: &SharedSearchData<F, O>) -> Option<(i64, Id)> {
-        let weights = &shared.egraph.analysis.weights;
-        let skel = self.concrete_skeleton_cost(weights);
-        let occ = &self.pattern.var_occurrences;
+    /// `(ForcedExpansion(p), argmin_r ForcedExpansion(r, p))` — the value paired
+    /// with the match root `r` closest to minimal. `None` when `p` has no matches.
+    /// See [`Self::within_forced_expansion_cap`] for the per-`r` cost decomposition.
+    pub fn forced_expansion_argmin(&self, shared: &SharedSearchData<F, O>) -> Option<(i64, Id)> {
+        let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
         let mut best: Option<(i64, Id)> = None;
         for m in &self.matches {
-            // Captured-arg cost, weighted by each slot's occurrence count and
-            // minimised over the factored substitution product.
-            let holes_min: i64 = m
-                .factors
-                .iter()
-                .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&slot, &id)| occ[slot] as i64 * shared.egraph[id].data.size as i64).sum::<i64>()).min().expect("factor rows are non-empty"))
-                .sum();
-            let root_min = shared.egraph[m.root_eclass].data.size as i64;
-            let excess = skel + holes_min - root_min;
-            if best.is_none_or(|(b, _)| excess < b) {
-                best = Some((excess, m.root_eclass));
+            let forced = self.forced_expansion_at(shared, skel, m);
+            if best.is_none_or(|(b, _)| forced < b) {
+                best = Some((forced, m.root_eclass));
             }
         }
         best
@@ -995,13 +741,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 }
 
-pub fn remove_exceeding_wrap_nesting<F: LanguageFamily, O: StitchOp, T>(successors: &mut Vec<T>, shared: &SharedSearchData<F, O>, max_wrap_nesting: Option<usize>, state_of: impl Fn(&T) -> &SearchState<F, O>) {
-    if !shared.has_cycle {
-        return;
-    }
-    successors.retain(|item| max_wrap_nesting.is_none_or(|cap| state_of(item).within_wrap_nesting_cap(shared, cap)));
-}
-
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
@@ -1012,7 +751,6 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
-    let has_cycle = egraph_has_cycle(&egraph);
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let shared = SharedSearchData {
         egraph,
@@ -1020,7 +758,6 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         follow: follow_expr,
         usage_counts,
         check_slow: args.check_slow,
-        has_cycle,
         shift_clamp,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);

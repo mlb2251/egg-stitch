@@ -10,7 +10,7 @@ use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, comp
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
-use crate::search::{SearchState, SeenTracker, SuccessorEnum, remove_exceeding_wrap_nesting, setup_search};
+use crate::search::{SearchState, SeenTracker, SuccessorEnum, setup_search};
 use egg::RecExpr;
 
 /// How to order the best-first search heap.
@@ -175,8 +175,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut num_expansions: usize = 0;
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
-    let mut gen_time: Duration = Duration::ZERO;
-    let mut filter_time: Duration = Duration::ZERO;
     let mut dominance_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
     let mut useless_frozen_hits: usize = 0;
@@ -212,31 +210,38 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
-        if args.verbose {
-            let excess_str = match nodes[node_id].state.minimality_excess_argmin(&shared) {
-                Some((e, root)) => format!("[excess={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
-                None => "[excess=- (no matches)]".to_string(),
-            };
-            println!("{} {} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan(), excess_str.yellow());
+        if args.verbose || args.verbose_forced_expansion {
+            let tag = format!("[expansion {}]", num_expansions);
+            let pat = nodes[node_id].state.pattern.to_string();
+            if args.verbose {
+                println!("{} {} {}", tag.dimmed(), "expanding:".dimmed(), pat.clone().cyan());
+            }
+            if args.verbose_forced_expansion {
+                let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared) {
+                    Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
+                    None => "[forced-expansion=- (no matches)]".to_string(),
+                };
+                println!("{} {} {}", tag.dimmed(), pat.cyan(), forced_str.yellow());
+            }
         }
 
         let parent_depth = nodes[node_id].depth;
-        let gen_t = Instant::now();
         let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
-        gen_time += gen_t.elapsed();
 
-        let filter_t = Instant::now();
-        // `--max-excess` subsumes wrap-nesting (a cyclic match has unbounded
-        // excess), so skip the costly subst-scanning wrap-nesting pass when it's on.
-        if let Some(k) = args.max_excess {
-            successors.retain(|c| c.passes_excess_cap(&shared, k as i64));
-        } else {
-            remove_exceeding_wrap_nesting(&mut successors, &shared, args.max_wrap_nesting.0, |c| c);
+        if let Some(k) = args.max_forced_expansion.0 {
+            // Safe to run on the post-dominance successor set: dominance
+            // short-circuits preserve forced expansion. dominant-reuse: doesn't
+            // change anything about the matching term at each site. useless-inline:
+            // replaces a variable with its minimal term, so preserves cost. Both
+            // don't change the set of matches.
+            //
+            // The cap is given in symbols; scale to the family's cost units.
+            let cap = k as i64 * F::symbol_cost(&shared.egraph.analysis.weights) as i64;
+            successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
         }
-        filter_time += filter_t.elapsed();
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow
@@ -392,8 +397,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     }
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
-    println!("{} {}", "successor-gen time:".dimmed(), format!("{:.3}s", gen_time.as_secs_f64()).bold());
-    println!("{} {}", "wrap+excess filter time:".dimmed(), format!("{:.3}s", filter_time.as_secs_f64()).bold());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
