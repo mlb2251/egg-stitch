@@ -163,7 +163,7 @@ mod tests {
         let root = egraph.add_expr(&expr.parse().unwrap());
         egraph.rebuild();
         let rules = number_folding_rewrites::<L, StitchAnalysis>().unwrap();
-        let runner = egg::Runner::new(StitchAnalysis::new(Weights::default())).with_egraph(egraph).run(&rules);
+        let runner: egg::Runner<L, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(Weights::default())).with_egraph(egraph).run(&rules);
         let extractor = egg::Extractor::new(&runner.egraph, crate::cost::WeightedSize { weights: Weights::default() });
         extractor.find_best(runner.egraph.find(root)).1.to_string()
     }
@@ -206,7 +206,7 @@ mod tests {
         let id = egraph.add_expr(&literal.parse().unwrap());
         egraph.rebuild();
         let rules = vec![successor_expansion_rewrite::<L, StitchAnalysis>(floor).unwrap()];
-        let runner = egg::Runner::new(StitchAnalysis::new(Weights::default())).with_egraph(egraph).run(&rules);
+        let runner: egg::Runner<L, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(Weights::default())).with_egraph(egraph).run(&rules);
         let id = runner.egraph.find(id);
         (runner.egraph, id)
     }
