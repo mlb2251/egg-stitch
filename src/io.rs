@@ -28,7 +28,7 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     println!("loaded {} rules", rules.len());
 
     let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
-    runner = runner.with_egraph(egraph_before_rules).with_iter_limit(10).run(&rules);
+    runner = runner.with_egraph(egraph_before_rules).with_iter_limit(100).run(&rules);
     runner.egraph.rebuild();
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
@@ -64,7 +64,7 @@ pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String],
         None => vec![],
     };
     let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
-    runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
+    runner = runner.with_egraph(egraph).with_iter_limit(100).run(&rules);
     runner.egraph.rebuild();
     SharedData::new(runner.egraph, root)
 }
