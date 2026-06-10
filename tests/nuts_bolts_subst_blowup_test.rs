@@ -49,7 +49,12 @@ fn factored_substs_stay_under_memory_cap() {
         .arg("-c")
         .arg(&script)
         .arg(BIN)
-        .args(["--search", "best-first", "--input", INPUT, "--rules", RULES, "--num-abstractions", "1", "--max-arity", "2", "--num-steps", "300"])
+        // Pin `--iter-limit`/`--node-limit` to the saturation bounds this test
+        // was calibrated against (the former hardcoded defaults). The production
+        // defaults are far larger, which would saturate the fixture into a much
+        // bigger egraph and trip the cap on the build alone, independent of how
+        // substitution sets are stored.
+        .args(["--search", "best-first", "--input", INPUT, "--rules", RULES, "--num-abstractions", "1", "--max-arity", "2", "--num-steps", "300", "--iter-limit", "10", "--node-limit", "10000"])
         .status()
         .expect("spawn egg-stitch under ulimit");
 
