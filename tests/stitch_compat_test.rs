@@ -703,17 +703,37 @@ fn cross_depth_forloop_db_var_inline() {
 /// `(f ?#0 ?#1)` would have to pass that subterm at every site, so the
 /// condition-parameterized `if` genuinely wins.
 ///
-/// This pins that the equivalence-driven unification is found (cost 39). It is
-/// a deliberate counter-example to a tempting "self-loop / re-nesting" prune of
-/// identity DSRs: because `(if true x y) => x` unions the `if` node into `x`'s
-/// e-class, that node looks like a self-loop, yet the abstraction containing it
-/// is the optimum — any prune keyed purely on self-loop nesting must not
-/// discard it.
+/// Whether this optimum is found depends on `--max-forced-expansion`. Because
+/// `(if true x y) => x` unions the `if` node into the bare branch's e-class, the
+/// minimal extraction there is the branch itself — so the `if`-wrapped match is
+/// non-minimal at every site, forcing a fixed 7 units of expansion (the extra
+/// `if` node plus the unselected 5-node branch, less the 1-token condition). The
+/// two tests below pin both behaviours: at the default `--max-forced-expansion 5`
+/// that forcing exceeds the cap, the abstraction is pruned and a worse arity-1
+/// abstraction wins (cost 44); raising the cap to 10 clears it and recovers the
+/// equivalence-driven `if`-unification optimum (cost 39). (This is exactly the
+/// incompleteness of the forced-expansion prune — kept cheap to spot.)
+const IF_INPUT: &str = "data/domains/conditional/if_branch_unify.json";
 const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewrites"];
 
+/// Default `--max-forced-expansion 5`: the `if`-wrapped match forces 7 units of
+/// expansion at every site, over the cap, so the prune drops the optimum and a
+/// worse abstraction wins (cost 44). As the default behaviour it owns the plain
+/// fixture.
 #[test]
-fn conditional_branch_unify() {
-    check_fixture_bf_only("data/domains/conditional/if_branch_unify.json", IF_RULES, true);
+fn conditional_branch_unify_default_drops_if_abstraction() {
+    check_fixture_bf_only(IF_INPUT, IF_RULES, true);
+}
+
+/// Alternate `--max-forced-expansion 10`: raising the cap past the forced
+/// expansion (7) recovers the equivalence-driven `if`-unification optimum
+/// (cost 39). Pins the non-default `.cap10` fixture.
+#[test]
+fn conditional_branch_unify_cap10_recovers_if_abstraction() {
+    let args = &["--rules", "data/domains/conditional/if_branch.rewrites", "--max-forced-expansion", "10"];
+    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap10.out.json", &bf, "if_branch_unify (cap 10)");
 }
 
 /// Crossed-spin wrap collapse: the optimum
