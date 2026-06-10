@@ -78,7 +78,7 @@ fn main() {
 /// by both the language family `F` and the leaf-Op `O`.
 fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> RunOutput {
     let load_start = std::time::Instant::now();
-    let (data, cost_before_rewrites, original_programs) = io::load_egraph::<F, O>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, args.weights);
+    let (data, cost_before_rewrites, original_programs) = io::load_egraph::<F, O>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, args.weights, args.iter_limit);
     println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
     let (library, original_size, final_cost, final_rewritten, heap_sizes_at_end) = multiple_step_search::<F, O>(data, args);
     RunOutput {

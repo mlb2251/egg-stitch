@@ -10,7 +10,8 @@ use std::{fs, path::Path};
 /// Returns the egraph, the root e-class Id of the programs node, the
 /// minimum AST cost of that root *before* any rewrites were applied, and
 /// the original program strings as parsed from the input file.
-pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, only_use_dsrs_at_start: bool, weights: Weights) -> (SharedData<F, O>, usize, Vec<String>) {
+/// `iter_limit` caps the number of e-saturation iterations when applying rules.
+pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, only_use_dsrs_at_start: bool, weights: Weights, iter_limit: usize) -> (SharedData<F, O>, usize, Vec<String>) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
     println!("Loaded {} programs", exprs.len());
@@ -28,7 +29,7 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     println!("loaded {} rules", rules.len());
 
     let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
-    runner = runner.with_egraph(egraph_before_rules).with_iter_limit(10).run(&rules);
+    runner = runner.with_egraph(egraph_before_rules).with_iter_limit(iter_limit).run(&rules);
     runner.egraph.rebuild();
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
@@ -38,7 +39,7 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     // fresh rule-free egraph for the search to run over.
     if only_use_dsrs_at_start {
         let programs = extract_programs::<F::Apply<O>>(&runner.egraph, root);
-        let data = egraph_from_programs::<F, O>(&programs, None, weights);
+        let data = egraph_from_programs::<F, O>(&programs, None, weights, iter_limit);
         println!("Egraph size after dropping rules: {}", data.egraph.classes().len());
         return (data, cost_before_rewrites, exprs);
     }
@@ -56,15 +57,16 @@ pub fn extract_programs<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::
 /// Builds a fresh egraph from program strings, applies rewrite rules, and returns it with its root.
 ///
 /// Used between abstractions: the rewritten programs are extracted as strings and fed into a
-/// clean egraph, discarding all prior equivalences.
-pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights) -> SharedData<F, O> {
+/// clean egraph, discarding all prior equivalences. `iter_limit` caps the number of
+/// e-saturation iterations when applying rules.
+pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights, iter_limit: usize) -> SharedData<F, O> {
     let (egraph, root) = programs_to_egraph::<F::Apply<O>>(programs, weights);
     let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {
         Some(f) => from_file(f, &weights).expect("Failed to parse rules file"),
         None => vec![],
     };
     let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
-    runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
+    runner = runner.with_egraph(egraph).with_iter_limit(iter_limit).run(&rules);
     runner.egraph.rebuild();
     SharedData::new(runner.egraph, root)
 }
