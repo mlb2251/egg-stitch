@@ -48,8 +48,8 @@ impl Factor {
     }
 
     /// Splits `self` into the finest set of independent sub-factors whose
-    /// cartesian product equals `self.rows` (as a set), falling back to
-    /// `[self]` when the relation doesn't decompose.
+    /// cartesian product equals `self.rows` (as a set), returning `[self]` when
+    /// the relation doesn't decompose (the common small-factor case).
     ///
     /// Two slot-positions are "entangled" when their joint projection has fewer
     /// rows than the product of their individual projections (i.e. not every
@@ -57,16 +57,11 @@ impl Factor {
     /// graph are the candidate blocks; the split is committed only after the
     /// exact check `∏|proj_block| == |rows|` (which holds iff `rows` equals the
     /// product of the blocks' projections, since `rows ⊆ ∏ proj` always).
-    /// Decomposes `self` and pushes the resulting factor(s) into `out` — when
-    /// it can't split (the common small-factor case) this pushes `self`
-    /// unchanged with no extra allocation, which keeps the hot expand path
-    /// allocation-light.
-    fn decompose_into(self, out: &mut Vec<Factor>) {
+    pub fn decompose(self) -> Vec<Factor> {
         let n = self.slots.len();
         let nrows = self.rows.len();
         if n <= 1 || nrows < DECOMPOSE_MIN_ROWS {
-            out.push(self);
-            return;
+            return vec![self];
         }
         // Packed-int projections on the hot pairwise scan: an `Id` is a `u32`,
         // so a single column packs into a `u64` and a column pair into a `u64`
@@ -118,8 +113,7 @@ impl Factor {
             blocks[idx].push(p);
         }
         if blocks.len() <= 1 {
-            out.push(self);
-            return;
+            return vec![self];
         }
         // Exact decomposition check: bail (keep coarse) on higher-order
         // entanglement that pairwise independence misses. A valid split has
@@ -137,22 +131,16 @@ impl Factor {
         };
         let prod = blocks.iter().map(|b| proj_block(b)).try_fold(1usize, |acc, x| acc.checked_mul(x));
         if prod != Some(nrows) {
-            out.push(self);
-            return;
+            return vec![self];
         }
-        for b in blocks {
-            let slots: Vec<usize> = b.iter().map(|&p| self.slots[p]).collect();
-            let rows: Vec<Vec<Id>> = self.rows.iter().map(|r| b.iter().map(|&p| r[p]).collect()).collect();
-            out.push(Factor::new(slots, rows).expect("non-empty source rows ⇒ non-empty projection"));
-        }
-    }
-
-    /// Convenience wrapper returning a fresh `Vec<Factor>` (used by the non-hot
-    /// reuse/concretize paths). The hot expand path uses [`Factor::decompose_into`].
-    pub fn decompose(self) -> Vec<Factor> {
-        let mut out = Vec::new();
-        self.decompose_into(&mut out);
-        out
+        blocks
+            .into_iter()
+            .map(|b| {
+                let slots: Vec<usize> = b.iter().map(|&p| self.slots[p]).collect();
+                let rows: Vec<Vec<Id>> = self.rows.iter().map(|r| b.iter().map(|&p| r[p]).collect()).collect();
+                Factor::new(slots, rows).expect("non-empty source rows ⇒ non-empty projection")
+            })
+            .collect()
     }
 }
 
