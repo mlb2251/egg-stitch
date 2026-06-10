@@ -3,6 +3,7 @@ pub mod candidates;
 pub mod cost;
 pub mod debug_log;
 pub mod egraph_util;
+pub mod factor;
 pub mod follow;
 pub mod io;
 pub mod lang;
@@ -262,13 +263,15 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 let body_str = state.pattern.display_with_ho(variable_indices);
                 let lambda = state.pattern.display_as_lambda(variable_indices);
                 let usage_counts = egraph_util::compute_usage_counts(&result_data.egraph, result_data.root);
-                // With the `None` sentinel every match keeps every subst, so every
-                // match contributes its usage count; otherwise count only matches
-                // whose kept list is non-empty.
-                let usage_matches: usize = match &candidate.kept_substs {
-                    None => state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
-                    Some(k) => state.matches.iter().zip(k).filter(|(_, ks)| !ks.is_empty()).map(|(m, _)| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
-                };
+                // A match contributes its usage count iff it keeps at least one
+                // candidate-compatible subst (lambda-free domains keep them all).
+                let var_depth = &state.pattern.var_depth;
+                let usage_matches: usize = state
+                    .matches
+                    .iter()
+                    .filter(|m| cost::filter_factors_by_candidate(&result_data.egraph, m, variable_indices, var_depth).is_some())
+                    .map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
+                    .sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
                 // With `--only-use-dsrs-at-start` the rules are not re-applied to
