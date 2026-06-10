@@ -1,6 +1,7 @@
 use crate::candidates::enumerate_candidates;
+use crate::factor::{Factor, factored_min};
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
-use crate::matching::{Factor, MatchAtEClass};
+use crate::matching::MatchAtEClass;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
 use egg::{CostFunction, Id, Language, RecExpr};
@@ -317,7 +318,7 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
 }
 
 /// Reusable index map: match-root eclass → index into `search_state.matches`.
-/// We store an index (not a `&Vec<Subst>`) so the map is `'static`-friendly and can
+/// We store an index (not a `&MatchAtEClass`) so the map is `'static`-friendly and can
 /// be reused across calls bound to different `SearchState`s.
 #[derive(Default)]
 pub struct RewriteScratch {
@@ -381,7 +382,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
                 wrap + sizes.get(v)
             };
             // Separable min over a factor list: stub + Σfactors (min over rows of Σslots).
-            let min_over = |factors: &[Factor]| -> i64 { stub_size + factors.iter().map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&k, &v)| arg_cost(k, v)).sum::<i64>()).min().expect("factor rows are non-empty")).sum::<i64>() };
+            let min_over = |factors: &[Factor]| -> i64 { stub_size + factored_min(factors, arg_cost) };
             let rewrite_size = match &sizes.analysis.kept {
                 KeptArgs::AllFactored => Some(min_over(&sizes.analysis.search_state.matches[i].factors)),
                 KeptArgs::Filtered(per) => per[i].as_deref().map(min_over),
@@ -586,10 +587,8 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
             // Only frozen slots (`k < frozen`) contribute; their arg sizes are
             // additively separable, so the min over the product factors into a
             // sum of per-factor minima (factors with no frozen slot add 0).
-            let mut rewrite_size = stub_size;
-            for f in &sizes.analysis.search_state.matches[i].factors {
-                rewrite_size += f.rows.iter().map(|row| f.slots.iter().zip(row).filter(|&(&k, _)| k < frozen).map(|(_, &v)| sizes.get(sizes.egraph.find(v))).sum::<i64>()).min().expect("factor rows are non-empty");
-            }
+            let factors = &sizes.analysis.search_state.matches[i].factors;
+            let rewrite_size = stub_size + factored_min(factors, |k, v| if k < frozen { sizes.get(sizes.egraph.find(v)) } else { 0 });
             best = best.min(rewrite_size);
         }
         best
@@ -655,7 +654,7 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(mut egraph: Stitch
         let Some(kept) = filter_factors_by_candidate(&egraph, m, variable_indices, var_depth) else {
             continue;
         };
-        for vars in crate::matching::factors_product(&kept) {
+        for vars in crate::factor::factors_product(&kept) {
             let wrapped = wrap_subst_args::<F, O>(&mut egraph, &vars, variable_indices, var_depth);
             let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
             pending.push((x, m.root_eclass));

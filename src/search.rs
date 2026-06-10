@@ -1,6 +1,7 @@
 use crate::egraph_util::{build_size_minimal_extraction, compute_eclasses_for_pattern_nodes, compute_usage_counts, egraph_has_cycle};
+use crate::factor::{Factor, factors_product, rebuild_factor};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
-use crate::matching::{Factor, MatchAtEClass, decompose_factor, identity_matches, rebuild_factor};
+use crate::matching::{MatchAtEClass, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
@@ -198,7 +199,33 @@ fn collapse_reuse(slots: &[usize], mut rows: Vec<Vec<Id>>, shallow_idx: usize, k
         r.remove(pd);
     }
     let new_slots: Vec<usize> = slots.iter().filter(|&&s| s != drop_idx).map(|&s| if s > drop_idx { s - 1 } else { s }).collect();
-    Factor::new(new_slots, rows).map(decompose_factor)
+    Factor::new(new_slots, rows).map(Factor::decompose)
+}
+
+/// Shared scaffold for the per-action match builders. For each parent match,
+/// `transform` returns the indices of the factor(s) the action rewrites plus
+/// their replacement factor(s), or `None` to drop the match (no surviving
+/// subst). Every untouched factor is passed through `renumber`. The replacement
+/// is appended after the renumbered factors — factor order is unobservable (the
+/// product, `num_substs`, and `locate_slot` are all order-independent). Returns
+/// the new matches and their total subst count.
+fn rebuild_matches(parent_matches: &[MatchAtEClass], mut transform: impl FnMut(&MatchAtEClass) -> Option<(Vec<usize>, Vec<Factor>)>, renumber: impl Fn(&Factor) -> Factor) -> (Vec<MatchAtEClass>, usize) {
+    let mut out: Vec<MatchAtEClass> = Vec::with_capacity(parent_matches.len());
+    for m in parent_matches {
+        let Some((touched, replacement)) = transform(m) else {
+            continue;
+        };
+        let mut new_factors: Vec<Factor> = Vec::with_capacity(m.factors.len());
+        for (fi, f) in m.factors.iter().enumerate() {
+            if !touched.contains(&fi) {
+                new_factors.push(renumber(f));
+            }
+        }
+        new_factors.extend(replacement);
+        out.push(MatchAtEClass { root_eclass: m.root_eclass, factors: new_factors });
+    }
+    let num = total_substs(&out);
+    (out, num)
 }
 
 impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
@@ -226,57 +253,42 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// (see `enumerate_candidates` and `shift_free_egraph`), so the match set
     /// stays permissive and search keeps exploring those branches.
     fn build_subset_matches(parent_matches: &[MatchAtEClass], var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
-        let mut out: Vec<MatchAtEClass> = Vec::with_capacity(parent_matches.len());
-        for m in parent_matches {
-            let (owner, pos) = m.locate_slot(var_idx);
-            let mut new_factors: Vec<Factor> = Vec::with_capacity(m.factors.len());
-            let mut dropped = false;
-            for (fi, f) in m.factors.iter().enumerate() {
-                if fi == owner {
-                    // New slot list: var_idx → k contiguous slots; higher slots bump by k-1
-                    // (k may be 0 for a leaf, shifting them down — hence isize).
-                    let arity_e = target.children().len();
-                    let delta = arity_e as isize - 1;
-                    let mut new_slots: Vec<usize> = Vec::with_capacity(f.slots.len() + arity_e.saturating_sub(1));
-                    for &s in &f.slots {
-                        if s == var_idx {
-                            new_slots.extend(var_idx..var_idx + arity_e);
-                        } else if s > var_idx {
-                            new_slots.push((s as isize + delta) as usize);
-                        } else {
-                            new_slots.push(s);
-                        }
+        // var_idx → k contiguous slots; higher slots bump by k-1 (k may be 0 for
+        // a leaf, shifting them down — hence isize).
+        let arity_e = target.children().len();
+        let delta = arity_e as isize - 1;
+        rebuild_matches(
+            parent_matches,
+            |m| {
+                let (owner, pos) = m.locate_slot(var_idx);
+                let f = &m.factors[owner];
+                let mut new_slots: Vec<usize> = Vec::with_capacity(f.slots.len() + arity_e.saturating_sub(1));
+                for &s in &f.slots {
+                    if s == var_idx {
+                        new_slots.extend(var_idx..var_idx + arity_e);
+                    } else if s > var_idx {
+                        new_slots.push((s as isize + delta) as usize);
+                    } else {
+                        new_slots.push(s);
                     }
-                    let built = rebuild_factor(new_slots, &f.rows, |row, rows| {
-                        for node in &shared.egraph[row[pos]].nodes {
-                            if !node.matches(target) {
-                                continue;
-                            }
-                            let mut nr = row.to_vec();
-                            nr.remove(pos);
-                            for (j, child_id) in node.children().iter().enumerate() {
-                                nr.insert(pos + j, *child_id);
-                            }
-                            rows.push(nr);
-                        }
-                    });
-                    match built {
-                        Some(fs) => new_factors.extend(fs),
-                        None => {
-                            dropped = true;
-                            break;
-                        }
-                    }
-                } else {
-                    new_factors.push(renumber_factor(f, var_idx, target.children().len() as isize - 1));
                 }
-            }
-            if !dropped {
-                out.push(MatchAtEClass { root_eclass: m.root_eclass, factors: new_factors });
-            }
-        }
-        let num = total_substs(&out);
-        (out, num)
+                let built = rebuild_factor(new_slots, &f.rows, |row, rows| {
+                    for node in &shared.egraph[row[pos]].nodes {
+                        if !node.matches(target) {
+                            continue;
+                        }
+                        let mut nr = row.to_vec();
+                        nr.remove(pos);
+                        for (j, child_id) in node.children().iter().enumerate() {
+                            nr.insert(pos + j, *child_id);
+                        }
+                        rows.push(nr);
+                    }
+                })?;
+                Some((vec![owner], built))
+            },
+            |f| renumber_factor(f, var_idx, delta),
+        )
     }
 
     /// Builds child matches for a `reuse(var_idx, second_var_idx)` action.
@@ -301,55 +313,49 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
         let deep_idx = if shallow_idx == var_idx { second_var_idx } else { var_idx };
-        let mut out: Vec<MatchAtEClass> = Vec::with_capacity(parent_matches.len());
-        for m in parent_matches {
-            let (sf, sp) = m.locate_slot(shallow_idx);
-            let (df, dp) = m.locate_slot(deep_idx);
-            // Build the joint (slots, filtered rows) over the factor(s) carrying
-            // the two coupled slots, then collapse keep/drop and re-decompose.
-            let pred = |a: egg::Id, b: egg::Id| shift_equal(a, b, min_depth, merged_depth, &shared.egraph, shared.shift_clamp);
-            let (joint_slots, joint_rows): (Vec<usize>, Vec<Vec<Id>>) = if sf == df {
-                let f = &m.factors[sf];
-                let rows = f.rows.iter().filter(|r| pred(r[sp], r[dp])).cloned().collect();
-                (f.slots.clone(), rows)
-            } else {
-                let (fa, fb) = (&m.factors[sf], &m.factors[df]);
-                let mut slots: Vec<usize> = fa.slots.iter().chain(&fb.slots).copied().collect();
-                slots.sort_unstable();
-                let mut rows: Vec<Vec<Id>> = Vec::new();
-                for ra in &fa.rows {
-                    for rb in &fb.rows {
-                        if pred(ra[sp], rb[dp]) {
-                            // Reassemble the joint row in ascending slot order.
-                            let mut joint = vec![Id::from(0); slots.len()];
-                            for (p, &s) in fa.slots.iter().enumerate() {
-                                joint[slots.binary_search(&s).unwrap()] = ra[p];
+        rebuild_matches(
+            parent_matches,
+            |m| {
+                let (sf, sp) = m.locate_slot(shallow_idx);
+                let (df, dp) = m.locate_slot(deep_idx);
+                // Build the joint (slots, filtered rows) over the factor(s)
+                // carrying the two coupled slots, then collapse keep/drop and
+                // re-decompose.
+                let pred = |a: egg::Id, b: egg::Id| shift_equal(a, b, min_depth, merged_depth, &shared.egraph, shared.shift_clamp);
+                let (joint_slots, joint_rows): (Vec<usize>, Vec<Vec<Id>>) = if sf == df {
+                    let f = &m.factors[sf];
+                    let rows = f.rows.iter().filter(|r| pred(r[sp], r[dp])).cloned().collect();
+                    (f.slots.clone(), rows)
+                } else {
+                    let (fa, fb) = (&m.factors[sf], &m.factors[df]);
+                    let mut slots: Vec<usize> = fa.slots.iter().chain(&fb.slots).copied().collect();
+                    slots.sort_unstable();
+                    let mut rows: Vec<Vec<Id>> = Vec::new();
+                    for ra in &fa.rows {
+                        for rb in &fb.rows {
+                            if pred(ra[sp], rb[dp]) {
+                                // Reassemble the joint row in ascending slot order.
+                                let mut joint = vec![Id::from(0); slots.len()];
+                                for (p, &s) in fa.slots.iter().enumerate() {
+                                    joint[slots.binary_search(&s).unwrap()] = ra[p];
+                                }
+                                for (p, &s) in fb.slots.iter().enumerate() {
+                                    joint[slots.binary_search(&s).unwrap()] = rb[p];
+                                }
+                                rows.push(joint);
                             }
-                            for (p, &s) in fb.slots.iter().enumerate() {
-                                joint[slots.binary_search(&s).unwrap()] = rb[p];
-                            }
-                            rows.push(joint);
                         }
                     }
-                }
-                (slots, rows)
-            };
-            let Some(merged_factors) = collapse_reuse(&joint_slots, joint_rows, shallow_idx, keep_idx, drop_idx) else {
-                continue;
-            };
+                    (slots, rows)
+                };
+                let merged_factors = collapse_reuse(&joint_slots, joint_rows, shallow_idx, keep_idx, drop_idx)?;
+                // sf and df are the touched factors (deduped when equal).
+                let touched = if sf == df { vec![sf] } else { vec![sf, df] };
+                Some((touched, merged_factors))
+            },
             // Untouched factors just renumber their above-drop slots down by 1.
-            let mut new_factors: Vec<Factor> = Vec::with_capacity(m.factors.len());
-            for (fi, f) in m.factors.iter().enumerate() {
-                if fi == sf || fi == df {
-                    continue;
-                }
-                new_factors.push(renumber_factor(f, drop_idx, -1));
-            }
-            new_factors.extend(merged_factors);
-            out.push(MatchAtEClass { root_eclass: m.root_eclass, factors: new_factors });
-        }
-        let num = total_substs(&out);
-        (out, num)
+            |f| renumber_factor(f, drop_idx, -1),
+        )
     }
 
     /// If `?#k` is useless, returns the (canonical) e-class id it's bound to in
@@ -450,7 +456,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if !new_slots.is_empty() {
                 let new_rows: Vec<Vec<Id>> = old.rows.iter().map(|r| r.iter().enumerate().filter(|&(i, _)| i != pos).map(|(_, &v)| v).collect()).collect();
                 if let Some(f) = Factor::new(new_slots, new_rows) {
-                    m.factors.extend(decompose_factor(f));
+                    m.factors.extend(f.decompose());
                 }
             }
             for f in &mut m.factors {
@@ -478,8 +484,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Applies an action to `self` and returns the resulting child without
-    /// cloning the parent's matches/substs (only the surviving filtered
-    /// substs get allocated in the child — the parent's `Vec<Subst>` data is
+    /// cloning the parent's matches (only the surviving transformed factor
+    /// rows get allocated in the child — the parent's `Vec<Factor>` data is
     /// not cloned-then-discarded). The pattern is cloned and mutated in
     /// place; `frozen_count` is recomputed inline.
     /// Used by best-first and by SMC after sampling so we don't materialise
@@ -714,7 +720,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // pruning if a leaf is buried and keeping (via early-exit) once every
         // leaf has a shallow witness.
         for m in &self.matches {
-            for subst in m.all_substs() {
+            for subst in factors_product(&m.factors) {
                 compute_eclasses_for_pattern_nodes::<F, O>(nodes, &pos_to_var, &subst, &shared.egraph, &mut ec);
                 // `depth_to[i]` = self-loop count on the root→`i` path (inclusive).
                 // `RevExpr` keeps a node before its children, so a low→high pass
