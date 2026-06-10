@@ -219,6 +219,10 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let mut final_cost = None;
     let mut final_rewritten: Option<Vec<String>> = None;
     let mut heap_sizes_at_end: Option<Vec<usize>> = None; // best-first frontier size at stop, one per search iteration
+    // (fn name, cumulative corpus+library cost, usage matches in the minimal
+    // corpus, body) after each abstraction, for the end-of-run summary of cost,
+    // cumulative compression, match count, and the abstraction body.
+    let mut summary: Vec<(String, usize, usize, String)> = Vec::new();
 
     let seed = args.seed.unwrap_or_else(|| rand::rng().random());
     println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
@@ -285,6 +289,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 // the library and must be added separately.
                 let prev_bodies: usize = library.iter().map(|a: &results::AbstractionResult| a.pattern_size).sum();
                 final_cost = Some(best_cost + prev_bodies);
+                summary.push((fn_name.clone(), best_cost + prev_bodies, usage_matches, body_str.clone()));
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
@@ -306,6 +311,28 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                     break;
                 }
             }
+        }
+    }
+
+    if !summary.is_empty() {
+        // Right-align every number to its column's widest entry so the costs,
+        // ratios, and match counts line up across abstractions. Pad the plain
+        // strings *before* coloring — ANSI escapes would otherwise throw off the
+        // width counts that `format!` uses.
+        let name_w = summary.iter().map(|(n, ..)| n.len() + 1).max().unwrap_or(0);
+        let cost_w = summary.iter().map(|(_, c, ..)| c.to_string().len()).max().unwrap_or(0).max(original_size.to_string().len());
+        let ratio_w = summary.iter().map(|(_, c, ..)| format!("{:.2}x", original_size as f64 / *c as f64).len()).max().unwrap_or(0);
+        let match_w = summary.iter().map(|(.., m, _)| m.to_string().len()).max().unwrap_or(0);
+        println!("\n{}", "═══ LIBRARY SUMMARY ═══".green().bold());
+        println!("{} {}", "initial cost:".dimmed(), format!("{:>cost_w$}", original_size).bold());
+        for (name, cost, matches, body) in &summary {
+            let ratio = original_size as f64 / *cost as f64;
+            let name_s = format!("{:<name_w$}", format!("{name}:"));
+            let cost_s = format!("{cost:>cost_w$}");
+            let ratio_s = format!("{:>ratio_w$}", format!("{ratio:.2}x"));
+            let match_s = format!("{matches:>match_w$}");
+            println!("  {} cost {}  cumulative {}  matches {}", name_s.cyan().bold(), cost_s.dimmed(), ratio_s.green().bold(), match_s.bold(),);
+            println!("    {}", body.dimmed());
         }
     }
 
