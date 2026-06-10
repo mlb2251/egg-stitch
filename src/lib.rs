@@ -331,13 +331,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
             let cost_s = format!("{cost:>cost_w$}");
             let ratio_s = format!("{:>ratio_w$}", format!("{ratio:.2}x"));
             let match_s = format!("{matches:>match_w$}");
-            println!(
-                "  {} cost {}  cumulative {}  matches {}",
-                name_s.cyan().bold(),
-                cost_s.dimmed(),
-                ratio_s.green().bold(),
-                match_s.bold(),
-            );
+            println!("  {} cost {}  cumulative {}  matches {}", name_s.cyan().bold(), cost_s.dimmed(), ratio_s.green().bold(), match_s.bold(),);
             println!("    {}", body.dimmed());
         }
     }
