@@ -50,11 +50,17 @@ fn expected_path(input: &str) -> String {
     format!("data/expected_outputs/{stem}.out.json")
 }
 
-/// Path for the temporary `--output` JSON of a single backend run. Includes
-/// pid + input stem + search to stay unique across parallel tests.
+/// Path for the temporary `--output` JSON of a single backend run. Uses pid +
+/// a process-global atomic counter so it's unique per *call*, not just per
+/// (input, search): several tests run best-first on the same input (e.g. tests
+/// that vary only CLI flags), and a shared path would let parallel tests race
+/// on the same file. Stem + search are kept only for human readability.
 fn temp_output_path(input: &str, search: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let stem = Path::new(input).file_stem().and_then(|s| s.to_str()).unwrap_or("input");
-    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}.json", std::process::id(), stem, search))
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}-{}.json", std::process::id(), stem, search, n))
 }
 
 /// Invokes the cargo-built binary, writes its `--output` JSON to a temp file,
