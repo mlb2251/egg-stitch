@@ -211,6 +211,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         };
 
         if let Some(k) = args.max_forced_expansion.0 {
+            // Safe to run on the post-dominance successor set: dominance
+            // short-circuits preserve forced expansion. dominant-reuse: doesn't
+            // change anything about the matching term at each site. useless-inline:
+            // replaces a variable with its minimal term, so preserves cost. Both
+            // don't change the set of matches.
+            //
             // The cap is given in symbols; scale to the family's cost units.
             let cap = k as i64 * F::symbol_cost(&shared.egraph.analysis.weights) as i64;
             successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
