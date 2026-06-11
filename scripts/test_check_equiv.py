@@ -10,6 +10,8 @@ Covers the bits most likely to silently degrade:
     (`($0 $1)` vs `($1 $0)` under a wrap — must NOT be β-equivalent)
   - library inlining + β-equivalence end-to-end
   - DSR-mediated equivalence via the e-graph mode (`(* 0 ?x) <=> 0`)
+  - `constant_folding` directive folding across kinds (`!numbers` / `!floats` /
+    `!integersarefloats`), composition with DSRs, and non-overreach
   - mismatch detection (the oracle must refuse to call non-equivalents equal)
 """
 
@@ -139,6 +141,85 @@ def test_dsr_does_not_overreach(tmp_rules):
     check("DSR does not collapse (* 0 y) with (* 1 y)", not same, status)
 
 
+# --- e-graph mode with constant folding ------------------------------------
+
+def test_constant_folding_unifies(fold_rules):
+    # `constant_folding: !numbers` folds (+ 1 2) into 3, so they must unify.
+    rules = parse_rewrites(fold_rules)
+    same, status = equiv_under_rules(
+        parse_term("(+ 1 2)"), parse_term("3"), rules, max_iters=20, max_nodes=2_000,
+    )
+    check("constant folding unifies (+ 1 2) with 3", same, status)
+
+
+def test_constant_folding_nested(fold_rules):
+    # Folding composes bottom-up: (* (+ 1 2) (- 10 4)) == 18.
+    rules = parse_rewrites(fold_rules)
+    same, status = equiv_under_rules(
+        parse_term("(* (+ 1 2) (- 10 4))"), parse_term("18"), rules, max_iters=20, max_nodes=2_000,
+    )
+    check("constant folding folds nested arithmetic to 18", same, status)
+
+
+def test_constant_folding_no_overreach(fold_rules):
+    # Folding must not equate distinct values: (+ 1 2) != 4.
+    rules = parse_rewrites(fold_rules)
+    same, status = equiv_under_rules(
+        parse_term("(+ 1 2)"), parse_term("4"), rules, max_iters=20, max_nodes=2_000,
+    )
+    check("constant folding does not equate (+ 1 2) with 4", not same, status)
+
+
+def test_constant_folding_skips_inexact(fold_rules):
+    # Inexact integer division is left unfolded, mirroring the Rust path, so
+    # (/ 7 2) must not collapse to 3.
+    rules = parse_rewrites(fold_rules)
+    same, status = equiv_under_rules(
+        parse_term("(/ 7 2)"), parse_term("3"), rules, max_iters=20, max_nodes=2_000,
+    )
+    check("constant folding leaves inexact (/ 7 2) unfolded", not same, status)
+
+
+def test_constant_folding_after_dsr(chain_rules):
+    # Folding fires only after non-minimizing rewrites rearrange the term:
+    # (* 2 tau) =tau=> (* 2 (* 2 pi)) =assoc=> (* (* 2 2) pi) =fold=> (* 4 pi).
+    # The folded subterm (* 2 2) is in neither side; it appears mid-saturation.
+    # Mirrors the `constant_folding_after_rewrites` stitch_compat fixture.
+    rules = parse_rewrites(chain_rules)
+    same, status = equiv_under_rules(
+        parse_term("(* 2 tau)"), parse_term("(* 4 pi)"), rules, max_iters=20, max_nodes=5_000,
+    )
+    check("folding composes with tau-def + assoc: (* 2 tau) ≡ (* 4 pi)", same, status)
+
+
+def _equiv(a, b, rules_path):
+    return equiv_under_rules(parse_term(a), parse_term(b), parse_rewrites(rules_path), max_iters=20, max_nodes=2_000)[0]
+
+
+def test_integers_mode(integers_rules):
+    # !integers folds integer-only operations but leaves float ones alone.
+    check("!integers folds (+ 1 2) ≡ 3", _equiv("(+ 1 2)", "3", integers_rules))
+    check("!integers leaves (+ 1.5 2.5) unfolded vs 4.0", not _equiv("(+ 1.5 2.5)", "4.0", integers_rules))
+
+
+def test_floats_mode(floats_rules):
+    # !floats folds float / mixed operations but leaves integer-only ones alone.
+    check("!floats folds (+ 1.5 2.5) ≡ 4.0", _equiv("(+ 1.5 2.5)", "4.0", floats_rules))
+    check("!floats leaves (+ 1 2) unfolded vs 3", not _equiv("(+ 1 2)", "3", floats_rules))
+
+
+def test_integers_are_floats_mode(iaf_rules):
+    # !integersarefloats reads ints as floats, so it folds integer ops in float
+    # and unifies each integer literal with its float form.
+    check("!integersarefloats folds (+ 1 2) ≡ 3.0", _equiv("(+ 1 2)", "3.0", iaf_rules))
+    check("!integersarefloats unifies 4 ≡ 4.0", _equiv("4", "4.0", iaf_rules))
+
+
+def test_folding_alone_keeps_int_float_distinct(fold_rules):
+    # Plain folding (no `n => n.0`) does not equate the literals 4 and 4.0.
+    check("!numbers keeps 4 and 4.0 distinct", not _equiv("4", "4.0", fold_rules))
+
+
 # --- driver ----------------------------------------------------------------
 
 def main():
@@ -146,6 +227,23 @@ def main():
     with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
         f.write("annihilator: (* 0 ?x) => 0\n")
         rules_path = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
+        f.write("constant_folding: !numbers\n")
+        fold_path = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
+        f.write("tau_def: tau <=> (* 2 pi)\n")
+        f.write("mult_assoc: (* ?a (* ?b ?c)) <=> (* (* ?a ?b) ?c)\n")
+        f.write("constant_folding: !numbers\n")
+        chain_path = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
+        f.write("constant_folding: !integers\n")
+        integers_path = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
+        f.write("constant_folding: !floats\n")
+        floats_path = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
+        f.write("constant_folding: !integersarefloats\n")
+        iaf_path = f.name
     try:
         tests = [
             test_shift_respects_cutoff,
@@ -157,6 +255,15 @@ def main():
             test_library_chained_entries,
             lambda: test_dsr_annihilator(rules_path),
             lambda: test_dsr_does_not_overreach(rules_path),
+            lambda: test_constant_folding_unifies(fold_path),
+            lambda: test_constant_folding_nested(fold_path),
+            lambda: test_constant_folding_no_overreach(fold_path),
+            lambda: test_constant_folding_skips_inexact(fold_path),
+            lambda: test_constant_folding_after_dsr(chain_path),
+            lambda: test_integers_mode(integers_path),
+            lambda: test_floats_mode(floats_path),
+            lambda: test_integers_are_floats_mode(iaf_path),
+            lambda: test_folding_alone_keeps_int_float_distinct(fold_path),
         ]
         for t in tests:
             try:
@@ -165,7 +272,8 @@ def main():
                 FAILS.append(getattr(t, "__name__", repr(t)))
                 traceback.print_exc()
     finally:
-        os.unlink(rules_path)
+        for p in (rules_path, fold_path, chain_path, integers_path, floats_path, iaf_path):
+            os.unlink(p)
 
     print()
     if FAILS:

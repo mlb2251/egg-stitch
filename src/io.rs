@@ -112,6 +112,10 @@ where
 /// use `<=>` instead of `=>` to declare a bidirectional equivalence; it expands
 /// to the forward rule plus a `<name>-rev` rule with `lhs`/`rhs` swapped.
 ///
+/// A `constant_folding: !<kind>` directive line adds built-in numeric rewrites:
+/// `!numbers` folds `+ - * /` over literal leaves, and `!successors` expands an
+/// integer literal `n` into `(+ 1 (n-1))` (see [`crate::constant_folding`]).
+///
 /// Panics if a rule violates the structural conditions behind
 /// `fv(c) = fv(MinTerm(c))` (see [`rule_fv_verdict`]).
 pub fn parse<L, A>(file: &str, weights: &Weights) -> anyhow::Result<Vec<Rewrite<L, A>>>
@@ -129,6 +133,24 @@ where
         .filter(|line| !line.is_empty())
     {
         let (name, rewrite) = line.split_once(':').ok_or(anyhow!("missing colon"))?;
+        // A `constant_folding: !<kind>` directive expands to a built-in family of
+        // folding rewrites rather than a single `lhs => rhs` rule.
+        if name.trim() == "constant_folding" {
+            use crate::constant_folding::{FoldMode, folding_rewrites, successor_expansion_rewrite};
+            match rewrite.trim() {
+                "!integers" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers)?),
+                "!floats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats)?),
+                "!integersarefloats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::IntegersAreFloats)?),
+                // `!numbers` is `!integers` and `!floats` combined (the original behaviour).
+                "!numbers" => {
+                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers)?);
+                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats)?);
+                }
+                "!successors" => rewrites.push(successor_expansion_rewrite::<L, A>(1)?),
+                other => return Err(anyhow!("unknown constant_folding kind {other:?} (supported: !integers, !floats, !integersarefloats, !numbers, !successors)")),
+            }
+            continue;
+        }
         // `=>` is a substring of `<=>`, so check the bidirectional arrow first.
         let (lhs, rhs, bidirectional) = match rewrite.split_once("<=>") {
             Some((lhs, rhs)) => (lhs, rhs, true),

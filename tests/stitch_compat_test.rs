@@ -377,6 +377,57 @@ fn arithmetic_aplusbplus1234() {
     check_fixture_bf_only("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES], false);
 }
 
+/// End-to-end check of the `constant_folding: !numbers` directive. The corpus
+/// writes one program's literal as `(+ 1 2)` and the other two as `3`; folding
+/// saturates them into the same e-class, so the winning abstraction bakes the
+/// constant in — `(f (g 3 x y z) ?#0)`, arity 1 — instead of having to pass the
+/// differing literal as a second parameter. Best-first finds this
+/// deterministically; the fixture pins that folding (parse → saturation →
+/// search) actually changes the output.
+#[test]
+fn constant_folding_unifies_literal() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold.json", &["-r", "data/domains/simple-arithmetic/const_fold.rewrites"], true);
+}
+
+/// Folding firing *after* non-minimizing rewrites. The corpus writes one angle
+/// as `(* 4 pi)` and another as `(* 2 tau)`; unifying them needs the whole
+/// chain: `tau => (* 2 pi)` (expands, growing the term), multiplicative
+/// associativity (`(* 2 (* 2 pi)) => (* (* 2 2) pi)`), then `!numbers` folding
+/// (`(* 2 2) => 4`) to reach `(* 4 pi)`. The folded subterm `(* 2 2)` exists in
+/// neither input — it's created mid-saturation — so this pins that folding
+/// composes with other DSRs rather than only collapsing literals already
+/// written adjacently. Best-first then bakes the shared angle into an arity-1
+/// abstraction `(seg (rot (* 2 tau)) ?#0)`.
+#[test]
+fn constant_folding_after_rewrites() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_after_rewrite.json", &["-r", "data/domains/simple-arithmetic/fold_after_rewrite.rewrites"], true);
+}
+
+/// `!integers`: folds `(+ 1 2) => 3` so the abstraction bakes in `3`, while the
+/// float operation `(+ 1.5 2.5)` is out of scope and stays unfolded in the body
+/// `(f (g 3 (+ 1.5 2.5) z) ?#0)`.
+#[test]
+fn constant_folding_integers() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_integers.json", &["-r", "data/domains/simple-arithmetic/const_fold_integers.rewrites"], true);
+}
+
+/// `!floats`: folds `(+ 1.5 2.5) => 4.0` (float result, decimal preserved) to
+/// unify with the literal `4.0`, while the integer operation `(+ 1 2)` is out of
+/// scope and stays unfolded in the body `(f (g 4.0 (+ 1 2) z) ?#0)`.
+#[test]
+fn constant_folding_floats() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_floats.json", &["-r", "data/domains/simple-arithmetic/const_fold_floats.rewrites"], true);
+}
+
+/// `!integersarefloats`: reads every literal as a float, so the integer operation
+/// `(+ 1 2)` folds to `3.0` and the integer literal `4` unifies with `4.0` (via
+/// `n => n.0`) — one abstraction `(f (g 3.0 4.0 z) ?#0)` covers programs written
+/// in either form.
+#[test]
+fn constant_folding_integers_are_floats() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_int_as_float.json", &["-r", "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
