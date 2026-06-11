@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""Generate the DSR-canonicalization "scramble" corpora.
+
+For each shared-structure family (real PubChem compounds that all contain a
+common substructure), this writes three files under
+data/domains/molecules/scramble/:
+
+  <name>.canon.json  - the molecules encoded with a canonical rooting (reference)
+  <name>.scram.json  - the SAME molecules with a random rooting + random child
+                       order (as if no canonicaliser existed)
+  <name>.rewrites    - re-rooting + neighbour-commutativity DSRs
+
+The experiment these support: scrambling destroys the shared-structure
+alignment that a canonical form (e.g. canonical SMILES) provides; the DSRs
+recover most of it -- either applied once as canonicalisation
+(`--only-use-dsrs-at-start`) or kept live during the abstraction search. The
+size of the "search-uses-DSRs over pre-canonicalise" edge tracks how much large,
+globally-alignable shared backbone the family has. See the sibling README.md for
+the exact run commands and the numbers.
+
+Corpora are restricted to acyclic, **stereocentre-free** molecules so that full
+neighbour commutativity is chemically sound (no enantiomer can be fabricated by
+a child swap) and a fully random scramble is perfectly reversible by the rules.
+
+SMILES are fetched from PubChem by substructure search and cached in
+scripts/scramble_smiles_cache.json, so re-running is deterministic and offline.
+
+Usage: python3 scripts/gen_scramble_corpora.py
+"""
+import json
+import os
+import random
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mol_to_tree as M  # noqa: E402
+from rdkit import Chem  # noqa: E402
+from rdkit import RDLogger  # noqa: E402
+
+RDLogger.DisableLog("rdApp.*")
+
+HERE = os.path.dirname(os.path.abspath(__file__))  # scripts/molecules
+ROOT = os.path.dirname(os.path.dirname(HERE))       # project root
+OUTDIR = os.path.join(ROOT, "data/domains/molecules/scramble")
+# The re-rooting + commutativity DSRs are general molecule symmetry rules (not
+# scramble-specific), so they live at the molecules domain level.
+REWRITES = os.path.join(ROOT, "data/domains/molecules/symmetries.rewrites")
+CACHE = os.path.join(HERE, "scramble_smiles_cache.json")
+
+# (name, substructure SMILES, max heavy atoms, target count, scramble seed)
+FAMILIES = [
+    ("hexyl", "CCCCCC", 13, 80, 11),    # shared linear alkyl backbone
+    ("ester", "CC(=O)OC", 13, 80, 13),  # shared ester functional group
+    ("glycol", "OCCOCCO", 14, 80, 17),  # shared polyether / PEG backbone
+]
+
+
+def http(url, tries=4):
+    """GET a URL with retries, returning decoded text or None."""
+    for _ in range(tries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "egg-stitch"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return resp.read().decode()
+        except Exception:
+            time.sleep(2)
+    return None
+
+
+def substructure_cids(smiles, max_records=8000):
+    """PubChem substructure search -> list of CIDs (handles the async listkey)."""
+    base = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    txt = http(f"{base}/compound/fastsubstructure/smiles/{urllib.parse.quote(smiles)}/cids/JSON?MaxRecords={max_records}")
+    if not txt:
+        return []
+    j = json.loads(txt)
+    if "IdentifierList" in j:
+        return j["IdentifierList"]["CID"]
+    if "Waiting" in j:
+        key = j["Waiting"]["ListKey"]
+        for _ in range(40):
+            time.sleep(3)
+            t = http(f"{base}/compound/listkey/{key}/cids/JSON")
+            if t and "IdentifierList" in json.loads(t):
+                return json.loads(t)["IdentifierList"]["CID"]
+    return []
+
+
+def smiles_for_cids(cids):
+    """Fetch canonical SMILES for a list of CIDs, batched."""
+    base = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    out = []
+    for i in range(0, len(cids), 150):
+        t = http(f"{base}/compound/cid/{','.join(map(str, cids[i:i + 150]))}/property/CanonicalSMILES/CSV")
+        if t:
+            for line in t.splitlines()[1:]:
+                parts = line.split(",")
+                if len(parts) >= 2:
+                    out.append(parts[1].strip().strip('"'))
+        time.sleep(0.15)
+    return out
+
+
+def stereocentre_free(mol):
+    """True if the molecule has no (assigned or potential) stereocentre."""
+    return not Chem.FindMolChiralCenters(Chem.RemoveHs(mol), includeUnassigned=True, useLegacyImplementation=False)
+
+
+def scramble(mol, rng):
+    """Encode `mol` from a random root with every node's children shuffled."""
+    def node(idx, parent, parent_order):
+        atom = mol.GetAtomWithIdx(idx)
+        mark = "m" if parent is None else M.BOND_MARK[parent_order]
+        nbrs = [(b.GetOtherAtomIdx(idx), M.bond_order(b)) for b in atom.GetBonds() if b.GetOtherAtomIdx(idx) != parent]
+        rng.shuffle(nbrs)
+        kids = [f"{mark}{atom.GetDegree()}", atom.GetSymbol()] + [node(n, idx, o) for n, o in nbrs]
+        return "(" + " ".join(kids) + ")"
+    return node(rng.randrange(mol.GetNumAtoms()), None, None)
+
+
+def head_tokens(mols):
+    """Every head token an atom can take across all rootings: `m<deg>` as a root,
+    and `<bond><deg>` reached by each of its incident bond orders. Derived from
+    the molecules (not just one encoding) so the rules are complete for any
+    rooting the re-rooting / scramble can produce."""
+    toks = set()
+    for mol in mols:
+        for atom in mol.GetAtoms():
+            deg = atom.GetDegree()
+            toks.add(f"m{deg}")
+            for bond in atom.GetBonds():
+                toks.add(f"{M.BOND_MARK[M.bond_order(bond)]}{deg}")
+    return toks
+
+
+def full_commutativity(mols):
+    """Adjacent-transposition (full symmetric group) commutativity rules for
+    every head shape any atom can take. Sound here because the corpora are
+    stereocentre-free, so no child swap can produce a distinct (enantiomeric)
+    molecule."""
+    out = []
+    for tok in sorted(head_tokens(mols)):
+        shown = int(tok[1:]) if tok[0] == "m" else int(tok[1:]) - 1
+        if shown < 2:
+            continue
+        base = [f"?n{k}" for k in range(shown)]
+        for k in range(shown - 1):
+            swapped = base[:]
+            swapped[k], swapped[k + 1] = swapped[k + 1], swapped[k]
+            out.append(f"comm_{tok}_{k}: ({tok} ?e {' '.join(base)}) => ({tok} ?e {' '.join(swapped)})")
+    return out
+
+
+def build_family(name, substruct, max_heavy, target, seed, cache):
+    """Fetch (cached), filter, encode, and write the canon/scram files for one
+    family. Returns the prepared molecules (used to build the shared rules)."""
+    if name not in cache:
+        print(f"  [{name}] fetching compounds containing {substruct} ...")
+        cache[name] = smiles_for_cids(substructure_cids(substruct)[:8000])
+
+    M.MAX_HEAVY = max_heavy
+    mols, seen = [], set()
+    for smi in cache[name]:
+        mol = M.prepare_mol(smi)  # acyclic, allowed elements, neutral, <= max_heavy
+        if mol is None or not stereocentre_free(mol):
+            continue
+        key = Chem.MolToSmiles(Chem.RemoveHs(mol))
+        if key in seen:
+            continue
+        seen.add(key)
+        mols.append(mol)
+        if len(mols) >= target:
+            break
+
+    canon = [M.to_tree(mol) for mol in mols]
+    rng = random.Random(seed)
+    scram = [scramble(mol, rng) for mol in mols]
+
+    os.makedirs(OUTDIR, exist_ok=True)
+    with open(os.path.join(OUTDIR, f"{name}.canon.json"), "w") as fh:
+        json.dump(canon, fh, indent=2)
+        fh.write("\n")
+    with open(os.path.join(OUTDIR, f"{name}.scram.json"), "w") as fh:
+        json.dump(scram, fh, indent=2)
+        fh.write("\n")
+    print(f"  [{name}] {len(mols)} molecules")
+    return mols
+
+
+def main():
+    cache = {}
+    if os.path.exists(CACHE):
+        with open(CACHE) as fh:
+            cache = json.load(fh)
+
+    all_mols = []
+    for name, substruct, max_heavy, target, seed in FAMILIES:
+        all_mols += build_family(name, substruct, max_heavy, target, seed, cache)
+
+    # One shared rewrites file covering every edge type and head shape any atom
+    # can take across all families -- re-rooting moves the root over any bond,
+    # commutativity reorders any node's children.
+    bond_types, _degrees = set(), set()
+    for mol in all_mols:
+        M.collect_shapes(mol, bond_types, _degrees)
+    rules = [M.reroot_rule(*bt) for bt in sorted(bond_types)] + full_commutativity(all_mols)
+    with open(REWRITES, "w") as fh:
+        fh.write("\n".join(rules) + "\n")
+    print(f"  {os.path.relpath(REWRITES, ROOT)}: {len(rules)} rules")
+
+    with open(CACHE, "w") as fh:
+        json.dump(cache, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+    print(f"wrote corpora to {os.path.relpath(OUTDIR, ROOT)}/")
+
+
+if __name__ == "__main__":
+    main()
