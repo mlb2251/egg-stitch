@@ -136,10 +136,18 @@ where
         // A `constant_folding: !<kind>` directive expands to a built-in family of
         // folding rewrites rather than a single `lhs => rhs` rule.
         if name.trim() == "constant_folding" {
+            use crate::constant_folding::{FoldMode, folding_rewrites, successor_expansion_rewrite};
             match rewrite.trim() {
-                "!numbers" => rewrites.extend(crate::constant_folding::number_folding_rewrites::<L, A>()?),
-                "!successors" => rewrites.push(crate::constant_folding::successor_expansion_rewrite::<L, A>(1)?),
-                other => return Err(anyhow!("unknown constant_folding kind {other:?} (supported: !numbers, !successors)")),
+                "!integers" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers)?),
+                "!floats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats)?),
+                "!integersarefloats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::IntegersAreFloats)?),
+                // `!numbers` is `!integers` and `!floats` combined (the original behaviour).
+                "!numbers" => {
+                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers)?);
+                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats)?);
+                }
+                "!successors" => rewrites.push(successor_expansion_rewrite::<L, A>(1)?),
+                other => return Err(anyhow!("unknown constant_folding kind {other:?} (supported: !integers, !floats, !integersarefloats, !numbers, !successors)")),
             }
             continue;
         }
