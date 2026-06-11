@@ -10,6 +10,7 @@ Covers the bits most likely to silently degrade:
     (`($0 $1)` vs `($1 $0)` under a wrap — must NOT be β-equivalent)
   - library inlining + β-equivalence end-to-end
   - DSR-mediated equivalence via the e-graph mode (`(* 0 ?x) <=> 0`)
+  - `constant_folding: !numbers` directive folding (and its non-overreach)
   - mismatch detection (the oracle must refuse to call non-equivalents equal)
 """
 
@@ -139,6 +140,45 @@ def test_dsr_does_not_overreach(tmp_rules):
     check("DSR does not collapse (* 0 y) with (* 1 y)", not same, status)
 
 
+# --- e-graph mode with constant folding ------------------------------------
+
+def test_constant_folding_unifies(fold_rules):
+    # `constant_folding: !numbers` folds (+ 1 2) into 3, so they must unify.
+    rules = parse_rewrites(fold_rules)
+    same, status = equiv_under_rules(
+        parse_term("(+ 1 2)"), parse_term("3"), rules, max_iters=20, max_nodes=2_000,
+    )
+    check("constant folding unifies (+ 1 2) with 3", same, status)
+
+
+def test_constant_folding_nested(fold_rules):
+    # Folding composes bottom-up: (* (+ 1 2) (- 10 4)) == 18.
+    rules = parse_rewrites(fold_rules)
+    same, status = equiv_under_rules(
+        parse_term("(* (+ 1 2) (- 10 4))"), parse_term("18"), rules, max_iters=20, max_nodes=2_000,
+    )
+    check("constant folding folds nested arithmetic to 18", same, status)
+
+
+def test_constant_folding_no_overreach(fold_rules):
+    # Folding must not equate distinct values: (+ 1 2) != 4.
+    rules = parse_rewrites(fold_rules)
+    same, status = equiv_under_rules(
+        parse_term("(+ 1 2)"), parse_term("4"), rules, max_iters=20, max_nodes=2_000,
+    )
+    check("constant folding does not equate (+ 1 2) with 4", not same, status)
+
+
+def test_constant_folding_skips_inexact(fold_rules):
+    # Inexact integer division is left unfolded, mirroring the Rust path, so
+    # (/ 7 2) must not collapse to 3.
+    rules = parse_rewrites(fold_rules)
+    same, status = equiv_under_rules(
+        parse_term("(/ 7 2)"), parse_term("3"), rules, max_iters=20, max_nodes=2_000,
+    )
+    check("constant folding leaves inexact (/ 7 2) unfolded", not same, status)
+
+
 # --- driver ----------------------------------------------------------------
 
 def main():
@@ -146,6 +186,9 @@ def main():
     with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
         f.write("annihilator: (* 0 ?x) => 0\n")
         rules_path = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
+        f.write("constant_folding: !numbers\n")
+        fold_path = f.name
     try:
         tests = [
             test_shift_respects_cutoff,
@@ -157,6 +200,10 @@ def main():
             test_library_chained_entries,
             lambda: test_dsr_annihilator(rules_path),
             lambda: test_dsr_does_not_overreach(rules_path),
+            lambda: test_constant_folding_unifies(fold_path),
+            lambda: test_constant_folding_nested(fold_path),
+            lambda: test_constant_folding_no_overreach(fold_path),
+            lambda: test_constant_folding_skips_inexact(fold_path),
         ]
         for t in tests:
             try:
@@ -166,6 +213,7 @@ def main():
                 traceback.print_exc()
     finally:
         os.unlink(rules_path)
+        os.unlink(fold_path)
 
     print()
     if FAILS:

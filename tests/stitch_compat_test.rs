@@ -377,6 +377,18 @@ fn arithmetic_aplusbplus1234() {
     check_fixture_bf_only("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES], false);
 }
 
+/// End-to-end check of the `constant_folding: !numbers` directive. The corpus
+/// writes one program's literal as `(+ 1 2)` and the other two as `3`; folding
+/// saturates them into the same e-class, so the winning abstraction bakes the
+/// constant in — `(f (g 3 x y z) ?#0)`, arity 1 — instead of having to pass the
+/// differing literal as a second parameter. Best-first finds this
+/// deterministically; the fixture pins that folding (parse → saturation →
+/// search) actually changes the output.
+#[test]
+fn constant_folding_unifies_literal() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold.json", &["-r", "data/domains/simple-arithmetic/const_fold.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);

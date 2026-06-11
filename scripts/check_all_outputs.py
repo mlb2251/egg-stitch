@@ -37,6 +37,7 @@ RULES_BY_REL = {
     "cogsci/wheels.dsr.out.json": "data/domains/cogsci/wheels.rewrites",
     "list/list.dsr.out.json": "data/domains/list/list.rewrites",
     "physics/physics.dsr.out.json": "data/domains/physics/physics.rewrites",
+    "simple-arithmetic/const_fold.out.json": "data/domains/simple-arithmetic/const_fold.rewrites",
     "test/arith_unify.out.json": "data/test/arith.rewrites",
     "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
     "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",

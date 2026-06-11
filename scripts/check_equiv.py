@@ -125,6 +125,17 @@ def parse_rewrites(path):
             if not line:
                 continue
             _name, body = line.split(":", 1)
+            # `constant_folding: !numbers` / `!successors` enables built-in numeric
+            # folding (see `crate::constant_folding`). Both directions are proved by
+            # the same fold normal form — folding `(+ 1 2) => 3` puts the expanded
+            # and collapsed forms in one e-class — so the checker models either kind
+            # with a single folding pass (the `("!fold", …)` sentinel below).
+            if _name.strip() == "constant_folding":
+                kind = body.strip()
+                if kind in ("!numbers", "!successors"):
+                    rules.append(("!fold", "numbers"))
+                    continue
+                raise ValueError(f"unknown constant_folding kind: {kind!r}")
             if "<=>" in body:
                 lhs, rhs = body.split("<=>", 1)
                 lhs_t, rhs_t = parse_term(lhs.strip(), pattern=True), parse_term(rhs.strip(), pattern=True)
@@ -452,13 +463,80 @@ def term_size(t):
     return 1
 
 
+# Binary arithmetic operators folded by `constant_folding: !numbers`.
+ARITH_FOLD_OPS = ("+", "-", "*", "/")
+
+
+def _eclass_int(eg, eid):
+    """If the e-class has a 0-ary integer-literal `sym` node, return its value."""
+    for op, kids in eg.eclass_nodes.get(eg.find(eid), ()):
+        if isinstance(op, tuple) and op[0] == "sym" and not kids:
+            try:
+                return int(op[1])
+            except ValueError:
+                pass
+    return None
+
+
+def _eclass_has_sym(eg, eid, name):
+    """True iff the e-class has the 0-ary `sym` leaf `name`."""
+    return any(isinstance(op, tuple) and op[0] == "sym" and not kids and op[1] == name for op, kids in eg.eclass_nodes.get(eg.find(eid), ()))
+
+
+def _eval_int(op, a, b):
+    """Fold `op` over two integers, mirroring the Rust `NumberFold` int path:
+    `/` folds only when exact (and the divisor is non-zero)."""
+    if op == "+":
+        return a + b
+    if op == "-":
+        return a - b
+    if op == "*":
+        return a * b
+    if op == "/":
+        return None if b == 0 or a % b != 0 else a // b
+    return None
+
+
+def _fold_numbers_step(eg):
+    """One `!numbers` folding pass. A flat `(binop a b)` desugars to
+    `app(app(sym(op), a), b)`; for each such e-node with `op` in `+ - * /` and
+    integer-literal operands, add the folded literal and union it in. Integer
+    only — matches what the corpora exercise and sidesteps float formatting."""
+    unions = False
+    for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
+        for op, kids in list(eg.eclass_nodes.get(eid, ())):
+            if op != "app" or len(kids) != 2:
+                continue
+            inner_eid, b_eid = kids
+            b = _eclass_int(eg, b_eid)
+            if b is None:
+                continue
+            for iop, ikids in list(eg.eclass_nodes.get(eg.find(inner_eid), ())):
+                if iop != "app" or len(ikids) != 2:
+                    continue
+                op_eid, a_eid = ikids
+                a = _eclass_int(eg, a_eid)
+                if a is None:
+                    continue
+                fold_op = next((s for s in ARITH_FOLD_OPS if _eclass_has_sym(eg, op_eid, s)), None)
+                if fold_op is None:
+                    continue
+                r = _eval_int(fold_op, a, b)
+                if r is not None and eg.union(eid, eg.add(("sym", str(r)), ())):
+                    unions = True
+    return unions
+
+
 def saturate(eg, rules, max_iters, max_nodes):
     """Run e-saturation: each iteration applies every DSR pattern rule to every
-    matching e-class and fires β on every `App(Lam(_), _)`. Stops at fixpoint,
-    when iteration cap is hit, or when the node cap is exceeded.
+    matching e-class, fires β on every `App(Lam(_), _)`, and (if a
+    `constant_folding` directive was present) folds numeric literals. Stops at
+    fixpoint, when iteration cap is hit, or when the node cap is exceeded.
 
     Returns ("ok", iters) on saturation, ("iters", iters) if iteration cap hit,
     ("nodes", iters) if node cap hit."""
+    fold_numbers = any(r[0] == "!fold" for r in rules)
+    pattern_rules = [r for r in rules if r[0] != "!fold"]
     for it in range(max_iters):
         if eg.total_nodes() > max_nodes:
             return ("nodes", it)
@@ -469,7 +547,7 @@ def saturate(eg, rules, max_iters, max_nodes):
         eclass_ids = list(set(eg.find(e) for e in eg.eclass_nodes))
 
         # 1. Fire all DSR rules.
-        for lhs, rhs in rules:
+        for lhs, rhs in pattern_rules:
             for eid in eclass_ids:
                 for subst in list(ematch(eg, lhs, eid, {})):
                     new_eid = instantiate(eg, rhs, subst)
@@ -496,6 +574,10 @@ def saturate(eg, rules, max_iters, max_nodes):
             new_eid = eg.add_term(reduced)
             if eg.union(app_eid, new_eid):
                 unions_made = True
+
+        # 3. Numeric folding (constant_folding directive).
+        if fold_numbers and _fold_numbers_step(eg):
+            unions_made = True
 
         eg.rebuild()
 
