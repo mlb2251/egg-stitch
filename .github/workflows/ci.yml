@@ -112,11 +112,19 @@ jobs:
       - id: ls
         run: |
           split_per_file="cogsci"
-          domains=$(ls -1 data/domains | jq -R . | jq -sc .)
+          # These domains are excluded from the lambda-calc search/follow sweeps
+          # below. `molecules` is an op-children domain (not lambda-calc) holding
+          # paired canon/scram corpora under subdirs, so the generic sweeps don't
+          # apply to it.
+          skip="molecules"
+          domains=$(ls -1 data/domains | grep -vxF "$skip" | jq -R . | jq -sc .)
           echo "domains=$domains" >> "$GITHUB_OUTPUT"
           targets=$(
             for d in data/domains/*/; do
               name=$(basename "$d")
+              if printf '%s\n' $skip | grep -qx "$name"; then
+                continue
+              fi
               if printf '%s\n' $split_per_file | grep -qx "$name"; then
                 ls -1 "$d"*.json
               else
