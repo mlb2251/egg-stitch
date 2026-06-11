@@ -46,6 +46,14 @@ RULES_BY_REL = {
     "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
     "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",
     "test/if_unify.out.json": "data/test/if.rewrites",
+    # molecule domain (op-children): re-rooting / commutativity DSRs are what
+    # make the rewritten trees equivalent, so β alone can't bridge them. Blessed
+    # by the `molecules_*` cases in `tests/stitch_compat_test.rs`.
+    "test/ethanol_two_rootings.out.json": "data/domains/molecules/molecules.rewrites",
+    "domains/molecules/molecules.out.json": "data/domains/molecules/molecules.rewrites",
+    "molecules/scramble/hexyl.scram.out.json": "data/domains/molecules/symmetries.rewrites",
+    "molecules/scramble/ester.scram.out.json": "data/domains/molecules/symmetries.rewrites",
+    "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/symmetries.rewrites",
 }
 
 

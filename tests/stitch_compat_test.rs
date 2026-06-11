@@ -847,3 +847,85 @@ fn self_loop_nested_loop_tower() {
 fn self_loop_if_unify() {
     check_self_loop("if_unify", "if");
 }
+
+// === molecule domain (op-children) ===
+//
+// Molecules are rooted trees over `(<bond><degree> E n1 n2 ...)` atom nodes
+// (see `data/domains/molecules/molecules.rewrites` for the encoding). They run
+// under the default `op-children` language — no `--language` flag. These pins
+// guard the two molecule-specific behaviours: the re-rooting + commutativity
+// DSRs that recover cross-molecule alignment, and the scramble benchmark
+// (`data/domains/molecules/scramble/`) where those DSRs stand in for a canonical
+// SMILES encoding. All are best-first only (op-children SMC isn't pinned here);
+// the full 5000-molecule `molecules.json` corpus is left out as too slow for a
+// unit test (its β-equivalence is covered by `scripts/check_all_outputs.py`).
+
+/// Two byte-identical ethanol trees, same rooting. With no rules the only
+/// shared structure is the whole molecule, so the search abstracts it wholesale
+/// — the trivial baseline before any symmetry DSR is in play.
+#[test]
+fn molecules_ethanol_same_rooting() {
+    check_fixture_bf_only("data/test/ethanol_same_rooting.json", &[], true);
+}
+
+/// The *same* ethanol molecule written from two different roots (carbon-rooted
+/// vs oxygen-rooted). Without rules the two trees share nothing structurally;
+/// the re-rooting DSRs in `molecules.rewrites` make them a single e-class, so
+/// the search recovers one whole-molecule abstraction covering both. This pins
+/// that re-rooting alignment fires — the core molecule-domain feature.
+#[test]
+fn molecules_ethanol_rerooted() {
+    check_fixture_bf_only("data/test/ethanol_two_rootings.json", &["-r", "data/domains/molecules/molecules.rewrites"], true);
+}
+
+const SYMMETRIES: &[&str] = &["-r", "data/domains/molecules/symmetries.rewrites"];
+
+/// Canonical-rooted scramble corpora, no rules — the reference encoding the
+/// benchmark compares against. Best-first converges (heap drains) so the default
+/// budget suffices and the result is exact. Each pins the single best
+/// abstraction the canonical alignment admits.
+#[test]
+fn molecules_scramble_hexyl_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/hexyl.canon.json", &[], true);
+}
+
+#[test]
+fn molecules_scramble_ester_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/ester.canon.json", &[], true);
+}
+
+#[test]
+fn molecules_scramble_glycol_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/glycol.canon.json", &[], true);
+}
+
+// The scrambled corpora (random root + child order) only realign once the
+// symmetry DSRs saturate, which makes the e-graph large enough that best-first
+// never drains its heap — so, like the self-loop fixtures above, these are
+// pinned at a fixed `--num-steps` budget (the optimum is reached early; the
+// budget just bounds the otherwise-unbounded tail). `check_all_outputs.py`
+// re-checks each rewritten corpus for equivalence under the same DSRs.
+
+/// Scrambled hexyl recovered by the DSRs: the re-rooting rules realign the
+/// scrambled trees onto the shared 6-carbon backbone, so the abstraction is the
+/// re-rooted alkyl chain `(m1 H (s4 C ...))` — the DSR-as-canonicaliser payoff.
+#[test]
+fn molecules_scramble_hexyl_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/hexyl.scram.json", "2000", SYMMETRIES, true);
+}
+
+/// Scrambled ester. Its shared motif (`CC(=O)OC`) is small, so under
+/// single-abstraction search the plain `(s1 H)` leaf still wins on raw count —
+/// pinned as the current behaviour (the larger ester-group abstraction only
+/// surfaces in the multi-abstraction benchmark run).
+#[test]
+fn molecules_scramble_ester_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/ester.scram.json", "2000", SYMMETRIES, true);
+}
+
+/// Scrambled glycol recovered by the DSRs onto its re-rooted polyether backbone
+/// `(s2 O (s4 C ...))`.
+#[test]
+fn molecules_scramble_glycol_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/glycol.scram.json", "2000", SYMMETRIES, true);
+}
