@@ -35,6 +35,7 @@ Patterns use ("pvar", name) for `?x`-style metavariables.
 
 import argparse
 import json
+import math
 import sys
 
 
@@ -125,17 +126,24 @@ def parse_rewrites(path):
             if not line:
                 continue
             _name, body = line.split(":", 1)
-            # `constant_folding: !numbers` / `!successors` enables built-in numeric
-            # folding (see `crate::constant_folding`). Both directions are proved by
-            # the same fold normal form — folding `(+ 1 2) => 3` puts the expanded
-            # and collapsed forms in one e-class — so the checker models either kind
-            # with a single folding pass (the `("!fold", …)` sentinel below).
+            # A `constant_folding` directive enables built-in numeric folding (see
+            # `crate::constant_folding`), emitted here as `("!fold", mode)` sentinels
+            # that `saturate` reads. Folding proves equivalences in both directions
+            # — `(+ 1 2) => 3` puts the expanded and collapsed forms in one e-class —
+            # so `!successors` is modelled by the same folding (integer and float, to
+            # cover integer-valued-float successors like `(+ 1.0 5.0)`).
             if _name.strip() == "constant_folding":
-                kind = body.strip()
-                if kind in ("!numbers", "!successors"):
-                    rules.append(("!fold", "numbers"))
-                    continue
-                raise ValueError(f"unknown constant_folding kind: {kind!r}")
+                modes = {
+                    "!integers": ("integers",),
+                    "!floats": ("floats",),
+                    "!integersarefloats": ("integersarefloats",),
+                    "!numbers": ("integers", "floats"),
+                    "!successors": ("integers", "floats"),
+                }.get(body.strip())
+                if modes is None:
+                    raise ValueError(f"unknown constant_folding kind: {body.strip()!r}")
+                rules.extend(("!fold", m) for m in modes)
+                continue
             if "<=>" in body:
                 lhs, rhs = body.split("<=>", 1)
                 lhs_t, rhs_t = parse_term(lhs.strip(), pattern=True), parse_term(rhs.strip(), pattern=True)
@@ -463,19 +471,44 @@ def term_size(t):
     return 1
 
 
-# Binary arithmetic operators folded by `constant_folding: !numbers`.
+# Binary arithmetic operators the `constant_folding` directives collapse.
 ARITH_FOLD_OPS = ("+", "-", "*", "/")
 
 
-def _eclass_int(eg, eid):
-    """If the e-class has a 0-ary integer-literal `sym` node, return its value."""
+def _leaf_nums(eg, eid):
+    """The numeric 0-ary `sym` leaves of the e-class, as (kind, value) pairs with
+    kind in {"int", "float"}."""
+    out = []
     for op, kids in eg.eclass_nodes.get(eg.find(eid), ()):
         if isinstance(op, tuple) and op[0] == "sym" and not kids:
             try:
-                return int(op[1])
+                out.append(("int", int(op[1])))
             except ValueError:
-                pass
-    return None
+                try:
+                    out.append(("float", float(op[1])))
+                except ValueError:
+                    pass
+    return out
+
+
+def _eclass_int(eg, eid):
+    """Integer value of an integer-literal leaf in the class, else None."""
+    return next((v for k, v in _leaf_nums(eg, eid) if k == "int"), None)
+
+
+def _eclass_float(eg, eid):
+    """Float value of any numeric leaf (integers coerced), else None."""
+    nums = _leaf_nums(eg, eid)
+    f = next((v for k, v in nums if k == "float"), None)
+    if f is not None:
+        return f
+    i = next((v for k, v in nums if k == "int"), None)
+    return float(i) if i is not None else None
+
+
+def _eclass_has_float(eg, eid):
+    """True iff the class holds a genuine float-literal leaf."""
+    return any(k == "float" for k, _ in _leaf_nums(eg, eid))
 
 
 def _eclass_has_sym(eg, eid, name):
@@ -484,8 +517,7 @@ def _eclass_has_sym(eg, eid, name):
 
 
 def _eval_int(op, a, b):
-    """Fold `op` over two integers, mirroring the Rust `NumberFold` int path:
-    `/` folds only when exact (and the divisor is non-zero)."""
+    """Exact integer fold; `/` only when the divisor is non-zero and divides evenly."""
     if op == "+":
         return a + b
     if op == "-":
@@ -497,32 +529,75 @@ def _eval_int(op, a, b):
     return None
 
 
-def _fold_numbers_step(eg):
-    """One `!numbers` folding pass. A flat `(binop a b)` desugars to
-    `app(app(sym(op), a), b)`; for each such e-node with `op` in `+ - * /` and
-    integer-literal operands, add the folded literal and union it in. Integer
-    only — matches what the corpora exercise and sidesteps float formatting."""
-    unions = False
+def _eval_float(op, a, b):
+    """Float fold; declines on a non-finite result. Formatted with `repr`, which
+    matches the Rust `{:?}` leaf form (`4.0`, not `4`) for the clean values the
+    corpora exercise."""
+    if op == "+":
+        r = a + b
+    elif op == "-":
+        r = a - b
+    elif op == "*":
+        r = a * b
+    elif op == "/":
+        r = a / b if b != 0 else float("inf")
+    else:
+        return None
+    return repr(r) if math.isfinite(r) else None
+
+
+def _arith_sites(eg):
+    """Yield `(eid, op_sym, a_eid, b_eid)` for every `(binop a b)` e-node — a flat
+    `(op a b)` desugars to `app(app(sym(op), a), b)`."""
     for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
         for op, kids in list(eg.eclass_nodes.get(eid, ())):
             if op != "app" or len(kids) != 2:
                 continue
             inner_eid, b_eid = kids
-            b = _eclass_int(eg, b_eid)
-            if b is None:
-                continue
             for iop, ikids in list(eg.eclass_nodes.get(eg.find(inner_eid), ())):
                 if iop != "app" or len(ikids) != 2:
                     continue
                 op_eid, a_eid = ikids
-                a = _eclass_int(eg, a_eid)
-                if a is None:
-                    continue
                 fold_op = next((s for s in ARITH_FOLD_OPS if _eclass_has_sym(eg, op_eid, s)), None)
-                if fold_op is None:
-                    continue
-                r = _eval_int(fold_op, a, b)
+                if fold_op is not None:
+                    yield eid, fold_op, a_eid, b_eid
+
+
+def _int_as_float_step(eg):
+    """`!integersarefloats` companion: add the float form `n.0` to every
+    integer-literal e-class that lacks one, so `1` unifies with `1.0`."""
+    unions = False
+    for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
+        n = _eclass_int(eg, eid)
+        if n is not None and not _eclass_has_float(eg, eid) and eg.union(eid, eg.add(("sym", repr(float(n))), ())):
+            unions = True
+    return unions
+
+
+def _fold_step(eg, modes):
+    """One folding pass for the active `modes` (a subset of
+    {"integers", "floats", "integersarefloats"}), mirroring the Rust appliers:
+    integer folding on integer operands, float folding when a float operand is
+    present (or on every op under `integersarefloats`), plus the `n => n.0`
+    companion for `integersarefloats`."""
+    iaf = "integersarefloats" in modes
+    do_int = "integers" in modes
+    do_float = "floats" in modes or iaf
+    unions = _int_as_float_step(eg) if iaf else False
+    for eid, op, a_eid, b_eid in _arith_sites(eg):
+        if do_int:
+            ai, bi = _eclass_int(eg, a_eid), _eclass_int(eg, b_eid)
+            if ai is not None and bi is not None:
+                r = _eval_int(op, ai, bi)
                 if r is not None and eg.union(eid, eg.add(("sym", str(r)), ())):
+                    unions = True
+        if do_float:
+            af, bf = _eclass_float(eg, a_eid), _eclass_float(eg, b_eid)
+            # Plain `!floats` only fires with a genuine float operand present;
+            # `!integersarefloats` reads every operand as a float.
+            if af is not None and bf is not None and (iaf or _eclass_has_float(eg, a_eid) or _eclass_has_float(eg, b_eid)):
+                r = _eval_float(op, af, bf)
+                if r is not None and eg.union(eid, eg.add(("sym", r), ())):
                     unions = True
     return unions
 
@@ -535,7 +610,7 @@ def saturate(eg, rules, max_iters, max_nodes):
 
     Returns ("ok", iters) on saturation, ("iters", iters) if iteration cap hit,
     ("nodes", iters) if node cap hit."""
-    fold_numbers = any(r[0] == "!fold" for r in rules)
+    fold_modes = {r[1] for r in rules if r[0] == "!fold"}
     pattern_rules = [r for r in rules if r[0] != "!fold"]
     for it in range(max_iters):
         if eg.total_nodes() > max_nodes:
@@ -576,7 +651,7 @@ def saturate(eg, rules, max_iters, max_nodes):
                 unions_made = True
 
         # 3. Numeric folding (constant_folding directive).
-        if fold_numbers and _fold_numbers_step(eg):
+        if fold_modes and _fold_step(eg, fold_modes):
             unions_made = True
 
         eg.rebuild()

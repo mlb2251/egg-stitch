@@ -403,6 +403,27 @@ fn constant_folding_after_rewrites() {
     check_fixture_bf_only("data/domains/simple-arithmetic/fold_after_rewrite.json", &["-r", "data/domains/simple-arithmetic/fold_after_rewrite.rewrites"], true);
 }
 
+/// `!integers`: folds `(+ 1 2) => 3` (integer result) so the abstraction bakes
+/// in `3`. Float operands are out of scope for this kind.
+#[test]
+fn constant_folding_integers() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_integers.json", &["-r", "data/domains/simple-arithmetic/const_fold_integers.rewrites"], true);
+}
+
+/// `!floats`: folds `(+ 1.5 2.5) => 4.0` (float result, decimal preserved) to
+/// unify with the literal `4.0`; integer operations stay unfolded.
+#[test]
+fn constant_folding_floats() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_floats.json", &["-r", "data/domains/simple-arithmetic/const_fold_floats.rewrites"], true);
+}
+
+/// `!integersarefloats`: the `n => n.0` rewrite unifies the integer literal `4`
+/// with the float `4.0`, so one abstraction covers programs written either way.
+#[test]
+fn constant_folding_integers_are_floats() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_int_as_float.json", &["-r", "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
