@@ -878,7 +878,9 @@ fn molecules_ethanol_rerooted() {
     check_fixture_bf_only("data/test/ethanol_two_rootings.json", &["-r", "data/domains/molecules/molecules.rewrites"], true);
 }
 
-const SYMMETRIES: &[&str] = &["-r", "data/domains/molecules/symmetries.rewrites"];
+/// The general molecule symmetry DSRs (re-rooting, proper rotations, and
+/// witness-guarded transpositions) — the same file the main corpus uses.
+const SYMMETRIES: &[&str] = &["-r", "data/domains/molecules/molecules.rewrites"];
 
 /// Canonical-rooted scramble corpora, no rules — the reference encoding the
 /// benchmark compares against. Best-first converges (heap drains) so the default

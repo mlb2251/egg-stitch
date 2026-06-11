@@ -32,8 +32,8 @@ from rdkit import RDLogger
 
 RDLogger.DisableLog("rdApp.*")
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+HERE = os.path.dirname(os.path.abspath(__file__))   # scripts/molecules
+ROOT = os.path.dirname(os.path.dirname(HERE))        # project root
 CACHE = os.path.join(HERE, "molecule_smiles.json")
 
 # Tunables for the bulk scan.
@@ -179,11 +179,19 @@ def to_tree(mol):
     return node_sexpr(mol, root_atom(mol), None, None)
 
 
-def collect_shapes(mol, bond_types, sp3_degrees):
-    """Record this molecule's bond types and all-single-bond atom degrees."""
+def collect_shapes(mol, bond_types, sp3_degrees, term_multibond=None):
+    """Record this molecule's bond types, all-single-bond atom degrees, and the
+    `(order, degree)` shapes of multi-bonded centres whose multi-bond partner is
+    terminal (degree 1), e.g. a carbonyl `C=O` -> `(2, 3)`."""
     for bond in mol.GetBonds():
         di, dj = bond.GetBeginAtom().GetDegree(), bond.GetEndAtom().GetDegree()
         bond_types.add((min(di, dj), bond_order(bond), max(di, dj)))
+        if term_multibond is not None and bond_order(bond) >= 2:
+            for end, other in ((bond.GetBeginAtom(), bond.GetEndAtom()), (bond.GetEndAtom(), bond.GetBeginAtom())):
+                # `end` is the centre (>=2 substituents to reorder), `other` the
+                # terminal partner across the multi-bond.
+                if other.GetDegree() == 1 and end.GetDegree() >= 3:
+                    term_multibond.add((bond_order(bond), end.GetDegree()))
     for atom in mol.GetAtoms():
         if all(bond_order(b) == 1 for b in atom.GetBonds()):
             sp3_degrees.add(atom.GetDegree())
@@ -249,6 +257,58 @@ def commutativity_rules(sp3_degrees):
     return out
 
 
+def dup_swap_rule(head, n):
+    """A transposition of the first two of `head`'s `n` shown slots, guarded by
+    the last two slots being the *same* metavariable.
+
+    Firing requires two substituents to be identical, which means the centre is
+    not a stereocentre, so the swap of the other two cannot fabricate an
+    enantiomer -- sound for any element. Together with the proper rotations above
+    (which bring any repeated pair into the last two slots) this realises the
+    full neighbour-permutation group at every centre that has a repeated
+    substituent (e.g. every CH2 / CH3 carbon).
+    """
+    slots = [f"?n{k}" for k in range(n - 1)] + [f"?n{n - 2}"]  # last pair shared
+    swapped = [slots[1], slots[0], *slots[2:]]
+    return f"comm_{head}_dup: {sexpr(head, '?e', slots)} => {sexpr(head, '?e', swapped)}"
+
+
+def dup_swap_rules(sp3_degrees):
+    """Duplicate-guarded transpositions for every all-single-bond shape with at
+    least three shown slots (root `m>=3`, single-bonded child `s>=4`)."""
+    out = []
+    for deg in sorted(sp3_degrees):
+        if deg >= 3:
+            out.append(dup_swap_rule(f"m{deg}", deg))
+        if deg - 1 >= 3:
+            out.append(dup_swap_rule(f"s{deg}", deg - 1))
+    return out
+
+
+def terminal_multibond_rules(term_multibond):
+    """Free commutativity for a multi-bonded centre whose multi-bond partner is
+    terminal -- e.g. a carbonyl, where the `=O` has no second substituent so no
+    E/Z geometry exists and the centre's remaining neighbours reorder freely.
+
+    Emitted in the rooted-at-the-terminal-partner form `(m1 ?p (<order><deg> ...))`;
+    re-rooting carries it to such centres anywhere in the tree. Adjacent
+    transpositions of the centre's `deg-1` children generate their full symmetric
+    group. Sound for any element because a degree-1 partner cannot bear the
+    second substituent E/Z would require.
+    """
+    out = []
+    for order, deg in sorted(term_multibond):
+        mark = BOND_MARK[order]
+        kids = [f"?n{k}" for k in range(deg - 1)]
+        for k in range(deg - 2):
+            swapped = kids[:]
+            swapped[k], swapped[k + 1] = swapped[k + 1], swapped[k]
+            inner_l = sexpr(f"{mark}{deg}", "?c", kids)
+            inner_r = sexpr(f"{mark}{deg}", "?c", swapped)
+            out.append(f"comm_term_{mark}{deg}_{k}: {sexpr('m1', '?p', [inner_l])} => {sexpr('m1', '?p', [inner_r])}")
+    return out
+
+
 def main():
     cache = {}
     if os.path.exists(CACHE):
@@ -283,12 +343,14 @@ def main():
         fh.write("\n")
 
     trees = [to_tree(mol) for mol in mols]
-    bond_types, sp3_degrees = set(), set()
+    bond_types, sp3_degrees, term_multibond = set(), set(), set()
     for mol in mols:
-        collect_shapes(mol, bond_types, sp3_degrees)
+        collect_shapes(mol, bond_types, sp3_degrees, term_multibond)
 
     reroots = [reroot_rule(i, o, j) for (i, o, j) in sorted(bond_types)]
     comms = commutativity_rules(sp3_degrees)
+    dups = dup_swap_rules(sp3_degrees)
+    terms = terminal_multibond_rules(term_multibond)
 
     outdir = os.path.join(ROOT, "data/domains/molecules")
     os.makedirs(outdir, exist_ok=True)
@@ -309,20 +371,30 @@ def main():
     ]
     lines = header + reroots + [
         "",
-        "// Commutativity (neighbours are unordered) -- only proper rotations of the",
-        "// local geometry, so no rule ever merges a stereoisomer:",
-        "//   * a double/triple-bonded centre gets no rule (a swap would flip E/Z);",
+        "// Commutativity (neighbours are unordered). Unconditionally only proper",
+        "// rotations of the local geometry, so no rule ever merges a stereoisomer:",
+        "//   * a double/triple-bonded centre gets no rotation (a swap would flip E/Z);",
         "//   * a tetrahedral centre uses A4 as a root, C3 with the parent pinned (never a",
         "//     bare transposition, so enantiomers stay distinct);",
         "//   * a pyramidal centre uses C3 as a root and nothing as a child; a divalent",
         "//     centre uses its C2 swap.",
-    ] + comms
+    ] + comms + [
+        "",
+        "// Transpositions guarded by a local achirality witness -- always sound, and",
+        "// together with the rotations above they close the full neighbour-permutation",
+        "// group on the achiral centres a random scramble can produce:",
+        "//   * `_dup`: two substituents identical => centre is not stereogenic, so the",
+        "//     other two may be swapped (the shared `?n` slot is the witness);",
+    ] + dups + [
+        "//   * `_term`: the multi-bond partner is terminal (`m1`, e.g. a carbonyl =O),",
+        "//     so no E/Z geometry exists and the centre's neighbours reorder freely.",
+    ] + terms
 
     with open(os.path.join(outdir, "molecules.rewrites"), "w") as fh:
         fh.write("\n".join(lines) + "\n")
 
     print(f"wrote {len(trees)} molecules, {len(reroots)} re-root rules, "
-          f"{len(comms)} commutativity rules")
+          f"{len(comms)} rotation + {len(dups)} duplicate + {len(terms)} terminal-multibond rules")
 
 
 if __name__ == "__main__":

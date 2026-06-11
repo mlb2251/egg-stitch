@@ -51,9 +51,9 @@ RULES_BY_REL = {
     # by the `molecules_*` cases in `tests/stitch_compat_test.rs`.
     "test/ethanol_two_rootings.out.json": "data/domains/molecules/molecules.rewrites",
     "domains/molecules/molecules.out.json": "data/domains/molecules/molecules.rewrites",
-    "molecules/scramble/hexyl.scram.out.json": "data/domains/molecules/symmetries.rewrites",
-    "molecules/scramble/ester.scram.out.json": "data/domains/molecules/symmetries.rewrites",
-    "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/symmetries.rewrites",
+    "molecules/scramble/hexyl.scram.out.json": "data/domains/molecules/molecules.rewrites",
+    "molecules/scramble/ester.scram.out.json": "data/domains/molecules/molecules.rewrites",
+    "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
 }
 
 
