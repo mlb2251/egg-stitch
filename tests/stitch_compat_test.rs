@@ -403,22 +403,26 @@ fn constant_folding_after_rewrites() {
     check_fixture_bf_only("data/domains/simple-arithmetic/fold_after_rewrite.json", &["-r", "data/domains/simple-arithmetic/fold_after_rewrite.rewrites"], true);
 }
 
-/// `!integers`: folds `(+ 1 2) => 3` (integer result) so the abstraction bakes
-/// in `3`. Float operands are out of scope for this kind.
+/// `!integers`: folds `(+ 1 2) => 3` so the abstraction bakes in `3`, while the
+/// float operation `(+ 1.5 2.5)` is out of scope and stays unfolded in the body
+/// `(f (g 3 (+ 1.5 2.5) z) ?#0)`.
 #[test]
 fn constant_folding_integers() {
     check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_integers.json", &["-r", "data/domains/simple-arithmetic/const_fold_integers.rewrites"], true);
 }
 
 /// `!floats`: folds `(+ 1.5 2.5) => 4.0` (float result, decimal preserved) to
-/// unify with the literal `4.0`; integer operations stay unfolded.
+/// unify with the literal `4.0`, while the integer operation `(+ 1 2)` is out of
+/// scope and stays unfolded in the body `(f (g 4.0 (+ 1 2) z) ?#0)`.
 #[test]
 fn constant_folding_floats() {
     check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_floats.json", &["-r", "data/domains/simple-arithmetic/const_fold_floats.rewrites"], true);
 }
 
-/// `!integersarefloats`: the `n => n.0` rewrite unifies the integer literal `4`
-/// with the float `4.0`, so one abstraction covers programs written either way.
+/// `!integersarefloats`: reads every literal as a float, so the integer operation
+/// `(+ 1 2)` folds to `3.0` and the integer literal `4` unifies with `4.0` (via
+/// `n => n.0`) — one abstraction `(f (g 3.0 4.0 z) ?#0)` covers programs written
+/// in either form.
 #[test]
 fn constant_folding_integers_are_floats() {
     check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_int_as_float.json", &["-r", "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"], true);

@@ -196,6 +196,12 @@ def _equiv(a, b, rules_path):
     return equiv_under_rules(parse_term(a), parse_term(b), parse_rewrites(rules_path), max_iters=20, max_nodes=2_000)[0]
 
 
+def test_integers_mode(integers_rules):
+    # !integers folds integer-only operations but leaves float ones alone.
+    check("!integers folds (+ 1 2) ≡ 3", _equiv("(+ 1 2)", "3", integers_rules))
+    check("!integers leaves (+ 1.5 2.5) unfolded vs 4.0", not _equiv("(+ 1.5 2.5)", "4.0", integers_rules))
+
+
 def test_floats_mode(floats_rules):
     # !floats folds float / mixed operations but leaves integer-only ones alone.
     check("!floats folds (+ 1.5 2.5) ≡ 4.0", _equiv("(+ 1.5 2.5)", "4.0", floats_rules))
@@ -230,6 +236,9 @@ def main():
         f.write("constant_folding: !numbers\n")
         chain_path = f.name
     with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
+        f.write("constant_folding: !integers\n")
+        integers_path = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
         f.write("constant_folding: !floats\n")
         floats_path = f.name
     with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
@@ -251,6 +260,7 @@ def main():
             lambda: test_constant_folding_no_overreach(fold_path),
             lambda: test_constant_folding_skips_inexact(fold_path),
             lambda: test_constant_folding_after_dsr(chain_path),
+            lambda: test_integers_mode(integers_path),
             lambda: test_floats_mode(floats_path),
             lambda: test_integers_are_floats_mode(iaf_path),
             lambda: test_folding_alone_keeps_int_float_distinct(fold_path),
@@ -262,7 +272,7 @@ def main():
                 FAILS.append(getattr(t, "__name__", repr(t)))
                 traceback.print_exc()
     finally:
-        for p in (rules_path, fold_path, chain_path, floats_path, iaf_path):
+        for p in (rules_path, fold_path, chain_path, integers_path, floats_path, iaf_path):
             os.unlink(p)
 
     print()
