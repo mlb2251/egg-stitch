@@ -1,0 +1,3 @@
+tau_def: tau <=> (* 2 pi)
+mult_assoc: (* ?a (* ?b ?c)) <=> (* (* ?a ?b) ?c)
+constant_folding: !numbers

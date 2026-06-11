@@ -179,6 +179,18 @@ def test_constant_folding_skips_inexact(fold_rules):
     check("constant folding leaves inexact (/ 7 2) unfolded", not same, status)
 
 
+def test_constant_folding_after_dsr(chain_rules):
+    # Folding fires only after non-minimizing rewrites rearrange the term:
+    # (* 2 tau) =tau=> (* 2 (* 2 pi)) =assoc=> (* (* 2 2) pi) =fold=> (* 4 pi).
+    # The folded subterm (* 2 2) is in neither side; it appears mid-saturation.
+    # Mirrors the `constant_folding_after_rewrites` stitch_compat fixture.
+    rules = parse_rewrites(chain_rules)
+    same, status = equiv_under_rules(
+        parse_term("(* 2 tau)"), parse_term("(* 4 pi)"), rules, max_iters=20, max_nodes=5_000,
+    )
+    check("folding composes with tau-def + assoc: (* 2 tau) ≡ (* 4 pi)", same, status)
+
+
 # --- driver ----------------------------------------------------------------
 
 def main():
@@ -189,6 +201,11 @@ def main():
     with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
         f.write("constant_folding: !numbers\n")
         fold_path = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".rewrites", delete=False) as f:
+        f.write("tau_def: tau <=> (* 2 pi)\n")
+        f.write("mult_assoc: (* ?a (* ?b ?c)) <=> (* (* ?a ?b) ?c)\n")
+        f.write("constant_folding: !numbers\n")
+        chain_path = f.name
     try:
         tests = [
             test_shift_respects_cutoff,
@@ -204,6 +221,7 @@ def main():
             lambda: test_constant_folding_nested(fold_path),
             lambda: test_constant_folding_no_overreach(fold_path),
             lambda: test_constant_folding_skips_inexact(fold_path),
+            lambda: test_constant_folding_after_dsr(chain_path),
         ]
         for t in tests:
             try:
@@ -214,6 +232,7 @@ def main():
     finally:
         os.unlink(rules_path)
         os.unlink(fold_path)
+        os.unlink(chain_path)
 
     print()
     if FAILS:

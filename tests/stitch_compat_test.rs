@@ -389,6 +389,20 @@ fn constant_folding_unifies_literal() {
     check_fixture_bf_only("data/domains/simple-arithmetic/const_fold.json", &["-r", "data/domains/simple-arithmetic/const_fold.rewrites"], true);
 }
 
+/// Folding firing *after* non-minimizing rewrites. The corpus writes one angle
+/// as `(* 4 pi)` and another as `(* 2 tau)`; unifying them needs the whole
+/// chain: `tau => (* 2 pi)` (expands, growing the term), multiplicative
+/// associativity (`(* 2 (* 2 pi)) => (* (* 2 2) pi)`), then `!numbers` folding
+/// (`(* 2 2) => 4`) to reach `(* 4 pi)`. The folded subterm `(* 2 2)` exists in
+/// neither input — it's created mid-saturation — so this pins that folding
+/// composes with other DSRs rather than only collapsing literals already
+/// written adjacently. Best-first then bakes the shared angle into an arity-1
+/// abstraction `(seg (rot (* 2 tau)) ?#0)`.
+#[test]
+fn constant_folding_after_rewrites() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_after_rewrite.json", &["-r", "data/domains/simple-arithmetic/fold_after_rewrite.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
