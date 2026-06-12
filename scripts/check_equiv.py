@@ -602,14 +602,21 @@ def _fold_step(eg, modes):
     return unions
 
 
-def saturate(eg, rules, max_iters, max_nodes):
+def saturate(eg, rules, max_iters, max_nodes, goal=None):
     """Run e-saturation: each iteration applies every DSR pattern rule to every
     matching e-class, fires β on every `App(Lam(_), _)`, and (if a
     `constant_folding` directive was present) folds numeric literals. Stops at
     fixpoint, when iteration cap is hit, or when the node cap is exceeded.
 
-    Returns ("ok", iters) on saturation, ("iters", iters) if iteration cap hit,
-    ("nodes", iters) if node cap hit."""
+    When `goal` is `(eid_a, eid_b)`, stops the instant the two land in the same
+    e-class — we only need to witness *that* equivalence, not the full congruence
+    closure. The commutativity-heavy molecule rules otherwise keep generating the
+    entire neighbour-permutation group long after the roots have already met, so
+    this early exit is the difference between seconds and the node cap. It only
+    short-circuits a *positive* verdict, so it changes no result.
+
+    Returns ("ok", iters) on goal-reached/fixpoint, ("iters", iters) if iteration
+    cap hit, ("nodes", iters) if node cap hit."""
     fold_modes = {r[1] for r in rules if r[0] == "!fold"}
     pattern_rules = [r for r in rules if r[0] != "!fold"]
     for it in range(max_iters):
@@ -656,6 +663,8 @@ def saturate(eg, rules, max_iters, max_nodes):
 
         eg.rebuild()
 
+        if goal is not None and eg.find(goal[0]) == eg.find(goal[1]):
+            return ("ok", it + 1)
         if not unions_made:
             return ("ok", it + 1)
     return ("iters", max_iters)
@@ -668,7 +677,11 @@ def equiv_under_rules(t1, t2, rules, max_iters, max_nodes):
     eid1 = eg.add_term(t1)
     eid2 = eg.add_term(t2)
     eg.rebuild()
-    status, iters = saturate(eg, rules, max_iters, max_nodes)
+    # Hash-consing already merges structurally-identical terms, so many pairs are
+    # done before any rule fires.
+    if eg.find(eid1) == eg.find(eid2):
+        return True, "identical (0 iters)"
+    status, iters = saturate(eg, rules, max_iters, max_nodes, goal=(eid1, eid2))
     same = eg.find(eid1) == eg.find(eid2)
     return same, f"{status} after {iters} iters ({eg.total_nodes()} nodes)"
 
