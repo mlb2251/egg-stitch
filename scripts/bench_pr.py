@@ -9,9 +9,9 @@ swapping ``egg_stitch_bin`` between the two binaries per measurement. No
 DSR condition) we run base then PR back-to-back. The first rep is treated
 as warmup and dropped from the aggregate. Babble and Stitch are not
 invoked; only our two methods are timed. Prints a side-by-side mean elapsed
-time and mean compression ratio per (domain, method). The with-DSRs table
-also carries a single ``molecules`` row geomeaning the scramble families in
-``MOL_FAMILIES`` (run only with DSRs, since they're meaningless without them).
+time and mean compression ratio per (domain, method). The scramble families in
+``MOL_FAMILIES`` (run only with DSRs, since they're meaningless without them)
+get their own ``molecules`` table with a per-family breakdown and geomean row.
 
 It also diffs the committed `data/expected_outputs/**/*.out.json` fixtures
 between the two branches, comparing every `compression_ratio` leaf, and emits a
@@ -55,8 +55,8 @@ DOMAINS = ["nuts-bolts", "dials", "list", "physics"]
 # Molecule scramble families (data/domains/molecules/scramble/): real PubChem
 # substructure corpora whose shared backbone the symmetry DSRs must re-align in
 # place of a canonical SMILES encoding. They're meaningless without the rewrites,
-# so we run them only in the with-DSRs condition and fold them into a single
-# geomeaned "molecules" row. op-children grammar -> "no-apps" weighting.
+# so we run them only in the with-DSRs condition and report them in their own
+# "molecules" table (per-family rows + geomean). op-children grammar -> "no-apps" weighting.
 MOL_FAMILIES = ["hexyl", "ester", "glycol"]
 MOL_DIR = ROOT / "data" / "domains" / "molecules" / "scramble"
 MOL_REWRITES = "data/domains/molecules/molecules.rewrites"  # relative to egg-stitch cwd
@@ -415,11 +415,11 @@ def compression_section(base: str, pr: str) -> str:
 
 
 def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str,
-              mol_base: dict | None = None, mol_pr: dict | None = None) -> str:
-    """Return a GitHub-flavored markdown comparison table for one DSR condition.
+              domains: list[str] = DOMAINS) -> str:
+    """Return a GitHub-flavored markdown comparison table.
 
-    ``mol_base``/``mol_pr`` (only passed for the with-DSRs table) add a single
-    ``molecules`` row geomeaning the scramble families in ``MOL_FAMILIES``.
+    Emits one row per entry in ``domains`` plus a trailing geomean row, for
+    each of the ``enum`` and ``smc`` methods.
     """
     lines = [
         f"### {title} — `{pr_label}` vs `{base_label}`",
@@ -436,12 +436,9 @@ def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str,
         return np.prod(rows, axis=0) ** (1 / len(rows))
 
     for m in ("enum", "smc"):
-        rows = [cell(base[dom][m], pr[dom][m]) for dom in DOMAINS]
-        labels = list(DOMAINS)
+        rows = [cell(base[dom][m], pr[dom][m]) for dom in domains]
+        labels = list(domains)
         rows.append(geomean(rows)); labels.append("geomean")
-        if mol_base is not None:
-            mol_rows = [cell(mol_base[fam][m], mol_pr[fam][m]) for fam in MOL_FAMILIES]
-            rows.append(geomean(mol_rows)); labels.append("molecules")
         for dom, (t_base, t_pr, speedup, c_base, c_pr) in zip(labels, rows):
             comp_warn = " ‼️" if c_pr / c_base < 0.99 else ""
             lines.append(f"| {_speedup_emoji(speedup)}{comp_warn} | {dom} | {m} | {t_base:.3f} | {t_pr:.3f} | {speedup:.2f}x | {c_base:.3f} | {c_pr:.3f} |")
@@ -559,14 +556,18 @@ def main() -> None:
         with_md = fmt_table(base, pr,
                             summarize(session, "base", "with_dsrs", methods, with_reps),
                             summarize(session, "pr", "with_dsrs", methods, with_reps),
-                            "with DSRs",
-                            mol_base=summarize(session, "base", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
-                            mol_pr=summarize(session, "pr", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES))
+                            "with DSRs")
         without_md = fmt_table(base, pr,
                                summarize(session, "base", "without_dsrs", methods, without_reps),
                                summarize(session, "pr", "without_dsrs", methods, without_reps),
                                "without DSRs")
-        timing_section = "## Timing and fixture regressions\n\n" + with_md + "\n\n" + without_md + "\n"
+        mol_md = fmt_table(base, pr,
+                           summarize(session, "base", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
+                           summarize(session, "pr", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
+                           "molecules (with DSRs)",
+                           domains=MOL_FAMILIES)
+        timing_section = ("## Timing and fixture regressions\n\n"
+                          + with_md + "\n\n" + without_md + "\n\n" + mol_md + "\n")
         report_section = comp_section.rstrip() + "\n\n" + timing_section
         print()
         print(report_section)
