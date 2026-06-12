@@ -27,7 +27,7 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_PATH = PROJECT_ROOT / "results" / "scramble_results.json"
-DEFAULT_OUT_PATH = PROJECT_ROOT / "figures" / "scramble_results.png"
+DEFAULT_OUT_DIR = PROJECT_ROOT / "figures" / "scramble_results"
 
 METHODS = ("DSR-canon", "search-DSR")
 METHOD_COLORS = {
@@ -100,7 +100,7 @@ class ExprNode:
                 label for label in self.collect_labels() if label.startswith("R")
             )
         )
-        assert len(r_labels) <= 3, "too many R labels to normalize"
+        assert len(r_labels) <= 2, "too many R labels to normalize"
         if len(r_labels) == 0:
             return self
         if len(r_labels) == 1:
@@ -128,8 +128,6 @@ def tokenize_expr(expr: str) -> list[str]:
 
 def display_label(label: str) -> str:
     """Normalize variables into molecule-style attachment labels."""
-    if label.startswith("fn_"):
-        return "V" + label.removeprefix("fn_")
     if label.startswith("?#"):
         return "R" + str(int(label.removeprefix("?#")) + 1)
     return label
@@ -142,11 +140,12 @@ def parse_expr(tokens: list[str], pos: int = 0) -> tuple[ExprNode, int]:
         return ExprNode(head=token, label=display_label(token), children=()), pos + 1
 
     head = tokens[pos + 1]
-    if re.fullmatch(r"[msdt]\d+", head):
+    if re.fullmatch(r"[msd]\d+", head):
         label = display_label(tokens[pos + 2])
         children = []
         pos += 3
     else:
+        assert re.fullmatch(r"fn_\d+", head), f"unexpected expression head: {head}"
         label = display_label(head)
         children = []
         pos += 2
@@ -170,8 +169,6 @@ def bond_order(label: str) -> int:
     """Infer a bond order from an expression label."""
     if label.startswith("d"):
         return 2
-    if label.startswith("t"):
-        return 3
     return 1
 
 
@@ -222,10 +219,10 @@ def normalize_positions(
     y_span = max_y - min_y
 
     def place_within(value: float, min_val: float, span: float) -> float:
-        if span > 0:
-            return (value - min_val) / span
-        else:
+        # A vertical/linear fragment collapses to a single column or row.
+        if span == 0:
             return 0.5
+        return (value - min_val) / span
 
     return {
         node_id: (
@@ -249,7 +246,7 @@ def add_bond_segments(
     length = math.hypot(dx, dy) or 1.0
     px = -dy / length
     py = dx / length
-    offsets = {1: [0.0], 2: [-0.06, 0.06], 3: [-0.09, 0.0, 0.09]}.get(order, [0.0])
+    offsets = {1: [0.0], 2: [-0.06, 0.06]}[order]
     for offset in offsets:
         drawer.add_artist(
             Line2D(
@@ -368,9 +365,9 @@ def step_points(
     ``n - 1``-th entry from ``cost_at_end_of_each_iter`` and ``library``.
     """
     initial_cost = payload["initial_cost"]
-    costs = payload.get("cost_at_end_of_each_iter", [])
-    library = payload.get("library", [])
-    times = payload.get("iteration_times", [])
+    costs = payload["cost_at_end_of_each_iter"]
+    library = payload["library"]
+    times = payload["iteration_times"]
 
     limit = min(max_step, len(costs), len(library), len(times))
     xs = [0]
@@ -380,7 +377,7 @@ def step_points(
         xs.append(step)
         ys.append(compression_ratio(initial_cost, costs[step - 1]))
         labels.append(library[step - 1])
-    last_time = times[limit - 1] if limit > 0 else math.nan
+    last_time = times[limit - 1]
     return xs, ys, unroll_labels(labels), last_time
 
 
@@ -448,8 +445,7 @@ def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> No
     results = []
 
     for method in METHODS:
-        payload = domain_payload.get(method)
-        results.append(step_points(payload, max_step))
+        results.append(step_points(domain_payload[method], max_step))
 
     median_ys = np.median([ys for _, ys, _, _ in results], axis=0)
 
@@ -479,7 +475,6 @@ def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> No
     ax.set_ylim(lo - r * 0.05, hi + r * 0.15)
 
     ax.set_title(f"Scramble results: {domain}")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
 
@@ -493,8 +488,8 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUT_PATH,
-        help="Output file path or directory for the rendered graphs",
+        default=DEFAULT_OUT_DIR,
+        help="Output directory for the rendered graphs",
     )
     parser.add_argument(
         "--max-step", type=int, default=4, help="Maximum step index to plot, inclusive"
@@ -502,10 +497,9 @@ def main() -> None:
     args = parser.parse_args()
 
     saved = load_results(args.input)
-    out_dir = args.output if args.output.suffix == "" else args.output.with_suffix("")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    args.output.mkdir(parents=True, exist_ok=True)
     for domain in saved:
-        render_domain(saved, domain, out_dir / f"{domain}.png", args.max_step)
+        render_domain(saved, domain, args.output / f"{domain}.png", args.max_step)
 
 
 if __name__ == "__main__":
