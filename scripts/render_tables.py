@@ -151,16 +151,23 @@ def geomean_col(xs: list[float | None]) -> float | None:
 
 def bold_best(xs: list[float | None], spec: str,
               higher_is_better: bool) -> list[str]:
-    """Format each value, wrapping the best one(s) in ``\\textbf{}``."""
+    """Format each value, wrapping the best one(s) in ``\\textbf{}``.
+
+    Ties are judged on the *rendered* value: any cell whose ``spec``-formatted
+    string matches the best value's formatted string is bolded, so two cells
+    that round to the same display (e.g. 7.191 and 7.192 both showing 7.19)
+    are both bolded even though their underlying values differ.
+    """
     vs = [x for x in xs if x is not None]
     best = max(vs) if higher_is_better and vs else (min(vs) if vs else None)
+    best_str = format(best, spec) if best is not None else None
     out = []
     for x in xs:
         if x is None:
             out.append("N/A")
         else:
             s = format(x, spec)
-            out.append(f"\\textbf{{{s}}}" if x == best else s)
+            out.append(f"\\textbf{{{s}}}" if s == best_str else s)
     return out
 
 
