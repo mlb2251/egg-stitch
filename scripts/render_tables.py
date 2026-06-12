@@ -259,11 +259,15 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
     # Tables 1 & 3 run with DSRs (which Stitch doesn't accept); fill the
     # Stitch column from the matching no-DSR table and star those cells.
     methods = METHODS
+    if presentation and table == 3:
+        methods = [m for m in methods if m != "stitch"]
     n = len(methods)
     has_egraph_min = table in TABLES_WITH_EGRAPH_MIN
     show_size = not presentation
     stitch_no_dsr = _stitch_no_dsr_maps(table)
-    stitch_idx = methods.index("stitch")
+    # The data rows always follow global METHODS; we only need this index
+    # to star the Stitch cell (if it hasn't been filtered out).
+    raw_stitch_idx = METHODS.index("stitch")
 
     # Column layout: domain, (size cols,) CRs, times. Presentation drops sizes
     # and adds a single vertical rule between the CR and Time groups.
@@ -321,13 +325,23 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
         For DSR tables, Stitch cells come from the no-DSR run and get a
         trailing star to flag the mismatch.
         """
+        # If we are dropping Stitch for this table, filter it out before bolding
+        # so that the bolding is relative to the remaining methods.
+        if presentation and table == 3:
+            crs = [v for i, v in enumerate(crs) if i != raw_stitch_idx]
+            ts = [v for i, v in enumerate(ts) if i != raw_stitch_idx]
+
         cr_strs = bold_best(crs, ".2f", higher_is_better=True)
         t_strs = bold_best(ts, ".3f", higher_is_better=False)
-        if stitch_no_dsr:
+
+        # Star Stitch if it's still in the method list.
+        if stitch_no_dsr and "stitch" in methods:
+            stitch_idx = methods.index("stitch")
             if crs[stitch_idx] is not None:
                 cr_strs[stitch_idx] += STITCH_STAR
             if ts[stitch_idx] is not None:
                 t_strs[stitch_idx] += STITCH_STAR
+
         if presentation:
             cr_strs = _shade_cells(cr_strs, methods)
             t_strs = _shade_cells(t_strs, methods)
@@ -345,8 +359,8 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
     # Geometric mean across benchmarks (per method, skipping missing cells).
     if rows:
         lines.append("\\midrule")
-        agg_cr = [geomean_col([r[3][i] for r in rows]) for i in range(n)]
-        agg_t = [geomean_col([r[4][i] for r in rows]) for i in range(n)]
+        agg_cr = [geomean_col([r[3][i] for r in rows]) for i in range(len(METHODS))]
+        agg_t = [geomean_col([r[4][i] for r in rows]) for i in range(len(METHODS))]
         size_cells = [""] * size_cols
         lines.append(emit("Geo. mean", size_cells, agg_cr, agg_t))
 
