@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render scramble experiment results as one subplot per domain.
+"""Render scramble experiment results as one figure per domain.
 
 The input JSON is expected to have the shape written by
 ``scripts/molecules/run_scramble_experiment.py``:
@@ -8,7 +8,7 @@ The input JSON is expected to have the shape written by
 iteration_times}}}``
 
 This renderer plots only the ``DSR-canon`` and ``search-DSR`` methods.
-Each domain gets its own subplot, with compression ratio on the y axis and
+Each domain gets its own figure, with compression ratio on the y axis and
 step number on the x axis. Step 0 is the normalized starting point
 ``(0, 1)``; steps 1-4 use the first four learned library functions. Each
 point is annotated with the corresponding learned library entry, and the
