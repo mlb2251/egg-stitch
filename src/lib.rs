@@ -22,6 +22,8 @@ pub mod shift;
 pub mod shift_equal;
 pub mod smc;
 
+use std::time::Instant;
+
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
 use rand::rngs::StdRng;
@@ -263,7 +265,7 @@ pub enum LanguageChoice {
 /// Tuple returned by [`multiple_step_search`]: `(library, corpus size after DSRs,
 /// final combined cost, final rewritten corpus, best-first heap size at stop for
 /// each abstraction iteration)`.
-type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>, Option<Vec<usize>>);
+type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<Vec<usize>>, Option<Vec<String>>, Option<Vec<usize>>, Vec<Instant>);
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
 /// the corpus size after DSRs (before any abstractions), the final combined cost,
@@ -278,9 +280,10 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let mut data = data;
     let mut library = Vec::new();
     let mut original_size = 0;
-    let mut final_cost = None;
+    let mut cost_at_end_of_each_iter: Option<Vec<usize>> = None; // best cost at each iteration, for summary output
     let mut final_rewritten: Option<Vec<String>> = None;
     let mut heap_sizes_at_end: Option<Vec<usize>> = None; // best-first frontier size at stop, one per search iteration
+    let mut search_ends: Vec<Instant> = Vec::new();
     // (fn name, cumulative corpus+library cost, usage matches in the minimal
     // corpus, body) after each abstraction, for the end-of-run summary of cost,
     // cumulative compression, match count, and the abstraction body.
@@ -350,7 +353,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 // corpus into `fn_K(...)` call sites only — their bodies live in
                 // the library and must be added separately.
                 let prev_bodies: usize = library.iter().map(|a: &results::AbstractionResult| a.pattern_size).sum();
-                final_cost = Some(best_cost + prev_bodies);
+                cost_at_end_of_each_iter.get_or_insert_with(Vec::new).push(best_cost + prev_bodies);
                 summary.push((fn_name.clone(), best_cost + prev_bodies, usage_matches, body_str.clone()));
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
@@ -366,6 +369,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                     best_iteration: best_found_at,
                     best_history,
                 });
+                search_ends.push(Instant::now());
 
                 if abstraction_idx + 1 < args.num_abstractions {
                     data = next_data;
@@ -398,7 +402,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
         }
     }
 
-    (library, original_size, final_cost, final_rewritten, heap_sizes_at_end)
+    (library, original_size, cost_at_end_of_each_iter, final_rewritten, heap_sizes_at_end, search_ends)
 }
 
 /// Smallest `k` such that no discriminant in `egraph` renders as `fn_k`,

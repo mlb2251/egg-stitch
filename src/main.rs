@@ -10,11 +10,13 @@ use egg_stitch::{
 struct RunOutput {
     library: Vec<results::AbstractionResult>,
     original_size: usize,
+    cost_at_end_of_each_iter: Option<Vec<usize>>,
     final_cost: Option<usize>,
     final_rewritten: Option<Vec<String>>,
     heap_sizes_at_end: Option<Vec<usize>>,
     cost_before_rewrites: usize,
     original_programs: Vec<String>,
+    iteration_times: Vec<f64>,
 }
 
 fn main() {
@@ -28,11 +30,13 @@ fn main() {
     let RunOutput {
         library,
         original_size,
+        cost_at_end_of_each_iter,
         final_cost,
         final_rewritten,
         heap_sizes_at_end,
         cost_before_rewrites,
         original_programs,
+        iteration_times,
     } = match args.language {
         LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
         LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
@@ -59,6 +63,7 @@ fn main() {
         elapsed_secs,
         initial_cost: cost_before_rewrites,
         cost_after_rewrites: original_size,
+        cost_at_end_of_each_iter,
         final_cost,
         compression_ratio,
         heap_sizes_at_end,
@@ -66,6 +71,7 @@ fn main() {
         original_programs,
         rewritten_programs,
         library,
+        iteration_times,
     };
 
     if let Some(ref output_path) = args.output {
@@ -80,14 +86,16 @@ fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> RunOutp
     let load_start = std::time::Instant::now();
     let (data, cost_before_rewrites, original_programs) = io::load_egraph::<F, O>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, args.weights, args.iter_limit, args.node_limit);
     println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
-    let (library, original_size, final_cost, final_rewritten, heap_sizes_at_end) = multiple_step_search::<F, O>(data, args);
+    let (library, original_size, cost_at_end_of_each_iter, final_rewritten, heap_sizes_at_end, search_ends) = multiple_step_search::<F, O>(data, args);
     RunOutput {
         library,
         original_size,
-        final_cost,
+        cost_at_end_of_each_iter: cost_at_end_of_each_iter.clone(),
+        final_cost: cost_at_end_of_each_iter.map(|v| v[v.len() - 1]),
         final_rewritten,
         heap_sizes_at_end,
         cost_before_rewrites,
         original_programs,
+        iteration_times: search_ends.into_iter().map(|t| t.duration_since(load_start).as_secs_f64()).collect(),
     }
 }
