@@ -39,7 +39,7 @@ METHOD_MARKERS = {
     "search-DSR": "s",
 }
 
-METOD_COMMON_NAME = {
+METHOD_COMMON_NAME = {
     "DSR-canon": "Stitch on E-Graph min term",
     "search-DSR": "E-Stitch",
 }
@@ -361,7 +361,7 @@ def annotate_diagram(ax, x: float, y: float, entry: ExprNode, offset_y: int) -> 
 
 def step_points(
     payload: dict, max_step: int
-) -> tuple[list[int], list[float], list[str], float]:
+) -> tuple[list[int], list[float], list[ExprNode | str], float]:
     """Return x/y points, labels, and the last plotted iteration time.
 
     Step 0 is the normalized starting point ``(0, 1)``. Step ``n`` uses the
@@ -384,7 +384,12 @@ def step_points(
     return xs, ys, unroll_labels(labels), last_time
 
 
-def unroll_labels(labels: list[str]) -> list[str]:
+def unroll_labels(labels: list[str]) -> list[ExprNode | str]:
+    """Expand each ``name: body`` label into a fully-substituted expression.
+
+    Labels that don't name a library entry (e.g. the empty step-0 label) are
+    returned unchanged as strings.
+    """
     label_map = {}
     for label in labels:
         if ": " in label:
@@ -456,7 +461,7 @@ def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> No
             marker=METHOD_MARKERS[method],
             linewidth=2.0,
             markersize=6,
-            label=METOD_COMMON_NAME[method]
+            label=METHOD_COMMON_NAME[method]
         )
         annotate_series(
             ax, xs, ys, labels, METHOD_COLORS[method], last_time, median_ys=median_ys
