@@ -85,19 +85,30 @@ class ExprNode:
             labels.extend(child.collect_labels())
         return labels
 
+    def relabel(self, mapping: dict[str, str]) -> "ExprNode":
+        """Return a new tree with each ``label`` remapped via ``mapping``."""
+        return ExprNode(
+            head=self.head,
+            label=mapping.get(self.label, self.label),
+            children=tuple(child.relabel(mapping) for child in self.children),
+        )
+
     def normalize_labels(self) -> "ExprNode":
         """Return a new expression tree with normalized labels."""
-        r_labels = [label for label in self.collect_labels() if label.startswith("R")]
-        assert len(set(r_labels)) <= 3, "too many R labels to normalize"
-        if len(set(r_labels)) == 0:
+        # Distinct R labels in first-seen (tree traversal) order.
+        r_labels = list(
+            dict.fromkeys(
+                label for label in self.collect_labels() if label.startswith("R")
+            )
+        )
+        assert len(r_labels) <= 3, "too many R labels to normalize"
+        if len(r_labels) == 0:
             return self
-        if len(set(r_labels)) == 1:
+        if len(r_labels) == 1:
             remap = {r_labels[0]: "R"}
         else:
-            remap = {r_labels[i]: f"R{i+1}" for i in range(len(r_labels))}
-        return self.subst(
-            {k: ExprNode(head=v, label=v, children=()) for k, v in remap.items()}
-        )
+            remap = {label: f"R{i+1}" for i, label in enumerate(r_labels)}
+        return self.relabel(remap)
 
 
 def compression_ratio(initial_cost: float, cost: float) -> float:
@@ -411,7 +422,6 @@ def annotate_series(
     """Annotate a series with molecular diagrams and a final time callout."""
 
     for step, (x, y, label, median_y) in enumerate(zip(xs, ys, labels, median_ys)):
-        print(y, median_y)
         above_median = y > median_y
 
         if step == 0:
