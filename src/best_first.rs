@@ -189,15 +189,38 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
-        if args.verbose {
-            println!("{} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan());
+        if args.verbose || args.verbose_forced_expansion {
+            let tag = format!("[expansion {}]", num_expansions);
+            let pat = nodes[node_id].state.pattern.to_string();
+            if args.verbose {
+                println!("{} {} {}", tag.dimmed(), "expanding:".dimmed(), pat.clone().cyan());
+            }
+            if args.verbose_forced_expansion {
+                let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared) {
+                    Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
+                    None => "[forced-expansion=- (no matches)]".to_string(),
+                };
+                println!("{} {} {}", tag.dimmed(), pat.cyan(), forced_str.yellow());
+            }
         }
 
         let parent_depth = nodes[node_id].depth;
-        let successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
+        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
+
+        if let Some(k) = args.max_forced_expansion.0 {
+            // Safe to run on the post-dominance successor set: dominance
+            // short-circuits preserve forced expansion. dominant-reuse: doesn't
+            // change anything about the matching term at each site. useless-inline:
+            // replaces a variable with its minimal term, so preserves cost. Both
+            // don't change the set of matches.
+            //
+            // The cap is given in symbols; scale to the family's cost units.
+            let cap = k as i64 * F::symbol_cost(&shared.egraph.analysis.weights) as i64;
+            successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
+        }
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow

@@ -36,7 +36,9 @@ pub struct RunResult {
     pub initial_cost: usize,
     /// Minimum AST size of the corpus after rewrite rules were applied (before search).
     pub cost_after_rewrites: usize,
-    /// Total cost after all abstractions (corpus size + sum of all pattern sizes).
+    /// Cost at each iteration of the search.
+    pub cost_at_end_of_each_iter: Option<Vec<usize>>,
+    /// Total cost after all abstractions (corpus size + sum of all pattern sizes). Always cost_at_end_of_each_iter[-1]
     pub final_cost: Option<usize>,
     pub compression_ratio: Option<f64>,
     /// Best-first heap size when each search iteration stopped, one entry per
@@ -58,4 +60,6 @@ pub struct RunResult {
     /// All abstractions found, in order (each stacks on the previous).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub library: Vec<AbstractionResult>,
+    /// Elapsed times for each iteration of the search.
+    pub iteration_times: Vec<f64>,
 }
