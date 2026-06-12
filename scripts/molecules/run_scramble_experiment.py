@@ -49,7 +49,7 @@ def ratio(input_path, extra):
 
 def main():
     subprocess.run(["cargo", "build", "--release", "--quiet"], cwd=ROOT, check=True)
-    rules = os.path.join(ROOT, "data/domains/molecules/symmetries.rewrites")  # general molecule symmetry DSRs
+    rules = os.path.join(ROOT, "data/domains/molecules/molecules.rewrites")  # general molecule symmetry DSRs
     print(f"{'family':8s} {'canon':>7s} {'scram':>7s} {'DSR-canon':>10s} {'search-DSR':>11s}  search-DSR edge")
     for fam in FAMILIES:
         scram = os.path.join(DDIR, f"{fam}.scram.json")
