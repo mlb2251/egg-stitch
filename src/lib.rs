@@ -41,6 +41,22 @@ pub enum SearchKind {
     BestFirst,
 }
 
+/// `--max-forced-expansion` value: a slack bound `Some(k)`, or `none` to disable
+/// the forced-expansion prune entirely.
+#[derive(Clone, Copy, Debug)]
+pub struct MaxForcedExpansion(pub Option<usize>);
+
+impl std::str::FromStr for MaxForcedExpansion {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("none") {
+            Ok(Self(None))
+        } else {
+            s.parse::<usize>().map(|n| Self(Some(n))).map_err(|_| format!("expected a non-negative integer or `none`, got {s:?}"))
+        }
+    }
+}
+
 /// E-graph based program synthesis via SMC.
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -176,6 +192,25 @@ pub struct Args {
     #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
     pub opt_lower_bound: bool,
 
+    /// Prune patterns which force "expansions" (e.g., 4 -> (+ 4 0)) at *every*
+    /// match site.
+    ///
+    /// Specifically for a match location r of p, let
+    ///     - Cost(r) = min_{t in r} Cost(t)
+    ///     - Cost(r | p) = min_{t in r, t matches p} Cost(t)
+    ///     - ForcedExpansion(r, p) = Cost(r | p) - Cost(r)
+    ///     - ForcedExpansion(p) = min_{r | p matches at r} ForcedExpansion(r, p)
+    /// Each t that matches p matches at some (r, σ), and at this point,
+    ///     Cost(t) = CostWithoutVars(p) + sum_{s in σ} Cost(s)
+    /// As such, we can compute
+    ///     Cost(r | p) = CostWithoutVars(p) + min_{σ | r matches at p with σ} sum_{s in σ} Cost(s)
+    ///
+    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
+    ///
+    /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
+    #[arg(long = "max-forced-expansion", default_value = "none")]
+    pub max_forced_expansion: MaxForcedExpansion,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
@@ -187,6 +222,13 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+
+    /// Print each best-first expansion's forced expansion (its argmin value and
+    /// the min-term of the closest-to-minimal match root). Independent of
+    /// `--verbose`; the min-term extraction makes it non-trivial, so it's its own
+    /// flag.
+    #[arg(long = "verbose-forced-expansion", default_value_t = false)]
+    pub verbose_forced_expansion: bool,
 
     /// Selects the language family the pipeline runs over. Patterns/programs/rules
     /// are always written in user-facing flat form; the language layer handles any

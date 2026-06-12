@@ -15,13 +15,13 @@
   "initial_cost": 19009,
   "library": [
     {
-      "approx_cost": 9758,
+      "approx_cost": 478,
       "arity": 2,
       "lambda": "(lam (lam (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi $1))))) $1 (M 1 (/ (* 2 pi) $1) 0 0)) (M $0 0 0 0))))",
-      "num_matches": 8,
+      "num_matches": 10,
       "pattern": "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
       "pattern_size": 29,
-      "usage_matches": 320
+      "usage_matches": 640
     },
     {
       "approx_cost": 6342,
@@ -33,13 +33,13 @@
       "usage_matches": 190
     },
     {
-      "approx_cost": 4718,
+      "approx_cost": 2534,
       "arity": 1,
       "lambda": "(lam (T (T c (M 2 0 0 0)) (M $0 0 0 0)))",
-      "num_matches": 6,
+      "num_matches": 7,
       "pattern": "fn_2: (T (T c (M 2 0 0 0)) (M ?#0 0 0 0))",
       "pattern_size": 13,
-      "usage_matches": 168
+      "usage_matches": 336
     }
   ],
   "original_programs": [

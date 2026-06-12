@@ -526,6 +526,69 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
+    /// `CostWithoutVars(p)`: the tree-expanded pattern cost minus its var leaves.
+    /// `compute_pattern_size` already tree-expands (counting each `?#k` as one
+    /// `sym_var_cost` leaf per occurrence), and `var_occurrences` counts those
+    /// occurrences the same way, so subtracting them leaves exactly the concrete
+    /// (non-var) skeleton.
+    fn concrete_skeleton_cost(&self, weights: &crate::lang::Weights) -> i64 {
+        let vars: i64 = self.pattern.var_occurrences.iter().sum::<usize>() as i64 * weights.sym_var_cost as i64;
+        crate::cost::compute_pattern_size::<F, O>(&self.pattern, weights) as i64 - vars
+    }
+
+    /// `ForcedExpansion(r, p) = Cost(r | p) - Cost(r)` for a single match `r`, given
+    /// the precomputed skeleton cost `skel = CostWithoutVars(p)`. Here `Cost(r | p) =
+    /// skel + min_σ Σ_{s∈σ} Cost(s)`, the inner min factored over the independent
+    /// substitution factors (per factor, the min over its rows of the
+    /// occurrence-weighted arg sizes), and `Cost(r)` is the e-class's minimal size.
+    fn forced_expansion_at(&self, shared: &SharedSearchData<F, O>, skel: i64, m: &crate::matching::MatchAtEClass) -> i64 {
+        let occ = &self.pattern.var_occurrences;
+        let holes_min: i64 = m
+            .factors
+            .iter()
+            .map(|f| f.rows.iter().map(|row| f.slots.iter().zip(row).map(|(&slot, &id)| occ[slot] as i64 * shared.egraph[id].data.size as i64).sum::<i64>()).min().expect("factor rows are non-empty"))
+            .sum();
+        skel + holes_min - shared.egraph[m.root_eclass].data.size as i64
+    }
+
+    /// `ForcedExpansion(p) ≤ cap`. Per match `r` computes `ForcedExpansion(r, p)` (see
+    /// [`Self::forced_expansion_at`]) and early-exits at the first `r` with `≤ cap`
+    /// (one match's work for a valid `p`).
+    ///
+    /// Sound to prune on: `ForcedExpansion(p)` is monotone non-decreasing under
+    /// expand/reuse — committing a hole swaps a `Cost(r)`-minimal arg for `≥`-cost
+    /// structure (`Cost(r | p)` rises, `Cost(r)` fixed) and substs only shrink — so
+    /// `ForcedExpansion(p) > cap` ⇒ every descendant `> cap`.
+    pub fn within_forced_expansion_cap(&self, shared: &SharedSearchData<F, O>, cap: i64) -> bool {
+        let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
+        self.matches.iter().any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
+    }
+
+    /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
+    /// Verbose-diagnostics only.
+    pub fn min_term(&self, shared: &SharedSearchData<F, O>, eclass: Id) -> String {
+        let mut out = Vec::new();
+        let mut memo = rustc_hash::FxHashMap::default();
+        crate::egraph_util::build_size_minimal_extraction::<F, O>(&shared.egraph, eclass, &mut out, &mut memo);
+        let rec: egg::RecExpr<F::Apply<OpWithVar<O>>> = out.into();
+        rec.to_string()
+    }
+
+    /// `(ForcedExpansion(p), argmin_r ForcedExpansion(r, p))` — the value paired
+    /// with the match root `r` closest to minimal. `None` when `p` has no matches.
+    /// See [`Self::within_forced_expansion_cap`] for the per-`r` cost decomposition.
+    pub fn forced_expansion_argmin(&self, shared: &SharedSearchData<F, O>) -> Option<(i64, Id)> {
+        let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
+        let mut best: Option<(i64, Id)> = None;
+        for m in &self.matches {
+            let forced = self.forced_expansion_at(shared, skel, m);
+            if best.is_none_or(|(b, _)| forced < b) {
+                best = Some((forced, m.root_eclass));
+            }
+        }
+        best
+    }
+
     /// Returns the enumerable successors of `self`. When dominance pruning
     /// fires, the single dominant child is built and returned via
     /// `SuccessorEnum::Dominant`; otherwise `SuccessorEnum::All` lists every
