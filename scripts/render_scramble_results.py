@@ -28,7 +28,6 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_PATH = PROJECT_ROOT / "results" / "scramble_results.json"
 DEFAULT_OUT_PATH = PROJECT_ROOT / "figures" / "scramble_results.png"
-DEFAULT_OUT_DIR = PROJECT_ROOT / "figures" / "scramble_results"
 
 METHODS = ("DSR-canon", "search-DSR")
 METHOD_COLORS = {
@@ -263,7 +262,7 @@ def add_bond_segments(
         )
 
 
-def render_molecule_diagram(entry: str, color: str):
+def render_molecule_diagram(entry: ExprNode):
     """Build a compact molecular diagram for a learned library entry."""
     from matplotlib.offsetbox import DrawingArea
     from matplotlib.patches import Circle
@@ -318,12 +317,11 @@ def render_molecule_diagram(entry: str, color: str):
         else:
             text = "black"
         radius = 4
-        facecolor = atom_color
         drawer.add_artist(
             Circle(
                 (x, y),
                 radius=radius,
-                facecolor=facecolor,
+                facecolor=atom_color,
                 linewidth=1.0,
             )
         )
@@ -342,15 +340,13 @@ def render_molecule_diagram(entry: str, color: str):
     return drawer
 
 
-def annotate_diagram(
-    ax, x: float, y: float, entry: str, color: str, offset_y: int
-) -> None:
+def annotate_diagram(ax, x: float, y: float, entry: ExprNode, offset_y: int) -> None:
     """Attach a compact molecular diagram to a data point."""
     from matplotlib.offsetbox import AnnotationBbox
 
     ax.add_artist(
         AnnotationBbox(
-            render_molecule_diagram(entry, color),
+            render_molecule_diagram(entry),
             (x, y),
             xybox=(0, offset_y),
             xycoords="data",
@@ -400,15 +396,6 @@ def unroll_labels(labels: list[str]) -> list[str]:
     return exprs
 
 
-def subplot_grid(n_items: int) -> tuple[int, int]:
-    """Choose a compact rows/cols layout for ``n_items`` subplots."""
-    if n_items <= 2:
-        return 1, n_items
-    cols = 2
-    rows = math.ceil(n_items / cols)
-    return rows, cols
-
-
 def annotate_series(
     ax,
     xs: list[int],
@@ -430,7 +417,7 @@ def annotate_series(
         if label:
             offset = 30
             yoff = offset if above_median else -offset
-            annotate_diagram(ax, x, y, label, color, yoff)
+            annotate_diagram(ax, x, y, label, yoff)
 
     ax.annotate(
         f"t={time_value:.3f}s",
@@ -448,10 +435,8 @@ def annotate_series(
 def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> None:
     """Render one domain figure and write it to ``out_path``."""
     import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D
 
     fig, ax = plt.subplots(figsize=(8.8, 6.0), tight_layout=True)
-
 
     domain_payload = saved[domain]
 
@@ -477,7 +462,6 @@ def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> No
             ax, xs, ys, labels, METHOD_COLORS[method], last_time, median_ys=median_ys
         )
 
-    ax.set_title(domain)
     ax.set_xlim(-0.2, max_step + 0.35)
     ax.set_xticks(list(range(max_step + 1)))
     ax.tick_params(axis="x", labelbottom=True)
