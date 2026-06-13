@@ -581,7 +581,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
     fn best(sizes: &StitchAnalysisRunner<F::Apply<O>, Self>, eclass: Id) -> i64 {
         let mut best = sizes.min_enode_size(eclass);
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
-            let frozen = sizes.analysis.search_state.frozen_count.unwrap_or(0);
+            let frozen = sizes.analysis.search_state.frozen_count();
             let weights = sizes.weights();
             let stub_size = F::stub_application_size(frozen, weights) as i64;
             // Only frozen slots (`k < frozen`) contribute; their arg sizes are
@@ -603,7 +603,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
 /// can no longer shrink via further expansion). Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
     scratch.rewrite.fill(search_state);
-    let frozen = search_state.frozen_count.unwrap_or(0);
+    let frozen = search_state.frozen_count();
     let mut arg_to_match_roots: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
     for m in &search_state.matches {
         let root = egraph.find(m.root_eclass);
