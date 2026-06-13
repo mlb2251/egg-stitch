@@ -423,8 +423,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// shifts the extraction to each occurrence's depth (sound — every surviving
     /// cross-depth reuse is a genuine shift-variant).
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
-        let mut targets: Vec<(usize, Id)> =
-            (0..self.pattern.vars.len()).filter(|&k| !self.pattern.var_frozen[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
+        let mut targets: Vec<(usize, Id)> = (0..self.pattern.vars.len()).filter(|&k| !self.pattern.var_frozen[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {
             return None;
         }
