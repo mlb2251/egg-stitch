@@ -39,11 +39,12 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// cohorts a prior action already committed to (duplicate canonical).
     pub var_reusable: Vec<bool>,
     /// True iff `?#k` is committed to never being expanded again (the
-    /// best-first freeze rule). Maintained here purely as index-aligned
-    /// bookkeeping — `expand`/`reuse`/`concretize` shift the bits to track
-    /// renumbering; the *policy* of which bits to set lives in
-    /// `SearchState::apply_action`. Excluded from `Pattern`'s `Eq`/`Hash`,
-    /// which key on syntax only.
+    /// best-first freeze rule); no longer necessarily a prefix. Maintained here
+    /// as index-aligned bookkeeping — `expand`/`reuse`/`concretize` shift the
+    /// bits to track renumbering, and `reuse` ORs the two participants so a
+    /// merge keeps either's commitment; the *policy* of which bits to newly set
+    /// lives in `SearchState::apply_action`. Excluded from `Pattern`'s
+    /// `Eq`/`Hash`, which key on syntax only.
     pub var_frozen: Vec<bool>,
 }
 
@@ -177,9 +178,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             *r = false;
         }
         self.var_reusable.remove(drop_idx);
-        // Index-align the freeze bits: with a prefix mask, removing a slot
-        // inside the prefix shortens it by one, and removing one outside leaves
-        // it unchanged.
+        // The merged var is frozen iff *either* participant was: dropping a slot
+        // must not discard its no-expand commitment. (Whether the merge itself
+        // freezes the kept slot is a policy decision left to
+        // `SearchState::apply_action`.)
+        self.var_frozen[keep_idx] = self.var_frozen[keep_idx] || self.var_frozen[drop_idx];
         self.var_frozen.remove(drop_idx);
 
         // Shift names of trailing vars down by one.

@@ -162,11 +162,11 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// the match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
     /// Whether the best-first freeze rule is active. When `true`, expanding
-    /// `?#k` commits `?#0..?#(k-1)` to never being expanded again (the frozen
-    /// set is tracked per-var in `Pattern::var_frozen`); restricts only
-    /// `Expand`, not `Reuse` (whose ordering uses `Pattern::var_reusable`).
-    /// `false` disables the rule — SMC uses this to dedupe purely on the
-    /// pattern's `RecExpr`.
+    /// `?#k` commits `?#0..?#(k-1)` to never being expanded again, and a
+    /// non-dominant `Reuse` freezes the merged var (the frozen set is tracked
+    /// per-var in `Pattern::var_frozen` and is no longer necessarily a prefix);
+    /// reuse *ordering* still uses `Pattern::var_reusable`. `false` disables the
+    /// rule — SMC uses this to dedupe purely on the pattern's `RecExpr`.
     pub freeze_rule: bool,
 }
 
@@ -403,11 +403,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         (0..self.pattern.vars.len()).any(|k| self.is_useless_var(k, shared))
     }
 
-    /// Number of leading frozen vars. The frozen set is maintained as a prefix
-    /// (`?#0..?#(n-1)`), so this is the freeze threshold: `k < frozen_count()`
-    /// ⇔ `?#k` is frozen.
+    /// Total number of frozen vars. The frozen set is no longer a prefix (a
+    /// non-dominant reuse can freeze a non-leading slot), so test individual
+    /// slots via `pattern.var_frozen[k]`; this count is the number of holes the
+    /// stub application keeps.
     pub fn frozen_count(&self) -> usize {
-        self.pattern.var_frozen.iter().take_while(|&&f| f).count()
+        self.pattern.var_frozen.iter().filter(|&&f| f).count()
     }
 
     /// Builds a child state by fully concretizing every useless *non-frozen*
@@ -441,9 +442,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// under the enclosing pattern binders (`fv < var_depth[var_idx]`).
     /// `useless_var_eclass` returns the eclass id iff these hold.
     ///
-    /// `frozen_count` is left untouched: callers concretize only non-frozen
-    /// vars (`var_idx >= frozen_count`), so removing that slot doesn't shift
-    /// any frozen-position index.
+    /// Callers concretize only non-frozen vars; `pattern.concretize` removes the
+    /// slot's freeze bit and shifts the rest down, keeping `var_frozen` aligned.
     pub fn concretize(&mut self, var_idx: usize, eclass: Id, shared: &SharedSearchData<F, O>) {
         let mut extraction: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
         let mut memo: FxHashMap<Id, Id> = FxHashMap::default();
@@ -493,10 +493,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// rows get allocated in the child — the parent's `Vec<Factor>` data is
     /// not cloned-then-discarded). The pattern is cloned and mutated in
     /// place; the freeze set (`Pattern::var_frozen`) is index-shifted by
-    /// `expand`/`reuse` and the expand-freeze policy is applied inline.
-    /// Used by best-first and by SMC after sampling so we don't materialise
-    /// child states for successors that don't get picked.
-    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) -> SearchState<F, O> {
+    /// `expand`/`reuse` and the freeze policy is applied inline: an `Expand`
+    /// freezes every earlier var, and a `Reuse` freezes the merged var when
+    /// `freeze_reused` is set (the caller passes `false` for the dominant-reuse
+    /// short-circuit). Used by best-first and by SMC after sampling so we don't
+    /// materialise child states for successors that don't get picked.
+    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, freeze_reused: bool) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
@@ -521,10 +523,17 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let d_a = self.pattern.var_depth[var_idx];
                 let d_b = self.pattern.var_depth[second_var_idx];
                 let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
-                // Reuse is unconstrained by the freeze rule (which only restricts
-                // syntactic expansions). The dropped slot's freeze bit is removed
-                // by `pattern.reuse`, keeping the freeze prefix index-aligned.
                 new_pattern.reuse(var_idx, second_var_idx);
+                // Sequencing rule: a non-dominant reuse freezes the merged var.
+                // Re-expanding it would re-derive (via the reuse↔expand diamond)
+                // a pattern also reachable by expanding the two factors first and
+                // reusing afterwards, so banning it keeps expand-then-reuse as the
+                // single canonical path. Skipped for the dominant short-circuit
+                // (the forced sole successor), where freezing would make
+                // `f(shared…)` unreachable. No-op under `freeze_rule = false`.
+                if self.freeze_rule && freeze_reused {
+                    new_pattern.var_frozen[var_idx.min(second_var_idx)] = true;
+                }
                 Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
             }
         };
@@ -697,7 +706,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
-                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared);
+                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, false);
                     return SuccessorEnum::Dominant { child, support };
                 }
                 out.push((Action::Reuse { keep: i, drop: j }, support));

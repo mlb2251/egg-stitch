@@ -115,7 +115,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             }
             for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
-                    let child = state.apply_action(&action, &shared);
+                    let child = state.apply_action(&action, &shared, true);
                     dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
                 }
             }
