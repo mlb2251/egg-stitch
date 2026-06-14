@@ -405,10 +405,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Total number of frozen vars. The frozen set is no longer a prefix (a
     /// non-dominant reuse can freeze a non-leading slot), so test individual
-    /// slots via `pattern.var_state[k].is_hole()`; this count is the number of
-    /// holes the stub application keeps.
+    /// slots via `!pattern.var_state[k].is_expandable()`; this count is the
+    /// number of holes the stub application keeps.
     pub fn frozen_count(&self) -> usize {
-        self.pattern.var_state.iter().filter(|&&s| s.is_hole()).count()
+        self.pattern.var_state.iter().filter(|&&s| !s.is_expandable()).count()
     }
 
     /// Builds a child state by fully concretizing every useless *non-frozen*
@@ -727,7 +727,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if var_idx > max_arity {
                 continue;
             }
-            if self.freeze_rule && self.pattern.var_state[var_idx].is_hole() {
+            if self.freeze_rule && !self.pattern.var_state[var_idx].is_expandable() {
                 continue;
             }
             let d_k = self.pattern.var_depth[var_idx];

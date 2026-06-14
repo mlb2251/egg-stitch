@@ -563,7 +563,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
 
 /// Optimistic analysis producing a lower bound on achievable size. At a match
 /// root, the rewrite collapses to a single stub node plus the captured
-/// arguments at frozen-var slots (those that are holes, `var_state[k].is_hole()`) — those holes are
+/// arguments at frozen-var slots (those that are holes, `!var_state[k].is_expandable()`) — those holes are
 /// committed to staying, so their args appear verbatim at every call site and
 /// must be paid for. Non-frozen vars can still be expanded into the body, so
 /// they contribute nothing here. Min taken across substs.
@@ -588,7 +588,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
             // separable, so the min over the product factors into a sum of
             // per-factor minima (factors with no frozen slot add 0).
             let factors = &sizes.analysis.search_state.matches[i].factors;
-            let rewrite_size = stub_size + factored_min(factors, |k, v| if var_state[k].is_hole() { sizes.get(sizes.egraph.find(v)) } else { 0 });
+            let rewrite_size = stub_size + factored_min(factors, |k, v| if !var_state[k].is_expandable() { sizes.get(sizes.egraph.find(v)) } else { 0 });
             best = best.min(rewrite_size);
         }
         best
@@ -609,7 +609,7 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         let root = egraph.find(m.root_eclass);
         for f in &m.factors {
             for (p, &k) in f.slots.iter().enumerate() {
-                if var_state[k].is_hole() {
+                if !var_state[k].is_expandable() {
                     for row in &f.rows {
                         arg_to_match_roots.entry(egraph.find(row[p])).or_default().push(root);
                     }

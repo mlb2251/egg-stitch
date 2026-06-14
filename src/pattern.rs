@@ -54,11 +54,11 @@ pub enum VarState {
 }
 
 impl VarState {
-    /// True iff `?#k` is committed to staying a hole (banned from expansion), so
-    /// its argument is paid at every call site and it counts in the stub size /
-    /// lower bound.
-    pub fn is_hole(self) -> bool {
-        matches!(self, VarState::ReuseBanned | VarState::Frozen)
+    /// True iff `?#k` may still be expanded. The complement — `ReuseBanned` /
+    /// `Frozen` — is committed to staying a hole, so its argument is paid at every
+    /// call site and it counts in the stub size / lower bound.
+    pub fn is_expandable(self) -> bool {
+        matches!(self, VarState::ReusableOrExpandable | VarState::Expandable)
     }
     /// True iff `?#k` may still be reused as the fresh side of a canonical reuse.
     pub fn is_reusable(self) -> bool {
@@ -109,7 +109,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// `SeenTracker` dedup key (flexibility is measured by the expand-banned set,
     /// since those slots restrict future expansion).
     pub fn frozen_mask(&self) -> Vec<bool> {
-        self.var_state.iter().map(|&s| s.is_hole()).collect()
+        self.var_state.iter().map(|&s| !s.is_expandable()).collect()
     }
 
     /// Expands the variable at `var_idx` with `target`. New children are inserted
