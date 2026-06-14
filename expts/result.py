@@ -50,6 +50,11 @@ class PerFileResult:
     """True when the tool exceeded its wall-clock budget and was killed; the
     cost/ratio fields are then None."""
 
+    cost_at_end_of_each_iter: list[int] | None = None
+    """egg-stitch's per-iteration best cost (native units, prior library bodies
+    folded in), one entry per learned abstraction. None for other tools or a
+    timed-out run. The scramble renderer uses it for the step trajectory."""
+
     @classmethod
     def timed_out_result(cls, *, method: str, domain: str, file: str,
                          initial_cost: int, timeout: float) -> "PerFileResult":

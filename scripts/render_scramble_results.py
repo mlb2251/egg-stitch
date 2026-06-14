@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Render scramble experiment results as one figure per domain.
+"""Render the molecule scramble results as one figure per family.
 
-The input JSON is expected to have the shape written by
-``scripts/molecules/run_scramble_experiment.py``:
+Reads ``results/table5.json`` (the molecule-subset table; see
+``expts/tables.py``). table5 records two best-first conditions whose
+per-iteration cost trajectory this renderer draws:
 
-``{domain: {method: {initial_cost, cost_at_end_of_each_iter, library,
-iteration_times}}}``
+  ``enum-dsrs-at-start`` -- DSRs canonicalise the egraph once, then search
+                            runs rule-free (the "Stitch on E-graph min term"
+                            baseline);
+  ``enum-100000``        -- DSRs kept live during search (E-Stitch).
 
-This renderer plots only the ``DSR-canon`` and ``search-DSR`` methods.
-Each domain gets its own figure, with compression ratio on the y axis and
+Each family gets its own figure, with compression ratio on the y axis and
 step number on the x axis. Step 0 is the normalized starting point
 ``(0, 1)``; steps 1-4 use the first four learned library functions. Each
 point is annotated with the corresponding learned library entry, and the
-final plotted point gets a time callout.
+final plotted point gets a wall-clock time callout (``elapsed_secs``).
 """
 
 from __future__ import annotations
@@ -21,14 +23,23 @@ import argparse
 import json
 import math
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_PATH = PROJECT_ROOT / "results" / "scramble_results.json"
+sys.path.insert(0, str(PROJECT_ROOT))
+from expts.tables import TABLE5_DOMAINS, TABLE5_ENUM_POINT  # noqa: E402
+
+RESULTS_PATH = PROJECT_ROOT / "results" / "table5.json"
 DEFAULT_OUT_DIR = PROJECT_ROOT / "figures" / "scramble_results"
 
+# Logical method name -> the table5 method key holding its run data.
+METHOD_DATA_KEY = {
+    "DSR-canon": "enum-dsrs-at-start",
+    "search-DSR": f"enum-{TABLE5_ENUM_POINT}",
+}
 METHODS = ("DSR-canon", "search-DSR")
 METHOD_COLORS = {
     "DSR-canon": "#6300CC",
@@ -356,20 +367,35 @@ def annotate_diagram(ax, x: float, y: float, entry: ExprNode, offset_y: int) -> 
     )
 
 
+def perfile_record(saved: dict, domain: str, method: str) -> dict | None:
+    """Extract the single per-file result dict for a (family, method) from
+    table5's nested ``domains -> runs -> [reps][files]`` shape.
+
+    Uses the first repeat (a representative run). Returns None if the method is
+    absent or its first repeat has no files (e.g. a tool that didn't run here).
+    """
+    runs = saved["domains"][domain].get("runs", {})
+    reps = runs.get(METHOD_DATA_KEY[method])
+    if not reps or not reps[0]:
+        return None
+    return reps[0][0]  # one file per molecule family
+
+
 def step_points(
-    payload: dict, max_step: int
+    perfile: dict, max_step: int
 ) -> tuple[list[int], list[float], list[ExprNode | str], float]:
-    """Return x/y points, labels, and the last plotted iteration time.
+    """Return x/y points, labels, and the wall-clock time for one method.
 
     Step 0 is the normalized starting point ``(0, 1)``. Step ``n`` uses the
-    ``n - 1``-th entry from ``cost_at_end_of_each_iter`` and ``library``.
+    ``n - 1``-th entry from ``cost_at_end_of_each_iter`` and ``library``. The
+    time callout uses the run's total ``elapsed_secs`` (the renderer only ever
+    showed the time after the final iteration).
     """
-    initial_cost = payload["initial_cost"]
-    costs = payload["cost_at_end_of_each_iter"]
-    library = payload["library"]
-    times = payload["iteration_times"]
+    initial_cost = perfile["initial_cost"]
+    costs = perfile["cost_at_end_of_each_iter"]
+    library = perfile["library"]
 
-    limit = min(max_step, len(costs), len(library), len(times))
+    limit = min(max_step, len(costs), len(library))
     xs = [0]
     ys = [1.0]
     labels = [""]
@@ -377,8 +403,7 @@ def step_points(
         xs.append(step)
         ys.append(compression_ratio(initial_cost, costs[step - 1]))
         labels.append(library[step - 1])
-    last_time = times[limit - 1]
-    return xs, ys, unroll_labels(labels), last_time
+    return xs, ys, unroll_labels(labels), perfile["elapsed_secs"]
 
 
 def unroll_labels(labels: list[str]) -> list[ExprNode | str]:
@@ -435,21 +460,22 @@ def annotate_series(
 
 
 def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> None:
-    """Render one domain figure and write it to ``out_path``."""
+    """Render one family figure and write it to ``out_path``."""
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(8.8, 6.0), tight_layout=True)
 
-    domain_payload = saved[domain]
-
-    results = []
-
+    methods, results = [], []
     for method in METHODS:
-        results.append(step_points(domain_payload[method], max_step))
+        perfile = perfile_record(saved, domain, method)
+        if perfile is None or perfile.get("cost_at_end_of_each_iter") is None:
+            continue  # method absent or has no per-iteration trajectory here
+        methods.append(method)
+        results.append(step_points(perfile, max_step))
 
     median_ys = np.median([ys for _, ys, _, _ in results], axis=0)
 
-    for method, (xs, ys, labels, last_time) in zip(METHODS, results):
+    for method, (xs, ys, labels, last_time) in zip(methods, results):
         ax.plot(
             xs,
             ys,
@@ -474,7 +500,8 @@ def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> No
     r = hi - lo
     ax.set_ylim(lo - r * 0.05, hi + r * 0.15)
 
-    ax.set_title(f"Scramble results: {domain}")
+    family = domain.split(":", 1)[1] if ":" in domain else domain
+    ax.set_title(f"Scramble results: {family}")
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
 
@@ -483,7 +510,7 @@ def main() -> None:
     """Parse CLI arguments and render one graph per domain."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--input", type=Path, default=RESULTS_PATH, help="Path to scramble_results.json"
+        "--input", type=Path, default=RESULTS_PATH, help="Path to table5.json"
     )
     parser.add_argument(
         "--output",
@@ -498,8 +525,11 @@ def main() -> None:
 
     saved = load_results(args.input)
     args.output.mkdir(parents=True, exist_ok=True)
-    for domain in saved:
-        render_domain(saved, domain, args.output / f"{domain}.png", args.max_step)
+    for domain in TABLE5_DOMAINS:
+        if domain not in saved["domains"]:
+            continue
+        family = domain.split(":", 1)[1]
+        render_domain(saved, domain, args.output / f"{family}.png", args.max_step)
 
 
 if __name__ == "__main__":

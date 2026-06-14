@@ -53,6 +53,11 @@ class BenchResult:
     # propagates through ``sum(...)`` so a mixed batch automatically yields
     # NaN at the aggregate level.
     cost_after_rewrites: float = field(default=math.nan)
+    # egg-stitch's per-iteration best cost (in its native cost units, with the
+    # prior library bodies folded in), one entry per learned abstraction. Only
+    # egg-stitch fills this; other tools leave it None. Used by the scramble
+    # renderer to draw the step-by-step compression trajectory.
+    cost_at_end_of_each_iter: list[int] | None = field(default=None)
 
 
 # Maximum arity of learned abstractions — set the same across all tools so the
