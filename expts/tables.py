@@ -26,7 +26,7 @@ from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
 from .runner import MOLECULE_FAMILIES
 
-NUM_RUNS = 1
+NUM_RUNS = 10
 
 # Table 1 / 3: babble has no equational theory for text/logo/towers, so the
 # "with DSRs" comparison excludes them.
