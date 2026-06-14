@@ -563,7 +563,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
 
 /// Optimistic analysis producing a lower bound on achievable size. At a match
 /// root, the rewrite collapses to a single stub node plus the captured
-/// arguments at frozen-var slots (those with `var_state[k] == Frozen`) — those holes are
+/// arguments at frozen-var slots (those that are holes, `var_state[k].is_hole()`) — those holes are
 /// committed to staying, so their args appear verbatim at every call site and
 /// must be paid for. Non-frozen vars can still be expanded into the body, so
 /// they contribute nothing here. Min taken across substs.

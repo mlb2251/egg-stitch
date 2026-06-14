@@ -405,8 +405,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Total number of frozen vars. The frozen set is no longer a prefix (a
     /// non-dominant reuse can freeze a non-leading slot), so test individual
-    /// slots via `pattern.var_state[k] == Frozen`; this count is the number of holes the
-    /// stub application keeps.
+    /// slots via `pattern.var_state[k].is_hole()`; this count is the number of
+    /// holes the stub application keeps.
     pub fn frozen_count(&self) -> usize {
         self.pattern.var_state.iter().filter(|&&s| s.is_hole()).count()
     }
@@ -505,8 +505,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
                 new_pattern.expand(*var_idx, &target);
                 // Commit to freezing every earlier var: expanding `?#k` forbids
-                // ever expanding `?#j` for `j < k`. Idempotent on the already-
-                // frozen prefix, so it keeps the set a prefix. Disabled for SMC.
+                // ever expanding `?#j` for `j < k`. Idempotent on already-frozen
+                // slots; freezes a leading run but the set need not stay a
+                // prefix (a reuse may have frozen a later slot). Disabled for SMC.
                 if self.freeze_rule {
                     for s in &mut new_pattern.var_state[..*var_idx] {
                         *s = VarState::Frozen;
