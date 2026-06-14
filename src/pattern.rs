@@ -21,6 +21,51 @@ use rustc_hash::FxHashMap;
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
 
+/// Per-var restriction level for the best-first canonical-ordering rules.
+///
+/// The states form a monotone order of increasing restriction — a var only ever
+/// moves rightward in the declaration order below, never back. (The `Ord` derive
+/// relies on that declaration order, so merges can take the `max`.) This
+/// collapses what were two index-aligned bitmaps (`reusable`, `frozen`): every
+/// transition keeps `expand-banned ⟹ not reusable`, so e.g. a reusable-and-frozen
+/// combination can't arise and isn't represented.
+///
+/// Both expand-banned states (`ReuseBanned`, `Frozen`) keep `?#k` as a hole that
+/// is paid for at every call site; they differ only in what happens when the var
+/// turns out to be *useless* (bound to one constant everywhere): a `Frozen` var
+/// is a committed argument and the state is pruned (stitch argument-capture),
+/// whereas a `ReuseBanned` var is instead inlined like a non-frozen one. Reuse
+/// freezes to `ReuseBanned` rather than `Frozen` because pruning-on-useless there
+/// would generate huge numbers of soon-pruned children (it disables the inline
+/// short-circuit); inlining keeps the dedup benefit without that blow-up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VarState {
+    /// Fresh cohort: may be both reused (as the fresh side of a canonical
+    /// reuse) and expanded.
+    ReusableOrExpandable,
+    /// Stale: may still be expanded, but no longer reused as the fresh side.
+    Expandable,
+    /// Banned from expansion by the reuse-freeze rule, but still inlinable when
+    /// useless (and not reused as the fresh side).
+    ReuseBanned,
+    /// Committed to never being expanded again (the expand-freeze rule); pruned
+    /// when useless.
+    Frozen,
+}
+
+impl VarState {
+    /// True iff `?#k` is committed to staying a hole (banned from expansion), so
+    /// its argument is paid at every call site and it counts in the stub size /
+    /// lower bound.
+    pub fn is_hole(self) -> bool {
+        matches!(self, VarState::ReuseBanned | VarState::Frozen)
+    }
+    /// True iff `?#k` may still be reused as the fresh side of a canonical reuse.
+    pub fn is_reusable(self) -> bool {
+        matches!(self, VarState::ReusableOrExpandable)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
@@ -32,20 +77,16 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// because cost accounting reads it on the hot path. Maintained incrementally
     /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// True iff `?#k` is in the freshest cohort. `expand` flips all
-    /// pre-existing vars to false and inserts new children as true; `reuse`
-    /// flips `0..drop_idx` to false (including the kept slot). Search skips
-    /// `Reuse(i, j)` only when *both* are false — that pair would re-merge
-    /// cohorts a prior action already committed to (duplicate canonical).
-    pub var_reusable: Vec<bool>,
-    /// True iff `?#k` is committed to never being expanded again (the
-    /// best-first freeze rule); no longer necessarily a prefix. Maintained here
-    /// as index-aligned bookkeeping — `expand`/`reuse`/`concretize` shift the
-    /// bits to track renumbering, and `reuse` ORs the two participants so a
-    /// merge keeps either's commitment; the *policy* of which bits to newly set
-    /// lives in `SearchState::apply_action`. Excluded from `Pattern`'s
-    /// `Eq`/`Hash`, which key on syntax only.
-    pub var_frozen: Vec<bool>,
+    /// Per-var restriction level (see [`VarState`]). Maintained as index-aligned
+    /// bookkeeping — `expand`/`reuse`/`concretize` shift the entries to track
+    /// renumbering, demote reusability, and merge commitments (a reuse takes the
+    /// `max` of the two participants); the *policy* of which vars to newly ban
+    /// lives in `SearchState::apply_action`. The freshest cohort
+    /// (`ReusableOrExpandable`) drives canonical reuse ordering: search skips
+    /// `Reuse(i, j)` only when neither is in that cohort. The expand-banned set is
+    /// not necessarily a prefix. Excluded from `Pattern`'s `Eq`/`Hash`, which key
+    /// on syntax only.
+    pub var_state: Vec<VarState>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -60,9 +101,15 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
             var_occurrences: vec![1],
-            var_reusable: vec![true],
-            var_frozen: vec![false],
+            var_state: vec![VarState::ReusableOrExpandable],
         }
+    }
+
+    /// The hole mask: `true` at each expand-banned slot. Used as the
+    /// `SeenTracker` dedup key (flexibility is measured by the expand-banned set,
+    /// since those slots restrict future expansion).
+    pub fn frozen_mask(&self) -> Vec<bool> {
+        self.var_state.iter().map(|&s| s.is_hole()).collect()
     }
 
     /// Expands the variable at `var_idx` with `target`. New children are inserted
@@ -85,16 +132,16 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_occ = self.var_occurrences.remove(var_idx);
-        self.var_reusable.remove(var_idx);
-        // Index-align the freeze bits; the expanded var's own bit is dropped
-        // (it had to be non-frozen to be expanded) and each new child starts
-        // non-frozen below.
-        self.var_frozen.remove(var_idx);
-        // Any expansion flips every *previously existing* var to non-reusable;
-        // only the children we insert below start out reusable. See
-        // `var_reusable` docs.
-        for r in &mut self.var_reusable {
-            *r = false;
+        // Drop the expanded var's own state (it had to be non-frozen to be
+        // expanded); each new child is inserted as `ReusableOrExpandable` below.
+        self.var_state.remove(var_idx);
+        // Any expansion demotes every *previously existing* fresh var out of the
+        // reusable cohort (`Frozen` stays frozen); only the children we insert
+        // below start reusable. See `VarState`.
+        for s in &mut self.var_state {
+            if *s == VarState::ReusableOrExpandable {
+                *s = VarState::Expandable;
+            }
         }
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
@@ -122,8 +169,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             // The new enode replaces every occurrence of the parent var, so the
             // syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
-            self.var_reusable.insert(var_idx + j, true);
-            self.var_frozen.insert(var_idx + j, false);
+            self.var_state.insert(var_idx + j, VarState::ReusableOrExpandable);
         }
 
         // Expand each occurrence of the var independently: build its own enode
@@ -171,19 +217,21 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
         // Reusing (i, j) commits to a canonical order: any var strictly below
-        // the *higher* of the two participating indices becomes non-reusable,
-        // so future reuses must involve indices ≥ drop_idx (including the
-        // kept slot itself, since we've moved past it).
-        for r in &mut self.var_reusable[..drop_idx] {
-            *r = false;
+        // the *higher* of the two participating indices leaves the reusable
+        // cohort (including the kept slot itself, since we've moved past it), so
+        // future reuses must involve indices ≥ drop_idx. `Frozen` vars stay
+        // frozen.
+        for s in &mut self.var_state[..drop_idx] {
+            if *s == VarState::ReusableOrExpandable {
+                *s = VarState::Expandable;
+            }
         }
-        self.var_reusable.remove(drop_idx);
-        // The merged var is frozen iff *either* participant was: dropping a slot
-        // must not discard its no-expand commitment. (Whether the merge itself
-        // freezes the kept slot is a policy decision left to
+        // The merged var inherits the *more restrictive* of the two states:
+        // dropping a slot must not discard its no-expand commitment. (Whether the
+        // merge itself bans the kept slot is a policy decision left to
         // `SearchState::apply_action`.)
-        self.var_frozen[keep_idx] = self.var_frozen[keep_idx] || self.var_frozen[drop_idx];
-        self.var_frozen.remove(drop_idx);
+        self.var_state[keep_idx] = self.var_state[keep_idx].max(self.var_state[drop_idx]);
+        self.var_state.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -212,8 +260,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let var_positions = self.vars.remove(var_idx);
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
-        self.var_reusable.remove(var_idx);
-        self.var_frozen.remove(var_idx);
+        self.var_state.remove(var_idx);
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);
