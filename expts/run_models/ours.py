@@ -119,6 +119,7 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         # Only meaningful when DSRs were applied; leave NaN otherwise so it
         # propagates through the cross-file sum in the runner.
         cost_after_rewrites=float(data["cost_after_rewrites"]) if rewrites_path is not None else math.nan,
+        cost_at_end_of_each_iter=data.get("cost_at_end_of_each_iter"),
     )
 
 
