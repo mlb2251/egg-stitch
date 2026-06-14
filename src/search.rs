@@ -18,8 +18,7 @@ use std::time::{Duration, Instant};
 /// new one — the prior visit was at least as flexible, so all of this visit's
 /// reachable successors are already reachable from it. A repeat that isn't
 /// dominated overwrites and passes through, because it unlocks expand actions
-/// the prior one had forbidden. The mask is always a prefix today, so subset
-/// reduces to the old `existing <= frozen_count` comparison.
+/// the prior one had forbidden.
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     map: FxHashMap<Pattern<F, O>, Vec<bool>>,
     pub hits: usize,
@@ -405,8 +404,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Number of leading frozen vars. The frozen set is maintained as a prefix
-    /// (`?#0..?#(n-1)`), so this is the freeze threshold the old scalar
-    /// `frozen_count` held; `k < frozen_count()` ⇔ `?#k` is frozen.
+    /// (`?#0..?#(n-1)`), so this is the freeze threshold: `k < frozen_count()`
+    /// ⇔ `?#k` is frozen.
     pub fn frozen_count(&self) -> usize {
         self.pattern.var_frozen.iter().take_while(|&&f| f).count()
     }
@@ -505,8 +504,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 new_pattern.expand(*var_idx, &target);
                 // Commit to freezing every earlier var: expanding `?#k` forbids
                 // ever expanding `?#j` for `j < k`. Idempotent on the already-
-                // frozen prefix, so it keeps the set a prefix (matches the old
-                // monotone `fc = max(fc, var_idx)`). Disabled for SMC.
+                // frozen prefix, so it keeps the set a prefix. Disabled for SMC.
                 if self.freeze_rule {
                     for f in &mut new_pattern.var_frozen[..*var_idx] {
                         *f = true;
@@ -525,7 +523,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
                 // Reuse is unconstrained by the freeze rule (which only restricts
                 // syntactic expansions). The dropped slot's freeze bit is removed
-                // by `pattern.reuse`, which reproduces the old `fc` index shift.
+                // by `pattern.reuse`, keeping the freeze prefix index-aligned.
                 new_pattern.reuse(var_idx, second_var_idx);
                 Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
             }

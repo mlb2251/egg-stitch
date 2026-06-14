@@ -42,11 +42,8 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// best-first freeze rule). Maintained here purely as index-aligned
     /// bookkeeping — `expand`/`reuse`/`concretize` shift the bits to track
     /// renumbering; the *policy* of which bits to set lives in
-    /// `SearchState::apply_action`. Today the set is always a prefix
-    /// `?#0..?#(k-1)` (the old scalar `frozen_count`), so it carries the same
-    /// information; the per-var representation just leaves room to freeze
-    /// individual slots later. Excluded from `Pattern`'s `Eq`/`Hash`, which
-    /// key on syntax only.
+    /// `SearchState::apply_action`. Excluded from `Pattern`'s `Eq`/`Hash`,
+    /// which key on syntax only.
     pub var_frozen: Vec<bool>,
 }
 
@@ -180,10 +177,9 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             *r = false;
         }
         self.var_reusable.remove(drop_idx);
-        // Index-align the freeze bits. Dropping the bit at `drop_idx` exactly
-        // reproduces the old scalar shift (`if drop_idx < frozen_count { fc -=
-        // 1 }`): with a prefix mask, removing a slot inside the prefix shortens
-        // it by one, and removing one outside leaves it unchanged.
+        // Index-align the freeze bits: with a prefix mask, removing a slot
+        // inside the prefix shortens it by one, and removing one outside leaves
+        // it unchanged.
         self.var_frozen.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
