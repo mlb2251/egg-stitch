@@ -59,3 +59,9 @@ class BenchResult:
 # table comparison stays apples-to-apples. Per-tool variations belong on the
 # tool's own module, not here.
 MAX_ARITY = 2
+
+# Per-tool address-space cap (RLIMIT_AS), applied uniformly so a run's memory
+# behaviour is reproducible across machines rather than depending on whatever
+# RAM happens to be free. A tool that exceeds it is killed and recorded as a
+# DNF, the same as a timeout. 20 GiB.
+MEM_LIMIT_BYTES = 20 * 1024**3

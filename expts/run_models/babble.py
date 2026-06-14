@@ -13,7 +13,7 @@ recovers the domain from the input file's parent directory.
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
@@ -58,6 +58,34 @@ def babble_bench_bin() -> Path:
     return cargo_build(BABBLE_DIR, "benchmark")
 
 
+@cache
+def babble_molecules_bin() -> Path:
+    """Build (if needed) and return the path to babble's ``molecules`` binary
+    — the op-children molecule-graph runner."""
+    _babble_ready()
+    return cargo_build(BABBLE_DIR, "molecules")
+
+
+def _expand_bidir_rewrites(text: str) -> str:
+    """Rewrite egg-stitch's ``<=>`` rules into the directed ``=>`` form babble
+    parses: each ``name: lhs <=> rhs`` becomes ``name`` (forward) and
+    ``name_rev`` (backward). Plain ``=>`` rules pass through; comments drop."""
+    out = []
+    for raw in text.splitlines():
+        line = raw.split("//", 1)[0].strip()
+        if not line:
+            continue
+        name, _, body = line.partition(":")
+        name, body = name.strip(), body.strip()
+        if "<=>" in body:
+            lhs, _, rhs = body.partition("<=>")
+            out.append(f"{name}: {lhs.strip()} => {rhs.strip()}")
+            out.append(f"{name}_rev: {rhs.strip()} => {lhs.strip()}")
+        else:
+            out.append(f"{name}: {body}")
+    return "\n".join(out) + "\n"
+
+
 # Maps the parent directory of a dreamcoder input file (relative to the
 # egg-stitch tree) to the babble domain name, so the runner can pass
 # ``--domain`` to ``benchmark``.
@@ -72,17 +100,63 @@ DREAMCODER_DOMAIN_PATHS: dict[Path, str] = {
 
 @dataclass(frozen=True)
 class Babble:
-    """Run babble (drawings or benchmark, picked by ``weighting``) on one file."""
+    """Run babble (drawings, benchmark, or molecules, picked by input) on one file."""
 
     beams: int = 400
     lps: int = 1
     max_arity: int = MAX_ARITY
+    # Wall-clock cap (seconds) and address-space cap (bytes) per invocation;
+    # excluded from repr so the method label is unchanged.
+    timeout: float | None = field(default=None, repr=False)
+    mem_limit: int | None = field(default=None, repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         if weighting == "no-apps":
+            # Molecule corpora are op-children s-exprs like cogsci, but use the
+            # molecule grammar/DSRs, so they get their own binary.
+            if "molecules" in input_path.parts:
+                return self._run_molecules(rounds, input_path, rewrites_path)
             return self._run_drawings(rounds, input_path, rewrites_path)
         assert weighting == "apps-equal"
         return self._run_benchmark(rounds, input_path, rewrites_path)
+
+    def _run_molecules(self, rounds: int, input_path: Path, rewrites_path: str | None) -> BenchResult:
+        """Run babble's ``molecules`` binary on a molecule scramble corpus.
+
+        The corpus JSON (a flat array of s-exprs) is written out as the
+        one-per-line ``.bab`` format the binary reads, and the egg-stitch
+        ``<=>`` DSR file is expanded to babble's directed form. Both derived
+        files land in the current results folder.
+        """
+        with open(input_path) as f:
+            programs = json.load(f)
+        bab = unique_path(current_folder_path() / f"{input_path.stem}.bab")
+        bab.write_text("\n".join(programs) + "\n")
+
+        json_dump = unique_path(current_folder_path() / f"{input_path.stem}_babble.json")
+        csv_out = unique_path(current_folder_path() / f"{input_path.stem}_babble.csv")
+        cmd = [
+            str(babble_molecules_bin()),
+            str(bab),
+            f"--beams={self.beams}",
+            f"--lps={self.lps}",
+            f"--rounds={rounds}",
+            f"--max-arity={self.max_arity}",
+            f"--output={csv_out}",
+            f"--dump-json={json_dump}",
+            "--learn-constants",
+        ]
+        if rewrites_path is not None:
+            src = (EGG_STITCH_DIR / rewrites_path).resolve()
+            dsr = unique_path(current_folder_path() / f"{input_path.stem}.babble.rewrites")
+            dsr.write_text(_expand_bidir_rewrites(src.read_text()))
+            cmd.append(f"--dsr={dsr}")
+        start = time.time()
+        _subproc_run(cmd, cwd=BABBLE_DIR, timeout=self.timeout, mem_limit=self.mem_limit)
+        elapsed = time.time() - start
+        with open(json_dump) as f:
+            data = json.load(f)
+        return _result_from_dump(data, elapsed)
 
     def _run_drawings(self, rounds: int, input_path: Path, rewrites_path: str | None) -> BenchResult:
         """Run babble's ``drawings`` binary on the ``.bab`` file matching ``input_path``.
@@ -113,7 +187,7 @@ class Babble:
         if rewrites_path is not None:
             cmd += [f"--dsr={rewrites_path}"]
         start = time.time()
-        _subproc_run(cmd, cwd=BABBLE_DIR)
+        _subproc_run(cmd, cwd=BABBLE_DIR, timeout=self.timeout, mem_limit=self.mem_limit)
         elapsed = time.time() - start
         with open(json_dump) as f:
             data = json.load(f)
@@ -178,7 +252,7 @@ class Babble:
             "--mode", mode,
         ]
         start = time.time()
-        _subproc_run(cmd, cwd=BABBLE_DIR)
+        _subproc_run(cmd, cwd=BABBLE_DIR, timeout=self.timeout, mem_limit=self.mem_limit)
         elapsed = time.time() - start
         with open(json_dump) as f:
             data = json.load(f)

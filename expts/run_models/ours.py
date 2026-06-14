@@ -8,7 +8,7 @@ hyperparameters as fields rather than mutating module-level state.
 import json
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
@@ -59,12 +59,17 @@ def egg_stitch(input, output="out.json", rewrites=None, **kwargs) -> Path:
 
 def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
          weighting: Weighting, search: str, max_arity: int,
-         search_flags: dict[str, object]) -> BenchResult:
+         search_flags: dict[str, object],
+         only_use_dsrs_at_start: bool = False,
+         timeout: float | None = None,
+         mem_limit: int | None = None) -> BenchResult:
     """Shared subprocess body for the SMC/best-first runners.
 
     ``search_flags`` carries only the runner-specific dials (num_steps,
     particles, temperature, …); the rest is identical between the two
-    search modes.
+    search modes. ``only_use_dsrs_at_start`` switches DSRs from live-during-
+    search to a one-shot canonicalisation pass; ``timeout`` caps wall-clock;
+    ``mem_limit`` caps address space.
     """
     output_path = unique_path(
         current_folder_path() / f"{input_path.stem}_{search.replace('-', '_')}.json"
@@ -86,6 +91,8 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     # handicap the comparison, so we don't pass ``--no-zero-arity``.
     if rewrites_path is not None:
         cmd += ["-r", rewrites_path]
+    if only_use_dsrs_at_start:
+        cmd.append("--only-use-dsrs-at-start")
     for k, v in search_flags.items():
         flag = "--" + k.replace("_", "-")
         if isinstance(v, bool):
@@ -93,7 +100,8 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
                 cmd.append(flag)
         else:
             cmd += [flag, str(v)]
-    _subproc_run(cmd, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"))
+    _subproc_run(cmd, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"),
+                 timeout=timeout, mem_limit=mem_limit)
     with open(output_path) as f:
         data = json.load(f)
     # egg-stitch's RunResult serialises ``pattern`` as ``"<fn_name>: <body>"``
@@ -120,6 +128,12 @@ class OursBf:
 
     num_steps: int = 500
     max_arity: int = MAX_ARITY
+    # When True, DSRs canonicalise the initial egraph once instead of staying
+    # live during search (the "dsrs-only-at-start" baseline). ``timeout`` caps
+    # wall-clock seconds. Excluded from repr so the method label is unchanged.
+    only_use_dsrs_at_start: bool = field(default=False, repr=False)
+    timeout: float | None = field(default=None, repr=False)
+    mem_limit: int | None = field(default=None, repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
@@ -127,6 +141,8 @@ class OursBf:
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
             search_flags={"num_steps": self.num_steps},
+            only_use_dsrs_at_start=self.only_use_dsrs_at_start,
+            timeout=self.timeout, mem_limit=self.mem_limit,
         )
 
 
@@ -138,6 +154,8 @@ class OursSmc:
     num_particles: int = 1000
     temperature: float = 1000.0
     max_arity: int = MAX_ARITY
+    timeout: float | None = field(default=None, repr=False)
+    mem_limit: int | None = field(default=None, repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
@@ -149,4 +167,5 @@ class OursSmc:
                 "num_particles": self.num_particles,
                 "temperature": self.temperature,
             },
+            timeout=self.timeout, mem_limit=self.mem_limit,
         )
