@@ -574,6 +574,93 @@ TABLE5_METHOD_PLOT_LABELS = {
     "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
 }
 
+# LaTeX-table columns: the same four methods, each at the single representative
+# operating point the plot marks with a filled dot. ``enum``/``smc`` map to
+# their sweep point; the baseline and babble key on their own labels.
+TABLE5_TABLE_METHODS = ["enum", "smc", "enum-dsrs-at-start", "babble"]
+TABLE5_DATA_KEYS = {
+    "enum": f"enum-{TABLE5_ENUM_POINT}",
+    "smc": f"smc-{TABLE_SMC_PARTICLES}",
+    "enum-dsrs-at-start": "enum-dsrs-at-start",
+    "babble": "babble",
+}
+TABLE5_COL_LABELS = {
+    "enum": "BFS",
+    "smc": "SMC",
+    "enum-dsrs-at-start": "BFS@start",
+    "babble": "babble",
+}
+
+
+def render_table5_tex(saved: dict) -> str:
+    """Return a LaTeX ``tabular`` for table5: molecule families × methods, with
+    Compression Ratio and Time (s) groups and a geomean row.
+
+    No e-graph-min or Stitch columns (table5 has neither). A method that timed
+    out / OOM'd on a family has ``compression_ratio: null`` for that cell; it's
+    rendered ``DNF`` and excluded from that row's bolding and the geomean.
+    """
+    domains = saved["domains"]
+    methods = TABLE5_TABLE_METHODS
+    n = len(methods)
+
+    def cells(values: list[float | None], spec: str, higher_is_better: bool) -> list[str]:
+        """bold_best, but render None as DNF (not N/A)."""
+        out = bold_best(values, spec, higher_is_better)
+        return [("DNF" if v is None else s) for v, s in zip(values, out)]
+
+    col_spec = "l r " + ("r" * n) + " " + ("r" * n)
+    lines = [
+        f"% {TABLE5_TITLE}: generated from results JSON",
+        "\\begin{tabular}{" + col_spec + "}",
+        "\\toprule",
+        "& \\multicolumn{1}{c}{Size} "
+        f"& \\multicolumn{{{n}}}{{c}}{{Compression Ratio}} "
+        f"& \\multicolumn{{{n}}}{{c}}{{Time (s)}} \\\\",
+        f"\\cmidrule(lr){{2-2}} \\cmidrule(lr){{3-{2 + n}}} "
+        f"\\cmidrule(lr){{{3 + n}-{2 + 2 * n}}}",
+    ]
+    method_hdr = " & ".join(TABLE5_COL_LABELS[m] for m in methods)
+    lines.append(f"Family & Original & {method_hdr} & {method_hdr} \\\\")
+    lines.append("\\midrule")
+
+    # Per-family rows, plus columns of values for the geomean row.
+    cr_cols: list[list[float | None]] = [[] for _ in methods]
+    t_cols: list[list[float | None]] = [[] for _ in methods]
+    for domain in TABLE5_DOMAINS:
+        if domain not in domains:
+            continue
+        runs = domains[domain].get("runs", {})
+        cr_map = aggregate_methods_cr(runs)
+        t_map = aggregate_methods_time(runs)
+        crs = [cr_map.get(TABLE5_DATA_KEYS[m]) for m in methods]
+        ts = [t_map.get(TABLE5_DATA_KEYS[m]) for m in methods]
+        # A DNF records the timeout as elapsed; drop that time so it isn't
+        # mistaken for a real measurement (keep cr/time over the same set).
+        ts = [t if c is not None else None for c, t in zip(crs, ts)]
+        for i in range(n):
+            cr_cols[i].append(crs[i])
+            t_cols[i].append(ts[i])
+        label = TABLE5_DOMAIN_LABELS.get(domain, domain)
+        original = fmt(initial_size_for_domain(runs), ".0f")
+        cr_strs = cells(crs, ".2f", higher_is_better=True)
+        t_strs = cells(ts, ".2f", higher_is_better=False)
+        lines.append(" & ".join([label, original, *cr_strs, *t_strs]) + " \\\\")
+
+    # Geomean row across families. Only computed for a method that finished
+    # *every* family — a geomean over a subset isn't comparable to the others,
+    # so a method with any DNF (e.g. babble on hexyl) is left blank here.
+    lines.append("\\midrule")
+    complete = lambda col: all(v is not None for v in col)
+    agg_cr = [geomean_col(col) if complete(col) else None for col in cr_cols]
+    agg_t = [geomean_col(col) if complete(col) else None for col in t_cols]
+    cr_strs = [("" if v is None else s) for v, s in zip(agg_cr, bold_best(agg_cr, ".2f", True))]
+    t_strs = [("" if v is None else s) for v, s in zip(agg_t, bold_best(agg_t, ".2f", False))]
+    lines.append(" & ".join(["Geo. mean", "", *cr_strs, *t_strs]) + " \\\\")
+
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    return "\n".join(lines)
+
 
 def _plot_table5(cr_map: dict, t_map: dict, title: str, out_path: Path) -> None:
     """``plot_cr_vs_time`` with table5's method roster wired in."""
@@ -604,15 +691,14 @@ def plot_table5_geomean(saved: dict, out_path: Path) -> None:
     per_cr = [aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains]
     per_t = [aggregate_methods_time(saved["domains"][d].get("runs", {})) for d in domains]
     keys = {k for m in per_cr for k in m} | {k for m in per_t for k in m}
-    cr_map = {k: geomean_col([m.get(k) for m in per_cr]) for k in keys}
-    # Drop a family's time wherever its CR is missing (a DNF still records the
-    # timeout as elapsed), so a method's geomean point reflects only the
-    # families it actually finished — keeping its CR and time over the same set.
-    t_map = {
-        k: geomean_col([t.get(k) if c.get(k) is not None else None
-                        for c, t in zip(per_cr, per_t)])
-        for k in keys
-    }
+    # Only plot a method's geomean point if it finished *every* family — a
+    # geomean over a subset isn't comparable, so a method with any DNF (e.g.
+    # babble on hexyl) is dropped from the geomean plot entirely.
+    def _complete_geomean(vals: list) -> float | None:
+        return geomean_col(vals) if all(v is not None for v in vals) else None
+
+    cr_map = {k: _complete_geomean([m.get(k) for m in per_cr]) for k in keys}
+    t_map = {k: _complete_geomean([m.get(k) for m in per_t]) for k in keys}
     _plot_table5(cr_map, t_map, f"{TABLE5_TITLE}\nGeo. mean across families", out_path)
 
 
@@ -675,7 +761,11 @@ def main() -> None:
     table5_path = RESULTS_DIR / "table5.json"
     if table5_path.exists():
         with open(table5_path) as f:
-            render_table5(json.load(f))
+            saved = json.load(f)
+        tex_path = FIGURES_DIR / "table5.tex"
+        tex_path.write_text(f"% source: {table5_path}\n" + render_table5_tex(saved) + "\n")
+        print(f"wrote {tex_path}", file=sys.stderr)
+        render_table5(saved)
     else:
         print(f"skipping table5: {table5_path} not present", file=sys.stderr)
 
