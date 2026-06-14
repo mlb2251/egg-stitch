@@ -403,11 +403,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         (0..self.pattern.vars.len()).any(|k| self.is_useless_var(k, shared))
     }
 
-    /// Number of leading frozen vars. The frozen set is maintained as a prefix
-    /// (`?#0..?#(n-1)`), so this is the freeze threshold: `k < frozen_count()`
-    /// ⇔ `?#k` is frozen.
+    /// Total number of frozen vars. The frozen set is no longer a prefix (a
+    /// non-dominant reuse can freeze a non-leading slot), so test individual
+    /// slots via `pattern.var_frozen[k]`; this count is the number of holes the
+    /// stub application keeps.
     pub fn frozen_count(&self) -> usize {
-        self.pattern.var_frozen.iter().take_while(|&&f| f).count()
+        self.pattern.var_frozen.iter().filter(|&&f| f).count()
     }
 
     /// Builds a child state by fully concretizing every useless *non-frozen*
@@ -441,9 +442,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// under the enclosing pattern binders (`fv < var_depth[var_idx]`).
     /// `useless_var_eclass` returns the eclass id iff these hold.
     ///
-    /// `frozen_count` is left untouched: callers concretize only non-frozen
-    /// vars (`var_idx >= frozen_count`), so removing that slot doesn't shift
-    /// any frozen-position index.
+    /// Callers concretize only non-frozen vars; `pattern.concretize` removes the
+    /// slot's freeze bit and shifts the rest down, keeping `var_frozen` aligned.
     pub fn concretize(&mut self, var_idx: usize, eclass: Id, shared: &SharedSearchData<F, O>) {
         let mut extraction: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
         let mut memo: FxHashMap<Id, Id> = FxHashMap::default();
@@ -503,8 +503,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
                 new_pattern.expand(*var_idx, &target);
                 // Commit to freezing every earlier var: expanding `?#k` forbids
-                // ever expanding `?#j` for `j < k`. Idempotent on the already-
-                // frozen prefix, so it keeps the set a prefix. Disabled for SMC.
+                // ever expanding `?#j` for `j < k`. Idempotent on already-frozen
+                // slots; freezes a leading run but the set need not stay a
+                // prefix (a reuse may have frozen a later slot). Disabled for SMC.
                 if self.freeze_rule {
                     for f in &mut new_pattern.var_frozen[..*var_idx] {
                         *f = true;
@@ -522,8 +523,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let d_b = self.pattern.var_depth[second_var_idx];
                 let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
                 // Reuse is unconstrained by the freeze rule (which only restricts
-                // syntactic expansions). The dropped slot's freeze bit is removed
-                // by `pattern.reuse`, keeping the freeze prefix index-aligned.
+                // syntactic expansions). `pattern.reuse` ORs the dropped slot's
+                // freeze bit into the kept slot before removing it, so the merged
+                // var is frozen iff either participant was.
                 new_pattern.reuse(var_idx, second_var_idx);
                 Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
             }
