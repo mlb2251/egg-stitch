@@ -177,9 +177,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             *r = false;
         }
         self.var_reusable.remove(drop_idx);
-        // Index-align the freeze bits: with a prefix mask, removing a slot
-        // inside the prefix shortens it by one, and removing one outside leaves
-        // it unchanged.
+        // The merged var is frozen iff *either* participant was
+        self.var_frozen[keep_idx] = self.var_frozen[keep_idx] || self.var_frozen[drop_idx];
         self.var_frozen.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
