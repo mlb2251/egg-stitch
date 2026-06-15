@@ -8,6 +8,7 @@ hyperparameters as fields rather than mutating module-level state.
 import json
 import math
 import os
+import time
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -100,8 +101,10 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
                 cmd.append(flag)
         else:
             cmd += [flag, str(v)]
+    start = time.time()
     _subproc_run(cmd, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"),
                  timeout=timeout, mem_limit=mem_limit)
+    elapsed = time.time() - start
     with open(output_path) as f:
         data = json.load(f)
     # egg-stitch's RunResult serialises ``pattern`` as ``"<fn_name>: <body>"``
@@ -112,7 +115,10 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         name, _, body = s.partition(": ")
         abstractions.append(Abstraction(name=name or f"fn_{i}", body=body or s))
     return BenchResult(
-        elapsed_secs=float(data["elapsed_secs"]),
+        # Wall-clock from the wrapper (incl. process spawn + corpus read + JSON
+        # write), not egg-stitch's internal ``elapsed_secs``, so the time is
+        # comparable to babble (which also reports wrapper wall-clock).
+        elapsed_secs=elapsed,
         initial_corpus=list(data["original_programs"]),
         final_corpus=list(data["rewritten_programs"]),
         abstractions=abstractions,

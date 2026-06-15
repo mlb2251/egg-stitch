@@ -13,15 +13,22 @@ use std::time::{Duration, Instant};
 /// search. Accumulates hit count and time spent so the host loop can report
 /// stats. Wrap in `Option<…>` at the call site — `None` disables the check
 /// entirely (useful for measuring how much pruning the seen-set buys).
-/// Stores the *minimum* frozen_count ever seen per pattern. A repeat insertion
-/// at an equal-or-higher frozen_count is a hit (the prior visit was at least
-/// as flexible). A repeat at a strictly lower frozen_count overwrites and
-/// passes through, because the new visit unlocks expand actions the prior one
-/// had forbidden.
+/// Stores the most-flexible freeze mask ever seen per pattern. A repeat
+/// insertion is a hit when a recorded visit's frozen set is a *subset* of the
+/// new one — the prior visit was at least as flexible, so all of this visit's
+/// reachable successors are already reachable from it. A repeat that isn't
+/// dominated overwrites and passes through, because it unlocks expand actions
+/// the prior one had forbidden.
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
-    map: FxHashMap<Pattern<F, O>, usize>,
+    map: FxHashMap<Pattern<F, O>, Vec<bool>>,
     pub hits: usize,
     pub time: Duration,
+}
+
+/// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
+/// is at least as flexible). Masks for the same pattern share a length.
+fn frozen_subset(a: &[bool], b: &[bool]) -> bool {
+    a.iter().zip(b).all(|(&fa, &fb)| !fa || fb)
 }
 
 impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
@@ -45,17 +52,17 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
-    /// Records `pattern` at `frozen_count` if this is the first visit or a
-    /// strictly-lower-frozen one; returns `true` (skip) if an equal-or-lower
-    /// frozen visit was already recorded — the prior visit was at least as
-    /// flexible, so all of this visit's reachable successors are already
-    /// reachable from it.
-    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen_count: usize) -> bool {
+    /// Records `pattern` at `frozen` if this is the first visit or a
+    /// not-dominated one; returns `true` (skip) if a recorded visit's frozen
+    /// set is a subset of `frozen` — the prior visit was at least as flexible,
+    /// so all of this visit's reachable successors are already reachable from
+    /// it.
+    pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen: Vec<bool>) -> bool {
         let t = Instant::now();
         let skip = match self.map.get(&pattern) {
-            Some(&existing) if existing <= frozen_count => true,
+            Some(existing) if frozen_subset(existing, &frozen) => true,
             _ => {
-                self.map.insert(pattern, frozen_count);
+                self.map.insert(pattern, frozen);
                 false
             }
         };
@@ -154,12 +161,13 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// dominance check in `enumerate_successors` to detect reuses that preserve
     /// the match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
-    /// Best-first canonical-ordering device: `Some(k)` means `?#0..?#(k-1)`
-    /// are committed to never being expanded again. Expanding `?#k` raises this
-    /// to `Some(k)`. Restricts only `Expand`, not `Reuse` (whose ordering uses
-    /// `Pattern::var_reusable`). `None` disables the rule — SMC uses this to
-    /// dedupe purely on the pattern's `RecExpr`.
-    pub frozen_count: Option<usize>,
+    /// Whether the best-first freeze rule is active. When `true`, expanding
+    /// `?#k` commits `?#0..?#(k-1)` to never being expanded again (the frozen
+    /// set is tracked per-var in `Pattern::var_frozen`); restricts only
+    /// `Expand`, not `Reuse` (whose ordering uses `Pattern::var_reusable`).
+    /// `false` disables the rule — SMC uses this to dedupe purely on the
+    /// pattern's `RecExpr`.
+    pub freeze_rule: bool,
 }
 
 /// Computes the total number of (distinct) substitutions across all matches —
@@ -376,12 +384,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.useless_var_eclass(k, shared).is_some()
     }
 
-    /// True iff some frozen variable (k < frozen_count) is useless. Used as a
-    /// search-time pruning rule during enumeration; returns `false` when
-    /// `frozen_count` is `None` (rule disabled) or when the match set is empty.
+    /// True iff some frozen variable is useless. Used as a search-time pruning
+    /// rule during enumeration; returns `false` when the freeze rule is
+    /// disabled (SMC) or when the match set is empty.
     pub fn is_useless_frozen(&self, shared: &SharedSearchData<F, O>) -> bool {
-        let Some(fc) = self.frozen_count else { return false };
-        (0..fc).any(|k| self.is_useless_var(k, shared))
+        if !self.freeze_rule {
+            return false;
+        }
+        (0..self.pattern.vars.len()).filter(|&k| self.pattern.var_frozen[k]).any(|k| self.is_useless_var(k, shared))
     }
 
     /// True iff any metavar in the pattern is useless. Unlike
@@ -393,20 +403,27 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         (0..self.pattern.vars.len()).any(|k| self.is_useless_var(k, shared))
     }
 
+    /// Total number of frozen vars. The frozen set is no longer a prefix (a
+    /// non-dominant reuse can freeze a non-leading slot), so test individual
+    /// slots via `pattern.var_frozen[k]`; this count is the number of holes the
+    /// stub application keeps.
+    pub fn frozen_count(&self) -> usize {
+        self.pattern.var_frozen.iter().filter(|&&f| f).count()
+    }
+
     /// Builds a child state by fully concretizing every useless *non-frozen*
-    /// metavar (`k >= frozen_count.unwrap_or(0)`) to the size-minimal
-    /// extraction of the e-class it's bound to. Returns `None` when no such
-    /// var exists. The child preserves the parent's `frozen_count` — this is a
-    /// dominating short-circuit that runs "before" any normal expand in the
-    /// canonical order, so it shouldn't bump the freeze cursor.
+    /// metavar to the size-minimal extraction of the e-class it's bound to.
+    /// Returns `None` when no such var exists. The child preserves the parent's
+    /// freeze set — this is a dominating short-circuit that runs "before" any
+    /// normal expand in the canonical order, so it shouldn't bump the freeze
+    /// cursor.
     ///
     /// Concretizations are applied in descending `var_idx` order so earlier
     /// indices don't shift mid-loop. Cross-depth vars inline too: `concretize`
     /// shifts the extraction to each occurrence's depth (sound — every surviving
     /// cross-depth reuse is a genuine shift-variant).
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
-        let start = self.frozen_count.unwrap_or(0);
-        let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
+        let mut targets: Vec<(usize, Id)> = (0..self.pattern.vars.len()).filter(|&k| !self.pattern.var_frozen[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {
             return None;
         }
@@ -425,9 +442,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// under the enclosing pattern binders (`fv < var_depth[var_idx]`).
     /// `useless_var_eclass` returns the eclass id iff these hold.
     ///
-    /// `frozen_count` is left untouched: callers concretize only non-frozen
-    /// vars (`var_idx >= frozen_count`), so removing that slot doesn't shift
-    /// any frozen-position index.
+    /// Callers concretize only non-frozen vars; `pattern.concretize` removes the
+    /// slot's freeze bit and shifts the rest down, keeping `var_frozen` aligned.
     pub fn concretize(&mut self, var_idx: usize, eclass: Id, shared: &SharedSearchData<F, O>) {
         let mut extraction: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
         let mut memo: FxHashMap<Id, Id> = FxHashMap::default();
@@ -459,16 +475,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.
-    /// `frozen_count` enables the freeze-based canonical-ordering rule when `Some(0)`;
-    /// pass `None` to disable the check (e.g. for SMC).
-    pub fn new(shared: &SharedSearchData<F, O>, frozen_count: Option<usize>) -> Self {
+    /// `freeze_rule = true` enables the freeze-based canonical-ordering rule
+    /// (best-first); pass `false` to disable the check (e.g. for SMC).
+    pub fn new(shared: &SharedSearchData<F, O>, freeze_rule: bool) -> Self {
         let matches = identity_matches(&shared.egraph, shared.root);
         let num_substs = total_substs(&matches);
         Self {
             pattern: Pattern::single_var(),
             matches,
             num_substs,
-            frozen_count,
+            freeze_rule,
         }
     }
 
@@ -476,22 +492,25 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// cloning the parent's matches (only the surviving transformed factor
     /// rows get allocated in the child — the parent's `Vec<Factor>` data is
     /// not cloned-then-discarded). The pattern is cloned and mutated in
-    /// place; `frozen_count` is recomputed inline.
+    /// place; the freeze set (`Pattern::var_frozen`) is index-shifted by
+    /// `expand`/`reuse` and the expand-freeze policy is applied inline.
     /// Used by best-first and by SMC after sampling so we don't materialise
     /// child states for successors that don't get picked.
     pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
-        let mut new_frozen_count = self.frozen_count;
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
-                // Commit to freezing every earlier var. `max` (rather than
-                // `=`) keeps the count monotone even though best-first's
-                // filter already enforces non-decreasing expansion order.
-                if let Some(fc) = new_frozen_count.as_mut() {
-                    *fc = (*fc).max(*var_idx);
-                }
                 new_pattern.expand(*var_idx, &target);
+                // Commit to freezing every earlier var: expanding `?#k` forbids
+                // ever expanding `?#j` for `j < k`. Idempotent on already-frozen
+                // slots; freezes a leading run but the set need not stay a
+                // prefix (a reuse may have frozen a later slot). Disabled for SMC.
+                if self.freeze_rule {
+                    for f in &mut new_pattern.var_frozen[..*var_idx] {
+                        *f = true;
+                    }
+                }
                 Self::build_subset_matches(&self.matches, *var_idx, &target, shared)
             }
             Action::Reuse { keep, drop } => {
@@ -503,17 +522,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let d_a = self.pattern.var_depth[var_idx];
                 let d_b = self.pattern.var_depth[second_var_idx];
                 let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
-                // Reuse is unconstrained by `frozen_count` (the freeze rule
-                // only restricts syntactic expansions). If reuse removes a
-                // var at index below `fc`, shift `fc` down so it still refers
-                // to the same expand-threshold position after the index shift
-                // in `pattern.reuse`.
-                if let Some(fc) = new_frozen_count.as_mut() {
-                    let drop_idx = var_idx.max(second_var_idx);
-                    if drop_idx < *fc {
-                        *fc -= 1;
-                    }
-                }
+                // Reuse is unconstrained by the freeze rule (which only restricts
+                // syntactic expansions). `pattern.reuse` ORs the dropped slot's
+                // freeze bit into the kept slot before removing it, so the merged
+                // var is frozen iff either participant was.
                 new_pattern.reuse(var_idx, second_var_idx);
                 Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
             }
@@ -522,7 +534,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             pattern: new_pattern,
             matches: new_matches,
             num_substs: new_num_substs,
-            frozen_count: new_frozen_count,
+            freeze_rule: self.freeze_rule,
         }
     }
 
@@ -604,10 +616,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// rest. Disabled by `--no-opt-dominance-reuse`.
     ///
     /// Expand actions are filtered against the best-first canonical-ordering
-    /// rule: any `var_idx < self.frozen_count` or `var_idx > max_arity` is
-    /// skipped before the action is even constructed. SMC passes
-    /// `max_arity = usize::MAX` and starts with `frozen_count = None`, so the
-    /// filter is a no-op for it.
+    /// rule: any frozen `var_idx` (`self.pattern.var_frozen[var_idx]`) or
+    /// `var_idx > max_arity` is skipped before the action is even constructed.
+    /// SMC passes `max_arity = usize::MAX` and runs with `freeze_rule = false`,
+    /// so the filter is a no-op for it.
     ///
     /// `support` is the (m,s)-pair count feeding the SMC weighting; it equals
     /// the surviving subst count, so `support > 0` ⇒ non-empty child.
@@ -638,7 +650,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // that fires on thousands of distinct one-off eclasses.
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
         // `var_reusable` is a best-first canonical-ordering device, mirroring
-        // `frozen_count`. SMC (frozen_count = None) ignores it so its reuse
+        // the freeze rule. SMC (freeze_rule = false) ignores it so its reuse
         // exploration stays unrestricted. Reusing two stale (non-reusable)
         // vars always re-reaches a pattern already obtainable by reusing them
         // earlier — when the later-created of the two was still in the fresh
@@ -646,7 +658,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // two vars' depths: a cross-depth reuse commutes past every expansion
         // after the one that created the deeper var, so it too has an
         // earlier-reuse canonical form.
-        let enforce_reusable = self.frozen_count.is_some();
+        let enforce_reusable = self.freeze_rule;
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
@@ -695,16 +707,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         for var_idx in 0..n {
             // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k; `max_arity` caps the eventual frozen_count
-            // (since a successful expand at var_idx raises fc to >= var_idx).
-            // Both checks are no-ops for SMC (frozen_count = None,
-            // max_arity = usize::MAX).
+            // `?#j` with j < k (tracked in `var_frozen`); `max_arity` caps the
+            // eventual arity. Both checks are no-ops for SMC (freeze_rule =
+            // false, max_arity = usize::MAX).
             if var_idx > max_arity {
                 continue;
             }
-            if let Some(fc) = self.frozen_count
-                && var_idx < fc
-            {
+            if self.freeze_rule && self.pattern.var_frozen[var_idx] {
                 continue;
             }
             let d_k = self.pattern.var_depth[var_idx];
@@ -761,7 +770,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         shift_clamp,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
-    let initial = SearchState::new(&shared, None);
+    let initial = SearchState::new(&shared, false);
     let mut scratch = crate::cost::CostScratch::new(&shared.egraph);
     let initial_candidate = crate::cost::CostCandidate {
         variable_indices: vec![Vec::new(); initial.pattern.var_depth.len()],
