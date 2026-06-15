@@ -15,6 +15,9 @@ Aggregation across files is *not* done here: ``run_method`` returns the raw
 
 from __future__ import annotations
 
+import json
+import signal
+import subprocess
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -46,9 +49,22 @@ class Runner(Protocol):
 
 # ─── domain helpers ────────────────────────────────────────────────────────
 
+# Molecule scramble families live under data/domains/molecules/scramble/ as
+# pseudo-domains named ``molecules:<family>`` (real PubChem substructure
+# corpora; op-children grammar, symmetry DSRs). See data/.../scramble/README.md.
+MOLECULE_FAMILIES = ["hexyl", "ester", "glycol"]
+
+
+def molecule_family(domain: str) -> str | None:
+    """Return the family for a ``molecules:<family>`` domain, else None."""
+    prefix = "molecules:"
+    return domain[len(prefix):] if domain.startswith(prefix) else None
+
 
 def domain_type(domain: str) -> str:
-    """Return ``"cogsci"`` or ``"dreamcoder"`` for a known domain."""
+    """Return ``"cogsci"``, ``"dreamcoder"``, or ``"molecules"`` for a known domain."""
+    if molecule_family(domain) is not None:
+        return "molecules"
     if domain in DREAMCODER_DOMAINS:
         return "dreamcoder"
     if domain in COGSCI_DOMAINS:
@@ -57,17 +73,20 @@ def domain_type(domain: str) -> str:
 
 
 def weighting_for(domain: str) -> Weighting:
-    """``"no-apps"`` for cogsci (flat s-exprs), ``"apps-equal"`` for dreamcoder
-    (curried lambda-calc)."""
-    return "no-apps" if domain_type(domain) == "cogsci" else "apps-equal"
+    """``"no-apps"`` for cogsci/molecules (flat op-children s-exprs),
+    ``"apps-equal"`` for dreamcoder (curried lambda-calc)."""
+    return "apps-equal" if domain_type(domain) == "dreamcoder" else "no-apps"
 
 
 def input_files(domain: str) -> list[Path]:
     """Absolute paths of the corpus files for a domain.
 
-    Cogsci domains have a single file; dreamcoder domains have one file per
-    benchmark iteration. Order is sorted so re-runs are deterministic.
+    Cogsci/molecule domains have a single file; dreamcoder domains have one
+    file per benchmark iteration. Order is sorted so re-runs are deterministic.
     """
+    fam = molecule_family(domain)
+    if fam is not None:
+        return [EGG_STITCH_DIR / "data" / "domains" / "molecules" / "scramble" / f"{fam}.scram.json"]
     if domain_type(domain) == "cogsci":
         return [EGG_STITCH_DIR / "data" / "domains" / "cogsci" / f"{domain}.json"]
     d = EGG_STITCH_DIR / "data" / "domains" / domain
@@ -75,13 +94,16 @@ def input_files(domain: str) -> list[Path]:
 
 
 def rewrites_path(domain: str) -> str | None:
-    """Path (relative to egg-stitch's cwd) to the babble rewrite file for
-    ``domain``, or ``None`` when no DSRs ship for it.
+    """Path (relative to egg-stitch's cwd) to the rewrite file for ``domain``,
+    or ``None`` when no DSRs ship for it.
 
     Cogsci files live under ``drawings.<domain>.rewrites``; dreamcoder ones at
-    ``<domain>.rewrites``. ``text``/``logo``/``towers`` have no DSRs.
+    ``<domain>.rewrites``; molecules share one symmetry file. ``text``/``logo``/
+    ``towers`` have no DSRs.
     """
     dt = domain_type(domain)
+    if dt == "molecules":
+        return "data/domains/molecules/molecules.rewrites"
     if dt == "dreamcoder":
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
         return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None
@@ -144,6 +166,10 @@ def _bench_cost(b: BenchResult, weighting: Weighting) -> tuple[int, int]:
     return initial, final
 
 
+# Signals whose kill we treat as "ran out of resources" → DNF (see run_method).
+_RESOURCE_KILL_SIGNALS = {signal.SIGTERM, signal.SIGKILL, signal.SIGABRT}
+
+
 # ─── runner ────────────────────────────────────────────────────────────────
 
 
@@ -172,7 +198,33 @@ def run_method(
 
     out: list[PerFileResult] = []
     for f in input_files(domain):
-        b = runner(rounds, f, rew, weighting)
+        try:
+            b = runner(rounds, f, rew, weighting)
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            # Record a DNF sentinel rather than aborting the whole table.
+            # Cases that all count as "didn't finish within budget":
+            #   * TimeoutExpired — the tool blew its own wall-clock cap;
+            #   * killed by a resource signal (-SIGTERM external OOM watchdog,
+            #     -SIGKILL system/cgroup OOM-killer, -SIGABRT Rust allocation
+            #     failure under the RLIMIT_AS cap) — i.e. ran out of the memory
+            #     or time budget.
+            # Any other non-zero exit (e.g. an unwinding panic, exit 101) is a
+            # real failure, so re-raise it.
+            if isinstance(e, subprocess.TimeoutExpired):
+                budget = e.timeout
+            elif e.returncode < 0 and -e.returncode in _RESOURCE_KILL_SIGNALS:
+                budget = getattr(runner, "timeout", None) or float("nan")
+            else:
+                raise
+            # initial_cost is recomputed from the (unmodified) input corpus so
+            # the row still carries a size.
+            with open(f) as fh:
+                programs = json.load(fh)
+            out.append(PerFileResult.timed_out_result(
+                method=str(runner), domain=domain, file=f.stem,
+                initial_cost=ast_size(programs, weighting), timeout=budget,
+            ))
+            continue
         ic, fc = _bench_cost(b, weighting)
         assert fc > 0, f"{domain}/{f.name}: final_cost=0 would make compression_ratio undefined"
         out.append(PerFileResult(
@@ -185,5 +237,6 @@ def run_method(
             elapsed_secs=b.elapsed_secs,
             library=[f"{a.name}: {a.body}" for a in b.abstractions],
             egraph_min_term_size=egraph_min_from_bench(b.cost_after_rewrites),
+            cost_at_end_of_each_iter=b.cost_at_end_of_each_iter,
         ))
     return out
