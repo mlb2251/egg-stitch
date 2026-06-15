@@ -1,4 +1,4 @@
-use crate::cost::{CostCache, CostScratch, compute_lower_bound, compute_pattern_size};
+use crate::cost::{CostCache, CostScratch, compute_lower_bound};
 use crate::lang::{LanguageFamily, StitchEgraph, StitchOp};
 use crate::search::SearchState;
 use colored::Colorize;
@@ -31,15 +31,15 @@ impl LowerBoundPruner {
         Self { enabled, hits: 0, time: Duration::ZERO }
     }
 
-    /// Computes `compute_lower_bound + pattern_size` for `state` and compares
-    /// it against `cost_to_beat`. Returns whether to prune, keep, or skip the
-    /// check entirely (when disabled).
+    /// Computes the `compute_lower_bound` for `state` and compares it against
+    /// `cost_to_beat`. Returns whether to prune, keep, or skip the check
+    /// entirely (when disabled).
     pub fn try_prune<F: LanguageFamily, O: StitchOp>(&mut self, egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, state: &SearchState<F, O>, cost_to_beat: usize) -> PruneResult {
         if !self.enabled {
             return PruneResult::Disabled;
         }
         let t = Instant::now();
-        let lb = compute_lower_bound(egraph, root, cache, scratch, state) + compute_pattern_size(&state.pattern, &egraph.analysis.weights);
+        let lb = compute_lower_bound(egraph, root, cache, scratch, state);
         self.time += t.elapsed();
         if lb >= cost_to_beat {
             self.hits += 1;
