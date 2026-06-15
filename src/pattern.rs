@@ -38,6 +38,13 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// `Reuse(i, j)` only when *both* are false — that pair would re-merge
     /// cohorts a prior action already committed to (duplicate canonical).
     pub var_reusable: Vec<bool>,
+    /// True iff `?#k` is committed to never being expanded again (the
+    /// best-first freeze rule). Maintained here purely as index-aligned
+    /// bookkeeping — `expand`/`reuse`/`concretize` shift the bits to track
+    /// renumbering; the *policy* of which bits to set lives in
+    /// `SearchState::apply_action`. Excluded from `Pattern`'s `Eq`/`Hash`,
+    /// which key on syntax only.
+    pub var_frozen: Vec<bool>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -53,6 +60,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             var_depth: vec![0],
             var_occurrences: vec![1],
             var_reusable: vec![true],
+            var_frozen: vec![false],
         }
     }
 
@@ -77,6 +85,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_occ = self.var_occurrences.remove(var_idx);
         self.var_reusable.remove(var_idx);
+        // Index-align the freeze bits; the expanded var's own bit is dropped
+        // (it had to be non-frozen to be expanded) and each new child starts
+        // non-frozen below.
+        self.var_frozen.remove(var_idx);
         // Any expansion flips every *previously existing* var to non-reusable;
         // only the children we insert below start out reusable. See
         // `var_reusable` docs.
@@ -110,6 +122,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             // syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
             self.var_reusable.insert(var_idx + j, true);
+            self.var_frozen.insert(var_idx + j, false);
         }
 
         // Expand each occurrence of the var independently: build its own enode
@@ -164,6 +177,9 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             *r = false;
         }
         self.var_reusable.remove(drop_idx);
+        // The merged var is frozen iff *either* participant was
+        self.var_frozen[keep_idx] = self.var_frozen[keep_idx] || self.var_frozen[drop_idx];
+        self.var_frozen.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -193,6 +209,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
         self.var_reusable.remove(var_idx);
+        self.var_frozen.remove(var_idx);
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);

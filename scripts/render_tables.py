@@ -684,9 +684,10 @@ def plot_table5_domain(saved: dict, domain: str, out_path: Path) -> None:
 def plot_table5_geomean(saved: dict, out_path: Path) -> None:
     """CR-vs-time plot using geomeans across the molecule families per key.
 
-    A method missing on some family (e.g. babble, which DNFs on hexyl) is
-    geomean'd over the families where it finished — consistent with how the
-    table1-4 geomean treats absent cells."""
+    A method that DNFs on any family (e.g. babble, which DNFs on hexyl) is
+    dropped from the geomean plot entirely — a geomean over a subset of
+    families isn't comparable to one over all of them. This matches the LaTeX
+    table, which blanks the geomean cell for any method with a DNF."""
     domains = [d for d in TABLE5_DOMAINS if d in saved["domains"]]
     per_cr = [aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains]
     per_t = [aggregate_methods_time(saved["domains"][d].get("runs", {})) for d in domains]
