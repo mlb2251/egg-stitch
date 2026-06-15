@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from render_molecules import render_all as render_molecules  # noqa: E402
 from expts.render_common import (  # noqa: E402
     aggregate_methods_cr,
     aggregate_methods_time,
@@ -767,6 +769,8 @@ def main() -> None:
         tex_path.write_text(f"% source: {table5_path}\n" + render_table5_tex(saved) + "\n")
         print(f"wrote {tex_path}", file=sys.stderr)
         render_table5(saved)
+        # Per-family molecule scramble trajectory figures (figures/molecules/).
+        render_molecules(saved, FIGURES_DIR / "molecules")
     else:
         print(f"skipping table5: {table5_path} not present", file=sys.stderr)
 
