@@ -33,7 +33,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from expts.tables import TABLE5_DOMAINS, TABLE5_ENUM_POINT  # noqa: E402
 
 RESULTS_PATH = PROJECT_ROOT / "results" / "table5.json"
-DEFAULT_OUT_DIR = PROJECT_ROOT / "figures" / "scramble_results"
+DEFAULT_OUT_DIR = PROJECT_ROOT / "figures" / "molecules"
+DEFAULT_MAX_STEP = 4
 
 # Logical method name -> the table5 method key holding its run data.
 METHOD_DATA_KEY = {
@@ -506,6 +507,18 @@ def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> No
     plt.close(fig)
 
 
+def render_all(saved: dict, out_dir: Path, max_step: int = DEFAULT_MAX_STEP) -> None:
+    """Render one per-family scramble figure into ``out_dir`` for each domain."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for domain in TABLE5_DOMAINS:
+        if domain not in saved["domains"]:
+            continue
+        family = domain.split(":", 1)[1]
+        out_path = out_dir / f"{family}.png"
+        render_domain(saved, domain, out_path, max_step)
+        print(f"wrote {out_path}", file=sys.stderr)
+
+
 def main() -> None:
     """Parse CLI arguments and render one graph per domain."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -519,17 +532,13 @@ def main() -> None:
         help="Output directory for the rendered graphs",
     )
     parser.add_argument(
-        "--max-step", type=int, default=4, help="Maximum step index to plot, inclusive"
+        "--max-step", type=int, default=DEFAULT_MAX_STEP,
+        help="Maximum step index to plot, inclusive",
     )
     args = parser.parse_args()
 
     saved = load_results(args.input)
-    args.output.mkdir(parents=True, exist_ok=True)
-    for domain in TABLE5_DOMAINS:
-        if domain not in saved["domains"]:
-            continue
-        family = domain.split(":", 1)[1]
-        render_domain(saved, domain, args.output / f"{family}.png", args.max_step)
+    render_all(saved, args.output, args.max_step)
 
 
 if __name__ == "__main__":
