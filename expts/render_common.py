@@ -68,16 +68,16 @@ def aggregate_time(repeats: list[list[dict]]) -> float | None:
 
 
 def _assert_all_or_nothing_dnf(method: str, repeats: list[list[dict]]) -> None:
-    """Guard the partial-DNF averaging asymmetry: a method must finish *every*
-    repeat or DNF *every* repeat. Otherwise ``aggregate_cr`` geomeans only the
-    finishers (optimistically dropping the DNFs) while ``aggregate_time`` still
-    sums in the timed-out repeats' budget, so the two would average inconsistent
-    repeat sets and silently mislead. A repeat counts as DNF if any of its
-    per-file records is one (``compression_ratio is None``)."""
-    dnf = [any(r["compression_ratio"] is None for r in per_file) for per_file in repeats]
+    """Guard the partial-DNF averaging asymmetry: every per-file record for the
+    method must be a DNF, or none may be. ``repeat_cr``/``aggregate_cr`` drop
+    DNFs (geomean over the finishers) while ``repeat_time``/``aggregate_time``
+    still sum in the timed-out runs' budget, so any mix averages CR and time
+    over inconsistent sets and silently misleads. A record is a DNF when
+    ``compression_ratio is None``."""
+    dnf = [r["compression_ratio"] is None for per_file in repeats for r in per_file]
     assert len(set(dnf)) <= 1, (
-        f"{method}: partial DNF across repeats ({sum(dnf)}/{len(dnf)} timed out/"
-        "OOM'd) — CR and time would aggregate over inconsistent repeat sets"
+        f"{method}: partial DNF ({sum(dnf)}/{len(dnf)} runs timed out/OOM'd) — "
+        "CR and time would aggregate over inconsistent sets"
     )
 
 
