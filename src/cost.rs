@@ -515,8 +515,7 @@ pub(crate) fn filter_factors_by_candidate<L: StitchLanguage>(egraph: &StitchEgra
 /// match contributes its root e-class's usage count iff it keeps at least one
 /// candidate-compatible subst (see [`filter_factors_by_candidate`]); matches
 /// that empty out aren't rewritten and so don't count. On lambda-free domains
-/// every match is kept. This is the count behind the `appx_cost` savings
-/// estimate, shared by the result summary and the search's verbose display.
+/// every match is kept. Backs the result summary's `usage_matches`/`approx_cost`.
 pub fn usage_matches<L: StitchLanguage>(egraph: &StitchEgraph<L>, matches: &[MatchAtEClass], variable_indices: &[Vec<i32>], var_depth: &[u32], usage_counts: &FxHashMap<Id, usize>) -> usize {
     matches.iter().filter(|m| filter_factors_by_candidate(egraph, m, variable_indices, var_depth).is_some()).map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum()
 }

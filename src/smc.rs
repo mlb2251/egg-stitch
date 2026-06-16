@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use crate::cost::{CostScratch, SearchStateWithCostSelection, compute_cost_and_select, usage_matches};
+use crate::cost::{CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
@@ -127,22 +127,15 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // benefit from a tighter `cost_to_beat`.
         let mut costs: Vec<usize> = Vec::with_capacity(expanded.len());
         let mut pruned: Vec<bool> = Vec::with_capacity(expanded.len());
-        // Usage-weighted abstracted-site count per particle, for the verbose
-        // `appx_cost` display. Filtered by the particle's selected candidate so
-        // it matches the result summary's `usage_matches` (see `cost::usage_matches`).
-        let mut site_counts: Vec<usize> = Vec::with_capacity(expanded.len());
         for s in expanded.iter() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
             if let PruneResult::Pruned = lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, cost_to_beat) {
                 costs.push(cost_to_beat);
                 pruned.push(true);
-                // Dead (weight -inf) and never displayed; keep the vec aligned.
-                site_counts.push(0);
                 continue;
             }
             let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow);
             let cost = selection.cost;
-            site_counts.push(usage_matches(&shared.egraph, &s.matches, &selection.candidate.variable_indices, &s.pattern.var_depth, &shared.usage_counts));
             let arity = s.pattern.vars.len();
             // In `--follow` mode the prefix filter lets cheaper non-matching
             // particles through, so skip the prefix-best update — only the
@@ -161,7 +154,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
 
         if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, &site_counts, verbose);
+            apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
             // Prefix progress: a deeper RecExpr means the particle has expanded
             // further into the follow target's shape. When this grows, count it
             // as improvement so the dead-runs check doesn't abort searches that
@@ -218,7 +211,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         if verbose {
             println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-            print_top_particles(&expanded, &weights, &shared, original_size, &site_counts, |i| costs[i]);
+            print_top_particles(&expanded, &weights, &shared, original_size, |i| costs[i]);
         }
 
         let weights_acc = normalize_and_accumulate(&mut weights);
@@ -244,7 +237,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         if verbose {
             println!("{}", format!("Step {}: resampled all particles", step).dimmed());
             let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
-            print_top_particles(&expanded, &resample_weights, &shared, original_size, &site_counts, |i| costs[i]);
+            print_top_particles(&expanded, &resample_weights, &shared, original_size, |i| costs[i]);
         }
 
         particles = expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect();
