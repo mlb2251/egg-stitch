@@ -9,7 +9,15 @@ swapping ``egg_stitch_bin`` between the two binaries per measurement. No
 DSR condition) we run base then PR back-to-back. The first rep is treated
 as warmup and dropped from the aggregate. Babble and Stitch are not
 invoked; only our two methods are timed. Prints a side-by-side mean elapsed
-time and mean compression ratio per (domain, method).
+time and mean compression ratio per (domain, method). The scramble families in
+``MOL_FAMILIES`` (run only with DSRs, since they're meaningless without them)
+get their own ``molecules`` table with a per-family breakdown and geomean row.
+
+It also diffs the committed `data/expected_outputs/**/*.out.json` fixtures
+between the two branches, comparing every `compression_ratio` leaf, and emits a
+"Compression vs <base>" report above the timing tables that flags any fixture
+whose compression dropped. As a prerequisite (shared with the timing run) the
+main worktree must be clean and the base ref must be up to date with its remote.
 
 Usage:
     python scripts/bench_pr.py [BASE=main] [PR=<current-branch>]
@@ -36,13 +44,22 @@ from statistics import mean, stdev
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from expts.result import PerFileResult  # noqa: E402
+from expts.result import PerFileResult, egraph_min_from_bench  # noqa: E402
 from expts.run_models import OursBf, OursSmc  # noqa: E402
 from expts.run_models import ours as _ours_mod  # noqa: E402
-from expts.runner import run_method  # noqa: E402
+from expts.runner import run_method, _bench_cost  # noqa: E402
 
 DOMAINS = ["nuts-bolts", "dials", "list", "physics"]
 # DOMAINS = ["nuts-bolts", "dials"]
+
+# Molecule scramble families (data/domains/molecules/scramble/): real PubChem
+# substructure corpora whose shared backbone the symmetry DSRs must re-align in
+# place of a canonical SMILES encoding. They're meaningless without the rewrites,
+# so we run them only in the with-DSRs condition and report them in their own
+# "molecules" table (per-family rows + geomean). op-children grammar -> "no-apps" weighting.
+MOL_FAMILIES = ["hexyl", "ester", "glycol"]
+MOL_DIR = ROOT / "data" / "domains" / "molecules" / "scramble"
+MOL_REWRITES = "data/domains/molecules/molecules.rewrites"  # relative to egg-stitch cwd
 
 # Adaptive rep count: keep adding reps until every cell's relative SEM
 # (stdev / sqrt(n) / mean) is below TARGET_REL_SEM on both branches, or
@@ -54,6 +71,12 @@ MIN_RUNS = 5
 MAX_RUNS = 60
 TARGET_REL_SEM = 0.02
 
+# Fixture-compression diff: where the committed outputs live, and the absolute
+# ratio delta below which two blessed floats are treated as equal (their
+# trailing digits are meaningless search noise).
+EXPECTED_OUTPUTS = "data/expected_outputs"
+COMP_EPS = 1e-9
+
 
 def sh(cmd, *, cwd=None, **kw):
     """Run a subprocess, echoing the command first. Defaults cwd to the repo root."""
@@ -61,12 +84,30 @@ def sh(cmd, *, cwd=None, **kw):
     return subprocess.run(cmd, check=True, cwd=cwd or ROOT, **kw)
 
 
-def check_clean_worktree() -> None:
-    """Abort if the main worktree has any uncommitted or untracked changes.
+def git_show(ref: str, rel: str):
+    """Return the contents of ``rel`` at git ref ``ref``, or None if absent."""
+    res = subprocess.run(
+        ["git", "show", f"{ref}:{rel}"], cwd=ROOT, capture_output=True, text=True
+    )
+    return res.stdout if res.returncode == 0 else None
 
-    We don't ``git checkout`` here anymore — worktrees handle that — but a
-    dirty tree usually indicates the user is mid-edit, which is rarely what
-    they want to benchmark.
+
+def rev_parse(ref: str):
+    """Return the commit SHA ``ref`` resolves to, or None if it doesn't exist."""
+    res = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", ref],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    return res.stdout.strip() or None
+
+
+def preflight(base: str) -> None:
+    """Abort unless the main worktree is clean and ``base`` is current with its
+    remote — both are prerequisites for a meaningful comparison.
+
+    A dirty tree usually means the user is mid-edit (rarely what they want to
+    benchmark), and a stale ``base`` would silently flag or bless the wrong
+    compression numbers. We don't ``git checkout`` here — worktrees handle that.
     """
     dirty = subprocess.check_output(
         ["git", "status", "--porcelain"], cwd=ROOT, text=True
@@ -75,6 +116,19 @@ def check_clean_worktree() -> None:
         raise SystemExit(
             "bench_pr: working tree is not clean — commit or stash before running.\n"
             + dirty
+        )
+    fetch = subprocess.run(
+        ["git", "fetch", "origin", base], cwd=ROOT, capture_output=True, text=True
+    )
+    if fetch.returncode != 0:
+        raise SystemExit(f"bench_pr: `git fetch origin {base}` failed:\n{fetch.stderr.strip()}")
+    local, remote = rev_parse(base), rev_parse("FETCH_HEAD")
+    if local is None:
+        raise SystemExit(f"bench_pr: baseline ref `{base}` does not exist locally")
+    if local != remote:
+        raise SystemExit(
+            f"bench_pr: local `{base}` ({local[:12]}) is not up to date with "
+            f"`origin/{base}` ({(remote or '?')[:12]}); run `git pull` on `{base}` first"
         )
 
 
@@ -107,6 +161,45 @@ def time_cell(binary_path: Path, runner, domain: str, use_dsrs: bool, cache_path
             return [PerFileResult(**d) for d in json.load(f)]
     _ours_mod.egg_stitch_bin = lambda: binary_path
     out = run_method(runner, domain, rounds=1, use_dsrs=use_dsrs)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "w") as f:
+        json.dump([r.to_dict() for r in out], f, indent=2)
+    return out
+
+
+def run_mol_family(runner, family: str) -> list[PerFileResult]:
+    """Run one molecule scramble ``family`` (always with the symmetry DSRs live)
+    and return a one-element ``[PerFileResult]`` matching ``run_method``'s shape.
+
+    Bypasses ``run_method``'s domain table since the scramble corpora aren't
+    registered domains; the uniform ``no-apps`` cost recomputation is still
+    shared via ``_bench_cost``.
+    """
+    weighting = "no-apps"
+    f = MOL_DIR / f"{family}.scram.json"
+    b = runner(1, f, MOL_REWRITES, weighting)
+    ic, fc = _bench_cost(b, weighting)
+    assert fc > 0, f"molecules/{family}: final_cost=0 would make compression_ratio undefined"
+    return [PerFileResult(
+        method=str(runner),
+        domain=f"molecules:{family}",
+        file=f.stem,
+        initial_cost=ic,
+        final_cost=fc,
+        compression_ratio=ic / fc,
+        elapsed_secs=b.elapsed_secs,
+        library=[f"{a.name}: {a.body}" for a in b.abstractions],
+        egraph_min_term_size=egraph_min_from_bench(b.cost_after_rewrites),
+    )]
+
+
+def time_mol_cell(binary_path: Path, runner, family: str, cache_path: Path):
+    """Cache-backed run of one molecule-family cell (mirrors ``time_cell``)."""
+    if cache_path.exists():
+        with open(cache_path) as f:
+            return [PerFileResult(**d) for d in json.load(f)]
+    _ours_mod.egg_stitch_bin = lambda: binary_path
+    out = run_mol_family(runner, family)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, "w") as f:
         json.dump([r.to_dict() for r in out], f, indent=2)
@@ -153,7 +246,7 @@ def rel_sem(xs: list[float]) -> float:
     return stdev(xs) / math.sqrt(len(xs)) / m
 
 
-def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str], reps_for: dict) -> dict:
+def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str], reps_for: dict, domains: list[str] = DOMAINS) -> dict:
     """Aggregate cached per-cell results (dropping rep 0 as warmup) into
     ``{domain: {method: {time, compression}}}``.
 
@@ -165,7 +258,7 @@ def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str
     sampler.
     """
     out: dict = {}
-    for domain in DOMAINS:
+    for domain in domains:
         out[domain] = {}
         for method in methods:
             n = reps_for[(dsr_label, domain, method)]
@@ -178,14 +271,16 @@ def summarize(session: str, branch_label: str, dsr_label: str, methods: list[str
     return out
 
 
-def update_pr_timing(pr_branch: str, timing_section: str) -> None:
-    """Replace (or append) the ``## Timing`` section in the PR description.
+def update_pr_report(pr_branch: str, report_section: str) -> None:
+    """Replace (or append) the managed compression + timing block in the PR.
 
     Looks up the open PR for ``pr_branch`` via ``gh``; if none exists, prints
-    a warning and returns. ``timing_section`` must start with ``## Timing``.
-    The section is replaced from its heading up to (but not including) the
-    next ``## `` heading or EOF; if no existing section is found it's
-    appended (separated by a blank line).
+    a warning and returns. ``report_section`` is the combined block: a
+    ``## Compression vs`` section followed by ``## Timing and fixture
+    regressions``. The managed region is matched as an optional compression
+    section immediately followed by the timing section (which absorbs an older
+    bare ``## Timing`` heading), up to the next ``## `` heading or EOF; if not
+    found it's appended (separated by a blank line).
     """
     try:
         body = subprocess.check_output(
@@ -196,14 +291,15 @@ def update_pr_timing(pr_branch: str, timing_section: str) -> None:
         print(f"\nbench_pr: no PR found for branch {pr_branch!r}, skipping PR update.\n  {e.stderr.strip()}")
         return
     body = body.rstrip("\n")
-    # Match "## Timing" up to (but not including) the next "## " or EOF.
     import re
-    pattern = re.compile(r"(?m)^## Timing\b.*?(?=^## |\Z)", re.DOTALL)
+    pattern = re.compile(
+        r"(?m)^(?:## Compression vs\b.*?(?=^## ))?## Timing\b.*?(?=^## |\Z)", re.DOTALL
+    )
     if pattern.search(body):
-        new_body = pattern.sub(timing_section.rstrip() + "\n\n", body).rstrip() + "\n"
+        new_body = pattern.sub(lambda _: report_section.rstrip() + "\n\n", body).rstrip() + "\n"
     else:
         sep = "\n\n" if body else ""
-        new_body = body + sep + timing_section.rstrip() + "\n"
+        new_body = body + sep + report_section.rstrip() + "\n"
     res = subprocess.run(
         ["gh", "pr", "edit", pr_branch, "--body-file", "-"],
         cwd=ROOT, input=new_body, text=True, capture_output=True,
@@ -223,23 +319,127 @@ def _speedup_emoji(speedup: float) -> str:
     return "⚪"
 
 
-def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str) -> str:
-    """Return a GitHub-flavored markdown comparison table for one DSR condition."""
+def _comp_leaves(obj, prefix=""):
+    """Yield (key, ratio) for every ``compression_ratio`` in ``obj``.
+
+    A dict carrying the key is one result (we don't recurse into it); any other
+    dict is a container whose values are recursed into, extending the key path
+    (DSR fixtures map per-benchmark names to result objects). A ``null`` ratio
+    means no invention was applied, so cost is unchanged — normalised to 1.0, as
+    ``src/main.rs`` computes ``original_size / final_cost`` and only emits None
+    when no rewrite happened.
+    """
+    if isinstance(obj, dict):
+        if "compression_ratio" in obj:
+            ratio = obj["compression_ratio"]
+            yield prefix, 1.0 if ratio is None else ratio
+        else:
+            for name, val in obj.items():
+                yield from _comp_leaves(val, f"{prefix}::{name}" if prefix else name)
+
+
+def _comp_leaves_at(ref: str, rel: str) -> dict:
+    """Return ``{key: ratio}`` for every compression leaf of fixture ``rel`` at
+    git ref ``ref`` (keyed by ``rel`` plus any in-file benchmark path). Empty if
+    the file is absent there or unparseable."""
+    text = git_show(ref, rel)
+    if text is None:
+        return {}
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return {f"{rel}::{k}" if k else rel: r for k, r in _comp_leaves(obj)}
+
+
+def compression_section(base: str, pr: str) -> str:
+    """Build the markdown "Compression vs <base>" report comparing every output
+    fixture's ``compression_ratio`` leaf on ``pr`` against ``base``.
+
+    Fixtures are listed from ``pr``; each leaf is bucketed into regressed,
+    improved, or new (absent on ``base``). Unchanged leaves are summarised but
+    not listed.
+    """
+    listing = subprocess.check_output(
+        ["git", "ls-tree", "-r", "--name-only", pr, "--", EXPECTED_OUTPUTS],
+        cwd=ROOT, text=True,
+    )
+    fixtures = sorted(p for p in listing.splitlines() if p.endswith(".out.json"))
+
+    higher, lower, new, n_equal = [], [], [], 0
+    for rel in fixtures:
+        cur = _comp_leaves_at(pr, rel)
+        base_leaves = _comp_leaves_at(base, rel)
+        for key, c in cur.items():
+            if key not in base_leaves:
+                new.append((key, c))
+                continue
+            delta = c - base_leaves[key]
+            if delta > COMP_EPS:
+                higher.append((key, c, base_leaves[key]))
+            elif delta < -COMP_EPS:
+                lower.append((key, c, base_leaves[key]))
+            else:
+                n_equal += 1
+    higher.sort(); lower.sort(); new.sort()
+
+    total = len(higher) + len(lower) + n_equal + len(new)
+    lines = [f"## Compression vs `{base}`", ""]
+    lines.append(
+        f"Compared **{total}** compression values across **{len(fixtures)}** fixtures: "
+        f"{len(lower)} regressed, {len(higher)} improved, {n_equal} unchanged, "
+        f"{len(new)} new (no baseline)."
+    )
+    lines.append("")
+    lines.append(
+        "**✅ ALL OUTPUTS HAVE GREATER-OR-EQUAL COMPRESSION**"
+        if not lower else f"**❌ {len(lower)} OUTPUT(S) REGRESSED**"
+    )
+
+    def delta_table(title, rows):
+        if not rows:
+            return
+        lines.extend(["", f"### {title} ({len(rows)})", "",
+                      f"| fixture | `{base}` | `{pr}` | delta |", "|---|---:|---:|---:|"])
+        for key, c, b in rows:
+            lines.append(f"| {key} | {b:.6f} | {c:.6f} | {c - b:+.6f} |")
+
+    delta_table("⬇️ Lower compression (regressions)", lower)
+    delta_table("⬆️ Higher compression (improvements)", higher)
+    if new:
+        lines.extend(["", f"### 🆕 New (not on `{base}`) ({len(new)})", "",
+                      f"| fixture | `{pr}` |", "|---|---:|"])
+        for key, c in new:
+            lines.append(f"| {key} | {c:.6f} |")
+    return "\n".join(lines)
+
+
+def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str,
+              domains: list[str] = DOMAINS) -> str:
+    """Return a GitHub-flavored markdown comparison table.
+
+    Emits one row per entry in ``domains`` plus a trailing geomean row, for
+    each of the ``enum`` and ``smc`` methods.
+    """
     lines = [
         f"### {title} — `{pr_label}` vs `{base_label}`",
         "",
         f"|   | domain | method | time `{base_label}` [s] | time `{pr_label}` [s] | speedup | comp `{base_label}` | comp `{pr_label}` |",
         "|---|---|---|---:|---:|---:|---:|---:|",
     ]
+
+    def cell(b: dict, p: dict):
+        """(time_base, time_pr, speedup, comp_base, comp_pr) for one domain/method."""
+        return (b["time"], p["time"], b["time"] / p["time"], b["compression"], p["compression"])
+
+    def geomean(rows):
+        return np.prod(rows, axis=0) ** (1 / len(rows))
+
     for m in ("enum", "smc"):
-        elements = []
-        for dom in DOMAINS:
-            b = base[dom][m]
-            p = pr[dom][m]
-            speedup = b["time"] / p["time"]
-            elements.append((b["time"], p["time"], speedup, b["compression"], p["compression"]))
-        elements.append(np.prod(elements, axis=0) ** (1 / len(elements)))
-        for dom, (t_base, t_pr, speedup, c_base, c_pr) in zip(DOMAINS + ["geomean"], elements):
+        rows = [cell(base[dom][m], pr[dom][m]) for dom in domains]
+        labels = list(domains)
+        rows.append(geomean(rows)); labels.append("geomean")
+        for dom, (t_base, t_pr, speedup, c_base, c_pr) in zip(labels, rows):
             comp_warn = " ‼️" if c_pr / c_base < 0.99 else ""
             lines.append(f"| {_speedup_emoji(speedup)}{comp_warn} | {dom} | {m} | {t_base:.3f} | {t_pr:.3f} | {speedup:.2f}x | {c_base:.3f} | {c_pr:.3f} |")
     return "\n".join(lines)
@@ -256,7 +456,10 @@ def main() -> None:
     enum_steps = int(os.environ.get("ENUM_STEPS", 5000))
     session = time.strftime("%Y-%m-%d_%H-%M-%S")
 
-    check_clean_worktree()
+    preflight(base)
+    # Built up front so a fixture regression is reported even if the (long)
+    # timing run is interrupted afterwards.
+    comp_section = compression_section(base, pr)
 
     print(f"base={base}  pr={pr}  reps=adaptive(min={MIN_RUNS}, max={MAX_RUNS}, target rel-SEM<{TARGET_REL_SEM:.0%})+1warmup  smc=({smc_steps} steps, {smc_parts} particles, T={smc_temp})  enum_steps={enum_steps}  session={session}")
 
@@ -277,11 +480,19 @@ def main() -> None:
         runner_for = dict(runners.items())
         use_dsrs_for = dict(conditions)
         cell_keys = [(d, dom, m) for (d, _), dom, (m, _) in product(conditions, DOMAINS, runners.items())]
+        # Molecule scramble families run only with DSRs (see MOL_FAMILIES).
+        cell_keys += [("with_dsrs", fam, m) for fam in MOL_FAMILIES for m in runners]
 
         def run_rep_for(cell: tuple[str, str, str], rep_idx: int) -> None:
             """Run one rep of one cell on base then PR back-to-back."""
             dsr_label, domain, method = cell
             runner = runner_for[method]
+            if domain in MOL_FAMILIES:
+                time_mol_cell(base_bin, runner, domain,
+                              cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
+                time_mol_cell(pr_bin, runner, domain,
+                              cache_path_for(session, "pr", dsr_label, method, domain, rep_idx))
+                return
             use_dsrs = use_dsrs_for[dsr_label]
             time_cell(base_bin, runner, domain, use_dsrs,
                       cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
@@ -341,6 +552,7 @@ def main() -> None:
         methods = list(runners.keys())
         with_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("with_dsrs",) for dom in DOMAINS for m in methods}
         without_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("without_dsrs",) for dom in DOMAINS for m in methods}
+        mol_reps = {("with_dsrs", fam, m): reps_done[("with_dsrs", fam, m)] for fam in MOL_FAMILIES for m in methods}
         with_md = fmt_table(base, pr,
                             summarize(session, "base", "with_dsrs", methods, with_reps),
                             summarize(session, "pr", "with_dsrs", methods, with_reps),
@@ -349,10 +561,17 @@ def main() -> None:
                                summarize(session, "base", "without_dsrs", methods, without_reps),
                                summarize(session, "pr", "without_dsrs", methods, without_reps),
                                "without DSRs")
-        timing_section = "## Timing\n\n" + with_md + "\n\n" + without_md + "\n"
+        mol_md = fmt_table(base, pr,
+                           summarize(session, "base", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
+                           summarize(session, "pr", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
+                           "molecules (with DSRs)",
+                           domains=MOL_FAMILIES)
+        timing_section = ("## Timing and fixture regressions\n\n"
+                          + with_md + "\n\n" + without_md + "\n\n" + mol_md + "\n")
+        report_section = comp_section.rstrip() + "\n\n" + timing_section
         print()
-        print(timing_section)
-        update_pr_timing(pr, timing_section)
+        print(report_section)
+        update_pr_report(pr, report_section)
     finally:
         teardown_worktree(wt_base)
         teardown_worktree(wt_pr)

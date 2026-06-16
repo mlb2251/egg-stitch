@@ -38,31 +38,49 @@
 use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
 
+mod common;
+
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 
 fn expected_path(input: &str) -> String {
-    // Mirror the `data/domains/<...>/foo.json` layout under `data/expected_outputs/`.
-    let relative = input.strip_prefix("data/domains/").expect("expected input under data/domains/");
+    // Mirror the input layout under `data/expected_outputs/`: `data/domains/<...>`
+    // and the hand-built `data/test/<...>` corpora both map by stripping `data/`.
+    let relative = input.strip_prefix("data/domains/").or_else(|| input.strip_prefix("data/")).expect("expected input under data/domains/ or data/");
     let stem = relative.strip_suffix(".json").unwrap_or(relative);
     format!("data/expected_outputs/{stem}.out.json")
 }
 
-/// Path for the temporary `--output` JSON of a single backend run. Includes
-/// pid + input stem + search to stay unique across parallel tests.
+/// Path for the temporary `--output` JSON of a single backend run. Uses pid +
+/// a process-global atomic counter so it's unique per *call*, not just per
+/// (input, search): several tests run best-first on the same input (e.g. tests
+/// that vary only CLI flags), and a shared path would let parallel tests race
+/// on the same file. Stem + search are kept only for human readability.
 fn temp_output_path(input: &str, search: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let stem = Path::new(input).file_stem().and_then(|s| s.to_str()).unwrap_or("input");
-    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}.json", std::process::id(), stem, search))
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}-{}.json", std::process::id(), stem, search, n))
 }
 
 /// Invokes the cargo-built binary, writes its `--output` JSON to a temp file,
-/// reads it back, and strips non-deterministic fields.
+/// reads it back, and strips non-deterministic fields. Best-first uses the
+/// default 50 000-step budget.
 fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
+    run_backend_steps(search, input, "50000", extra_args)
+}
+
+/// Like [`run_backend`] but with an explicit best-first `--num-steps` budget
+/// (ignored by SMC). Used for corpora where 50 000 steps is impractical — e.g.
+/// an e-graph cyclic *through a binder*, whose pattern search space is unbounded
+/// and whose per-expansion work grows super-linearly.
+fn run_backend_steps(search: &str, input: &str, bf_steps: &str, extra_args: &[&str]) -> Value {
     let out = temp_output_path(input, search);
     let out_str = out.to_str().expect("utf-8 temp path");
     let mut cmd = Command::new(BIN);
     cmd.args(["--search", search, "--input", input, "--check-slow", "--num-abstractions", "1", "--output", out_str]);
     if search == "best-first" {
-        cmd.args(["--num-steps", "50000"]);
+        cmd.args(["--num-steps", bf_steps]);
     } else {
         cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
     }
@@ -74,7 +92,7 @@ fn run_backend(search: &str, input: &str, extra_args: &[&str]) -> Value {
     let _ = fs::remove_file(&out);
     let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
     if let Some(obj) = v.as_object_mut() {
-        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search"] {
+        for k in ["timestamp", "elapsed_secs", "iteration_times", "input_file", "rules_file", "search"] {
             obj.remove(k);
         }
     }
@@ -127,7 +145,18 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
     }
     // Collapse to a single entry when both backends agree; otherwise record
     // both side-by-side so the divergence is visible in the fixture.
-    let combined = if bf == smc { bf } else { json!({"best-first": bf, "smc": smc}) };
+    // `heap_sizes_at_end` is a best-first-only field (SMC has no heap), so a
+    // bare difference on it isn't a real divergence — compare with it removed
+    // and keep the best-first value (which carries the heap sizes) when they
+    // otherwise agree.
+    let agree = {
+        let mut bf_cmp = bf.clone();
+        if let Some(obj) = bf_cmp.as_object_mut() {
+            obj.remove("heap_sizes_at_end");
+        }
+        bf_cmp == smc
+    };
+    let combined = if agree { bf } else { json!({"best-first": bf, "smc": smc}) };
     bless_or_check(&expected_path(input), &combined, input);
 }
 
@@ -137,7 +166,13 @@ fn check_fixture(input: &str, extra_args: &[&str], check_pattern: bool) {
 /// signal. The fixture format is the same single `RunResult` shape that
 /// `check_fixture` writes when both backends already agree.
 fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) {
-    let mut bf = run_backend("best-first", input, extra_args);
+    check_fixture_bf_only_steps(input, "50000", extra_args, check_pattern);
+}
+
+/// [`check_fixture_bf_only`] with an explicit best-first `--num-steps` budget,
+/// for corpora where the default 50 000 is impractical (see [`run_backend_steps`]).
+fn check_fixture_bf_only_steps(input: &str, bf_steps: &str, extra_args: &[&str], check_pattern: bool) {
+    let mut bf = run_backend_steps("best-first", input, bf_steps, extra_args);
     strip_library_field(&mut bf, "best_history");
     if !check_pattern {
         strip_library_patterns(&mut bf);
@@ -147,14 +182,16 @@ fn check_fixture_bf_only(input: &str, extra_args: &[&str], check_pattern: bool) 
 
 /// Shared blessing/checking step for the two `check_fixture*` helpers.
 fn bless_or_check(path: &str, value: &Value, input: &str) {
+    let value = common::sorted(value);
     if std::env::var("BLESS").is_ok() {
-        let mut text = serde_json::to_string_pretty(value).expect("serialize expected");
+        let mut text = serde_json::to_string_pretty(&value).expect("serialize expected");
         text.push('\n');
         fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
     } else {
         let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("missing fixture {path}: {e} (run with BLESS=1 to create)"));
-        let expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
-        assert_eq!(value, &expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
+        let mut expected: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
+        common::sort_keys(&mut expected);
+        assert_eq!(value, expected, "fixture mismatch for {input} (run with BLESS=1 to update)");
     }
 }
 
@@ -299,6 +336,22 @@ fn same_leaf_different_depths_is_not_reused() {
     check_fixture("data/domains/stitch/same-leaf-different-depths.json", &["--language", "lambda-calc"], true);
 }
 
+/// Sibling of `same_leaf_different_depths_is_not_reused`, but for `shift_equal`'s
+/// *recursive* same-e-class shortcut rather than the top-level `a == b` one.
+/// In `(lam (lam (g (lam (f $1 $2)) (f $1 $1))))` the only abstraction is the
+/// cross-depth reuse `(g (lam ?#0) ?#0)`, whose captures `(f $1 $2)` and
+/// `(f $1 $1)` share the e-class `(f $1)` (fv {1}) sitting exactly at the gap
+/// boundary. The buggy `fv_outside_gap` shortcut accepted that as shift-invariant,
+/// so the merge was unsound: inlining `fn_0` reconstructs `(f $2 $2)` instead of
+/// `(f $1 $2)`. The fix rejects the reuse, so a sound search finds *no*
+/// abstraction (empty fixture, corpus unchanged). A regressed build re-discovers
+/// the bad abstraction and mismatches here; `scripts/check_all_outputs.py`'s
+/// β-equivalence sweep also rejects a bad re-bless.
+#[test]
+fn cross_depth_fv_outside_gap_is_not_reused() {
+    check_fixture("data/domains/ho-bugs/cross_depth_fv_outside_gap.json", LAMBDA, true);
+}
+
 /// Exercises `--rules`: with the bidirectional `(+ 0 ?x) <=> ?x` in play,
 /// the `(+ _ (* _ _))` shape aligns across all five programs (the fifth,
 /// `(* 7 (* (- v) (- v)))`, gets a `(+ 0 _)`-wrapped representation in its
@@ -324,9 +377,81 @@ fn arithmetic_aplusbplus1234() {
     check_fixture_bf_only("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES], false);
 }
 
+/// End-to-end check of the `constant_folding: !numbers` directive. The corpus
+/// writes one program's literal as `(+ 1 2)` and the other two as `3`; folding
+/// saturates them into the same e-class, so the winning abstraction bakes the
+/// constant in — `(f (g 3 x y z) ?#0)`, arity 1 — instead of having to pass the
+/// differing literal as a second parameter. Best-first finds this
+/// deterministically; the fixture pins that folding (parse → saturation →
+/// search) actually changes the output.
+#[test]
+fn constant_folding_unifies_literal() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold.json", &["-r", "data/domains/simple-arithmetic/const_fold.rewrites"], true);
+}
+
+/// Folding firing *after* non-minimizing rewrites. The corpus writes one angle
+/// as `(* 4 pi)` and another as `(* 2 tau)`; unifying them needs the whole
+/// chain: `tau => (* 2 pi)` (expands, growing the term), multiplicative
+/// associativity (`(* 2 (* 2 pi)) => (* (* 2 2) pi)`), then `!numbers` folding
+/// (`(* 2 2) => 4`) to reach `(* 4 pi)`. The folded subterm `(* 2 2)` exists in
+/// neither input — it's created mid-saturation — so this pins that folding
+/// composes with other DSRs rather than only collapsing literals already
+/// written adjacently. Best-first then bakes the shared angle into an arity-1
+/// abstraction `(seg (rot (* 2 tau)) ?#0)`.
+#[test]
+fn constant_folding_after_rewrites() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_after_rewrite.json", &["-r", "data/domains/simple-arithmetic/fold_after_rewrite.rewrites"], true);
+}
+
+/// `!integers`: folds `(+ 1 2) => 3` so the abstraction bakes in `3`, while the
+/// float operation `(+ 1.5 2.5)` is out of scope and stays unfolded in the body
+/// `(f (g 3 (+ 1.5 2.5) z) ?#0)`.
+#[test]
+fn constant_folding_integers() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_integers.json", &["-r", "data/domains/simple-arithmetic/const_fold_integers.rewrites"], true);
+}
+
+/// `!floats`: folds `(+ 1.5 2.5) => 4.0` (float result, decimal preserved) to
+/// unify with the literal `4.0`, while the integer operation `(+ 1 2)` is out of
+/// scope and stays unfolded in the body `(f (g 4.0 (+ 1 2) z) ?#0)`.
+#[test]
+fn constant_folding_floats() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_floats.json", &["-r", "data/domains/simple-arithmetic/const_fold_floats.rewrites"], true);
+}
+
+/// `!integersarefloats`: reads every literal as a float, so the integer operation
+/// `(+ 1 2)` folds to `3.0` and the integer literal `4` unifies with `4.0` (via
+/// `n => n.0`) — one abstraction `(f (g 3.0 4.0 z) ?#0)` covers programs written
+/// in either form.
+#[test]
+fn constant_folding_integers_are_floats() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_int_as_float.json", &["-r", "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
+}
+
+/// Regression for the `shift_equal` binder-cycle non-termination
+/// (`src/shift_equal.rs`). The rules `a => (lambda a)` / `b => (lambda b)` carry
+/// no metavariables, so `rule_fv_verdict` accepts them, yet each concrete RHS
+/// hashconses back into the matched class — equality saturation closes two
+/// distinct cycles *through the `lambda` binder*. Best-first then reaches a
+/// pattern with two metavars at different binder depths capturing those cyclic
+/// classes and calls `shift_equal(a, b, 0, 1)`.
+///
+/// Pre-fix, that call grew its `(deeper, shallower, init_depth)` key without
+/// bound (one bump per binder around the cycle) and overflowed the stack —
+/// aborting this run. With `init_depth` clamped at `shift_clamp` the coinduction
+/// closes, so the run completes and produces a stable result. A small step
+/// budget keeps it fast (the cyclic e-graph makes the search space unbounded).
+#[test]
+fn binder_cycle_terminates() {
+    // Pre-fix the run aborts with a stack overflow inside `shift_equal`'s
+    // coinduction, so `run_backend_steps`'s success assertion is itself the
+    // regression signal; the fixture then pins the (now-terminating) result.
+    check_fixture_bf_only_steps("data/domains/cyclic-binder/lam_self_cycle.json", "300", &["--language", "lambda-calc", "--rules", "data/domains/cyclic-binder/lam_self_cycle.rewrites"], true);
 }
 
 /// Collapse an s-expression to a sorted multiset of its atoms, discarding
@@ -381,7 +506,11 @@ fn arith_rewrites() {
         let bodies = abstraction_bodies(r);
         assert!(bodies.len() == 1, "expected exactly one abstraction");
         let abstr = all_symbols_hack(&bodies[0]);
-        if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
+        // Plus is associative+commutative, so several abstraction shapes are
+        // equally valid. With the `<=>` rules now genuinely bidirectional, the
+        // search also reaches the fully-flattened `(+ a b c d)` (one `+`); the
+        // older nested 2-/3-`+` shapes remain valid too.
+        if abstr != ["+", "a", "b", "c", "d"] && abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
             panic!("bad abstr: {:?}", abstr);
         }
         let rewr = rewritten_corpus(r, &original).iter().map(|x| all_symbols_hack(x)).collect::<Vec<_>>();
@@ -619,4 +748,215 @@ fn cross_depth_useless_inline() {
 #[test]
 fn cross_depth_forloop_db_var_inline() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_forloop_db_var_inline.json", LAMBDA, true);
+}
+
+/// Conditional-branch unification driven by a DSR equivalence. Half the
+/// programs place a big subterm `(a b c d e)` at one slot and half place
+/// `(g h i j k)`. The `(if true x y) == x` / `(if false x y) == y` rewrites let
+/// a *bare* branch be recognized as an arm of the conditional, so the optimal
+/// abstraction is `(f (if ?#0 (a b c d e) (g h i j k)) ?#1)`: it captures both
+/// big branches once in the body and each call site passes only a one-token
+/// boolean condition instead of the whole 5-node subterm. A plain metavar hole
+/// `(f ?#0 ?#1)` would have to pass that subterm at every site, so the
+/// condition-parameterized `if` genuinely wins.
+///
+/// The `--max-forced-expansion` prune interacts with this optimum. Because
+/// `(if true x y) => x` unions the `if` node into the bare branch's e-class, the
+/// minimal extraction there is the branch itself — so the `if`-wrapped match is
+/// non-minimal at every site, forcing a fixed 7 units of expansion (the extra
+/// `if` node plus the unselected 5-node branch, less the 1-token condition). The
+/// three tests below pin this: at the default (`none`, prune off) the optimum is
+/// found (cost 39); a cap below the forcing (5) prunes it and a worse arity-1
+/// abstraction wins (cost 44); a cap at or above it (10) clears the prune and
+/// recovers the optimum (cost 39). (This is exactly the incompleteness of the
+/// forced-expansion prune — kept cheap to spot.)
+const IF_INPUT: &str = "data/domains/conditional/if_branch_unify.json";
+const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewrites"];
+
+/// Default (`--max-forced-expansion none`, prune off): the equivalence-driven
+/// `if`-unification optimum is found (cost 39). Owns the plain fixture.
+#[test]
+fn conditional_branch_unify() {
+    check_fixture_bf_only(IF_INPUT, IF_RULES, true);
+}
+
+/// `--max-forced-expansion 5`: the `if`-wrapped match forces 7 units of expansion
+/// at every site, over the cap, so the prune drops the optimum and a worse arity-1
+/// abstraction wins (cost 44). Pins the `.cap5` fixture.
+#[test]
+fn conditional_branch_unify_cap5_drops_if_abstraction() {
+    let args = &["--rules", "data/domains/conditional/if_branch.rewrites", "--max-forced-expansion", "5"];
+    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap5.out.json", &bf, "if_branch_unify (cap 5)");
+}
+
+/// `--max-forced-expansion 10`: raising the cap past the forced expansion (7)
+/// recovers the equivalence-driven `if`-unification optimum (cost 39). Pins the
+/// `.cap10` fixture.
+#[test]
+fn conditional_branch_unify_cap10_recovers_if_abstraction() {
+    let args = &["--rules", "data/domains/conditional/if_branch.rewrites", "--max-forced-expansion", "10"];
+    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap10.out.json", &bf, "if_branch_unify (cap 10)");
+}
+
+/// Crossed-spin wrap collapse: the optimum
+/// `(g (da³(P ?#0 ?#1)) (db³(Q ?#0 ?#2)))` reuses `?#0` across two independent
+/// wrappers that collapse on disjoint match families (`P` at the r1 roots, `Q`
+/// at the r2 roots). Pins that the search recovers this cross-wrapper reuse
+/// optimum (cost 54) rather than settling for a per-wrapper abstraction.
+#[test]
+fn crossed_wrap_collapse() {
+    let args = &["--language", "op-children", "--rules", "data/test/crossed_wrap_collapse.rewrites", "--max-arity", "3"];
+    check_fixture_bf_only("data/test/crossed_wrap_collapse.json", args, true);
+}
+
+/// Regression: a metavar reused across binder depths keeps a genuine
+/// higher-order capture, and its η-app body args must be depth-shifted per
+/// occurrence. `build_with_ho` / `display_pattern_as_lambda` applied the raw
+/// `variable_indices[k]` at every occurrence, dropping the shift.
+///
+/// Unlike `cross_depth_forloop_db_var_inline` (which inlines the metavar to a
+/// literal DB leaf), this corpus keeps the capture higher-order
+/// (`variable_indices = [[0]]`, `var_depth = 1`) on a metavar merged across
+/// depths 1 and 2. The five programs share the heavy skeleton
+/// `(+ a b c d e f (lam (foo (bar _) (gg (lam (bar _))))))` — big enough above
+/// the binding `lam` that best-first roots the abstraction *above* it, so the
+/// captured `$0` is pattern-internal — while the inner slot varies in *where*
+/// it uses the bound variable (`(h $0)`, `($0 q)`, `(k $0 r)`, `(m s $0 t)`,
+/// bare `$0`), so no uniform literal body fits and the capture stays HO. The
+/// shallow slot uses `$0`, the deep slot (one `lam` deeper) the shift-variant
+/// `$1`.
+///
+/// The fixture pins the sound output (deep η-arg `$1`, lambda `($2 $1)`).
+/// Pre-fix the export emits `($2 $0)` at the deep occurrence, so `(fn_0 …)`
+/// β-reduces to `(bar $0)` where the original has `(bar $1)`. `--check-slow`
+/// misses it (size and root-fv are preserved); `scripts/check_all_outputs.py`'s
+/// β-equivalence sweep over the blessed fixture catches it. Until the
+/// per-occurrence shift is restored this test fails on the `$0`/`$1` mismatch.
+#[test]
+fn cross_depth_ho_capture() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_ho_capture.json", LAMBDA, true);
+}
+
+/// Hand-built `data/test/` corpora whose rule sets each introduce an identity
+/// self-loop — a freely re-nestable wrapper (`(+ ?x 0) == ?x`,
+/// `(if ?c ?x ?x) == ?x`, `(repeat ?x 1 ?m) == ?x`, `(f (g ?x)) == ?x`) —
+/// alongside genuine equivalences (`4 == (+ 2 2)`). Best-first only, capped at
+/// `--max-arity 2`: the self-loops make the space unbounded, so the
+/// `--num-steps` cap in `run_backend` is what bounds the towers (`converge_tower`
+/// / `nested_loop_tower` still hit the cap, leaving a non-zero `heap_sizes_at_end`
+/// — the regression these pin until dominated-wrapper stripping drains them).
+fn check_self_loop(input: &str, rules: &str) {
+    check_fixture_bf_only(&format!("data/test/{input}.json"), &["--rules", &format!("data/test/{rules}.rewrites"), "--max-arity", "2"], true);
+}
+
+/// `4 == (+ 2 2)` unifies the two corpus shapes; `(+ ?x 0)` is the self-loop.
+#[test]
+fn self_loop_arith_unify() {
+    check_self_loop("arith_unify", "arith");
+}
+
+/// Direct-child self-loop `(repeat ?x 1 ?m) => ?x` over a compressive corpus.
+#[test]
+fn self_loop_converge_tower() {
+    check_self_loop("converge_tower", "converge_tower");
+}
+
+/// Grandchild self-loop `(f (g ?x)) => ?x` over a compressive corpus.
+#[test]
+fn self_loop_nested_loop_tower() {
+    check_self_loop("nested_loop_tower", "nested_loop_tower");
+}
+
+/// `if_nest`/`if_same` self-loop over an `(if p _ _)` corpus.
+#[test]
+fn self_loop_if_unify() {
+    check_self_loop("if_unify", "if");
+}
+
+// === molecule domain (op-children) ===
+//
+// Molecules are rooted trees over `(<bond><degree> E n1 n2 ...)` atom nodes
+// (see `data/domains/molecules/molecules.rewrites` for the encoding). They run
+// under the default `op-children` language — no `--language` flag. These pins
+// guard the two molecule-specific behaviours: the re-rooting + commutativity
+// DSRs that recover cross-molecule alignment, and the scramble benchmark
+// (`data/domains/molecules/scramble/`) where those DSRs stand in for a canonical
+// SMILES encoding. All are best-first only (op-children SMC isn't pinned here);
+// the full 5000-molecule `molecules.json` corpus is left out as too slow for a
+// unit test (its β-equivalence is covered by `scripts/check_all_outputs.py`).
+
+/// Two byte-identical ethanol trees, same rooting. With no rules the only
+/// shared structure is the whole molecule, so the search abstracts it wholesale
+/// — the trivial baseline before any symmetry DSR is in play.
+#[test]
+fn molecules_ethanol_same_rooting() {
+    check_fixture_bf_only("data/test/ethanol_same_rooting.json", &[], true);
+}
+
+/// The *same* ethanol molecule written from two different roots (carbon-rooted
+/// vs oxygen-rooted). Without rules the two trees share nothing structurally;
+/// the re-rooting DSRs in `molecules.rewrites` make them a single e-class, so
+/// the search recovers one whole-molecule abstraction covering both. This pins
+/// that re-rooting alignment fires — the core molecule-domain feature.
+#[test]
+fn molecules_ethanol_rerooted() {
+    check_fixture_bf_only("data/test/ethanol_two_rootings.json", &["-r", "data/domains/molecules/molecules.rewrites"], true);
+}
+
+/// The general molecule symmetry DSRs (re-rooting, proper rotations, and
+/// witness-guarded transpositions) — the same file the main corpus uses.
+const SYMMETRIES: &[&str] = &["-r", "data/domains/molecules/molecules.rewrites"];
+
+/// Canonical-rooted scramble corpora, no rules — the reference encoding the
+/// benchmark compares against. Best-first converges (heap drains) so the default
+/// budget suffices and the result is exact. Each pins the single best
+/// abstraction the canonical alignment admits.
+#[test]
+fn molecules_scramble_hexyl_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/hexyl.canon.json", &[], true);
+}
+
+#[test]
+fn molecules_scramble_ester_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/ester.canon.json", &[], true);
+}
+
+#[test]
+fn molecules_scramble_glycol_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/glycol.canon.json", &[], true);
+}
+
+// The scrambled corpora (random root + child order) only realign once the
+// symmetry DSRs saturate, which makes the e-graph large enough that best-first
+// never drains its heap — so, like the self-loop fixtures above, these are
+// pinned at a fixed `--num-steps` budget (the optimum is reached early; the
+// budget just bounds the otherwise-unbounded tail). `check_all_outputs.py`
+// re-checks each rewritten corpus for equivalence under the same DSRs.
+
+/// Scrambled hexyl recovered by the DSRs: the re-rooting rules realign the
+/// scrambled trees onto the shared 6-carbon backbone, so the abstraction is the
+/// re-rooted alkyl chain `(m1 H (s4 C ...))` — the DSR-as-canonicaliser payoff.
+#[test]
+fn molecules_scramble_hexyl_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/hexyl.scram.json", "2000", SYMMETRIES, true);
+}
+
+/// Scrambled ester. Its shared motif (`CC(=O)OC`) is small, so under
+/// single-abstraction search the plain `(s1 H)` leaf still wins on raw count —
+/// pinned as the current behaviour (the larger ester-group abstraction only
+/// surfaces in the multi-abstraction benchmark run).
+#[test]
+fn molecules_scramble_ester_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/ester.scram.json", "2000", SYMMETRIES, true);
+}
+
+/// Scrambled glycol recovered by the DSRs onto its re-rooted polyether backbone
+/// `(s2 O (s4 C ...))`.
+#[test]
+fn molecules_scramble_glycol_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/glycol.scram.json", "2000", SYMMETRIES, true);
 }

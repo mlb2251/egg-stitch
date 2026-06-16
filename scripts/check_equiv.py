@@ -35,6 +35,7 @@ Patterns use ("pvar", name) for `?x`-style metavariables.
 
 import argparse
 import json
+import math
 import sys
 
 
@@ -119,10 +120,30 @@ def parse_rewrites(path):
     rules = []
     with open(path) as f:
         for raw in f:
-            line = raw.split("#", 1)[0].strip()
+            # Strip `#` and `//` line comments. `//` never collides with the
+            # division operator, which is always written `(/ …)` with a space.
+            line = raw.split("#", 1)[0].split("//", 1)[0].strip()
             if not line:
                 continue
             _name, body = line.split(":", 1)
+            # A `constant_folding` directive enables built-in numeric folding (see
+            # `crate::constant_folding`), emitted here as `("!fold", mode)` sentinels
+            # that `saturate` reads. Folding proves equivalences in both directions
+            # — `(+ 1 2) => 3` puts the expanded and collapsed forms in one e-class —
+            # so `!successors` is modelled by the same folding (integer and float, to
+            # cover integer-valued-float successors like `(+ 1.0 5.0)`).
+            if _name.strip() == "constant_folding":
+                modes = {
+                    "!integers": ("integers",),
+                    "!floats": ("floats",),
+                    "!integersarefloats": ("integersarefloats",),
+                    "!numbers": ("integers", "floats"),
+                    "!successors": ("integers", "floats"),
+                }.get(body.strip())
+                if modes is None:
+                    raise ValueError(f"unknown constant_folding kind: {body.strip()!r}")
+                rules.extend(("!fold", m) for m in modes)
+                continue
             if "<=>" in body:
                 lhs, rhs = body.split("<=>", 1)
                 lhs_t, rhs_t = parse_term(lhs.strip(), pattern=True), parse_term(rhs.strip(), pattern=True)
@@ -450,13 +471,154 @@ def term_size(t):
     return 1
 
 
-def saturate(eg, rules, max_iters, max_nodes):
-    """Run e-saturation: each iteration applies every DSR pattern rule to every
-    matching e-class and fires β on every `App(Lam(_), _)`. Stops at fixpoint,
-    when iteration cap is hit, or when the node cap is exceeded.
+# Binary arithmetic operators the `constant_folding` directives collapse.
+ARITH_FOLD_OPS = ("+", "-", "*", "/")
 
-    Returns ("ok", iters) on saturation, ("iters", iters) if iteration cap hit,
-    ("nodes", iters) if node cap hit."""
+
+def _leaf_nums(eg, eid):
+    """The numeric 0-ary `sym` leaves of the e-class, as (kind, value) pairs with
+    kind in {"int", "float"}."""
+    out = []
+    for op, kids in eg.eclass_nodes.get(eg.find(eid), ()):
+        if isinstance(op, tuple) and op[0] == "sym" and not kids:
+            try:
+                out.append(("int", int(op[1])))
+            except ValueError:
+                try:
+                    out.append(("float", float(op[1])))
+                except ValueError:
+                    pass
+    return out
+
+
+def _eclass_int(eg, eid):
+    """Integer value of an integer-literal leaf in the class, else None."""
+    return next((v for k, v in _leaf_nums(eg, eid) if k == "int"), None)
+
+
+def _eclass_float(eg, eid):
+    """Float value of any numeric leaf (integers coerced), else None."""
+    nums = _leaf_nums(eg, eid)
+    f = next((v for k, v in nums if k == "float"), None)
+    if f is not None:
+        return f
+    i = next((v for k, v in nums if k == "int"), None)
+    return float(i) if i is not None else None
+
+
+def _eclass_has_float(eg, eid):
+    """True iff the class holds a genuine float-literal leaf."""
+    return any(k == "float" for k, _ in _leaf_nums(eg, eid))
+
+
+def _eclass_has_sym(eg, eid, name):
+    """True iff the e-class has the 0-ary `sym` leaf `name`."""
+    return any(isinstance(op, tuple) and op[0] == "sym" and not kids and op[1] == name for op, kids in eg.eclass_nodes.get(eg.find(eid), ()))
+
+
+def _eval_int(op, a, b):
+    """Exact integer fold; `/` only when the divisor is non-zero and divides evenly."""
+    if op == "+":
+        return a + b
+    if op == "-":
+        return a - b
+    if op == "*":
+        return a * b
+    if op == "/":
+        return None if b == 0 or a % b != 0 else a // b
+    return None
+
+
+def _eval_float(op, a, b):
+    """Float fold; declines on a non-finite result. Formatted with `repr`, which
+    matches the Rust `{:?}` leaf form (`4.0`, not `4`) for the clean values the
+    corpora exercise."""
+    if op == "+":
+        r = a + b
+    elif op == "-":
+        r = a - b
+    elif op == "*":
+        r = a * b
+    elif op == "/":
+        r = a / b if b != 0 else float("inf")
+    else:
+        return None
+    return repr(r) if math.isfinite(r) else None
+
+
+def _arith_sites(eg):
+    """Yield `(eid, op_sym, a_eid, b_eid)` for every `(binop a b)` e-node — a flat
+    `(op a b)` desugars to `app(app(sym(op), a), b)`."""
+    for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
+        for op, kids in list(eg.eclass_nodes.get(eid, ())):
+            if op != "app" or len(kids) != 2:
+                continue
+            inner_eid, b_eid = kids
+            for iop, ikids in list(eg.eclass_nodes.get(eg.find(inner_eid), ())):
+                if iop != "app" or len(ikids) != 2:
+                    continue
+                op_eid, a_eid = ikids
+                fold_op = next((s for s in ARITH_FOLD_OPS if _eclass_has_sym(eg, op_eid, s)), None)
+                if fold_op is not None:
+                    yield eid, fold_op, a_eid, b_eid
+
+
+def _int_as_float_step(eg):
+    """`!integersarefloats` companion: add the float form `n.0` to every
+    integer-literal e-class that lacks one, so `1` unifies with `1.0`."""
+    unions = False
+    for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
+        n = _eclass_int(eg, eid)
+        if n is not None and not _eclass_has_float(eg, eid) and eg.union(eid, eg.add(("sym", repr(float(n))), ())):
+            unions = True
+    return unions
+
+
+def _fold_step(eg, modes):
+    """One folding pass for the active `modes` (a subset of
+    {"integers", "floats", "integersarefloats"}), mirroring the Rust appliers:
+    integer folding on integer operands, float folding when a float operand is
+    present (or on every op under `integersarefloats`), plus the `n => n.0`
+    companion for `integersarefloats`."""
+    iaf = "integersarefloats" in modes
+    do_int = "integers" in modes
+    do_float = "floats" in modes or iaf
+    unions = _int_as_float_step(eg) if iaf else False
+    for eid, op, a_eid, b_eid in _arith_sites(eg):
+        if do_int:
+            ai, bi = _eclass_int(eg, a_eid), _eclass_int(eg, b_eid)
+            if ai is not None and bi is not None:
+                r = _eval_int(op, ai, bi)
+                if r is not None and eg.union(eid, eg.add(("sym", str(r)), ())):
+                    unions = True
+        if do_float:
+            af, bf = _eclass_float(eg, a_eid), _eclass_float(eg, b_eid)
+            # Plain `!floats` only fires with a genuine float operand present;
+            # `!integersarefloats` reads every operand as a float.
+            if af is not None and bf is not None and (iaf or _eclass_has_float(eg, a_eid) or _eclass_has_float(eg, b_eid)):
+                r = _eval_float(op, af, bf)
+                if r is not None and eg.union(eid, eg.add(("sym", r), ())):
+                    unions = True
+    return unions
+
+
+def saturate(eg, rules, max_iters, max_nodes, goal=None):
+    """Run e-saturation: each iteration applies every DSR pattern rule to every
+    matching e-class, fires β on every `App(Lam(_), _)`, and (if a
+    `constant_folding` directive was present) folds numeric literals. Stops at
+    fixpoint, when iteration cap is hit, or when the node cap is exceeded.
+
+    When `goal` is `(eid_a, eid_b)`, stops the instant the two land in the same
+    e-class — we only need to witness *that* equivalence, not the full congruence
+    closure. The commutativity-heavy molecule rules otherwise keep generating the
+    entire neighbour-permutation group long after the roots have already met, so
+    this early exit is the difference between seconds and the node cap. It only
+    short-circuits a *positive* verdict, so it changes no result.
+
+    Returns ("ok", iters) on goal-reached/fixpoint, ("iters", iters) if iteration
+    cap hit, ("nodes", iters) if node cap hit."""
+    fold_modes = {r[1] for r in rules if r[0] == "!fold"}
+    pattern_rules = [r for r in rules if r[0] != "!fold"]
     for it in range(max_iters):
         if eg.total_nodes() > max_nodes:
             return ("nodes", it)
@@ -467,7 +629,7 @@ def saturate(eg, rules, max_iters, max_nodes):
         eclass_ids = list(set(eg.find(e) for e in eg.eclass_nodes))
 
         # 1. Fire all DSR rules.
-        for lhs, rhs in rules:
+        for lhs, rhs in pattern_rules:
             for eid in eclass_ids:
                 for subst in list(ematch(eg, lhs, eid, {})):
                     new_eid = instantiate(eg, rhs, subst)
@@ -495,8 +657,14 @@ def saturate(eg, rules, max_iters, max_nodes):
             if eg.union(app_eid, new_eid):
                 unions_made = True
 
+        # 3. Numeric folding (constant_folding directive).
+        if fold_modes and _fold_step(eg, fold_modes):
+            unions_made = True
+
         eg.rebuild()
 
+        if goal is not None and eg.find(goal[0]) == eg.find(goal[1]):
+            return ("ok", it + 1)
         if not unions_made:
             return ("ok", it + 1)
     return ("iters", max_iters)
@@ -509,7 +677,11 @@ def equiv_under_rules(t1, t2, rules, max_iters, max_nodes):
     eid1 = eg.add_term(t1)
     eid2 = eg.add_term(t2)
     eg.rebuild()
-    status, iters = saturate(eg, rules, max_iters, max_nodes)
+    # Hash-consing already merges structurally-identical terms, so many pairs are
+    # done before any rule fires.
+    if eg.find(eid1) == eg.find(eid2):
+        return True, "identical (0 iters)"
+    status, iters = saturate(eg, rules, max_iters, max_nodes, goal=(eid1, eid2))
     same = eg.find(eid1) == eg.find(eid2)
     return same, f"{status} after {iters} iters ({eg.total_nodes()} nodes)"
 
@@ -547,13 +719,15 @@ def check_pair_beta(o, r, fuel):
 def check_file(path, args):
     with open(path) as f:
         data = json.load(f)
-    # `check_fixture` writes `{best-first: <result>, smc: <result>}` when the
-    # two backends diverge; otherwise the flat single-`RunResult` shape.
-    # Treat each backend independently in the dual case.
-    if "library" not in data and ("best-first" in data or "smc" in data):
+    # A single `RunResult` always carries `original_programs` at top level. When
+    # it's absent, the file aggregates several runs keyed by a tag: either the
+    # two backends (`best-first`/`smc`, written by `check_fixture`) or one entry
+    # per input file (the list/physics per-file regression in
+    # `dreamcoder_bfs_test.rs`). Check each sub-result independently.
+    if "original_programs" not in data and isinstance(data, dict):
         ok = True
-        for backend, sub in data.items():
-            if not _check_run_result(path, backend, sub, args):
+        for tag, sub in data.items():
+            if not _check_run_result(path, tag, sub, args):
                 ok = False
         return ok
     return _check_run_result(path, None, data, args)

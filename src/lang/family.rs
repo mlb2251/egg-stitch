@@ -19,10 +19,10 @@ use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, S
 /// Cost weights are runtime values (`Weights`) carried on `StitchAnalysis`, so
 /// they no longer parameterize this trait.
 pub trait LanguageFamily: Clone + 'static {
-    /// Discriminant type for `Apply<O>`. Only needs `StitchDisc` (hash/eq/size/var
-    /// detection) — `from_name` is not required since the family knows how to
-    /// build var leaves directly via `make_var`.
-    type Discriminant<O: StitchOp>: StitchDisc;
+    /// Discriminant type for `Apply<O>`. A `StitchOp`: besides hash/eq/size/var
+    /// detection, it can be built from a name and from a De Bruijn index, which
+    /// lets language-agnostic code construct representative leaves.
+    type Discriminant<O: StitchOp>: StitchOp;
 
     /// The Language obtained by instantiating this family with leaf-Op `O`.
     type Apply<O: StitchOp>: StitchLanguage<Discriminant = Self::Discriminant<O>>;
@@ -45,7 +45,12 @@ pub trait LanguageFamily: Clone + 'static {
     /// Structural cost (sum of node costs over all enodes added by
     /// `add_stub_application`) of an `arity`-arg stub application — the
     /// head plus any spine nodes (e.g. curried `App`s) the family inserts.
-    fn stub_application_size<O: StitchOp>(name: &str, arity: usize, weights: &Weights) -> u32;
+    fn stub_application_size(arity: usize, weights: &Weights) -> u32;
+
+    /// Cost of a single symbol (leaf) in this family — the unit that the
+    /// `--max-forced-expansion` slack is denominated in, so a cap of `k` means
+    /// "`k` symbols' worth of forced expansion".
+    fn symbol_cost(weights: &Weights) -> u32;
 
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
@@ -130,8 +135,13 @@ impl LanguageFamily for OpChildren {
         egraph.add(Self::make(O::from_name(name), children))
     }
 
-    fn stub_application_size<O: StitchOp>(name: &str, _arity: usize, weights: &Weights) -> u32 {
-        O::from_name(name).intrinsic_size(weights)
+    fn stub_application_size(_arity: usize, weights: &Weights) -> u32 {
+        // OpChildren has no application spine: a stub is a single leaf node.
+        weights.sym_var_cost
+    }
+
+    fn symbol_cost(weights: &Weights) -> u32 {
+        weights.sym_var_cost
     }
 
     fn check_fast_vs_slow(fast: i64, slow: i64) {
@@ -227,8 +237,13 @@ impl LanguageFamily for LambdaCalc {
         current
     }
 
-    fn stub_application_size<O: StitchOp>(name: &str, arity: usize, weights: &Weights) -> u32 {
-        LambdaCalcDisc::Leaf(O::from_name(name)).intrinsic_size(weights) + arity as u32 * weights.app_cost
+    fn stub_application_size(arity: usize, weights: &Weights) -> u32 {
+        // Leaf head plus one curried `App` per argument.
+        weights.sym_var_cost + arity as u32 * weights.app_cost
+    }
+
+    fn symbol_cost(weights: &Weights) -> u32 {
+        weights.sym_var_cost
     }
 
     fn check_fast_vs_slow(fast: i64, slow: i64) {
@@ -283,7 +298,7 @@ impl LanguageFamily for LambdaCalc {
         if last_db.is_some() && nodes[usize::from(cur)].discriminant().as_var().is_some() { cur } else { id }
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
         let arity = vars.len();
         let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
         for (k, ids) in vars.iter().enumerate() {
@@ -308,8 +323,11 @@ impl LanguageFamily for LambdaCalc {
             let new_id = if let Some(&k) = pos_to_k.get(&i) {
                 let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
                 let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
+                // Deeper occurrences sit under `depth[i] − var_depth[k]` extra
+                // binders, so each captured index shifts up by that delta.
+                let occ_shift = depth[i] as i32 - var_depth[k] as i32;
                 for dbidx in variable_indices[k].iter().rev() {
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx)));
+                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx + occ_shift)));
                     current = out.add(LambdaCalcLanguage::App([current, arg_id]));
                 }
                 current

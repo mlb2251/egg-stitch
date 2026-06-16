@@ -1,0 +1,7 @@
+// genuine equivalence: 4 and (+ 2 2) denote the same value (bidirectional)
+four_to_sum: 4 => (+ 2 2)
+sum_to_four: (+ 2 2) => 4
+// identity self-loop on +: (+ x 0) == x, re-applicable, so + becomes a
+// freely-renestable wrapper (the tower source, analogous to scale_1)
+add_zero_grow: (+ ?x ?y) => (+ (+ ?x ?y) 0)
+add_zero_elim: (+ ?x 0) => ?x

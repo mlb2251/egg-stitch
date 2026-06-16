@@ -22,10 +22,44 @@ ROOT = REPO / "data" / "expected_outputs"
 
 # Fixtures where the search was run with `-r <rules>` and β alone is not
 # enough to bridge the DSR-mediated equivalence in the rewritten programs.
-# Keep in sync with `tests/stitch_compat_test.rs`.
+# Keep in sync with the suites that bless these fixtures: the stitch/arith/
+# conditional/fv-overapprox/test entries come from `tests/stitch_compat_test.rs`,
+# the `cogsci/*.dsr` ones from `tests/cogsci_bfs_test.rs`, and the
+# `list`/`physics` ones from `tests/dreamcoder_bfs_test.rs`.
 RULES_BY_REL = {
     "fv-overapprox/annihilator.out.json": "data/domains/fv-overapprox/annihilator.rewrites",
     "stitch/nested.out.json": "data/domains/stitch/nested.rewrites",
+    "conditional/if_branch_unify.out.json": "data/domains/conditional/if_branch.rewrites",
+    "conditional/if_branch_unify.cap5.out.json": "data/domains/conditional/if_branch.rewrites",
+    "conditional/if_branch_unify.cap10.out.json": "data/domains/conditional/if_branch.rewrites",
+    "test/crossed_wrap_collapse.out.json": "data/test/crossed_wrap_collapse.rewrites",
+    "cogsci/dials.dsr.out.json": "data/domains/cogsci/dials.rewrites",
+    "cogsci/dials.dsr-mfe3.out.json": "data/domains/cogsci/dials.rewrites",
+    "cogsci/furniture.dsr.out.json": "data/domains/cogsci/furniture.rewrites",
+    "cogsci/furniture.dsr-mfe3.out.json": "data/domains/cogsci/furniture.rewrites",
+    "cogsci/nuts-bolts.dsr.out.json": "data/domains/cogsci/nuts-bolts.rewrites",
+    "cogsci/nuts-bolts.dsr-mfe3.out.json": "data/domains/cogsci/nuts-bolts.rewrites",
+    "cogsci/wheels.dsr.out.json": "data/domains/cogsci/wheels.rewrites",
+    "cogsci/wheels.dsr-mfe3.out.json": "data/domains/cogsci/wheels.rewrites",
+    "list/list.dsr.out.json": "data/domains/list/list.rewrites",
+    "physics/physics.dsr.out.json": "data/domains/physics/physics.rewrites",
+    "simple-arithmetic/const_fold.out.json": "data/domains/simple-arithmetic/const_fold.rewrites",
+    "simple-arithmetic/const_fold_integers.out.json": "data/domains/simple-arithmetic/const_fold_integers.rewrites",
+    "simple-arithmetic/const_fold_floats.out.json": "data/domains/simple-arithmetic/const_fold_floats.rewrites",
+    "simple-arithmetic/const_fold_int_as_float.out.json": "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites",
+    "simple-arithmetic/fold_after_rewrite.out.json": "data/domains/simple-arithmetic/fold_after_rewrite.rewrites",
+    "test/arith_unify.out.json": "data/test/arith.rewrites",
+    "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
+    "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",
+    "test/if_unify.out.json": "data/test/if.rewrites",
+    # molecule domain (op-children): re-rooting / commutativity DSRs are what
+    # make the rewritten trees equivalent, so β alone can't bridge them. Blessed
+    # by the `molecules_*` cases in `tests/stitch_compat_test.rs`.
+    "test/ethanol_two_rootings.out.json": "data/domains/molecules/molecules.rewrites",
+    "domains/molecules/molecules.out.json": "data/domains/molecules/molecules.rewrites",
+    "molecules/scramble/hexyl.scram.out.json": "data/domains/molecules/molecules.rewrites",
+    "molecules/scramble/ester.scram.out.json": "data/domains/molecules/molecules.rewrites",
+    "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
 }
 
 

@@ -52,6 +52,14 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let num_particles = args.num_particles;
     let num_steps = args.num_steps.expect("--num-steps is required for SMC search");
     let temperature = args.temperature;
+    // A non-positive temperature makes every weight `-cost/T` non-finite
+    // (`-inf`, or `NaN` for a zero-cost particle), collapsing the whole run to
+    // "all particles died"; a negative one would silently invert the objective.
+    assert!(temperature > 0.0 && temperature.is_finite(), "--temperature must be a positive finite number, got {temperature}");
+    // A negative boost yields negative resampling weights, which make the
+    // cumulative array non-monotonic and break `partition_point` in
+    // `weighted_choice`. Zero is allowed.
+    assert!(args.boost_reuse_weight >= 0.0 && args.boost_reuse_weight.is_finite(), "--boost-reuse-weight must be a non-negative finite number, got {}", args.boost_reuse_weight);
     let dead_runs = args.dead_runs;
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
@@ -70,7 +78,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
-    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared, None), num_particles)];
+    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared, false), num_particles)];
     let mut scratch = CostScratch::new(&shared.egraph);
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
@@ -192,8 +200,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             break;
         }
         // Steps since last improvement; if no improvement yet, measure from step 0
-        // so a fully stuck search still aborts after `dead_runs`.
-        if (step as i64) - (best_found_at.unwrap_or(0) as i64) > dead_runs as i64 {
+        // so a fully stuck search still aborts after `dead_runs`. Use `>=` so we
+        // stop after exactly `dead_runs` no-improvement steps, per the CLI help.
+        if (step as i64) - (best_found_at.unwrap_or(0) as i64) >= dead_runs as i64 {
             log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
@@ -284,7 +293,9 @@ fn action_weights_with_reuse_boost<D>(actions: &[(Action<D>, usize)], boost_reus
 }
 
 /// Finds the index `i` such that `r` falls into the half-open interval
-/// `(acc_weights[i-1], acc_weights[i]]` (treating the implicit prefix as 0).
+/// `[acc_weights[i-1], acc_weights[i])` (treating the implicit prefix as 0):
+/// the smallest `i` with `acc_weights[i] > r`. Closed on the left, open on the
+/// right — `partition_point(|w| w <= r)` returns exactly this.
 ///
 /// Uses `partition_point` so that zero-weight prefixes (entries whose
 /// cumulative value equals a previous one) are skipped, and clamps to the

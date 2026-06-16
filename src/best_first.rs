@@ -83,6 +83,9 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     pub best_history: Vec<BestHistoryEntry>,
     /// Total number of heap pops performed before the loop stopped.
     pub num_expansions: usize,
+    /// Heap size when the loop stopped. `0` means the frontier was exhausted
+    /// (the search converged); a non-zero value means it hit the `num_steps` cap.
+    pub heap_size_at_end: usize,
     pub data: crate::shared::SharedData<F, O>,
     pub tree_log: Option<SearchTreeLog>,
 }
@@ -122,7 +125,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let debug = args.debug_log;
     let strategy = args.priority;
 
-    let initial_state = SearchState::new(&shared, Some(0));
+    let initial_state = SearchState::new(&shared, true);
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
     let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
@@ -141,7 +144,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
-        s.check_and_insert(initial_state.pattern.clone(), initial_state.frozen_count.unwrap_or(0));
+        s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.var_frozen.clone());
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -157,7 +160,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut useless_inline_hits: usize = 0;
     let search_start = Instant::now();
 
-    'search: while let Some(Reverse((_prio, node_id))) = heap.pop() {
+    'search: loop {
+        // Check cutoffs before popping so a node isn't discarded from the frontier.
         if let Some(b) = budget
             && num_expansions >= b
         {
@@ -170,6 +174,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
         }
+        let Some(Reverse((_prio, node_id))) = heap.pop() else {
+            break;
+        };
 
         // Re-check the cached lower bound: best may have improved since this node was pushed.
         if let Some(lb) = nodes[node_id].lower_bound
@@ -182,15 +189,38 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         nodes[node_id].expanded = true;
         expansion_order.push(node_id);
 
-        if args.verbose {
-            println!("{} {} {}", format!("[expansion {}]", num_expansions).dimmed(), "expanding:".dimmed(), nodes[node_id].state.pattern.to_string().cyan());
+        if args.verbose || args.verbose_forced_expansion {
+            let tag = format!("[expansion {}]", num_expansions);
+            let pat = nodes[node_id].state.pattern.to_string();
+            if args.verbose {
+                println!("{} {} {}", tag.dimmed(), "expanding:".dimmed(), pat.clone().cyan());
+            }
+            if args.verbose_forced_expansion {
+                let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared) {
+                    Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
+                    None => "[forced-expansion=- (no matches)]".to_string(),
+                };
+                println!("{} {} {}", tag.dimmed(), pat.cyan(), forced_str.yellow());
+            }
         }
 
         let parent_depth = nodes[node_id].depth;
-        let successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
+        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
         };
+
+        if let Some(k) = args.max_forced_expansion.0 {
+            // Safe to run on the post-dominance successor set: dominance
+            // short-circuits preserve forced expansion. dominant-reuse: doesn't
+            // change anything about the matching term at each site. useless-inline:
+            // replaces a variable with its minimal term, so preserves cost. Both
+            // don't change the set of matches.
+            //
+            // The cap is given in symbols; scale to the family's cost units.
+            let cap = k as i64 * F::symbol_cost(&shared.egraph.analysis.weights) as i64;
+            successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
+        }
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow
@@ -199,7 +229,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.pattern.clone(), child_state.frozen_count.unwrap_or(0))
+                && s.check_and_insert(child_state.pattern.clone(), child_state.pattern.var_frozen.clone())
             {
                 continue;
             }
@@ -236,6 +266,17 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _, _)| *c);
             let arity = child_state.pattern.vars.len();
+            // KNOWN DIVERGENCE FROM SMC: this update is *not* guarded by
+            // `shared.follow.is_none()`, unlike its counterpart at smc.rs:135. In
+            // `--follow` mode best-first therefore records the cheapest matching
+            // *prefix* as `best`, whereas SMC records only an exact follow match
+            // (and returns `None` if the budget runs out first). The non-prefix
+            // children are already filtered out above (see :199), so `best` is
+            // always a valid follow-prefix; the two backends just disagree on
+            // what they report when no exact hit is reached within budget. This
+            // is intentionally left as-is: follow mode is a reachability check
+            // and none of the follow tests depend on which backend's
+            // budget-exhaustion behaviour is used.
             if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat && !child_state.has_useless_var(&shared) {
                 let elapsed = search_start.elapsed().as_secs_f64();
                 println!(
@@ -357,6 +398,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         best_history,
         best_found_at,
         num_expansions,
+        heap_size_at_end: heap.len(),
         data: shared.into_data(),
         tree_log,
     }

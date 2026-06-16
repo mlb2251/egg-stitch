@@ -1,7 +1,10 @@
 pub mod best_first;
 pub mod candidates;
+pub mod constant_folding;
 pub mod cost;
 pub mod debug_log;
+pub mod egraph_util;
+pub mod factor;
 pub mod follow;
 pub mod io;
 pub mod lang;
@@ -18,9 +21,10 @@ pub mod shift;
 pub mod shift_equal;
 pub mod smc;
 
+use std::time::Instant;
+
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
-use egg::Language;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -35,6 +39,22 @@ pub enum SearchKind {
     Smc,
     /// Best-first enumerative search over canonical patterns.
     BestFirst,
+}
+
+/// `--max-forced-expansion` value: a slack bound `Some(k)`, or `none` to disable
+/// the forced-expansion prune entirely.
+#[derive(Clone, Copy, Debug)]
+pub struct MaxForcedExpansion(pub Option<usize>);
+
+impl std::str::FromStr for MaxForcedExpansion {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("none") {
+            Ok(Self(None))
+        } else {
+            s.parse::<usize>().map(|n| Self(Some(n))).map_err(|_| format!("expected a non-negative integer or `none`, got {s:?}"))
+        }
+    }
 }
 
 /// E-graph based program synthesis via SMC.
@@ -52,6 +72,23 @@ pub struct Args {
     /// Path to rewrite rules file.
     #[arg(short, long)]
     pub rules: Option<String>,
+
+    /// Apply DSRs (rewrite rules) only when building the initial egraph, not
+    /// during search. With this set, the initial egraph is normalized by the
+    /// rules, its min-term is extracted, and a fresh rule-free egraph is rebuilt
+    /// from that min-term for the actual search (and between abstractions).
+    #[arg(long, default_value_t = false)]
+    pub only_use_dsrs_at_start: bool,
+
+    /// Maximum number of e-saturation iterations when applying rewrite rules to
+    /// the egraph (initial build and between abstractions).
+    #[arg(long, default_value_t = 100)]
+    pub iter_limit: usize,
+
+    /// Maximum number of e-nodes the egraph may grow to during e-saturation
+    /// before the runner stops (initial build and between abstractions).
+    #[arg(long, default_value_t = 50_000_000)]
+    pub node_limit: usize,
 
     /// Follow pattern to constrain particle expansion.
     #[arg(short, long)]
@@ -85,7 +122,7 @@ pub struct Args {
     #[arg(long, default_value_t = 50)]
     pub dead_runs: usize,
 
-    /// Maximum arity of patterns to consider as "best".
+    /// Maximum arity of patterns that can be returned by search.
     #[arg(long, default_value_t = 1000)]
     pub max_arity: usize,
 
@@ -164,6 +201,25 @@ pub struct Args {
     #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
     pub opt_lower_bound: bool,
 
+    /// Prune patterns which force "expansions" (e.g., 4 -> (+ 4 0)) at *every*
+    /// match site.
+    ///
+    /// Specifically for a match location r of p, let
+    ///     - Cost(r) = min_{t in r} Cost(t)
+    ///     - Cost(r | p) = min_{t in r, t matches p} Cost(t)
+    ///     - ForcedExpansion(r, p) = Cost(r | p) - Cost(r)
+    ///     - ForcedExpansion(p) = min_{r | p matches at r} ForcedExpansion(r, p)
+    /// Each t that matches p matches at some (r, σ), and at this point,
+    ///     Cost(t) = CostWithoutVars(p) + sum_{s in σ} Cost(s)
+    /// As such, we can compute
+    ///     Cost(r | p) = CostWithoutVars(p) + min_{σ | r matches at p with σ} sum_{s in σ} Cost(s)
+    ///
+    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
+    ///
+    /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
+    #[arg(long = "max-forced-expansion", default_value = "none")]
+    pub max_forced_expansion: MaxForcedExpansion,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
@@ -175,6 +231,13 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+
+    /// Print each best-first expansion's forced expansion (its argmin value and
+    /// the min-term of the closest-to-minimal match root). Independent of
+    /// `--verbose`; the min-term extraction makes it non-trivial, so it's its own
+    /// flag.
+    #[arg(long = "verbose-forced-expansion", default_value_t = false)]
+    pub verbose_forced_expansion: bool,
 
     /// Selects the language family the pipeline runs over. Patterns/programs/rules
     /// are always written in user-facing flat form; the language layer handles any
@@ -199,22 +262,34 @@ pub enum LanguageChoice {
     LambdaCalc,
 }
 
+/// Tuple returned by [`multiple_step_search`]: `(library, corpus size after DSRs,
+/// final combined cost, final rewritten corpus, best-first heap size at stop for
+/// each abstraction iteration)`.
+type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<Vec<usize>>, Option<Vec<String>>, Option<Vec<usize>>, Vec<Instant>);
+
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
 /// the corpus size after DSRs (before any abstractions), the final combined cost,
-/// and the final rewritten corpus (`Some` once any abstraction has been applied,
-/// `None` if no abstraction was found).
+/// the final rewritten corpus (`Some` once any abstraction has been applied,
+/// `None` if no abstraction was found), and the best-first heap size at stop for
+/// each iteration (`None` for SMC).
 ///
 /// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
 /// their match roots, then the rewritten programs are extracted as strings. By default
 /// those strings build a fresh egraph for the next round (DSR rules are re-applied
 /// there); with `--roll-over` the rewritten egraph is instead reused directly, carrying
 /// all accumulated equivalences into the next round.
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> MultiStepSearchResult {
     let mut data = data;
     let mut library = Vec::new();
     let mut original_size = 0;
-    let mut final_cost = None;
+    let mut cost_at_end_of_each_iter: Option<Vec<usize>> = None; // best cost at each iteration, for summary output
     let mut final_rewritten: Option<Vec<String>> = None;
+    let mut heap_sizes_at_end: Option<Vec<usize>> = None; // best-first frontier size at stop, one per search iteration
+    let mut search_ends: Vec<Instant> = Vec::new();
+    // (fn name, cumulative corpus+library cost, usage matches in the minimal
+    // corpus, body) after each abstraction, for the end-of-run summary of cost,
+    // cumulative compression, match count, and the abstraction body.
+    let mut summary: Vec<(String, usize, usize, String)> = Vec::new();
 
     let seed = args.seed.unwrap_or_else(|| rand::rng().random());
     println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
@@ -227,19 +302,22 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let fn_name_base = first_free_fn_index::<F::Apply<O>>(&data.egraph);
 
     for abstraction_idx in 0..args.num_abstractions {
-        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history) = match args.search {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history, iter_heap_size) = match args.search {
             SearchKind::Smc => {
                 let r = smc::smc::<F, O>(data, args, &mut rng);
-                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None)
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None, None)
             }
             SearchKind::BestFirst => {
                 let r = best_first::best_first(data, args);
-                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history))
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history), Some(r.heap_size_at_end))
             }
         };
 
         if abstraction_idx == 0 {
             original_size = iter_original_size;
+        }
+        if let Some(h) = iter_heap_size {
+            heap_sizes_at_end.get_or_insert_with(Vec::new).push(h);
         }
 
         match best {
@@ -255,24 +333,30 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_data.egraph.analysis.weights);
                 let body_str = state.pattern.display_with_ho(variable_indices);
                 let lambda = state.pattern.display_as_lambda(variable_indices);
-                let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
-                // With the `None` sentinel every match keeps every subst, so every
-                // match contributes its usage count; otherwise count only matches
-                // whose kept list is non-empty.
-                let usage_matches: usize = match &candidate.kept_substs {
-                    None => state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
-                    Some(k) => state.matches.iter().zip(k).filter(|(_, ks)| !ks.is_empty()).map(|(m, _)| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
-                };
+                let usage_counts = egraph_util::compute_usage_counts(&result_data.egraph, result_data.root);
+                // A match contributes its usage count iff it keeps at least one
+                // candidate-compatible subst (lambda-free domains keep them all).
+                let var_depth = &state.pattern.var_depth;
+                let usage_matches: usize = state
+                    .matches
+                    .iter()
+                    .filter(|m| cost::filter_factors_by_candidate(&result_data.egraph, m, variable_indices, var_depth).is_some())
+                    .map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
+                    .sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, args.rules.as_deref(), args.roll_over);
+                // With `--only-use-dsrs-at-start` the rules are not re-applied to
+                // the fresh egraph between abstractions.
+                let rule_file = if args.only_use_dsrs_at_start { None } else { args.rules.as_deref() };
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file, args.iter_limit, args.node_limit, args.roll_over);
 
                 // `best_cost` is the search's score for this iteration: rewritten
                 // corpus + this abstraction's body. Earlier iterations rewrote the
                 // corpus into `fn_K(...)` call sites only — their bodies live in
                 // the library and must be added separately.
                 let prev_bodies: usize = library.iter().map(|a: &results::AbstractionResult| a.pattern_size).sum();
-                final_cost = Some(best_cost + prev_bodies);
+                cost_at_end_of_each_iter.get_or_insert_with(Vec::new).push(best_cost + prev_bodies);
+                summary.push((fn_name.clone(), best_cost + prev_bodies, usage_matches, body_str.clone()));
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
@@ -287,6 +371,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                     best_iteration: best_found_at,
                     best_history,
                 });
+                search_ends.push(Instant::now());
 
                 if abstraction_idx + 1 < args.num_abstractions {
                     data = next_data;
@@ -297,7 +382,29 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
         }
     }
 
-    (library, original_size, final_cost, final_rewritten)
+    if !summary.is_empty() {
+        // Right-align every number to its column's widest entry so the costs,
+        // ratios, and match counts line up across abstractions. Pad the plain
+        // strings *before* coloring — ANSI escapes would otherwise throw off the
+        // width counts that `format!` uses.
+        let name_w = summary.iter().map(|(n, ..)| n.len() + 1).max().unwrap_or(0);
+        let cost_w = summary.iter().map(|(_, c, ..)| c.to_string().len()).max().unwrap_or(0).max(original_size.to_string().len());
+        let ratio_w = summary.iter().map(|(_, c, ..)| format!("{:.2}x", original_size as f64 / *c as f64).len()).max().unwrap_or(0);
+        let match_w = summary.iter().map(|(.., m, _)| m.to_string().len()).max().unwrap_or(0);
+        println!("\n{}", "═══ LIBRARY SUMMARY ═══".green().bold());
+        println!("{} {}", "initial cost:".dimmed(), format!("{:>cost_w$}", original_size).bold());
+        for (name, cost, matches, body) in &summary {
+            let ratio = original_size as f64 / *cost as f64;
+            let name_s = format!("{:<name_w$}", format!("{name}:"));
+            let cost_s = format!("{cost:>cost_w$}");
+            let ratio_s = format!("{:>ratio_w$}", format!("{ratio:.2}x"));
+            let match_s = format!("{matches:>match_w$}");
+            println!("  {} cost {}  cumulative {}  matches {}", name_s.cyan().bold(), cost_s.dimmed(), ratio_s.green().bold(), match_s.bold(),);
+            println!("    {}", body.dimmed());
+        }
+    }
+
+    (library, original_size, cost_at_end_of_each_iter, final_rewritten, heap_sizes_at_end, search_ends)
 }
 
 /// Smallest `k` such that no discriminant in `egraph` renders as `fn_k`,
@@ -327,26 +434,17 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// match substitution and unions each with its match root, rebuilds, then extracts
 /// the rewritten programs as strings.
 ///
-/// `roll_over` chooses what egraph the next abstraction round searches over:
-/// - `false` (default): the extracted programs are fed into a *fresh* egraph (with
-///   DSR rules re-applied), discarding all prior equivalences.
-/// - `true`: the rewritten egraph is reused directly, rolling every accumulated
-///   equivalence (and the new `fn_N(...)` applications) forward into the next round.
-///
-/// Either way the extracted program strings are returned for reporting.
-pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, roll_over: bool) -> (shared::SharedData<F, O>, Vec<String>) {
+/// Returns the fresh egraph, its root id, and the rewritten program strings.
+pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, iter_limit: usize, node_limit: usize, roll_over: bool) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { egraph, root } = data;
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
-    let programs: Vec<String> = {
-        let extractor = egg::Extractor::new(&egraph, cost::WeightedSize { weights: egraph.analysis.weights });
-        let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
-        programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect()
-    };
+    let programs = io::extract_programs::<F::Apply<O>>(&egraph, root);
     let next_data = if roll_over {
         shared::SharedData::new(egraph, root)
     } else {
         let weights = egraph.analysis.weights;
-        io::egraph_from_programs::<F, O>(&programs, rule_file, weights)
+        let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit);
+        fresh
     };
     (next_data, programs)
 }

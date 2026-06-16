@@ -1,0 +1,33 @@
+{
+  "compression_ratio": 1.4615384615384617,
+  "cost_after_rewrites": 19,
+  "cost_at_end_of_each_iter": [
+    13
+  ],
+  "final_cost": 13,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 19,
+  "library": [
+    {
+      "approx_cost": 7,
+      "arity": 1,
+      "lambda": "(lam (seg (rot (* 2 tau)) $0))",
+      "num_matches": 3,
+      "pattern": "fn_0: (seg (rot (* 2 tau)) ?#0)",
+      "pattern_size": 6,
+      "usage_matches": 3
+    }
+  ],
+  "original_programs": [
+    "(seg (rot (* 4 pi)) a)",
+    "(seg (rot (* 2 tau)) b)",
+    "(seg (rot (* 4 pi)) c)"
+  ],
+  "rewritten_programs": [
+    "(fn_0 a)",
+    "(fn_0 b)",
+    "(fn_0 c)"
+  ]
+}

@@ -41,7 +41,7 @@ fn load() -> (StitchEgraph<Lang>, egg::Id) {
 fn end_to_end_drops_fv_when_beneficial() {
     let (egraph, root) = load();
     let args = Args::parse_from(["egg-stitch", "--language", "lambda-calc", "--search", "best-first", "--num-steps", "500", "--max-arity", "1", "--num-abstractions", "1"]);
-    let (library, _orig, _final_cost, final_rewritten) = multiple_step_search::<LambdaCalc, OpDB<Op>>(SharedData::new(egraph, root), &args);
+    let (library, _orig, _final_cost, final_rewritten, _heap, _search_ends) = multiple_step_search::<LambdaCalc, OpDB<Op>>(SharedData::new(egraph, root), &args);
     assert_eq!(library.len(), 1, "expected one abstraction; got {} entries", library.len());
     let rewritten = final_rewritten.expect("rewritten corpus");
     // The fourth program — the only one whose body references `$0` — should

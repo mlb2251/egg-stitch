@@ -4,15 +4,15 @@
 \toprule
 & \multicolumn{2}{c}{Size} & \multicolumn{4}{c}{Compression Ratio} & \multicolumn{4}{c}{Time (s)} \\
 \cmidrule(lr){2-3} \cmidrule(lr){4-7} \cmidrule(lr){8-11}
-Domain & Original & E-graph min & Enum & SMC & babble & Stitch & Enum & SMC & babble & Stitch \\
+Domain & Original & E-graph min & BFS & SMC & babble & Stitch & BFS & SMC & babble & Stitch \\
 \midrule
-Nuts \& Bolts & 19008 & 19008 & \textbf{1.77} & \textbf{1.77} & 1.75 & \textbf{1.77}$^{\star}$ & 0.964 & 0.468 & 18.898 & \textbf{0.044}$^{\star}$ \\
-Dials & 35712 & 20582 & 2.09 & 2.09 & \textbf{2.17} & 1.26$^{\star}$ & 0.731 & 0.241 & 46.148 & \textbf{0.107}$^{\star}$ \\
-Wheels & 35426 & 30256 & \textbf{1.45} & \textbf{1.45} & 1.36 & 1.24$^{\star}$ & 2.457 & 0.211 & 16.377 & \textbf{0.109}$^{\star}$ \\
-Furniture & 42935 & 37027 & 1.36 & \textbf{1.70} & 1.39 & 1.38$^{\star}$ & 0.502 & \textbf{0.136} & 25.946 & 0.148$^{\star}$ \\
-List & 523 & 522 & \textbf{1.06} & 1.06 & 1.03 & 1.05$^{\star}$ & 0.541 & 1.930 & 12.933 & \textbf{0.211}$^{\star}$ \\
-Physics & 518 & 518 & \textbf{1.10} & 1.10 & 1.05 & 1.07$^{\star}$ & 0.137 & 0.293 & 2.150 & \textbf{0.054}$^{\star}$ \\
+Nuts \& Bolts & 19008 & 19008 & \textbf{1.77} & \textbf{1.77} & 1.75 & \textbf{1.77}$^{\star}$ & 0.879 & 0.490 & 19.038 & \textbf{0.044}$^{\star}$ \\
+Dials & 35712 & 20582 & 2.09 & 2.09 & \textbf{2.17} & 1.26$^{\star}$ & 0.776 & 0.264 & 46.806 & \textbf{0.107}$^{\star}$ \\
+Wheels & 35426 & 30256 & \textbf{1.45} & \textbf{1.45} & 1.36 & 1.24$^{\star}$ & 3.005 & 0.395 & 16.693 & \textbf{0.108}$^{\star}$ \\
+Furniture & 42935 & 37027 & 1.36 & \textbf{1.70} & 1.39 & 1.38$^{\star}$ & 0.405 & \textbf{0.125} & 26.405 & 0.149$^{\star}$ \\
+List & 523 & 522 & \textbf{1.06} & \textbf{1.06} & 1.03 & 1.05$^{\star}$ & 0.518 & 1.933 & 12.901 & \textbf{0.213}$^{\star}$ \\
+Physics & 518 & 518 & \textbf{1.10} & \textbf{1.10} & 1.05 & 1.07$^{\star}$ & 0.161 & 0.267 & 2.118 & \textbf{0.055}$^{\star}$ \\
 \midrule
-Geo. mean &  &  & 1.43 & \textbf{1.48} & 1.41 & 1.28$^{\star}$ & 0.633 & 0.350 & 14.751 & \textbf{0.098}$^{\star}$ \\
+Geo. mean &  &  & 1.43 & \textbf{1.48} & 1.41 & 1.28$^{\star}$ & 0.641 & 0.386 & 14.852 & \textbf{0.098}$^{\star}$ \\
 \bottomrule
 \end{tabular}
