@@ -511,6 +511,16 @@ pub(crate) fn filter_factors_by_candidate<L: StitchLanguage>(egraph: &StitchEgra
     Some(out)
 }
 
+/// Usage-weighted count of the match sites a candidate actually abstracts: a
+/// match contributes its root e-class's usage count iff it keeps at least one
+/// candidate-compatible subst (see [`filter_factors_by_candidate`]); matches
+/// that empty out aren't rewritten and so don't count. On lambda-free domains
+/// every match is kept. This is the count behind the `appx_cost` savings
+/// estimate, shared by the result summary and the search's verbose display.
+pub fn usage_matches<L: StitchLanguage>(egraph: &StitchEgraph<L>, matches: &[MatchAtEClass], variable_indices: &[Vec<i32>], var_depth: &[u32], usage_counts: &FxHashMap<Id, usize>) -> usize {
+    matches.iter().filter(|m| filter_factors_by_candidate(egraph, m, variable_indices, var_depth).is_some()).map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum()
+}
+
 /// Same as [`compute_size_for_candidate`] but assumes `scratch.rewrite` is
 /// already filled for the current `search_state` and the caller has already
 /// computed `ho_arity`. `compute_cost_and_select` hoists both to amortise
