@@ -55,25 +55,20 @@ impl SearchPriority {
 /// Computes the `(primary, secondary)` heap key for a node; lower is popped
 /// first, with `secondary` breaking ties before insertion order. `DepthFirst`
 /// and `MostMatches` invert by subtracting from `usize::MAX` — safe since
-/// `depth` and `num_matches` won't approach that bound. `forced` is the node's
-/// ForcedExpansion (clamped at 0 since negatives only mean "very productive").
+/// `depth` and `num_matches` won't approach that bound
 fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: usize, forced: i64) -> (usize, usize) {
     match strategy {
         SearchPriority::Cost => (cost, 0),
         SearchPriority::DepthFirst => (usize::MAX - depth, 0),
         SearchPriority::BreadthFirst => (depth, 0),
         SearchPriority::MostMatches => (usize::MAX - num_matches, 0),
+        // clamp to 0 because anything <= 0 means no forced expansion
         SearchPriority::ForcedThenCost => (forced.max(0) as usize, cost),
     }
 }
 
-/// True iff every equivalence in the e-graph is cost-balanced: each enode of
-/// each class extracts to that class's minimal size, so there are no larger
-/// equivalent forms to over-expand into. Holds with no DSRs, or with
-/// cost-preserving ones (e.g. canonicalization). When it holds the
-/// over-specialization blowup can't arise and plain cost ordering drains the
-/// search, so the `(forced-expansion, cost)` ordering's per-node forced
-/// computation is wasted — best-first falls back to `Cost`. One O(enodes) scan.
+/// True iff every every e-node in the e-graph has the same cost as all
+/// other e-nodes in its class.
 fn cost_balanced<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> bool {
     let weights = egraph.analysis.weights;
     egraph.classes().all(|c| c.nodes.iter().all(|n| n.discriminant().intrinsic_size(&weights) + n.children().iter().map(|&ch| egraph[ch].data.size).sum::<u32>() == c.data.size))
