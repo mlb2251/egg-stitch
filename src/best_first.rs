@@ -138,9 +138,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
     let debug = args.debug_log;
-    // ForcedThenCost only earns its per-node forced computation when there are
-    // larger equivalent forms to over-expand into; with cost-balanced rules (or
-    // none) plain cost ordering drains all the same, so fall back to it.
+    // ForcedThenCost reduces to Cost when the e-graph is cost-balanced
     let strategy = if matches!(args.priority, SearchPriority::ForcedThenCost) && cost_balanced::<F, O>(&shared.egraph) {
         println!("{}", "rules are cost-balanced: ordering by cost (forced-expansion ordering not needed)".dimmed());
         SearchPriority::Cost
