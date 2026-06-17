@@ -149,12 +149,13 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let initial_state = SearchState::new(&shared, true);
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
-    let (ip0, ip1) = priority(strategy, initial_cost, 0, &initial_state, &shared);
+    let initial_prio = priority(strategy, initial_cost, 0, &initial_state, &shared);
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
-    // Heap key: (primary, secondary, insertion-order). `secondary` breaks ties
-    // (e.g. cost within a forced level); insertion order keeps it deterministic.
-    let mut heap: BinaryHeap<Reverse<(usize, usize, usize)>> = BinaryHeap::new();
+    // Heap key: `(priority, insertion-order)`. `priority` is itself a tuple so
+    // it can order lexicographically (e.g. forced-expansion then cost);
+    // insertion order breaks remaining ties to stay deterministic.
+    let mut heap: BinaryHeap<Reverse<((usize, usize), usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
 
     nodes.push(Node {
@@ -165,7 +166,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         expanded: false,
         lower_bound: None,
     });
-    heap.push(Reverse((ip0, ip1, 0)));
+    heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
         s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.var_frozen.clone());
     }
@@ -197,7 +198,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
         }
-        let Some(Reverse((_prio, _sec, node_id))) = heap.pop() else {
+        let Some(Reverse((_prio, node_id))) = heap.pop() else {
             break;
         };
 
@@ -284,7 +285,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             cost_time += cost_t.elapsed();
             cost_calls += 1;
             let child_depth = parent_depth + 1;
-            let (cp0, cp1) = priority(strategy, child_cost, child_depth, &child_state, &shared);
+            let child_prio = priority(strategy, child_cost, child_depth, &child_state, &shared);
             let child_id = nodes.len();
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _, _)| *c);
@@ -342,7 +343,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 expanded: false,
                 lower_bound: child_lower_bound,
             });
-            heap.push(Reverse((cp0, cp1, child_id)));
+            heap.push(Reverse((child_prio, child_id)));
 
             if exact_follow_hit {
                 let elapsed = search_start.elapsed().as_secs_f64();
