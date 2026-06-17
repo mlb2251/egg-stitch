@@ -62,7 +62,26 @@ fn factored_substs_stay_under_memory_cap() {
         // defaults are far larger, which would saturate the fixture into a much
         // bigger egraph and trip the cap on the build alone, independent of how
         // substitution sets are stored.
-        .args(["--search", "best-first", "--input", INPUT, "--rules", RULES, "--num-abstractions", "1", "--max-arity", "2", "--num-steps", "300", "--max-forced-expansion", "1", "--iter-limit", "10", "--node-limit", "10000"])
+        .args([
+            "--search",
+            "best-first",
+            "--input",
+            INPUT,
+            "--rules",
+            RULES,
+            "--num-abstractions",
+            "1",
+            "--max-arity",
+            "2",
+            "--num-steps",
+            "300",
+            "--max-forced-expansion",
+            "1",
+            "--iter-limit",
+            "10",
+            "--node-limit",
+            "10000",
+        ])
         .status()
         .expect("spawn egg-stitch under ulimit");
 
