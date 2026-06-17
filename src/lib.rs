@@ -209,13 +209,7 @@ pub struct Args {
     /// As such, we can compute
     ///     Cost(r | p) = CostWithoutVars(p) + min_{σ | r matches at p with σ} sum_{s in σ} Cost(s)
     ///
-    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`.
-    /// ForcedExpansion is monotone non-decreasing under expand/reuse, so this
-    /// bounds the heap to the finite `{forced ≤ cap}` subspace: best-first
-    /// drains it and self-terminates (the cap counts as a standalone cutoff, no
-    /// --num-steps/--time-limit needed). It permanently excludes the above-cap
-    /// abstractions from the search, including from `best` — a genuine filter,
-    /// not just a stopping point.
+    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
     ///
     /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
     #[arg(long = "max-forced-expansion", default_value = "none")]
