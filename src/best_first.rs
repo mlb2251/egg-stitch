@@ -52,18 +52,22 @@ impl SearchPriority {
     }
 }
 
-/// Computes the heap key for `state`; lower is popped first. This is
-/// a tuple to allow for lexicographic ordering.
-fn priority<F: LanguageFamily, O: StitchOp>(strategy: SearchPriority, cost: usize, depth: usize, state: &SearchState<F, O>, shared: &SharedSearchData<F, O>) -> (usize, usize) {
+/// Computes a node's `(heap key, forced-expansion)`; lower key is popped first
+/// (the key is a tuple for lexicographic ordering). `forced_lower_bound` is the
+/// parent's forced-expansion, used to early-exit the `ForcedThenCost` scan
+/// (forced is monotone, so no child drops below it); the returned forced value
+/// is threaded down as the next level's bound. Pass `i64::MIN` when there's no
+/// parent. `forced` is 0 for strategies that don't use it.
+fn priority<F: LanguageFamily, O: StitchOp>(strategy: SearchPriority, cost: usize, depth: usize, state: &SearchState<F, O>, shared: &SharedSearchData<F, O>, forced_lower_bound: i64) -> ((usize, usize), i64) {
     match strategy {
-        SearchPriority::Cost => (cost, 0),
-        SearchPriority::DepthFirst => (usize::MAX - depth, 0),
-        SearchPriority::BreadthFirst => (depth, 0),
-        SearchPriority::MostMatches => (usize::MAX - state.matches.len(), 0),
+        SearchPriority::Cost => ((cost, 0), 0),
+        SearchPriority::DepthFirst => ((usize::MAX - depth, 0), 0),
+        SearchPriority::BreadthFirst => ((depth, 0), 0),
+        SearchPriority::MostMatches => ((usize::MAX - state.matches.len(), 0), 0),
         SearchPriority::ForcedThenCost => {
+            let forced = state.forced_expansion_argmin(shared, forced_lower_bound).map_or(0, |(v, _)| v);
             // clamp to 0 because anything <= 0 means no forced expansion
-            let forced = state.forced_expansion_argmin(shared).map_or(0, |(v, _)| v);
-            (forced.max(0) as usize, cost)
+            ((forced.max(0) as usize, cost), forced)
         }
     }
 }
@@ -117,6 +121,9 @@ struct Node<F: LanguageFamily, O: StitchOp> {
     /// Lower bound on cost of any descendant; only set when `--opt-lower-bound` is on.
     /// Re-checked on pop in case `best` improved between push and pop.
     lower_bound: Option<usize>,
+    /// This node's ForcedExpansion (0 unless ordering by `ForcedThenCost`). Used
+    /// as the monotone lower bound that early-exits its children's forced scans.
+    forced: i64,
 }
 
 /// Runs best-first enumerative search to find a pattern that minimizes cost.
@@ -149,7 +156,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let initial_state = SearchState::new(&shared, true);
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
-    let initial_prio = priority(strategy, initial_cost, 0, &initial_state, &shared);
+    // No parent, so no lower bound: scan fully.
+    let (initial_prio, initial_forced) = priority(strategy, initial_cost, 0, &initial_state, &shared, i64::MIN);
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
     // Heap key: `(priority, insertion-order)`. `priority` is itself a tuple so
@@ -165,6 +173,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         depth: 0,
         expanded: false,
         lower_bound: None,
+        forced: initial_forced,
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
@@ -220,7 +229,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 println!("{} {} {}", tag.dimmed(), "expanding:".dimmed(), pat.clone().cyan());
             }
             if args.verbose_forced_expansion {
-                let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared) {
+                let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared, i64::MIN) {
                     Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
                     None => "[forced-expansion=- (no matches)]".to_string(),
                 };
@@ -229,6 +238,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         }
 
         let parent_depth = nodes[node_id].depth;
+        // The parent's forced-expansion is a monotone lower bound on each child's,
+        // so it early-exits the children's forced scans (the hot path on DSRs).
+        let parent_forced = nodes[node_id].forced;
         let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All(actions) => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared)).collect(),
@@ -285,7 +297,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             cost_time += cost_t.elapsed();
             cost_calls += 1;
             let child_depth = parent_depth + 1;
-            let child_prio = priority(strategy, child_cost, child_depth, &child_state, &shared);
+            let (child_prio, child_forced) = priority(strategy, child_cost, child_depth, &child_state, &shared, parent_forced);
             let child_id = nodes.len();
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _, _)| *c);
@@ -342,6 +354,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 depth: child_depth,
                 expanded: false,
                 lower_bound: child_lower_bound,
+                forced: child_forced,
             });
             heap.push(Reverse((child_prio, child_id)));
 
