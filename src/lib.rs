@@ -213,11 +213,9 @@ pub struct Args {
     /// ForcedExpansion is monotone non-decreasing under expand/reuse, so this
     /// bounds the heap to the finite `{forced ≤ cap}` subspace: best-first
     /// drains it and self-terminates (the cap counts as a standalone cutoff, no
-    /// --num-steps/--time-limit needed). Paired with the default
-    /// `--priority forced-then-cost`, the search pops in non-decreasing forced
-    /// order, so this is a productive-first *drain to F*, complete within the
-    /// subspace — not a silent clip. `forced-expansion prunes` in the stats is
-    /// the above-cap frontier dropped at the boundary.
+    /// --num-steps/--time-limit needed). It permanently excludes the above-cap
+    /// abstractions from the search, including from `best` — a genuine filter,
+    /// not just a stopping point.
     ///
     /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
     #[arg(long = "max-forced-expansion", default_value = "none")]

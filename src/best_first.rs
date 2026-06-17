@@ -186,7 +186,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut dominance_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
     let mut useless_frozen_hits: usize = 0;
-    let mut forced_pruned: usize = 0;
     let mut useless_inline_hits: usize = 0;
     let search_start = Instant::now();
 
@@ -249,12 +248,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             //
             // The cap is given in symbols; scale to the family's cost units.
             let cap = k as i64 * F::symbol_cost(&shared.egraph.analysis.weights) as i64;
-            let before = successors.len();
             successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
-            // These are the above-cap frontier dropped this expansion; with
-            // ForcedThenCost ordering the search drains `{forced ≤ cap}` and
-            // `forced_pruned` is the boundary it stopped at.
-            forced_pruned += before - successors.len();
         }
 
         for child_state in successors {
@@ -387,9 +381,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
-    if args.max_forced_expansion.0.is_some() {
-        println!("{} {}", "forced-expansion prunes (above-cap frontier):".dimmed(), forced_pruned.to_string().bold());
-    }
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
