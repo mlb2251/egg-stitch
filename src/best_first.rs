@@ -7,9 +7,10 @@ use std::time::{Duration, Instant};
 
 use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, compute_cost_and_select, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
-use crate::lang::{LanguageFamily, StitchOp};
+use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::search::{SearchState, SeenTracker, SuccessorEnum, setup_search};
+use egg::Language;
 
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -64,6 +65,18 @@ fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: us
         SearchPriority::MostMatches => (usize::MAX - num_matches, 0),
         SearchPriority::ForcedThenCost => (forced.max(0) as usize, cost),
     }
+}
+
+/// True iff every equivalence in the e-graph is cost-balanced: each enode of
+/// each class extracts to that class's minimal size, so there are no larger
+/// equivalent forms to over-expand into. Holds with no DSRs, or with
+/// cost-preserving ones (e.g. canonicalization). When it holds the
+/// over-specialization blowup can't arise and plain cost ordering drains the
+/// search, so the `(forced-expansion, cost)` ordering's per-node forced
+/// computation is wasted — best-first falls back to `Cost`. One O(enodes) scan.
+fn cost_balanced<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> bool {
+    let weights = egraph.analysis.weights;
+    egraph.classes().all(|c| c.nodes.iter().all(|n| n.discriminant().intrinsic_size(&weights) + n.children().iter().map(|&ch| egraph[ch].data.size).sum::<u32>() == c.data.size))
 }
 
 /// One "new best" event recorded during search.
@@ -133,9 +146,17 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
     let debug = args.debug_log;
-    let strategy = args.priority;
-    // ForcedThenCost (the default) needs each node's ForcedExpansion for its key;
-    // other strategies don't, so skip the per-node computation for them.
+    // ForcedThenCost only earns its per-node forced computation when there are
+    // larger equivalent forms to over-expand into; with cost-balanced rules (or
+    // none) plain cost ordering drains all the same, so fall back to it.
+    let strategy = if matches!(args.priority, SearchPriority::ForcedThenCost) && cost_balanced::<F, O>(&shared.egraph) {
+        println!("{}", "rules are cost-balanced: ordering by cost (forced-expansion ordering not needed)".dimmed());
+        SearchPriority::Cost
+    } else {
+        args.priority
+    };
+    // ForcedThenCost needs each node's ForcedExpansion for its key; other
+    // strategies don't, so skip the per-node computation for them.
     let need_forced = matches!(strategy, SearchPriority::ForcedThenCost);
 
     let initial_state = SearchState::new(&shared, true);
