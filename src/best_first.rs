@@ -132,9 +132,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
     let budget = args.num_steps;
     let time_limit = args.time_limit.map(std::time::Duration::from_secs_f64);
-    // `--max-forced-expansion` bounds the heap to the finite `{forced ≤ cap}`
-    // subspace (forced is monotone), so the search self-terminates by draining
-    // it — that makes it a valid standalone cutoff, no step/time limit required.
     if budget.is_none() && time_limit.is_none() && args.max_forced_expansion.0.is_none() {
         panic!("best-first search requires at least one of --num-steps, --time-limit, or --max-forced-expansion");
     }
