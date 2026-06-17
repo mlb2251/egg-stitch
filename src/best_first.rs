@@ -22,6 +22,11 @@ pub enum SearchPriority {
     BreadthFirst,
     /// Patterns with the most e-class matches first.
     MostMatches,
+    /// Lexicographic `(forced-expansion, cost)`: least-over-specialized first,
+    /// cost breaking ties. Forced-expansion is monotone, so this pops in
+    /// non-decreasing forced order — the ordering the forced-expansion *budget*
+    /// (`--max-forced-expansion-budget`) drains against.
+    ForcedThenCost,
 }
 
 impl SearchPriority {
@@ -32,6 +37,7 @@ impl SearchPriority {
             "depth-first" => Some(Self::DepthFirst),
             "breadth-first" => Some(Self::BreadthFirst),
             "most-matches" => Some(Self::MostMatches),
+            "forced-then-cost" => Some(Self::ForcedThenCost),
             _ => None,
         }
     }
@@ -43,19 +49,23 @@ impl SearchPriority {
             Self::DepthFirst => "depth-first",
             Self::BreadthFirst => "breadth-first",
             Self::MostMatches => "most-matches",
+            Self::ForcedThenCost => "forced-then-cost",
         }
     }
 }
 
-/// Computes the heap priority for a node. Lower values are popped first.
-/// `DepthFirst` and `MostMatches` invert by subtracting from `usize::MAX` —
-/// safe since `depth` and `num_matches` won't approach that bound.
-fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: usize) -> usize {
+/// Computes the `(primary, secondary)` heap key for a node; lower is popped
+/// first, with `secondary` breaking ties before insertion order. `DepthFirst`
+/// and `MostMatches` invert by subtracting from `usize::MAX` — safe since
+/// `depth` and `num_matches` won't approach that bound. `forced` is the node's
+/// ForcedExpansion (clamped at 0 since negatives only mean "very productive").
+fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: usize, forced: i64) -> (usize, usize) {
     match strategy {
-        SearchPriority::Cost => cost,
-        SearchPriority::DepthFirst => usize::MAX - depth,
-        SearchPriority::BreadthFirst => depth,
-        SearchPriority::MostMatches => usize::MAX - num_matches,
+        SearchPriority::Cost => (cost, 0),
+        SearchPriority::DepthFirst => (usize::MAX - depth, 0),
+        SearchPriority::BreadthFirst => (depth, 0),
+        SearchPriority::MostMatches => (usize::MAX - num_matches, 0),
+        SearchPriority::ForcedThenCost => (forced.max(0) as usize, cost),
     }
 }
 
@@ -117,21 +127,30 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
     let budget = args.num_steps;
     let time_limit = args.time_limit.map(std::time::Duration::from_secs_f64);
-    if budget.is_none() && time_limit.is_none() {
-        panic!("best-first search requires at least one of --num-steps or --time-limit");
+    // `--max-forced-expansion` bounds the heap to the finite `{forced ≤ cap}`
+    // subspace (forced is monotone), so the search self-terminates by draining
+    // it — that makes it a valid standalone cutoff, no step/time limit required.
+    if budget.is_none() && time_limit.is_none() && args.max_forced_expansion.0.is_none() {
+        panic!("best-first search requires at least one of --num-steps, --time-limit, or --max-forced-expansion");
     }
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
     let debug = args.debug_log;
     let strategy = args.priority;
+    // ForcedThenCost (the default) needs each node's ForcedExpansion for its key;
+    // other strategies don't, so skip the per-node computation for them.
+    let need_forced = matches!(strategy, SearchPriority::ForcedThenCost);
 
     let initial_state = SearchState::new(&shared, true);
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
-    let initial_prio = priority(strategy, initial_cost, 0, initial_state.matches.len());
+    let initial_forced = if need_forced { initial_state.forced_expansion_argmin(&shared).map_or(0, |(v, _)| v) } else { 0 };
+    let (ip0, ip1) = priority(strategy, initial_cost, 0, initial_state.matches.len(), initial_forced);
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
-    let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
+    // Heap key: (primary, secondary, insertion-order). `secondary` breaks ties
+    // (e.g. cost within a forced level); insertion order keeps it deterministic.
+    let mut heap: BinaryHeap<Reverse<(usize, usize, usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
 
     nodes.push(Node {
@@ -142,7 +161,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         expanded: false,
         lower_bound: None,
     });
-    heap.push(Reverse((initial_prio, 0)));
+    heap.push(Reverse((ip0, ip1, 0)));
     if let Some(s) = seen.as_mut() {
         s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.var_frozen.clone());
     }
@@ -157,6 +176,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut dominance_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
     let mut useless_frozen_hits: usize = 0;
+    let mut forced_pruned: usize = 0;
     let mut useless_inline_hits: usize = 0;
     let search_start = Instant::now();
 
@@ -174,7 +194,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             println!("{}", format!("reached time limit {:.3}s", limit.as_secs_f64()).yellow());
             break;
         }
-        let Some(Reverse((_prio, node_id))) = heap.pop() else {
+        let Some(Reverse((_prio, _sec, node_id))) = heap.pop() else {
             break;
         };
 
@@ -219,7 +239,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             //
             // The cap is given in symbols; scale to the family's cost units.
             let cap = k as i64 * F::symbol_cost(&shared.egraph.analysis.weights) as i64;
+            let before = successors.len();
             successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
+            // These are the above-cap frontier dropped this expansion; with
+            // ForcedThenCost ordering the search drains `{forced ≤ cap}` and
+            // `forced_pruned` is the boundary it stopped at.
+            forced_pruned += before - successors.len();
         }
 
         for child_state in successors {
@@ -261,7 +286,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             cost_time += cost_t.elapsed();
             cost_calls += 1;
             let child_depth = parent_depth + 1;
-            let child_prio = priority(strategy, child_cost, child_depth, child_state.matches.len());
+            let child_forced = if need_forced { child_state.forced_expansion_argmin(&shared).map_or(0, |(v, _)| v) } else { 0 };
+            let (cp0, cp1) = priority(strategy, child_cost, child_depth, child_state.matches.len(), child_forced);
             let child_id = nodes.len();
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _, _)| *c);
@@ -319,7 +345,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 expanded: false,
                 lower_bound: child_lower_bound,
             });
-            heap.push(Reverse((child_prio, child_id)));
+            heap.push(Reverse((cp0, cp1, child_id)));
 
             if exact_follow_hit {
                 let elapsed = search_start.elapsed().as_secs_f64();
@@ -351,6 +377,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
+    if args.max_forced_expansion.0.is_some() {
+        println!("{} {}", "forced-expansion prunes (above-cap frontier):".dimmed(), forced_pruned.to_string().bold());
+    }
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());

@@ -110,7 +110,8 @@ pub struct Args {
     pub num_steps: Option<usize>,
 
     /// Wall-clock time limit in seconds for best-first search.
-    /// At least one of --num-steps or --time-limit must be provided for best-first.
+    /// At least one of --num-steps, --time-limit, or --max-forced-expansion must
+    /// be provided for best-first.
     #[arg(long)]
     pub time_limit: Option<f64>,
 
@@ -131,7 +132,10 @@ pub struct Args {
     pub no_zero_arity: bool,
 
     /// Heap priority for best-first search (only used when --search=best-first).
-    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
+    /// Default `forced-then-cost`: pop in non-decreasing forced-expansion order
+    /// (cost breaking ties), so the productive low-forced region is searched
+    /// first and the over-specialized tail last.
+    #[arg(long, value_enum, default_value_t = SearchPriority::ForcedThenCost)]
     pub priority: SearchPriority,
 
     /// Multiplicative boost applied to reuse-action sampling weights in SMC.
@@ -205,7 +209,15 @@ pub struct Args {
     /// As such, we can compute
     ///     Cost(r | p) = CostWithoutVars(p) + min_{σ | r matches at p with σ} sum_{s in σ} Cost(s)
     ///
-    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
+    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`.
+    /// ForcedExpansion is monotone non-decreasing under expand/reuse, so this
+    /// bounds the heap to the finite `{forced ≤ cap}` subspace: best-first
+    /// drains it and self-terminates (the cap counts as a standalone cutoff, no
+    /// --num-steps/--time-limit needed). Paired with the default
+    /// `--priority forced-then-cost`, the search pops in non-decreasing forced
+    /// order, so this is a productive-first *drain to F*, complete within the
+    /// subspace — not a silent clip. `forced-expansion prunes` in the stats is
+    /// the above-cap frontier dropped at the boundary.
     ///
     /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
     #[arg(long = "max-forced-expansion", default_value = "none")]
