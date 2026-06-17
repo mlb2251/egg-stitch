@@ -52,12 +52,8 @@ impl SearchPriority {
     }
 }
 
-/// Computes the `(primary, secondary)` heap key for `state`; lower is popped
-/// first, with `secondary` breaking ties before insertion order. `DepthFirst`
-/// and `MostMatches` invert by subtracting from `usize::MAX` — safe since
-/// `depth` and `num_matches` won't approach that bound. Each arm derives only
-/// the per-node statistic it needs (match count, ForcedExpansion) from `state`,
-/// so callers don't branch on the strategy or compute anything up front.
+/// Computes the heap key for `state`; lower is popped first. This is
+/// a tuple to allow for lexicographic ordering.
 fn priority<F: LanguageFamily, O: StitchOp>(strategy: SearchPriority, cost: usize, depth: usize, state: &SearchState<F, O>, shared: &SharedSearchData<F, O>) -> (usize, usize) {
     match strategy {
         SearchPriority::Cost => (cost, 0),
