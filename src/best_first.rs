@@ -9,7 +9,7 @@ use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, comp
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
-use crate::search::{SearchState, SeenTracker, SuccessorEnum, setup_search};
+use crate::search::{SearchState, SeenTracker, SharedSearchData, SuccessorEnum, setup_search};
 use egg::Language;
 
 /// How to order the best-first search heap.
@@ -52,18 +52,23 @@ impl SearchPriority {
     }
 }
 
-/// Computes the `(primary, secondary)` heap key for a node; lower is popped
+/// Computes the `(primary, secondary)` heap key for `state`; lower is popped
 /// first, with `secondary` breaking ties before insertion order. `DepthFirst`
 /// and `MostMatches` invert by subtracting from `usize::MAX` — safe since
-/// `depth` and `num_matches` won't approach that bound
-fn priority(strategy: SearchPriority, cost: usize, depth: usize, num_matches: usize, forced: i64) -> (usize, usize) {
+/// `depth` and `num_matches` won't approach that bound. Each arm derives only
+/// the per-node statistic it needs (match count, ForcedExpansion) from `state`,
+/// so callers don't branch on the strategy or compute anything up front.
+fn priority<F: LanguageFamily, O: StitchOp>(strategy: SearchPriority, cost: usize, depth: usize, state: &SearchState<F, O>, shared: &SharedSearchData<F, O>) -> (usize, usize) {
     match strategy {
         SearchPriority::Cost => (cost, 0),
         SearchPriority::DepthFirst => (usize::MAX - depth, 0),
         SearchPriority::BreadthFirst => (depth, 0),
-        SearchPriority::MostMatches => (usize::MAX - num_matches, 0),
-        // clamp to 0 because anything <= 0 means no forced expansion
-        SearchPriority::ForcedThenCost => (forced.max(0) as usize, cost),
+        SearchPriority::MostMatches => (usize::MAX - state.matches.len(), 0),
+        SearchPriority::ForcedThenCost => {
+            // clamp to 0 because anything <= 0 means no forced expansion
+            let forced = state.forced_expansion_argmin(shared).map_or(0, |(v, _)| v);
+            (forced.max(0) as usize, cost)
+        }
     }
 }
 
@@ -145,15 +150,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     } else {
         args.priority
     };
-    // ForcedThenCost needs each node's ForcedExpansion for its key; other
-    // strategies don't, so skip the per-node computation for them.
-    let need_forced = matches!(strategy, SearchPriority::ForcedThenCost);
-
     let initial_state = SearchState::new(&shared, true);
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
-    let initial_forced = if need_forced { initial_state.forced_expansion_argmin(&shared).map_or(0, |(v, _)| v) } else { 0 };
-    let (ip0, ip1) = priority(strategy, initial_cost, 0, initial_state.matches.len(), initial_forced);
+    let (ip0, ip1) = priority(strategy, initial_cost, 0, &initial_state, &shared);
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
     // Heap key: (primary, secondary, insertion-order). `secondary` breaks ties
@@ -288,8 +288,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             cost_time += cost_t.elapsed();
             cost_calls += 1;
             let child_depth = parent_depth + 1;
-            let child_forced = if need_forced { child_state.forced_expansion_argmin(&shared).map_or(0, |(v, _)| v) } else { 0 };
-            let (cp0, cp1) = priority(strategy, child_cost, child_depth, child_state.matches.len(), child_forced);
+            let (cp0, cp1) = priority(strategy, child_cost, child_depth, &child_state, &shared);
             let child_id = nodes.len();
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _, _)| *c);
