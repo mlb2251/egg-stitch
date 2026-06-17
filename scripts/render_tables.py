@@ -83,9 +83,10 @@ TABLE_TITLES = {
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
 TABLES_WITH_EGRAPH_MIN = {1, 3}
-# DSR tables borrow Stitch numbers from the matching no-DSR table (Stitch
-# doesn't accept DSRs); cells/markers are starred to flag the mismatch.
-NO_DSR_COUNTERPART = {1: 2, 3: 4}
+# DSR tables (1 & 3) don't run Stitch (it doesn't accept DSRs) and omit the
+# Stitch column entirely (see ``render``), so neither borrows numbers from a
+# no-DSR counterpart. Kept as a map in case a future table wants to.
+NO_DSR_COUNTERPART: dict[int, int] = {}
 STITCH_STAR = "$^{\\star}$"
 
 # Plot styling: each method gets a color, each domain a marker. Keeping these
@@ -264,10 +265,10 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
     every method column gets a faint background tint of its plot color.
     """
     domains = saved["domains"]
-    # Tables 1 & 3 run with DSRs (which Stitch doesn't accept); fill the
-    # Stitch column from the matching no-DSR table and star those cells.
+    # Tables 1 & 3 run with DSRs (which Stitch doesn't accept), so they drop
+    # the Stitch column entirely.
     methods = METHODS
-    if presentation and table == 3:
+    if table in TABLES_WITH_EGRAPH_MIN:
         methods = [m for m in methods if m != "stitch"]
     n = len(methods)
     has_egraph_min = table in TABLES_WITH_EGRAPH_MIN
@@ -328,14 +329,10 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
 
     def emit(label: str, size_cells: list[str],
              crs: list[float | None], ts: list[float | None]) -> str:
-        """Render one data row with the best CR (max) and time (min) bolded.
-
-        For DSR tables, Stitch cells come from the no-DSR run and get a
-        trailing star to flag the mismatch.
-        """
+        """Render one data row with the best CR (max) and time (min) bolded."""
         # If we are dropping Stitch for this table, filter it out before bolding
         # so that the bolding is relative to the remaining methods.
-        if presentation and table == 3:
+        if table in TABLES_WITH_EGRAPH_MIN:
             crs = [v for i, v in enumerate(crs) if i != raw_stitch_idx]
             ts = [v for i, v in enumerate(ts) if i != raw_stitch_idx]
 
