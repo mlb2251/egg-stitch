@@ -14,7 +14,7 @@ use crate::search::{SearchState, SeenTracker, SuccessorEnum, setup_search};
 /// How to order the best-first search heap.
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum SearchPriority {
-    /// Lowest compressed-corpus-plus-pattern cost first (default).
+    /// Lowest compressed-corpus-plus-pattern cost first.
     Cost,
     /// Deepest patterns first.
     DepthFirst,
@@ -22,10 +22,7 @@ pub enum SearchPriority {
     BreadthFirst,
     /// Patterns with the most e-class matches first.
     MostMatches,
-    /// Lexicographic `(forced-expansion, cost)`: least-over-specialized first,
-    /// cost breaking ties. Forced-expansion is monotone, so this pops in
-    /// non-decreasing forced order — the ordering the forced-expansion *budget*
-    /// (`--max-forced-expansion-budget`) drains against.
+    /// Lexicographic `(forced-expansion, cost)` (default)
     ForcedThenCost,
 }
 
