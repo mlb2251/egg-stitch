@@ -1,18 +1,18 @@
 % source: /home/kavi/mit/egg-stitch/results/table3.json
 % Compression Using Rewrites, Stacked Abstractions: generated from results JSON
-\begin{tabular}{l r r rrrr rrrr}
+\begin{tabular}{l r r rrr rrr}
 \toprule
-& \multicolumn{2}{c}{Size} & \multicolumn{4}{c}{Compression Ratio} & \multicolumn{4}{c}{Time (s)} \\
-\cmidrule(lr){2-3} \cmidrule(lr){4-7} \cmidrule(lr){8-11}
-Domain & Original & E-graph min & BFS & SMC & babble & Stitch & BFS & SMC & babble & Stitch \\
+& \multicolumn{2}{c}{Size} & \multicolumn{3}{c}{Compression Ratio} & \multicolumn{3}{c}{Time (s)} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-6} \cmidrule(lr){7-9}
+Domain & Original & E-graph min & BFS & SMC & babble & BFS & SMC & babble \\
 \midrule
-Nuts \& Bolts & 19008 & 19008 & \textbf{14.86} & 13.43 & 11.76 & \textbf{14.86}$^{\star}$ & 10.274 & 13.796 & 33.818 & \textbf{0.099}$^{\star}$ \\
-Dials & 35712 & 20582 & \textbf{10.53} & 10.52 & 8.37 & 7.94$^{\star}$ & 1.008 & 1.284 & 71.670 & \textbf{0.450}$^{\star}$ \\
-Wheels & 35426 & 30256 & 6.85 & \textbf{6.95} & 6.68 & 6.17$^{\star}$ & 2.468 & 6.625 & 62.368 & \textbf{0.413}$^{\star}$ \\
-Furniture & 42935 & 37027 & 6.94 & \textbf{6.98} & 4.40 & 6.64$^{\star}$ & 2.224 & 13.317 & 101.243 & \textbf{0.581}$^{\star}$ \\
-List & 523 & 522 & \textbf{1.20} & \textbf{1.20} & 1.09 & 1.18$^{\star}$ & 5.357 & 10.762 & 160.924 & \textbf{1.672}$^{\star}$ \\
-Physics & 518 & 518 & \textbf{1.45} & \textbf{1.45} & 1.42 & 1.43$^{\star}$ & 1.713 & 4.161 & 17.359 & \textbf{0.373}$^{\star}$ \\
+Nuts \& Bolts & 19008 & 19008 & \textbf{14.86} & 13.43 & 11.76 & \textbf{10.274} & 13.796 & 33.818 \\
+Dials & 35712 & 20582 & \textbf{10.53} & 10.52 & 8.37 & \textbf{1.008} & 1.284 & 71.670 \\
+Wheels & 35426 & 30256 & 6.85 & \textbf{6.95} & 6.68 & \textbf{2.468} & 6.625 & 62.368 \\
+Furniture & 42935 & 37027 & 6.94 & \textbf{6.98} & 4.40 & \textbf{2.224} & 13.317 & 101.243 \\
+List & 523 & 522 & \textbf{1.20} & \textbf{1.20} & 1.09 & \textbf{5.357} & 10.762 & 160.924 \\
+Physics & 518 & 518 & \textbf{1.45} & \textbf{1.45} & 1.42 & \textbf{1.713} & 4.161 & 17.359 \\
 \midrule
-Geo. mean &  &  & \textbf{4.84} & 4.78 & 4.06 & 4.49$^{\star}$ & 2.837 & 6.419 & 59.133 & \textbf{0.434}$^{\star}$ \\
+Geo. mean &  &  & \textbf{4.84} & 4.78 & 4.06 & \textbf{2.837} & 6.419 & 59.133 \\
 \bottomrule
 \end{tabular}

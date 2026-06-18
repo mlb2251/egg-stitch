@@ -17,20 +17,16 @@ pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchS
         sorted_idx.sort_by(|&a, &b| weights_before[b].partial_cmp(&weights_before[a]).unwrap_or(std::cmp::Ordering::Equal));
         println!("{}", "top 5 particles before follow constraint:".dimmed());
         for &i in sorted_idx.iter().take(5) {
-            let usage_matches: usize = states[i].matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
             let pat_size = compute_pattern_size(&states[i].pattern, &shared.egraph.analysis.weights);
-            let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
             println!(
-                "  {} {} cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
+                "  {} {} cost={} ratio={:.2}x weight={:.4} matches={} pat_size={}",
                 format!("p{}:", i).dimmed(),
                 states[i].pattern.to_string().cyan(),
                 costs[i],
                 original_size as f64 / costs[i] as f64,
                 weights_before[i],
                 states[i].matches.len(),
-                usage_matches,
                 pat_size,
-                appx_cost
             );
         }
     }
@@ -60,21 +56,10 @@ pub fn print_top_particles<F: LanguageFamily, O: StitchOp>(states: &[SearchState
     let mut sorted_idx: Vec<usize> = (0..states.len()).collect();
     sorted_idx.sort_by(|&a, &b| weights[b].partial_cmp(&weights[a]).unwrap_or(std::cmp::Ordering::Equal));
     for &i in sorted_idx.iter().take(min(5, states.len())) {
-        let usage_matches: usize = states[i].matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
         let pat_size = compute_pattern_size(&states[i].pattern, &shared.egraph.analysis.weights);
-        let appx_cost = original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
         let cost_i = get_cost(i);
         let ratio = original_size as f64 / cost_i as f64;
         println!("  {} {}", format!("p{}:", i).dimmed(), states[i].pattern.to_string().cyan());
-        println!(
-            "      cost={} ratio={:.2}x weight={:.4} matches={} usage_matches={} pat_size={} appx_cost={}",
-            cost_i,
-            ratio,
-            weights[i],
-            states[i].matches.len(),
-            usage_matches,
-            pat_size,
-            appx_cost
-        );
+        println!("      cost={} ratio={:.2}x weight={:.4} matches={} pat_size={}", cost_i, ratio, weights[i], states[i].matches.len(), pat_size,);
     }
 }
