@@ -75,7 +75,7 @@ BASELINE_METHOD = "enum-dsrs-at-start"
 # Table cells use the bare search-strategy name; plot legends spell out the
 # E-Stitch prefix so each series is unambiguous standalone.
 METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble",
-                 "stitch": "Stitch", BASELINE_METHOD: "BFS@start"}
+                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT"}
 METHOD_PLOT_LABELS = {
     "enum": "E-Stitch: BFS",
     "smc": "E-Stitch: SMC",
@@ -608,7 +608,7 @@ TABLE5_DATA_KEYS = {
 TABLE5_COL_LABELS = {
     "enum": "BFS",
     "smc": "SMC",
-    "enum-dsrs-at-start": "BFS@start",
+    "enum-dsrs-at-start": "BFS/MT",
     "babble": "babble",
 }
 
