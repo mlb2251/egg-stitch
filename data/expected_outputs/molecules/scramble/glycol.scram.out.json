@@ -6,16 +6,16 @@
   ],
   "final_cost": 1133,
   "heap_sizes_at_end": [
-    41
+    31
   ],
   "initial_cost": 2977,
   "library": [
     {
       "approx_cost": 592,
       "arity": 1,
-      "lambda": "(lam (s2 O (s4 C (s4 C (s1 H) (s1 H) $0) (s1 H) (s1 H))))",
+      "lambda": "(lam (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) $0))))",
       "num_matches": 96,
-      "pattern": "fn_0: (s2 O (s4 C (s4 C (s1 H) (s1 H) ?#0) (s1 H) (s1 H)))",
+      "pattern": "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
       "pattern_size": 15,
       "usage_matches": 160
     }
