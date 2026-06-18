@@ -8,10 +8,11 @@ For a given input (and optional DSR file):
   2. Re-run egg-stitch with `--follow <body>` under both `smc` and
      `best-first`, asserting each run's `library[0].pattern` body matches.
 
-If stitch produces no abstraction (e.g. the corpus has no compressible
-abstraction), or its abstraction puts a metavar in operator position (which
-egg-stitch doesn't represent — it abstracts only argument positions), the
-input is skipped with a pass — there is nothing for egg-stitch to follow.
+stitch runs with `--no-curried-bodies --no-curried-metavars` so it only
+proposes abstractions egg-stitch can represent (no metavar/body left of an
+app). If it produces no abstraction (the corpus has nothing compressible
+within that space — e.g. `(a a a)`/`(b b b)`, whose only abstraction is the
+operator-position `(#0 #0 #0)`), the input is skipped with a pass.
 
 stitch can't take DSRs, so any `--rewrites` file is applied only to the
 egg-stitch follow runs, not to discovery — the target itself is DSR-free.
@@ -86,12 +87,16 @@ def stitch_follow_target(stitch_bin, input_path, language, output_path):
     to `?#k`) and the abstraction's arity (its distinct-metavar count) — or
     `(None, None)` when stitch finds nothing to abstract.
 
-    Cost flags mirror expts.run_models.stitch: `op-children` is the no-apps
-    weighting (non-app nodes cost 10000, curried forms disabled) and everything
-    else is apps-equal (all costs 1).
+    Cost flags follow expts.run_models.stitch: `op-children` is the no-apps
+    weighting (non-app nodes cost 10000), everything else is apps-equal (all
+    costs 1). Unlike the benchmark, `--no-curried-bodies --no-curried-metavars`
+    are passed on *every* language: egg-stitch can't represent a metavar (or
+    body) to the left of an app, so without them stitch proposes operator-
+    position abstractions (e.g. `(a a a)`/`(b b b)` -> `(#0 #0 #0)`) that egg-
+    stitch can never follow. With them, stitch instead reports no abstraction
+    there, handled by the empty-discovery skip in `main`.
     """
-    no_apps = language == "op-children"
-    cost = "10000" if no_apps else "1"
+    cost = "10000" if language == "op-children" else "1"
     cmd = [
         str(stitch_bin), str(input_path),
         "-i1", f"-a{MAX_ARITY}",
@@ -100,9 +105,8 @@ def stitch_follow_target(stitch_bin, input_path, language, output_path):
         "--cost-app", "1",
         "--cost-var", cost, "--cost-ivar", cost,
         "--cost-prim-default", cost, "--cost-lam", cost,
+        "--no-curried-bodies", "--no-curried-metavars",
     ]
-    if no_apps:
-        cmd += ["--no-curried-bodies", "--no-curried-metavars"]
     print(f"$ {' '.join(cmd)}", file=sys.stderr)
     subprocess.run(cmd, check=True)
     abstractions = json.loads(Path(output_path).read_text()).get("abstractions") or []
@@ -295,14 +299,6 @@ def main():
         target, arity = stitch_follow_target(stitch_bin, args.input, language, disc_out)
         if target is None:
             print(f"SKIP: stitch found no abstraction for {args.input} — nothing to follow")
-            sys.exit(0)
-        # egg-stitch only abstracts argument positions: it can't represent an
-        # operator-position metavar (e.g. stitch turns `(a a a)`/`(b b b)` into
-        # `(?#0 ?#0 ?#0)`, abstracting the applied function itself). egg-stitch's
-        # own search returns an empty library for such corpora, so there's
-        # nothing to follow — skip with a pass, as for an empty discovery.
-        if re.match(r"\(\s*\?#", target):
-            print(f"SKIP: stitch's abstraction {target} has an operator-position metavar egg-stitch can't represent — nothing to follow")
             sys.exit(0)
         print(f"follow target: {target} (arity {arity})", file=sys.stderr)
 
