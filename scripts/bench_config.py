@@ -8,9 +8,13 @@ being clipped at an arbitrary expansion count. Targets a cap can't bound keep a
 step limit. Caps and limits are tuned so each target finishes in roughly the
 wall-clock of the former 5000-step runs.
 
-Tuning notes (best-first, with DSRs, summed over a target's files):
+Tuning notes (best-first, with DSRs, summed over a target's files): the cap is
+set to the largest value before the {forced ≤ cap} subspace jumps (and the
+search blows past ~1s), so each run converges in roughly a second.
     nuts-bolts  cap 11  -> 0.43s converged   (old 5000-step clip: 1.16s)
     dials       cap  8  -> 0.32s converged   (old clip: 0.33s)
+    furniture   cap 34  -> 0.73s converged    (5638 exps; cap 36 jumps to 2.1s)
+    wheels      cap 33  -> 0.74s converged    (4514 exps; cap 36 jumps to 2.2s)
     list/physics        -> already converge within the step limit (<0.6s each)
     molecules           -> forced-expansion doesn't separate their productive
                            patterns, so a cap can't bound the search; keep the
@@ -35,6 +39,8 @@ SMC_TEMP = 1000.0
 BF_RUNNERS = {
     "nuts-bolts": OursBf(num_steps=None, max_forced_expansion=11),
     "dials": OursBf(num_steps=None, max_forced_expansion=8),
+    "furniture": OursBf(num_steps=None, max_forced_expansion=34),
+    "wheels": OursBf(num_steps=None, max_forced_expansion=33),
     "list": OursBf(num_steps=5000),
     "physics": OursBf(num_steps=5000),
     "hexyl": OursBf(num_steps=5000),

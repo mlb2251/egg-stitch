@@ -48,7 +48,7 @@ from expts.result import PerFileResult, egraph_min_from_bench  # noqa: E402
 from expts.run_models import ours as _ours_mod  # noqa: E402
 from expts.runner import run_method, _bench_cost  # noqa: E402
 
-DOMAINS = ["nuts-bolts", "dials", "list", "physics"]
+DOMAINS = ["nuts-bolts", "dials", "furniture", "wheels", "list", "physics"]
 # DOMAINS = ["nuts-bolts", "dials"]
 
 # Molecule scramble families (data/domains/molecules/scramble/): real PubChem
