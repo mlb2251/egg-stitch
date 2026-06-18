@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run `follow_reaches.py` on every `*.json` under one or more domain dirs.
 
-For each input, both backends must reach the abstraction discovered by a
-deterministic best-first run. Used as a CI sweep to catch regressions where
-follow mode loses the ability to reproduce stitch's own output.
+For each input, both backends must reach the abstraction discovered by the
+reference `stitch` compressor. Used as a CI sweep to catch regressions where
+follow mode loses the ability to reproduce stitch's output.
 
 Usage:
     scripts/follow_reaches_domain.py DOMAIN_DIR [DOMAIN_DIR …] [-- extra args]
