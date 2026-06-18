@@ -598,9 +598,13 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
     }
 }
 
-/// Computes an optimistic lower bound on corpus size. Each match contributes a
-/// 1-node stub plus the minimum total size of its frozen-var arguments (those
-/// can no longer shrink via further expansion). Reuses allocations in `scratch`.
+/// Optimistic lower bound on the objective `corpus + body`. Corpus side: each
+/// match contributes a 1-node stub plus the minimum total size of its frozen-var
+/// arguments (those can no longer shrink via further expansion). Body side: the
+/// current pattern size — monotone non-decreasing under expand/reuse and a lower
+/// bound on the final `compute_body_size_with_ho` (the HO term is non-negative),
+/// so it both tightens the bound and, being unbounded in pattern depth,
+/// guarantees the search tree is finite. Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
     scratch.rewrite.fill(search_state);
     let var_state = &search_state.pattern.var_state;
@@ -627,7 +631,7 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         sizes.mark_dirty(m.root_eclass);
     }
     sizes.solve();
-    sizes.get(root) as usize
+    sizes.get(root) as usize + compute_pattern_size::<F, O>(&search_state.pattern, &egraph.analysis.weights)
 }
 
 /// Consumes `egraph` and unions each match root with a `fn_name(args...)`

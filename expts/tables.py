@@ -20,8 +20,11 @@ from typing import Sequence
 from tqdm import tqdm
 
 from . import ALL_DOMAINS
+from ._subproc import available_memory_bytes
+from .bench import MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
+from .runner import MOLECULE_FAMILIES
 
 NUM_RUNS = 10
 
@@ -42,20 +45,39 @@ BFS_STEP_SWEEP: tuple[int, ...] = (200, 500, 1000, 2000, 5000, 10000, 20000, 500
 SMC_PARTICLE_SWEEP: tuple[int, ...] = (20, 50, 100, 200, 500, 1000, 2000, 5000)
 
 
-def _sweep_runners() -> tuple[tuple[str, object], ...]:
-    """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value."""
-    bfs = tuple((f"enum-{n}", OursBf(num_steps=n)) for n in BFS_STEP_SWEEP)
-    smc = tuple((f"smc-{p}", OursSmc(num_particles=p)) for p in SMC_PARTICLE_SWEEP)
+def _sweep_runners(
+    timeout: float | None = None,
+    bfs_steps: tuple[int, ...] = BFS_STEP_SWEEP,
+    mem_limit: int | None = None,
+) -> tuple[tuple[str, object], ...]:
+    """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value.
+
+    ``timeout`` (seconds) caps each tool invocation's wall-clock and
+    ``mem_limit`` (bytes) its address space; None means no cap. ``bfs_steps``
+    overrides the best-first step sweep (table5 extends it).
+    """
+    bfs = tuple((f"enum-{n}", OursBf(num_steps=n, timeout=timeout, mem_limit=mem_limit)) for n in bfs_steps)
+    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, timeout=timeout, mem_limit=mem_limit)) for p in SMC_PARTICLE_SWEEP)
     return bfs + smc
 
 
-# Runner rosters — Table 1/3 share the no-Stitch roster, Table 2/4 share
-# the with-Stitch roster.
+# Best-first operating point for the single dsrs-only-at-start baseline row
+# (the "BFS@start" column on the DSR tables and table5). It collapses to a
+# small rule-free e-graph, so we just let best-first run essentially to
+# exhaustion — the step budget is set far above what any input needs.
+BASELINE_BFS_STEPS = 10_000_000
+
+# Runner rosters — Table 2/4 share the with-Stitch roster; Table 1/3 (DSRs,
+# no Stitch) add a "dsrs-only-at-start" baseline: best-first that canonicalises
+# with the DSRs once instead of keeping them live (the BFS@start column).
 BASE_RUNNERS: tuple[tuple[str, object], ...] = _sweep_runners() + (
     ("babble", Babble()),
 )
 RUNNERS_WITH_STITCH: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
     ("stitch", Stitch()),
+)
+DSR_RUNNERS: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
+    ("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True)),
 )
 
 
@@ -114,7 +136,7 @@ def _run_table(
     output_name: str,
 ) -> Path:
     """Run each ``(label, runner)`` on every domain ``NUM_RUNS`` times and save JSON."""
-    assert all(d in ALL_DOMAINS for d in domains), "domain typo"
+    assert all(d in ALL_DOMAINS or d.startswith("molecules:") for d in domains), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "config": {"num_abstractions": num_abstractions},
@@ -145,10 +167,11 @@ def _run_table(
 
 
 def table1() -> Path:
-    """Run Enum, SMC, and babble on the Table 1 domains with DSRs."""
+    """Run Enum, SMC, babble, and the dsrs-only-at-start baseline on the
+    Table 1 domains with DSRs."""
     return _run_table(
         domains=TABLE1_DOMAINS,
-        runners=BASE_RUNNERS,
+        runners=DSR_RUNNERS,
         num_abstractions=1,
         use_dsrs=True,
         folder_prefix="table1",
@@ -172,7 +195,7 @@ def table3() -> Path:
     """Run the Table 1 setup with 20 stacked abstractions."""
     return _run_table(
         domains=TABLE1_DOMAINS,
-        runners=BASE_RUNNERS,
+        runners=DSR_RUNNERS,
         num_abstractions=20,
         use_dsrs=True,
         folder_prefix="table3",
@@ -189,4 +212,57 @@ def table4() -> Path:
         use_dsrs=False,
         folder_prefix="table4",
         output_name="table4.json",
+    )
+
+
+# Table 5: the molecule scramble subset, with DSRs. Same algorithm roster as
+# Table 3 (Enum/SMC sweeps + babble) plus a "dsrs-only-at-start" baseline
+# (best-first that canonicalises with the DSRs once instead of keeping them
+# live). Every algorithm gets a hard wall-clock cap.
+TABLE5_DOMAINS = [f"molecules:{fam}" for fam in MOLECULE_FAMILIES]
+TABLE5_TIMEOUT = 300.0  # seconds, per tool invocation
+TABLE5_NUM_ABSTRACTIONS = 4
+# Live DSRs inflate the e-graph with every symmetry-equivalent orientation, so
+# best-first needs far more pops to converge on molecules than the 10k cogsci
+# point. The sweep is extended to 100k, which is the representative enum
+# operating point for this domain.
+TABLE5_BFS_SWEEP = BFS_STEP_SWEEP + (100_000,)
+TABLE5_ENUM_POINT = 100_000
+
+
+def _table5_runners() -> tuple[tuple[str, object], ...]:
+    """Table 3's roster (Enum/SMC sweeps + babble) plus the dsrs-only-at-start
+    baseline, every runner capped at :data:`TABLE5_TIMEOUT` and
+    :data:`MEM_LIMIT_BYTES`."""
+    return (
+        _sweep_runners(timeout=TABLE5_TIMEOUT, bfs_steps=TABLE5_BFS_SWEEP, mem_limit=MEM_LIMIT_BYTES)
+        + (("babble", Babble(timeout=TABLE5_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)),)
+        + (("enum-dsrs-at-start", OursBf(
+            num_steps=BASELINE_BFS_STEPS,
+            only_use_dsrs_at_start=True,
+            timeout=TABLE5_TIMEOUT,
+            mem_limit=MEM_LIMIT_BYTES,
+        )),)
+    )
+
+
+def table5() -> Path:
+    """Run the molecule scramble subset with DSRs, Table 3 roster + the
+    dsrs-only-at-start baseline, each algorithm capped at 300s and 20 GiB."""
+    # Preflight: the per-tool memory cap is only a consistent control if the
+    # machine actually has that much free, so refuse to start otherwise.
+    free = available_memory_bytes()
+    if free < MEM_LIMIT_BYTES:
+        raise SystemExit(
+            f"table5: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
+            f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
+            f"available. Free up memory or lower MEM_LIMIT_BYTES."
+        )
+    return _run_table(
+        domains=TABLE5_DOMAINS,
+        runners=_table5_runners(),
+        num_abstractions=TABLE5_NUM_ABSTRACTIONS,
+        use_dsrs=True,
+        folder_prefix="table5",
+        output_name="table5.json",
     )

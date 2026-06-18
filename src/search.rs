@@ -602,13 +602,25 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `(ForcedExpansion(p), argmin_r ForcedExpansion(r, p))` — the value paired
     /// with the match root `r` closest to minimal. `None` when `p` has no matches.
     /// See [`Self::within_forced_expansion_cap`] for the per-`r` cost decomposition.
-    pub fn forced_expansion_argmin(&self, shared: &SharedSearchData<F, O>) -> Option<(i64, Id)> {
+    ///
+    /// `lower_bound` is a known lower bound on `ForcedExpansion(p)` — in best-first
+    /// the parent's value, since forced-expansion is monotone non-decreasing under
+    /// expand/reuse (the same property `within_forced_expansion_cap` relies on),
+    /// so no descendant drops below it. We early-exit the moment a match attains
+    /// it: the min can't go lower, so the result is exact. Pass `i64::MIN` to scan
+    /// fully (no bound). Only the *value* is exact under the bound; the returned
+    /// root is then the first attaining match rather than the global argmin — fine
+    /// for the heap key (value only) and verbose passes `i64::MIN`.
+    pub fn forced_expansion_argmin(&self, shared: &SharedSearchData<F, O>, lower_bound: i64) -> Option<(i64, Id)> {
         let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
         let mut best: Option<(i64, Id)> = None;
         for m in &self.matches {
             let forced = self.forced_expansion_at(shared, skel, m);
             if best.is_none_or(|(b, _)| forced < b) {
                 best = Some((forced, m.root_eclass));
+                if forced <= lower_bound {
+                    break;
+                }
             }
         }
         best

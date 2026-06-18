@@ -67,13 +67,31 @@ def aggregate_time(repeats: list[list[dict]]) -> float | None:
     return _geomean([repeat_time(r) for r in repeats])
 
 
+def _assert_all_or_nothing_dnf(method: str, repeats: list[list[dict]]) -> None:
+    """Guard the partial-DNF averaging asymmetry: every per-file record for the
+    method must be a DNF, or none may be. ``repeat_cr``/``aggregate_cr`` drop
+    DNFs (geomean over the finishers) while ``repeat_time``/``aggregate_time``
+    still sum in the timed-out runs' budget, so any mix averages CR and time
+    over inconsistent sets and silently misleads. A record is a DNF when
+    ``compression_ratio is None``."""
+    dnf = [r["compression_ratio"] is None for per_file in repeats for r in per_file]
+    assert len(set(dnf)) <= 1, (
+        f"{method}: partial DNF ({sum(dnf)}/{len(dnf)} runs timed out/OOM'd) — "
+        "CR and time would aggregate over inconsistent sets"
+    )
+
+
 def aggregate_methods_cr(runs: dict[str, list[list[dict]]]) -> dict[str, float | None]:
     """{method: aggregated compression ratio} for every method present."""
+    for m, repeats in runs.items():
+        _assert_all_or_nothing_dnf(m, repeats)
     return {m: aggregate_cr(repeats) for m, repeats in runs.items()}
 
 
 def aggregate_methods_time(runs: dict[str, list[list[dict]]]) -> dict[str, float | None]:
     """{method: aggregated elapsed seconds} for every method present."""
+    for m, repeats in runs.items():
+        _assert_all_or_nothing_dnf(m, repeats)
     return {m: aggregate_time(repeats) for m, repeats in runs.items()}
 
 
