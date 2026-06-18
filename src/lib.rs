@@ -110,7 +110,8 @@ pub struct Args {
     pub num_steps: Option<usize>,
 
     /// Wall-clock time limit in seconds for best-first search.
-    /// At least one of --num-steps or --time-limit must be provided for best-first.
+    /// At least one of --num-steps, --time-limit, or --max-forced-expansion must
+    /// be provided for best-first.
     #[arg(long)]
     pub time_limit: Option<f64>,
 
@@ -131,7 +132,9 @@ pub struct Args {
     pub no_zero_arity: bool,
 
     /// Heap priority for best-first search (only used when --search=best-first).
-    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
+    /// Default `forced-then-cost`: explore all patterns without a forced expansion,
+    /// ordered by cost, then move on to patterns with 1 forced expansion, and so on.
+    #[arg(long, value_enum, default_value_t = SearchPriority::ForcedThenCost)]
     pub priority: SearchPriority,
 
     /// Multiplicative boost applied to reuse-action sampling weights in SMC.
