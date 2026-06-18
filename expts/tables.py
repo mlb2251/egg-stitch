@@ -63,9 +63,9 @@ def _sweep_runners(
 
 # Best-first operating point for the single dsrs-only-at-start baseline row
 # (the "BFS@start" column on the DSR tables and table5). It collapses to a
-# small rule-free e-graph and converges well before 10k, so extra steps don't
-# change it (kept at render_tables' canonical 10k point).
-BASELINE_BFS_STEPS = 10_000
+# small rule-free e-graph, so we just let best-first run essentially to
+# exhaustion — the step budget is set far above what any input needs.
+BASELINE_BFS_STEPS = 10_000_000
 
 # Runner rosters — Table 2/4 share the with-Stitch roster; Table 1/3 (DSRs,
 # no Stitch) add a "dsrs-only-at-start" baseline: best-first that canonicalises
