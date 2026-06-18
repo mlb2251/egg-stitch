@@ -44,6 +44,18 @@ TABLE_DOMAINS_NO_DSR = TABLE_DOMAINS_DSR + ["text", "logo", "towers"]
 
 def domains_for_table(table: int) -> list[str]:
     return TABLE_DOMAINS_DSR if table in TABLES_WITH_EGRAPH_MIN else TABLE_DOMAINS_NO_DSR
+
+
+def methods_for_table(table: int) -> list[str]:
+    """Ordered method columns for the table.
+
+    DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add the
+    dsrs-only-at-start "BFS@start" baseline; no-DSR tables (2 & 4) keep Stitch
+    and have no baseline.
+    """
+    if table in TABLES_WITH_EGRAPH_MIN:
+        return ["enum", "smc", BASELINE_METHOD, "babble"]
+    return ["enum", "smc", "babble", "stitch"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
     "dials": "Dials",
@@ -56,14 +68,20 @@ DOMAIN_LABELS = {
     "towers": "Towers",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
+# DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add a
+# "dsrs-only-at-start" baseline: best-first that canonicalises with the DSRs
+# once instead of keeping them live (the "BFS@start" column, same as table5).
+BASELINE_METHOD = "enum-dsrs-at-start"
 # Table cells use the bare search-strategy name; plot legends spell out the
 # E-Stitch prefix so each series is unambiguous standalone.
-METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble", "stitch": "Stitch"}
+METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble",
+                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT"}
 METHOD_PLOT_LABELS = {
     "enum": "E-Stitch: BFS",
     "smc": "E-Stitch: SMC",
     "babble": "babble",
     "stitch": "Stitch",
+    BASELINE_METHOD: "E-Stitch: BFS (DSRs at start)",
 }
 # The single sweep point each base method contributes to the table cells.
 # Plots use the full sweep regardless.
@@ -74,6 +92,7 @@ TABLE_DATA_KEYS = {
     "smc": f"smc-{TABLE_SMC_PARTICLES}",
     "babble": "babble",
     "stitch": "stitch",
+    BASELINE_METHOD: BASELINE_METHOD,
 }
 TABLE_TITLES = {
     1: "Compression Using Rewrites",
@@ -120,8 +139,11 @@ def line_color(i: int):
     return modify_color(THEME_COLORS[i], 0.5, 0.9)
 
 
-# Plot uses a "line" variant of the pastel theme for readability on white.
+# Plot uses a "line" variant of the pastel theme for readability on white. The
+# dsrs-only-at-start baseline (DSR tables only, where Stitch isn't plotted)
+# gets its own color past the four base series.
 METHOD_COLORS = {m: line_color(i) for i, m in enumerate(METHODS)}
+METHOD_COLORS[BASELINE_METHOD] = line_color(4)
 DOMAIN_PLOT_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -208,13 +230,14 @@ def _collect_rows(
 ) -> list[tuple[str, float | None, float | None, list[float | None], list[float | None]]]:
     """Per-domain ``(domain, original_size, egraph_min, crs, ts)`` for the table.
 
-    ``crs``/``ts`` hold the single table-point value per method (in ``METHODS``
-    order); on DSR tables the Stitch entry is spliced from the no-DSR
-    counterpart. Shared by the LaTeX table and the bar-chart renderers.
+    ``crs``/``ts`` hold the single table-point value per method, in
+    ``methods_for_table`` order; on no-DSR tables the Stitch entry is spliced
+    from the no-DSR counterpart. Shared by the LaTeX table and the bar-chart
+    renderers.
     """
     domains = saved["domains"]
+    methods = methods_for_table(table)
     stitch_no_dsr = _stitch_no_dsr_maps(table)
-    stitch_idx = METHODS.index("stitch")
     rows = []
     for domain in domains_for_table(table):
         if domain not in domains:
@@ -222,10 +245,11 @@ def _collect_rows(
         runs = domains[domain].get("runs", {})
         cr_map = aggregate_methods_cr(runs)
         t_map = aggregate_methods_time(runs)
-        crs = [cr_map.get(TABLE_DATA_KEYS[m]) for m in METHODS]
-        ts = [t_map.get(TABLE_DATA_KEYS[m]) for m in METHODS]
-        if domain in stitch_no_dsr:
-            crs[stitch_idx], ts[stitch_idx] = stitch_no_dsr[domain]
+        crs = [cr_map.get(TABLE_DATA_KEYS[m]) for m in methods]
+        ts = [t_map.get(TABLE_DATA_KEYS[m]) for m in methods]
+        if "stitch" in methods and domain in stitch_no_dsr:
+            si = methods.index("stitch")
+            crs[si], ts[si] = stitch_no_dsr[domain]
         rows.append((domain, initial_size_for_domain(runs), egraph_min_for_domain(runs), crs, ts))
     return rows
 
@@ -241,6 +265,8 @@ PRESENTATION_COLORS = {
     "smc": "estitchHighlight",
     "babble": "ecorange",
     "stitch": "ecblue",
+    # The dsrs-only-at-start baseline is an E-Stitch search variant too.
+    BASELINE_METHOD: "estitchHighlight",
 }
 
 
@@ -265,18 +291,14 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
     every method column gets a faint background tint of its plot color.
     """
     domains = saved["domains"]
-    # Tables 1 & 3 run with DSRs (which Stitch doesn't accept), so they drop
-    # the Stitch column entirely.
-    methods = METHODS
-    if table in TABLES_WITH_EGRAPH_MIN:
-        methods = [m for m in methods if m != "stitch"]
+    # DSR tables (1 & 3) drop Stitch and add the dsrs-only-at-start baseline;
+    # no-DSR tables (2 & 4) keep Stitch. ``_collect_rows`` returns cells in this
+    # same order, so no per-method filtering is needed below.
+    methods = methods_for_table(table)
     n = len(methods)
     has_egraph_min = table in TABLES_WITH_EGRAPH_MIN
     show_size = not presentation
     stitch_no_dsr = _stitch_no_dsr_maps(table)
-    # The data rows always follow global METHODS; we only need this index
-    # to star the Stitch cell (if it hasn't been filtered out).
-    raw_stitch_idx = METHODS.index("stitch")
 
     # Column layout: domain, (size cols,) CRs, times. Presentation drops sizes
     # and adds a single vertical rule between the CR and Time groups.
@@ -329,13 +351,11 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
 
     def emit(label: str, size_cells: list[str],
              crs: list[float | None], ts: list[float | None]) -> str:
-        """Render one data row with the best CR (max) and time (min) bolded."""
-        # If we are dropping Stitch for this table, filter it out before bolding
-        # so that the bolding is relative to the remaining methods.
-        if table in TABLES_WITH_EGRAPH_MIN:
-            crs = [v for i, v in enumerate(crs) if i != raw_stitch_idx]
-            ts = [v for i, v in enumerate(ts) if i != raw_stitch_idx]
+        """Render one data row with the best CR (max) and time (min) bolded.
 
+        ``crs``/``ts`` are already in ``methods`` order (Stitch dropped on DSR
+        tables), so bolding is relative to exactly the displayed columns.
+        """
         cr_strs = bold_best(crs, ".2f", higher_is_better=True)
         t_strs = bold_best(ts, ".3f", higher_is_better=False)
 
@@ -364,8 +384,8 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
     # Geometric mean across benchmarks (per method, skipping missing cells).
     if rows:
         lines.append("\\midrule")
-        agg_cr = [geomean_col([r[3][i] for r in rows]) for i in range(len(METHODS))]
-        agg_t = [geomean_col([r[4][i] for r in rows]) for i in range(len(METHODS))]
+        agg_cr = [geomean_col([r[3][i] for r in rows]) for i in range(n)]
+        agg_t = [geomean_col([r[4][i] for r in rows]) for i in range(n)]
         size_cells = [""] * size_cols
         lines.append(emit("Geo. mean", size_cells, agg_cr, agg_t))
 
@@ -517,7 +537,8 @@ def plot_domain(saved: dict, table: int, domain: str, out_path: Path) -> None:
             t_map[TABLE_DATA_KEYS["stitch"]] = t
             starred = True
     title = f"{TABLE_TITLES[table]}\n{DOMAIN_PLOT_LABELS.get(domain, domain)}"
-    plot_cr_vs_time(cr_map, t_map, title, out_path, stitch_starred=starred)
+    plot_cr_vs_time(cr_map, t_map, title, out_path, stitch_starred=starred,
+                    methods=methods_for_table(table))
 
 
 def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
@@ -541,7 +562,8 @@ def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
     t_map = {k: geomean_col([m.get(k) for m in per_t]) for k in keys}
     plot_cr_vs_time(cr_map, t_map,
                     f"{TABLE_TITLES[table]}\nGeo. mean across domains",
-                    out_path, stitch_starred=starred)
+                    out_path, stitch_starred=starred,
+                    methods=methods_for_table(table))
 
 
 # ─── table5: molecule scramble subset ────────────────────────────────────────
@@ -586,7 +608,7 @@ TABLE5_DATA_KEYS = {
 TABLE5_COL_LABELS = {
     "enum": "BFS",
     "smc": "SMC",
-    "enum-dsrs-at-start": "BFS@start",
+    "enum-dsrs-at-start": "BFS/MT",
     "babble": "babble",
 }
 
