@@ -131,9 +131,17 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
 
 @dataclass(frozen=True)
 class OursBf:
-    """Egg-stitch in best-first ("enum") search mode, on a single input file."""
+    """Egg-stitch in best-first ("enum") search mode, on a single input file.
 
-    num_steps: int = 500
+    Best-first needs at least one cutoff. ``num_steps`` is the expansion-count
+    budget; ``max_forced_expansion`` is the self-draining forced-expansion cap
+    (the heap bounds to the ``{forced ≤ cap}`` subspace and empties, so the
+    search runs to *convergence* instead of being clipped). Set either or both
+    (whichever is not None is forwarded as a flag).
+    """
+
+    num_steps: int | None = 500
+    max_forced_expansion: int | None = None
     max_arity: int = MAX_ARITY
     # When True, DSRs canonicalise the initial egraph once instead of staying
     # live during search (the "dsrs-only-at-start" baseline). ``timeout`` caps
@@ -143,11 +151,16 @@ class OursBf:
     mem_limit: int | None = field(default=None, repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
+        search_flags: dict[str, object] = {}
+        if self.num_steps is not None:
+            search_flags["num_steps"] = self.num_steps
+        if self.max_forced_expansion is not None:
+            search_flags["max_forced_expansion"] = self.max_forced_expansion
         return _run(
             rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
-            search_flags={"num_steps": self.num_steps},
+            search_flags=search_flags,
             only_use_dsrs_at_start=self.only_use_dsrs_at_start,
             timeout=self.timeout, mem_limit=self.mem_limit,
         )

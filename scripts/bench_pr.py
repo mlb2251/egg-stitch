@@ -19,19 +19,17 @@ between the two branches, comparing every `compression_ratio` leaf, and emits a
 whose compression dropped. As a prerequisite (shared with the timing run) the
 main worktree must be clean and the base ref must be up to date with its remote.
 
+All search hyperparameters (SMC budget + per-target best-first cutoffs) live in
+``scripts/bench_config.py`` — edit that one file to retune. Best-first runs to
+convergence via a self-draining ``--max-forced-expansion`` cap where one bounds
+the search (see the config), and falls back to a step limit elsewhere.
+
 Usage:
     python scripts/bench_pr.py [BASE=main] [PR=<current-branch>]
-
-Env overrides (defaults match the paper-table runner):
-    SMC_STEPS=100
-    SMC_PARTICLES=1000
-    SMC_TEMP=1000.0
-    ENUM_STEPS=500
 """
 
 import json
 import math
-import os
 import subprocess
 import sys
 import time
@@ -43,13 +41,14 @@ from statistics import mean, stdev
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import bench_config  # noqa: E402  (scripts/bench_config.py — the one knob file)
 from expts.result import PerFileResult, egraph_min_from_bench  # noqa: E402
-from expts.run_models import OursBf, OursSmc  # noqa: E402
 from expts.run_models import ours as _ours_mod  # noqa: E402
 from expts.runner import run_method, _bench_cost  # noqa: E402
 
-DOMAINS = ["nuts-bolts", "dials", "list", "physics"]
+DOMAINS = ["nuts-bolts", "dials", "furniture", "wheels", "list", "physics"]
 # DOMAINS = ["nuts-bolts", "dials"]
 
 # Molecule scramble families (data/domains/molecules/scramble/): real PubChem
@@ -450,10 +449,6 @@ def main() -> None:
     args = sys.argv[1:]
     base = args[0] if len(args) >= 1 else "main"
     pr = args[1] if len(args) >= 2 else subprocess.check_output(["git", "branch", "--show-current"], cwd=ROOT, text=True).strip()
-    smc_steps = int(os.environ.get("SMC_STEPS", 100))
-    smc_parts = int(os.environ.get("SMC_PARTICLES", 1000))
-    smc_temp = float(os.environ.get("SMC_TEMP", 1000.0))
-    enum_steps = int(os.environ.get("ENUM_STEPS", 5000))
     session = time.strftime("%Y-%m-%d_%H-%M-%S")
 
     preflight(base)
@@ -461,7 +456,13 @@ def main() -> None:
     # timing run is interrupted afterwards.
     comp_section = compression_section(base, pr)
 
-    print(f"base={base}  pr={pr}  reps=adaptive(min={MIN_RUNS}, max={MAX_RUNS}, target rel-SEM<{TARGET_REL_SEM:.0%})+1warmup  smc=({smc_steps} steps, {smc_parts} particles, T={smc_temp})  enum_steps={enum_steps}  session={session}")
+    bf_summary = {
+        t: (f"mfe{r.max_forced_expansion}" if r.max_forced_expansion is not None else f"{r.num_steps}steps")
+        for t, r in bench_config.BF_RUNNERS.items()
+    }
+    print(f"base={base}  pr={pr}  reps=adaptive(min={MIN_RUNS}, max={MAX_RUNS}, target rel-SEM<{TARGET_REL_SEM:.0%})+1warmup  "
+          f"smc=({bench_config.SMC_STEPS} steps, {bench_config.SMC_PARTICLES} particles, T={bench_config.SMC_TEMP})  "
+          f"bf={bf_summary}  session={session}")
 
     wt_root = Path(f"/tmp/bench_pr_{session}")
     wt_base = wt_root / "base"
@@ -470,23 +471,28 @@ def main() -> None:
         base_bin = setup_worktree(base, wt_base)
         pr_bin = setup_worktree(pr, wt_pr)
 
-        runners = {
-            "enum": OursBf(num_steps=enum_steps),
-            "smc": OursSmc(num_steps=smc_steps, num_particles=smc_parts, temperature=smc_temp),
-        }
+        # SMC is shared across targets; best-first is per-target (its cutoff —
+        # forced-expansion cap vs step limit — depends on the domain). All knobs
+        # live in scripts/bench_config.py.
+        smc_runner = bench_config.smc_runner()
+        methods = ["enum", "smc"]
+
+        def runner_for(method: str, domain: str):
+            """The runner for one (method, domain): per-target best-first, shared SMC."""
+            return smc_runner if method == "smc" else bench_config.BF_RUNNERS[domain]
+
         conditions = [("with_dsrs", True), ("without_dsrs", False)]
         # Each cell is keyed by (dsr_label, domain, method); runner + use_dsrs
         # are recovered from these lookup tables.
-        runner_for = dict(runners.items())
         use_dsrs_for = dict(conditions)
-        cell_keys = [(d, dom, m) for (d, _), dom, (m, _) in product(conditions, DOMAINS, runners.items())]
+        cell_keys = [(d, dom, m) for (d, _), dom, m in product(conditions, DOMAINS, methods)]
         # Molecule scramble families run only with DSRs (see MOL_FAMILIES).
-        cell_keys += [("with_dsrs", fam, m) for fam in MOL_FAMILIES for m in runners]
+        cell_keys += [("with_dsrs", fam, m) for fam in MOL_FAMILIES for m in methods]
 
         def run_rep_for(cell: tuple[str, str, str], rep_idx: int) -> None:
             """Run one rep of one cell on base then PR back-to-back."""
             dsr_label, domain, method = cell
-            runner = runner_for[method]
+            runner = runner_for(method, domain)
             if domain in MOL_FAMILIES:
                 time_mol_cell(base_bin, runner, domain,
                               cache_path_for(session, "base", dsr_label, method, domain, rep_idx))
@@ -549,7 +555,6 @@ def main() -> None:
                 print(f"  WARN: {'/'.join(cell)} hit MAX_RUNS={MAX_RUNS} without converging "
                       f"(rel-SEM {cell_rel_sem(cell, n):.2%})", flush=True)
 
-        methods = list(runners.keys())
         with_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("with_dsrs",) for dom in DOMAINS for m in methods}
         without_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("without_dsrs",) for dom in DOMAINS for m in methods}
         mol_reps = {("with_dsrs", fam, m): reps_done[("with_dsrs", fam, m)] for fam in MOL_FAMILIES for m in methods}
