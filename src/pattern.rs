@@ -30,14 +30,15 @@ pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O
 /// transition keeps `expand-banned ⟹ not reusable`, so e.g. a reusable-and-frozen
 /// combination can't arise and isn't represented.
 ///
-/// Both expand-banned states (`ReuseBanned`, `Frozen`) keep `?#k` as a hole that
-/// is paid for at every call site; they differ only in what happens when the var
-/// turns out to be *useless* (bound to one constant everywhere): a `Frozen` var
-/// is a committed argument and the state is pruned (stitch argument-capture),
-/// whereas a `ReuseBanned` var is instead inlined like a non-frozen one. Reuse
-/// freezes to `ReuseBanned` rather than `Frozen` because pruning-on-useless there
-/// would generate huge numbers of soon-pruned children (it disables the inline
-/// short-circuit); inlining keeps the dedup benefit without that blow-up.
+/// `Frozen` is reached two ways — the expand-freeze rule (expanding `?#k` freezes
+/// every earlier var) and the reuse-freeze rule (a non-dominant `Reuse` freezes
+/// the merged var) — but behaves identically afterwards: `?#k` stays a hole paid
+/// for at every call site, and when the var turns out *useless* (bound to one
+/// constant everywhere) the state is pruned (stitch argument-capture). Under the
+/// self-draining forced-expansion cap that prune shrinks the bounded search; an
+/// earlier model gave reuse-freeze its own state that instead *inlined* useless
+/// vars, but that only paid off in the legacy step-capped regime and was a net
+/// loss (e.g. wheels 5x slower) once best-first ran to convergence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VarState {
     /// Fresh cohort: may be both reused (as the fresh side of a canonical
@@ -45,18 +46,15 @@ pub enum VarState {
     ReusableOrExpandable,
     /// Stale: may still be expanded, but no longer reused as the fresh side.
     Expandable,
-    /// Banned from expansion by the reuse-freeze rule, but still inlinable when
-    /// useless (and not reused as the fresh side).
-    ReuseBanned,
-    /// Committed to never being expanded again (the expand-freeze rule); pruned
-    /// when useless.
+    /// Committed to never being expanded again (by either the expand-freeze or
+    /// the reuse-freeze rule); pruned when useless.
     Frozen,
 }
 
 impl VarState {
-    /// True iff `?#k` may still be expanded. The complement — `ReuseBanned` /
-    /// `Frozen` — is committed to staying a hole, so its argument is paid at every
-    /// call site and it counts in the stub size / lower bound.
+    /// True iff `?#k` may still be expanded. The complement — `Frozen` — is
+    /// committed to staying a hole, so its argument is paid at every call site
+    /// and it counts in the stub size / lower bound.
     pub fn is_expandable(self) -> bool {
         matches!(self, VarState::ReusableOrExpandable | VarState::Expandable)
     }

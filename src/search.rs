@@ -525,20 +525,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let d_b = self.pattern.var_depth[second_var_idx];
                 let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
                 new_pattern.reuse(var_idx, second_var_idx);
-                // Sequencing rule: a non-dominant reuse bans expanding the merged
-                // var. Re-expanding it would re-derive (via the reuse↔expand
-                // diamond) a pattern also reachable by expanding the two factors
-                // first and reusing afterwards, so banning it keeps
-                // expand-then-reuse as the single canonical path. We use
-                // `ReuseBanned` (not `Frozen`) so a later-useless merged var is
-                // inlined rather than pruned — pruning here disables the inline
-                // short-circuit and floods the search with soon-pruned children.
+                // Sequencing rule: a non-dominant reuse freezes the merged var.
+                // Re-expanding it would re-derive (via the reuse↔expand diamond)
+                // a pattern also reachable by expanding the two factors first and
+                // reusing afterwards, so freezing it keeps expand-then-reuse as
+                // the single canonical path. Frozen (like the expand-freeze rule)
+                // means a later-useless merged var is pruned, not inlined — under
+                // the forced-expansion cap that prune shrinks the bounded search.
                 // Skipped for the dominant short-circuit (the forced sole
-                // successor), where banning would make `f(shared…)` unreachable.
+                // successor), where freezing would make `f(shared…)` unreachable.
                 // No-op under `freeze_rule = false`.
                 if self.freeze_rule && freeze_reused {
-                    let m = var_idx.min(second_var_idx);
-                    new_pattern.var_state[m] = new_pattern.var_state[m].max(VarState::ReuseBanned);
+                    new_pattern.var_state[var_idx.min(second_var_idx)] = VarState::Frozen;
                 }
                 Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
             }
