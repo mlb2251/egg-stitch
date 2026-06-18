@@ -9,7 +9,9 @@ For a given input (and optional DSR file):
      `best-first`, asserting each run's `library[0].pattern` body matches.
 
 If stitch produces no abstraction (e.g. the corpus has no compressible
-abstraction), the input is skipped with a pass — there is nothing to follow.
+abstraction), or its abstraction puts a metavar in operator position (which
+egg-stitch doesn't represent — it abstracts only argument positions), the
+input is skipped with a pass — there is nothing for egg-stitch to follow.
 
 stitch can't take DSRs, so any `--rewrites` file is applied only to the
 egg-stitch follow runs, not to discovery — the target itself is DSR-free.
@@ -293,6 +295,14 @@ def main():
         target, arity = stitch_follow_target(stitch_bin, args.input, language, disc_out)
         if target is None:
             print(f"SKIP: stitch found no abstraction for {args.input} — nothing to follow")
+            sys.exit(0)
+        # egg-stitch only abstracts argument positions: it can't represent an
+        # operator-position metavar (e.g. stitch turns `(a a a)`/`(b b b)` into
+        # `(?#0 ?#0 ?#0)`, abstracting the applied function itself). egg-stitch's
+        # own search returns an empty library for such corpora, so there's
+        # nothing to follow — skip with a pass, as for an empty discovery.
+        if re.match(r"\(\s*\?#", target):
+            print(f"SKIP: stitch's abstraction {target} has an operator-position metavar egg-stitch can't represent — nothing to follow")
             sys.exit(0)
         print(f"follow target: {target} (arity {arity})", file=sys.stderr)
 
