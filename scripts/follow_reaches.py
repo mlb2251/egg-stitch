@@ -41,13 +41,11 @@ MAX_ARITY = 2
 
 # Fixed at 2000 steps for both backends — the follow sweep is a CI diagnostic,
 # not a quality search, so we want uniform, bounded runtime per input.
-# `--max-arity` is injected per-input (see `run_egg_stitch`), pinned to the
-# arity of stitch's discovered abstraction: with any slack, best-first finds a
-# cheaper higher-arity *generalization* of the target — an extra `?#k` slot,
-# often HO-applied to a bound var — and never specialises down to stitch's
-# exact pattern (smc still reaches it).
-SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "2000", "--temperature", "1000"]
-BF_DEFAULTS = ["--num-steps", "2000"]
+# `--max-arity` matches the `-a{MAX_ARITY}` stitch was run at: egg-stitch
+# searches the same arity budget and should land on stitch's (possibly lower-
+# arity) optimum on its own. (Passthrough may override it via `_drop_overridden`.)
+SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "2000", "--temperature", "1000", "--max-arity", str(MAX_ARITY)]
+BF_DEFAULTS = ["--num-steps", "2000", "--max-arity", str(MAX_ARITY)]
 
 
 def cargo_binary():
@@ -82,10 +80,9 @@ def language_from_passthrough(passthrough):
 
 
 def stitch_follow_target(stitch_bin, input_path, language, output_path):
-    """Run stitch on `input_path` and return `(target, arity)` — its top
-    abstraction as an egg-stitch follow pattern (stitch's `#k` metavars rewritten
-    to `?#k`) and the abstraction's arity (its distinct-metavar count) — or
-    `(None, None)` when stitch finds nothing to abstract.
+    """Run stitch on `input_path` and return its top abstraction as an egg-stitch
+    follow pattern (stitch's `#k` metavars rewritten to `?#k`), or None when
+    stitch finds nothing to abstract.
 
     Cost flags follow expts.run_models.stitch: `op-children` is the no-apps
     weighting (non-app nodes cost 10000), everything else is apps-equal (all
@@ -111,10 +108,8 @@ def stitch_follow_target(stitch_bin, input_path, language, output_path):
     subprocess.run(cmd, check=True)
     abstractions = json.loads(Path(output_path).read_text()).get("abstractions") or []
     if not abstractions:
-        return None, None
-    target = re.sub(r"(?<!\?)#", "?#", abstractions[0]["body"])
-    arity = len(set(re.findall(r"\?#(\d+)", target)))
-    return target, arity
+        return None
+    return re.sub(r"(?<!\?)#", "?#", abstractions[0]["body"])
 
 
 def _flag_names(args):
@@ -133,14 +128,9 @@ def _drop_overridden(defaults, override_flags):
     return out
 
 
-def run_egg_stitch(binary, search, input_path, rewrites, output_path, passthrough, follow=None, max_arity=None):
-    """Invoke egg-stitch for one search; return True on exit code 0.
-
-    `max_arity` pins `--max-arity` to the arity of stitch's discovered
-    abstraction (skipped when the passthrough already sets it)."""
+def run_egg_stitch(binary, search, input_path, rewrites, output_path, passthrough, follow=None):
+    """Invoke egg-stitch for one search; return True on exit code 0."""
     defaults = SMC_DEFAULTS if search == "smc" else BF_DEFAULTS
-    if max_arity is not None and "--max-arity" not in _flag_names(passthrough):
-        defaults = defaults + ["--max-arity", str(max_arity)]
     defaults = _drop_overridden(defaults, _flag_names(passthrough))
     cmd = [
         str(binary),
@@ -296,11 +286,11 @@ def main():
         disc_out = outdir / f"{stem}.discovery.out.json"
         print("\n=== discovery (stitch) ===", file=sys.stderr)
         language = language_from_passthrough(passthrough)
-        target, arity = stitch_follow_target(stitch_bin, args.input, language, disc_out)
+        target = stitch_follow_target(stitch_bin, args.input, language, disc_out)
         if target is None:
             print(f"SKIP: stitch found no abstraction for {args.input} — nothing to follow")
             sys.exit(0)
-        print(f"follow target: {target} (arity {arity})", file=sys.stderr)
+        print(f"follow target: {target}", file=sys.stderr)
 
         # 2) Follow runs: both backends must reach a pattern alpha-equivalent
         #    to the discovery target. The match is liberal in one direction —
@@ -314,7 +304,7 @@ def main():
         for search in ("best-first", "smc"):
             out = outdir / f"{stem}.{search}.follow.out.json"
             print(f"\n=== {search} (follow) ===", file=sys.stderr)
-            if not run_egg_stitch(binary, search, args.input, args.rewrites, out, passthrough, follow=target, max_arity=arity):
+            if not run_egg_stitch(binary, search, args.input, args.rewrites, out, passthrough, follow=target):
                 print(f"{search}: search failed", file=sys.stderr)
                 results[search] = False
                 continue
