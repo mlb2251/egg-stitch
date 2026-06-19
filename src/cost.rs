@@ -55,6 +55,26 @@ pub struct SearchStateWithCostSelection<F: crate::lang::LanguageFamily, O: crate
     pub selection: CostSelection,
 }
 
+impl<F: LanguageFamily, O: StitchOp> SearchStateWithCostSelection<F, O> {
+    /// Canonicalizes the winning state's variable order (DFS first-appearance)
+    /// and remaps the selection's `variable_indices` by the same permutation.
+    /// Run on the winner before output/rewrite. We permute the existing
+    /// selection rather than re-running `compute_cost_and_select` because the
+    /// optimiser breaks ties between equal-cost candidates nondeterministically
+    /// (hash-order dependent) — recomputing could pick a different candidate and
+    /// make output flaky. The permutation preserves the exact selection (cost is
+    /// var-order invariant), just renumbered.
+    pub fn canonicalize(&mut self) {
+        let perm = self.state.canonicalize_vars();
+        let vi = &self.selection.candidate.variable_indices;
+        let mut new_vi = vec![Vec::new(); vi.len()];
+        for (k, &nk) in perm.iter().enumerate() {
+            new_vi[nk] = vi[k].clone();
+        }
+        self.selection.candidate.variable_indices = new_vi;
+    }
+}
+
 /// Build a copy of `eclass` in `egraph` with every free DB leaf permuted onto
 /// wrap-lam slots in preparation for the call-site β at `?#k`. For each free
 /// `$n` at recursion depth `initial_depth` (so its index relative to our root

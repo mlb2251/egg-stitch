@@ -249,6 +249,12 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     lower_bound_pruner.print_stats();
 
+    // Canonicalize the winner's var numbering (DFS first-appearance) before
+    // output.
+    if let Some((_, pair)) = best_so_far.as_mut() {
+        pair.canonicalize();
+    }
+
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, best))) = (best_found_at, best_so_far.as_ref()) {
         let state = &best.state;

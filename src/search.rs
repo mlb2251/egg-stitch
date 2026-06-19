@@ -474,6 +474,33 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
+    /// Canonicalizes the pattern's var numbering to DFS first-appearance order
+    /// and remaps the match factor slots to match. Call on the winning state
+    /// before output/rewrite so the abstraction's variable order is canonical.
+    /// Returns the old->new permutation so callers can remap other index-aligned
+    /// data (e.g. a `CostSelection`'s `variable_indices`). Row count is preserved
+    /// (a bijection on slots), so `num_substs` stays valid.
+    pub fn canonicalize_vars(&mut self) -> Vec<usize> {
+        let perm = self.pattern.canonicalize_vars();
+        for m in &mut self.matches {
+            m.factors = m
+                .factors
+                .iter()
+                .map(|f| {
+                    // Remap each slot to its canonical index, then re-sort
+                    // ascending (Factor invariant), permuting row columns to
+                    // match.
+                    let mut idx: Vec<(usize, usize)> = f.slots.iter().enumerate().map(|(pos, &s)| (perm[s], pos)).collect();
+                    idx.sort_unstable();
+                    let new_slots: Vec<usize> = idx.iter().map(|&(ns, _)| ns).collect();
+                    let new_rows: Vec<Vec<Id>> = f.rows.iter().map(|row| idx.iter().map(|&(_, pos)| row[pos]).collect()).collect();
+                    Factor::new(new_slots, new_rows).expect("canonicalize is a bijection; non-empty rows are preserved")
+                })
+                .collect();
+        }
+        perm
+    }
+
     /// Creates the initial search state: a single-variable pattern matching every e-class.
     /// `freeze_rule = true` enables the freeze-based canonical-ordering rule
     /// (best-first); pass `false` to disable the check (e.g. for SMC).
