@@ -548,13 +548,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
-                // Commit to freezing every var of *lower f-rank*: expanding the
-                // var at f-rank `r` forbids ever expanding a lower-f-rank var.
-                // `rank` (var -> f-rank) comes from `enumerate`; we set the
-                // parent bits here and let `expand` relocate them into the
-                // child's var layout. Idempotent on already-frozen slots; the
-                // frozen set need not be contiguous (a reuse may have frozen a
-                // higher-rank slot). Disabled for SMC (`rank` is the identity).
+                // Commit to freezing every var of *lower rank*: expanding the
+                // var at rank `r` forbids ever expanding a lower-rank var.
+                // Disabled for SMC.
                 if self.freeze_rule {
                     let rv = rank[*var_idx];
                     for (j, frozen) in new_pattern.var_frozen.iter_mut().enumerate() {
