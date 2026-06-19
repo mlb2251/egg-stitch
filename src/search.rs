@@ -162,7 +162,7 @@ pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
         child: SearchState<F, O>,
         support: usize,
     },
-    /// `(action, support)` pairs plus the f-rank (`var -> rank`) the freeze rule
+    /// `(action, support)` pairs plus the rank (`var -> rank`) the freeze rule
     /// in `apply_action` needs to mark the right vars frozen when an `Expand`
     /// fires. Identity order for SMC.
     All {
@@ -669,7 +669,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// every (match, factor-row) the var appears in. Reads the precomputed
     /// per-eclass shape histograms ([`SharedSearchData::eclass_shapes`]) and keeps
     /// shapes in enode first-appearance order so the emitted action order is
-    /// deterministic. (`hit` feeds the f-rank; the expand emission ignores it.)
+    /// deterministic. (`hit` feeds the rank; the expand emission ignores it.)
     fn expand_shapes(&self, var_idx: usize, shared: &SharedSearchData<F, O>) -> VarShapes<F, O> {
         let d_k = self.pattern.var_depth[var_idx];
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
@@ -704,11 +704,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         shapes
     }
 
-    /// f-rank ordering over all vars, built from each var's [`Self::expand_shapes`].
-    /// `f(k) = min_shape sup/hit` is the mean enodes per *matching* subst of `k`'s
-    /// cleanest expansion — penalizing per-root fan-out but not breadth.
+    /// Non-expansive ordering over all vars, built from each var's [`Self::expand_shapes`].
+    /// `f(k) = the mean enodes per *matching* subst of `k`'s
+    /// cleanest expansion.
     ///
-    /// Returns `(shapes, rank, order)`. `rank` (var -> f-rank) / `order` (f-rank
+    /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank
     /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
     /// emission order so those act on `f` rather than creation order, *without*
     /// renumbering the pattern. SMC (`freeze_rule = false`) keeps creation order:
