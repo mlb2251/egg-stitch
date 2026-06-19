@@ -86,9 +86,7 @@ fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
 }
 
 /// True iff a candidate expansion shape `disc` cannot be a literal expansion at
-/// a hole of depth `depth` (a free DB-var leaf that would escape its binder).
-/// Takes the discriminant rather than a node so it applies directly to the
-/// precomputed eclass shape histograms.
+/// a hole of depth `depth`
 fn invalid_literal_expansion<D: StitchDisc>(disc: &D, depth: u32) -> bool {
     let Some(dbidx) = disc.de_bruijn_index() else { return false };
     target_is_free_db_var(dbidx, depth)
@@ -140,11 +138,6 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     pub shift_clamp: u32,
     /// Per-eclass `(discriminant, arity, enode-count)` shape histogram,
     /// precomputed once (the e-graph is static during search).
-    /// `enumerate_successor_actions` reads this when computing expand-action
-    /// supports instead of re-walking each eclass's enodes on every (match,
-    /// factor, row) it appears in — the same eclass recurs across many substs,
-    /// so caching the distinct shapes turns the hot loop from an enode traversal
-    /// into a short distinct-shape walk.
     pub eclass_shapes: FxHashMap<Id, EclassShapeHist<F, O>>,
 }
 
