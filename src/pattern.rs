@@ -207,6 +207,36 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         perm
     }
 
+    /// Renumbers vars by `perm` (old index -> new index, a bijection over
+    /// `0..vars.len()`): reorders the index-aligned vecs and rewrites every
+    /// `Var(n)` leaf to its new name. Used by the f-rank search reorder.
+    pub fn apply_var_perm(&mut self, perm: &[usize]) {
+        let n = self.vars.len();
+        let mut new_vars = vec![Vec::new(); n];
+        let mut new_depth = vec![0u32; n];
+        let mut new_occ = vec![0usize; n];
+        let mut new_reusable = vec![false; n];
+        let mut new_frozen = vec![false; n];
+        for (k, &nk) in perm.iter().enumerate() {
+            new_vars[nk] = std::mem::take(&mut self.vars[k]);
+            new_depth[nk] = self.var_depth[k];
+            new_occ[nk] = self.var_occurrences[k];
+            new_reusable[nk] = self.var_reusable[k];
+            new_frozen[nk] = self.var_frozen[k];
+        }
+        for (k, ids) in new_vars.iter().enumerate() {
+            let name = var_node::<F, O>(k as u32);
+            for &id in ids {
+                self.pattern[id] = name.clone();
+            }
+        }
+        self.vars = new_vars;
+        self.var_depth = new_depth;
+        self.var_occurrences = new_occ;
+        self.var_reusable = new_reusable;
+        self.var_frozen = new_frozen;
+    }
+
     /// Unifies two variables. The lower-indexed one is kept; the higher one is
     /// removed and its positions are rewritten to the kept var's name. Trailing
     /// vars shift left by one and have their leaves renamed accordingly. Args may

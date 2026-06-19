@@ -668,7 +668,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `support > 0`; `subset_matches` then guarantees the child's match set is
     /// non-empty.
     #[allow(clippy::type_complexity)]
-    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, opt_useless_inline: bool, max_arity: usize, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> SuccessorEnum<F, O> {
+    pub fn enumerate_successor_actions(&mut self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, opt_useless_inline: bool, max_arity: usize, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> SuccessorEnum<F, O> {
         // Useless-non-frozen inlining is a strictly dominating short-circuit:
         // a constant arg adds no compression, so specialising the body by
         // inlining its size-minimal extraction can only improve cost. Runs
@@ -688,6 +688,74 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // eclass used thousands of times looks like the same support as one
         // that fires on thousands of distinct one-off eclasses.
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
+
+        // Single per-var shape pass, shared by the f-rank reorder below and the
+        // expand-action emission at the end (the prototype's separate reorder
+        // pass folded in here — one egraph traversal per node, not two). For
+        // each var `k` and candidate expansion shape `(disc, arity)`:
+        //   sup = Σ_{match,row} usage·(substs/rows)·|matching enodes|   (action weight)
+        //   hit = Σ_{match,row} usage·(substs/rows)·[≥1 matching enode] (matching substs)
+        type Shape<F, O> = (<F as LanguageFamily>::Discriminant<O>, usize);
+        let mut sup: Vec<FxHashMap<Shape<F, O>, usize>> = (0..n).map(|_| FxHashMap::default()).collect();
+        let mut hit: Vec<FxHashMap<Shape<F, O>, usize>> = (0..n).map(|_| FxHashMap::default()).collect();
+        for m in &self.matches {
+            for f in &m.factors {
+                let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
+                for (pos, &k) in f.slots.iter().enumerate() {
+                    let d_k = self.pattern.var_depth[k];
+                    for row in &f.rows {
+                        let mut per_row: FxHashMap<Shape<F, O>, usize> = FxHashMap::default();
+                        for node in &shared.egraph[row[pos]].nodes {
+                            if invalid_literal_expansion(node, d_k) {
+                                continue;
+                            }
+                            *per_row.entry((node.discriminant(), node.children().len())).or_insert(0) += 1;
+                        }
+                        for (shape, c) in per_row {
+                            *sup[k].entry(shape.clone()).or_insert(0) += c * w;
+                            *hit[k].entry(shape).or_insert(0) += w;
+                        }
+                    }
+                }
+            }
+        }
+
+        // f-rank reorder (best-first only). `f(k) = min_shape sup/hit` = mean
+        // enodes per *matching* subst — penalizes per-root fan-out, not breadth.
+        // Renumber so the freeze prefix, reuse cohort, and `var_idx > max_arity`
+        // skip all act on f instead of creation order. SMC keeps creation order
+        // (its dedup is syntactic), so it skips this.
+        if self.freeze_rule && n > 1 {
+            let fval: Vec<f64> = (0..n).map(|k| sup[k].iter().map(|(shape, &s)| s as f64 / hit[k][shape] as f64).fold(f64::INFINITY, f64::min)).collect();
+            let mut order: Vec<usize> = (0..n).collect();
+            order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
+            let mut perm = vec![0usize; n]; // perm[old] = new rank
+            for (rank, &old) in order.iter().enumerate() {
+                perm[old] = rank;
+            }
+            if perm.iter().enumerate().any(|(i, &p)| i != p) {
+                self.pattern.apply_var_perm(&perm);
+                for m in &mut self.matches {
+                    m.factors = m
+                        .factors
+                        .iter()
+                        .map(|f| {
+                            let mut idx: Vec<(usize, usize)> = f.slots.iter().enumerate().map(|(pos, &s)| (perm[s], pos)).collect();
+                            idx.sort_unstable();
+                            let new_slots: Vec<usize> = idx.iter().map(|&(ns, _)| ns).collect();
+                            let new_rows: Vec<Vec<Id>> = f.rows.iter().map(|row| idx.iter().map(|&(_, pos)| row[pos]).collect()).collect();
+                            Factor::new(new_slots, new_rows).expect("reorder is a bijection; non-empty rows preserved")
+                        })
+                        .collect();
+                }
+                let mut new_sup = vec![FxHashMap::default(); n];
+                for (k, &nk) in perm.iter().enumerate() {
+                    new_sup[nk] = std::mem::take(&mut sup[k]);
+                }
+                sup = new_sup;
+            }
+        }
+
         // `var_reusable` is a best-first canonical-ordering device, mirroring
         // the freeze rule. SMC (freeze_rule = false) ignores it so its reuse
         // exploration stays unrestricted. Reusing two stale (non-reusable)
@@ -755,34 +823,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if self.freeze_rule && self.pattern.var_frozen[var_idx] {
                 continue;
             }
-            let d_k = self.pattern.var_depth[var_idx];
-            let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
-            let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
-            for m in &self.matches {
-                let (fi, pos) = m.locate_slot(var_idx);
-                let f = &m.factors[fi];
-                // Each row of the owning factor stands in for `total/|f.rows|`
-                // full substs (the product of the other factors), so weight the
-                // per-row node contributions by that multiplier.
-                let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
-                for row in &f.rows {
-                    for node in &shared.egraph[row[pos]].nodes {
-                        if invalid_literal_expansion(node, d_k) {
-                            continue;
-                        }
-                        let key = (node.discriminant(), node.children().len());
-                        match shape_idx.get(&key) {
-                            Some(&idx) => shapes[idx].1 += w,
-                            None => {
-                                shape_idx.insert(key.clone(), shapes.len());
-                                shapes.push((key, w));
-                            }
-                        }
-                    }
-                }
-            }
-            for ((op, arity), support) in shapes {
-                out.push((Action::Expand { var_idx, op, arity }, support));
+            // Reuse the shapes already aggregated up front (post-reorder).
+            for ((op, arity), support) in &sup[var_idx] {
+                out.push((Action::Expand { var_idx, op: op.clone(), arity: *arity }, *support));
             }
         }
         SuccessorEnum::All(out)
