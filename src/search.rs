@@ -774,13 +774,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // per-row node contributions by that multiplier.
                 let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
                 for row in &f.rows {
-                    // The eclass's distinct shapes (with multiplicities) are
-                    // precomputed, so this is a short distinct-shape walk rather
-                    // than an enode traversal; a shape with `count` enodes
-                    // contributes `count·w` to its support, exactly as summing
-                    // `w` per matching enode would. Histogram order is enode
-                    // first-appearance order, so the emitted action order (and
-                    // best-first's creation-order tie-break) is unchanged.
                     for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
                         if invalid_literal_expansion(disc, d_k) {
                             continue;
@@ -804,15 +797,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 }
 
-/// Parses the shared-context fields out of CLI args, computes usage counts, and
-/// returns the initial corpus size alongside the populated `SharedSearchData`.
 /// Precomputes each eclass's `(discriminant, arity, count)` shape histogram in
-/// enode first-appearance order. The e-graph is static during search, so an
-/// eclass's distinct enode shapes (and multiplicities) never change — caching
-/// them lets `enumerate_successor_actions` skip re-walking enodes for every
-/// subst. First-appearance order keeps the downstream expand-action emission
-/// (and thus best-first's creation-order tie-break) identical to walking the
-/// enodes directly.
+/// enode first-appearance order. Works because e-graph is never mutated during search.
 fn compute_eclass_shapes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> Vec<EclassShapeHist<F, O>> {
     let len = egraph.classes().map(|c| usize::from(c.id)).max().map_or(0, |m| m + 1);
     let mut out: Vec<EclassShapeHist<F, O>> = vec![Vec::new(); len];
@@ -833,6 +819,8 @@ fn compute_eclass_shapes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F
     out
 }
 
+/// Parses the shared-context fields out of CLI args, computes usage counts, and
+/// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
     // The follow pattern is whatever `display_recexpr` would emit for a
     // pattern: flat-form sexps that may have a `?#k` variable head (e.g.
