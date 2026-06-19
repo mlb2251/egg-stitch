@@ -34,9 +34,10 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub var_occurrences: Vec<usize>,
     /// True iff `?#k` is in the freshest cohort. `expand` flips all
     /// pre-existing vars to false and inserts new children as true; `reuse`
-    /// flips `0..drop_idx` to false (including the kept slot). Search skips
-    /// `Reuse(i, j)` only when *both* are false — that pair would re-merge
-    /// cohorts a prior action already committed to (duplicate canonical).
+    /// flips `0..drop_idx` to false *except* the kept slot (reusing a variable
+    /// shouldn't stop us reusing it again). Search skips `Reuse(i, j)` only
+    /// when *both* are false — that pair would re-merge cohorts a prior action
+    /// already committed to (duplicate canonical).
     pub var_reusable: Vec<bool>,
     /// True iff `?#k` is committed to never being expanded again (the
     /// best-first freeze rule). Maintained here purely as index-aligned
@@ -169,13 +170,13 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Reusing (i, j) commits to a canonical order: any var strictly below
-        // the *higher* of the two participating indices becomes non-reusable,
-        // so future reuses must involve indices ≥ drop_idx (including the
-        // kept slot itself, since we've moved past it).
+        // Stale every var below drop_idx so future reuses go in canonical
+        // (increasing-drop) order — but keep the merged slot reusable: if we
+        // reused a variable we should be able to reuse it again.
         for r in &mut self.var_reusable[..drop_idx] {
             *r = false;
         }
+        self.var_reusable[keep_idx] = true;
         self.var_reusable.remove(drop_idx);
         // The merged var is frozen iff *either* participant was
         self.var_frozen[keep_idx] = self.var_frozen[keep_idx] || self.var_frozen[drop_idx];
