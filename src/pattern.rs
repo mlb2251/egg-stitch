@@ -214,21 +214,19 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Reusing (i, j) commits to a canonical order: any var strictly below
-        // the *higher* of the two participating indices leaves the reusable
-        // cohort (including the kept slot itself, since we've moved past it), so
-        // future reuses must involve indices ≥ drop_idx. `Frozen` vars stay
-        // frozen.
+        // Stale every var below drop_idx so future reuses go in canonical
+        // (increasing-drop) order, but keep the merged slot reusable — reusing a
+        // variable shouldn't stop us reusing it again, so vars can reuse across
+        // nesting (#258). It still inherits the more-restrictive *expand*
+        // commitment: Frozen if either participant was (Frozen ⟹ not reusable,
+        // so freezing wins). Whether the merge itself freezes the kept slot is a
+        // policy decision left to `SearchState::apply_action`.
         for s in &mut self.var_state[..drop_idx] {
             if *s == VarState::ReusableOrExpandable {
                 *s = VarState::Expandable;
             }
         }
-        // The merged var inherits the *more restrictive* of the two states:
-        // dropping a slot must not discard its no-expand commitment. (Whether the
-        // merge itself bans the kept slot is a policy decision left to
-        // `SearchState::apply_action`.)
-        self.var_state[keep_idx] = self.var_state[keep_idx].max(self.var_state[drop_idx]);
+        self.var_state[keep_idx] = if self.var_state[keep_idx] == VarState::Frozen || self.var_state[drop_idx] == VarState::Frozen { VarState::Frozen } else { VarState::ReusableOrExpandable };
         self.var_state.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
