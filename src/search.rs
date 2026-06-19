@@ -780,7 +780,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
 
         // Per-var expansion shapes (first-appearance order, with support) and the
-        // f-rank `rank`/`order`, in one egraph pass. See [`Self::shape_pass`].
+        // `rank`/`order`, in one egraph pass. See [`Self::shape_pass`].
         let (shapes, rank, order) = self.shape_pass(shared);
 
         // `var_reusable` is a best-first canonical-ordering device, mirroring
@@ -840,14 +840,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 out.push((Action::Reuse { keep: i, drop: j }, support));
             }
         }
-        // Emit expands in f-rank order so the `max_arity` cap and heap tie-breaks
+        // Emit expands in rank order so the `max_arity` cap and heap tie-breaks
         // act on the f-order.
         for &var_idx in &order {
-            // Freezing rule: expanding the var at f-rank `r` commits every
-            // lower-f-rank var to never being expanded again (tracked in
-            // `var_frozen`, applied in `apply_action`); `max_arity` caps the
-            // eventual arity in f-rank. Both checks are no-ops for SMC
-            // (freeze_rule = false, identity order, max_arity = usize::MAX).
             if rank[var_idx] > max_arity {
                 continue;
             }
