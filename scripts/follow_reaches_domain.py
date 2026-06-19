@@ -61,15 +61,20 @@ KNOWN_DIVERGENCES = {
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
     # simple1 is `(a a a)`/`(b b b)`; the only compressing abstraction is
     # `(?#0 ?#0 ?#0)` (= `lam x. x x x`), which stitch finds (1.67x). egg-stitch
-    # CAN represent and build it — SMC does, at ~1.5x on a larger corpus — and
-    # best-first reuses a var many times in general (`(f ?#0 ?#0 ?#0)`, even 4x,
-    # even curried). The narrow case best-first misses is the *all-metavar*
-    # self-application: a body with no concrete node anywhere. Any concrete
-    # anchor makes best-first find it (`(f ?#0 ?#0 ?#0)`, `(?#0 ?#0 z)`); only
-    # the bare `(?#0 ?#0 ?#0)` is lost (its canonical-ordering rules prune the
-    # one construction order that reaches it). So this is a best-first
-    # search-completeness gap, not a representational or cost limit. (Both
-    # backends report None: smc also misses it on this 2-program corpus.)
+    # represents and builds it under SMC (~1.5x on a larger corpus), and
+    # best-first reuses a var many times in general (`(f ?#0 ?#0 ?#0)`, even
+    # curried). The one shape best-first misses is this all-metavar
+    # self-application. Its forced construction is expand -> expand ->
+    # dominant-reuse, reaching `(?#0 ?#0 ?#1)` with *both* remaining slots
+    # non-reusable (expand stales pre-existing vars, the reuse stales the merged
+    # slot), so the final reuse(0,1) is skipped by best-first's reuse
+    # canonical-ordering rule (search.rs enumerate_successor_actions, gated on
+    # freeze_rule; SMC disables it) and the heap empties. A concrete anchor
+    # rescues it: the function slot is filled by concretization instead of a
+    # merge (`(f ?#0 ?#0 ?#0)`), or an arg stays fresh for the last merge
+    # (`(?#0 ?#0 z)`), so a valid reuse order exists. A best-first completeness
+    # gap (the rule's "stale+stale reuse is always redundant" assumption is
+    # false here), not a representational or cost limit.
     "data/domains/stitch/simple1.json":
         {"want": "(?#0 ?#0 ?#0)", "got": "None"},
 }
