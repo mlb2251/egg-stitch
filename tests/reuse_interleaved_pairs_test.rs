@@ -43,13 +43,6 @@ fn op_children_pattern(programs: &[&str]) -> String {
 /// without the fix best-first stalls one merge short.
 #[test]
 fn reuse_interleaved_pairs() {
-    let programs = &[
-        "(f (g a b) a b)",
-        "(f (g c d) c d)",
-        "(f (g e h) e h)",
-        "(f (g i j) i j)",
-        "(f (g k l) k l)",
-        "(f (g m n) m n)",
-    ];
+    let programs = &["(f (g a b) a b)", "(f (g c d) c d)", "(f (g e h) e h)", "(f (g i j) i j)", "(f (g k l) k l)", "(f (g m n) m n)"];
     assert_eq!(op_children_pattern(programs), "fn_0: (f (g ?#0 ?#1) ?#0 ?#1)");
 }
