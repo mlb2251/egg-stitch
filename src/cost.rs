@@ -66,12 +66,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchStateWithCostSelection<F, O> {
     /// var-order invariant), just renumbered.
     pub fn canonicalize(&mut self) {
         let perm = self.state.canonicalize_vars();
-        let vi = &mut self.selection.candidate.variable_indices;
+        let vi = &self.selection.candidate.variable_indices;
         let mut new_vi = vec![Vec::new(); vi.len()];
         for (k, &nk) in perm.iter().enumerate() {
-            new_vi[nk] = std::mem::take(&mut vi[k]);
+            new_vi[nk] = vi[k].clone();
         }
-        *vi = new_vi;
+        self.selection.candidate.variable_indices = new_vi;
     }
 }
 
