@@ -157,10 +157,11 @@ jobs:
       - name: search-and-check ${{ matrix.target }}
         run: python3 scripts/search_and_check_domain.py ${{ matrix.target }} -- --language lambda-calc --num-steps 2000
 
-  # For each input in each domain: run best-first to discover an abstraction,
-  # then re-run both backends with `--follow` on that pattern and assert each
-  # reaches it. Guards against regressions where follow mode can no longer
-  # reproduce the abstraction stitch itself finds.
+  # For each input in each domain: run the reference stitch compressor to
+  # discover an abstraction, then re-run both backends with `--follow` on that
+  # pattern and assert each reaches it. Guards against regressions where follow
+  # mode can no longer reproduce the abstraction stitch itself finds. The script
+  # self-clones/builds `../stitch`, so no extra checkout step is needed here.
   follow-reaches-domains:
     needs: list-domains
     runs-on: ubuntu-latest
