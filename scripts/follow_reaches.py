@@ -8,11 +8,8 @@ For a given input (and optional DSR file):
   2. Re-run egg-stitch with `--follow <body>` under both `smc` and
      `best-first`, asserting each run's `library[0].pattern` body matches.
 
-stitch runs with `--no-curried-bodies --no-curried-metavars` so it only
-proposes abstractions egg-stitch can represent (no metavar/body left of an
-app). If it produces no abstraction (the corpus has nothing compressible
-within that space — e.g. `(a a a)`/`(b b b)`, whose only abstraction is the
-operator-position `(#0 #0 #0)`), the input is skipped with a pass.
+If stitch produces no abstraction (e.g. the corpus has no compressible
+abstraction), the input is skipped with a pass — there is nothing to follow.
 
 stitch can't take DSRs, so any `--rewrites` file is applied only to the
 egg-stitch follow runs, not to discovery — the target itself is DSR-free.
@@ -84,16 +81,16 @@ def stitch_follow_target(stitch_bin, input_path, language, output_path):
     follow pattern (stitch's `#k` metavars rewritten to `?#k`), or None when
     stitch finds nothing to abstract.
 
-    Cost flags follow expts.run_models.stitch: `op-children` is the no-apps
+    Cost flags mirror expts.run_models.stitch: `op-children` is the no-apps
     weighting (non-app nodes cost 10000), everything else is apps-equal (all
-    costs 1). Unlike the benchmark, `--no-curried-bodies --no-curried-metavars`
-    are passed on *every* language: egg-stitch can't represent a metavar (or
-    body) to the left of an app, so without them stitch proposes operator-
-    position abstractions (e.g. `(a a a)`/`(b b b)` -> `(#0 #0 #0)`) that egg-
-    stitch can never follow. With them, stitch instead reports no abstraction
-    there, handled by the empty-discovery skip in `main`.
+    costs 1). `--no-curried-bodies --no-curried-metavars` are passed only on
+    op-children, where curried (left-of-app) forms can't be expressed; on
+    lambda-calc both stitch and egg-stitch can represent operator-position
+    metavars, so we leave stitch unconstrained — forbidding them would only
+    handicap stitch into a worse abstraction than egg-stitch finds.
     """
-    cost = "10000" if language == "op-children" else "1"
+    no_apps = language == "op-children"
+    cost = "10000" if no_apps else "1"
     cmd = [
         str(stitch_bin), str(input_path),
         "-i1", f"-a{MAX_ARITY}",
@@ -102,8 +99,9 @@ def stitch_follow_target(stitch_bin, input_path, language, output_path):
         "--cost-app", "1",
         "--cost-var", cost, "--cost-ivar", cost,
         "--cost-prim-default", cost, "--cost-lam", cost,
-        "--no-curried-bodies", "--no-curried-metavars",
     ]
+    if no_apps:
+        cmd += ["--no-curried-bodies", "--no-curried-metavars"]
     print(f"$ {' '.join(cmd)}", file=sys.stderr)
     subprocess.run(cmd, check=True)
     abstractions = json.loads(Path(output_path).read_text()).get("abstractions") or []
