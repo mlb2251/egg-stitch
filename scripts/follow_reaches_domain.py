@@ -52,8 +52,6 @@ KNOWN_DIVERGENCES = {
     # uses / cost 225.) stitch declines the generalisation; egg-stitch takes it.
     "data/domains/text/text_ellisk_2019-01-24T21.49.39__bench003_it3.json":
         {"want": "(lam (lam (fn_170 $0 $1)))", "got": "(lam (lam (fn_170 (?#0 $0) $1)))"},
-    "data/domains/text/text_ellisk_2019-01-24T21.58.02__bench003_it4.json":
-        {"want": "(lam (lam (fn_36 $1 $0)))", "got": "(lam (lam (fn_36 $1 (?#0 $0))))"},
     "data/domains/text/text_ellisk_2019-01-25T20.19.06__bench003_it3.json":
         {"want": "(lam (lam (fn_170 $0 $1)))", "got": "(lam (lam (fn_170 (?#0 $0) $1)))"},
     "data/domains/ho-bugs/cross_slot_shift_memo.json":
