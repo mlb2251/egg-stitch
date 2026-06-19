@@ -147,8 +147,17 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
 /// child (dominance pruning fired) or a list of `(action, support)` pairs the
 /// caller can sample from. SMC builds children lazily only for sampled actions.
 pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
-    Dominant { child: SearchState<F, O>, support: usize },
-    All(Vec<(Action<F::Discriminant<O>>, usize)>),
+    Dominant {
+        child: SearchState<F, O>,
+        support: usize,
+    },
+    /// `(action, support)` pairs plus the f-rank (`var -> rank`) the freeze rule
+    /// in `apply_action` needs to mark the right vars frozen when an `Expand`
+    /// fires. Identity order for SMC.
+    All {
+        actions: Vec<(Action<F::Discriminant<O>>, usize)>,
+        rank: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -523,21 +532,27 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `expand`/`reuse` and the expand-freeze policy is applied inline.
     /// Used by best-first and by SMC after sampling so we don't materialise
     /// child states for successors that don't get picked.
-    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) -> SearchState<F, O> {
+    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, rank: &[usize]) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
-                new_pattern.expand(*var_idx, &target);
-                // Commit to freezing every earlier var: expanding `?#k` forbids
-                // ever expanding `?#j` for `j < k`. Idempotent on already-frozen
-                // slots; freezes a leading run but the set need not stay a
-                // prefix (a reuse may have frozen a later slot). Disabled for SMC.
+                // Commit to freezing every var of *lower f-rank*: expanding the
+                // var at f-rank `r` forbids ever expanding a lower-f-rank var.
+                // `rank` (var -> f-rank) comes from `enumerate`; we set the
+                // parent bits here and let `expand` relocate them into the
+                // child's var layout. Idempotent on already-frozen slots; the
+                // frozen set need not be contiguous (a reuse may have frozen a
+                // higher-rank slot). Disabled for SMC (`rank` is the identity).
                 if self.freeze_rule {
-                    for f in &mut new_pattern.var_frozen[..*var_idx] {
-                        *f = true;
+                    let rv = rank[*var_idx];
+                    for (j, frozen) in new_pattern.var_frozen.iter_mut().enumerate() {
+                        if rank[j] < rv {
+                            *frozen = true;
+                        }
                     }
                 }
+                new_pattern.expand(*var_idx, &target);
                 Self::build_subset_matches(&self.matches, *var_idx, &target, shared)
             }
             Action::Reuse { keep, drop } => {
@@ -668,7 +683,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `support > 0`; `subset_matches` then guarantees the child's match set is
     /// non-empty.
     #[allow(clippy::type_complexity)]
-    pub fn enumerate_successor_actions(&mut self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, opt_useless_inline: bool, max_arity: usize, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> SuccessorEnum<F, O> {
+    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, opt_useless_inline: bool, max_arity: usize, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> SuccessorEnum<F, O> {
         // Useless-non-frozen inlining is a strictly dominating short-circuit:
         // a constant arg adds no compression, so specialising the body by
         // inlining its size-minimal extraction can only improve cost. Runs
@@ -720,41 +735,26 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
 
-        // f-rank reorder (best-first only). `f(k) = min_shape sup/hit` = mean
+        // f-rank ordering (best-first only). `f(k) = min_shape sup/hit` = mean
         // enodes per *matching* subst — penalizes per-root fan-out, not breadth.
-        // Renumber so the freeze prefix, reuse cohort, and `var_idx > max_arity`
-        // skip all act on f instead of creation order. SMC keeps creation order
-        // (its dedup is syntactic), so it skips this.
-        if self.freeze_rule && n > 1 {
+        // We do NOT renumber the pattern/matches; instead `rank` (var -> f-rank)
+        // and `order` (f-rank -> var) are threaded to the only places that
+        // consume the canonical variable order: the `max_arity` expansion skip
+        // and the expand emission order below, plus the freeze rule in
+        // `apply_action` (via the returned `rank`). SMC (freeze_rule = false)
+        // keeps creation order, so `rank`/`order` are the identity there.
+        let (rank, order): (Vec<usize>, Vec<usize>) = if self.freeze_rule && n > 1 {
             let fval: Vec<f64> = (0..n).map(|k| sup[k].iter().map(|(shape, &s)| s as f64 / hit[k][shape] as f64).fold(f64::INFINITY, f64::min)).collect();
             let mut order: Vec<usize> = (0..n).collect();
             order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
-            let mut perm = vec![0usize; n]; // perm[old] = new rank
-            for (rank, &old) in order.iter().enumerate() {
-                perm[old] = rank;
+            let mut rank = vec![0usize; n];
+            for (r, &k) in order.iter().enumerate() {
+                rank[k] = r;
             }
-            if perm.iter().enumerate().any(|(i, &p)| i != p) {
-                self.pattern.apply_var_perm(&perm);
-                for m in &mut self.matches {
-                    m.factors = m
-                        .factors
-                        .iter()
-                        .map(|f| {
-                            let mut idx: Vec<(usize, usize)> = f.slots.iter().enumerate().map(|(pos, &s)| (perm[s], pos)).collect();
-                            idx.sort_unstable();
-                            let new_slots: Vec<usize> = idx.iter().map(|&(ns, _)| ns).collect();
-                            let new_rows: Vec<Vec<Id>> = f.rows.iter().map(|row| idx.iter().map(|&(_, pos)| row[pos]).collect()).collect();
-                            Factor::new(new_slots, new_rows).expect("reorder is a bijection; non-empty rows preserved")
-                        })
-                        .collect();
-                }
-                let mut new_sup = vec![FxHashMap::default(); n];
-                for (k, &nk) in perm.iter().enumerate() {
-                    new_sup[nk] = std::mem::take(&mut sup[k]);
-                }
-                sup = new_sup;
-            }
-        }
+            (rank, order)
+        } else {
+            ((0..n).collect(), (0..n).collect())
+        };
 
         // `var_reusable` is a best-first canonical-ordering device, mirroring
         // the freeze rule. SMC (freeze_rule = false) ignores it so its reuse
@@ -806,29 +806,32 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
-                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared);
+                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, &rank);
                     return SuccessorEnum::Dominant { child, support };
                 }
                 out.push((Action::Reuse { keep: i, drop: j }, support));
             }
         }
-        for var_idx in 0..n {
-            // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k (tracked in `var_frozen`); `max_arity` caps the
-            // eventual arity. Both checks are no-ops for SMC (freeze_rule =
-            // false, max_arity = usize::MAX).
-            if var_idx > max_arity {
+        // Emit expands in f-rank order so the `max_arity` cap and heap tie-breaks
+        // act on the f-order.
+        for &var_idx in &order {
+            // Freezing rule: expanding the var at f-rank `r` commits every
+            // lower-f-rank var to never being expanded again (tracked in
+            // `var_frozen`, applied in `apply_action`); `max_arity` caps the
+            // eventual arity in f-rank. Both checks are no-ops for SMC
+            // (freeze_rule = false, identity order, max_arity = usize::MAX).
+            if rank[var_idx] > max_arity {
                 continue;
             }
             if self.freeze_rule && self.pattern.var_frozen[var_idx] {
                 continue;
             }
-            // Reuse the shapes already aggregated up front (post-reorder).
+            // Reuse the shapes already aggregated up front.
             for ((op, arity), support) in &sup[var_idx] {
                 out.push((Action::Expand { var_idx, op: op.clone(), arity: *arity }, *support));
             }
         }
-        SuccessorEnum::All(out)
+        SuccessorEnum::All { actions: out, rank }
     }
 }
 

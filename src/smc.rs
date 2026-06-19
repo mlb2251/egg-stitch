@@ -95,13 +95,15 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
-        for (mut state, mult) in particles.drain(..) {
+        for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
                     dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
                     continue;
                 }
-                SuccessorEnum::All(actions) => actions,
+                // SMC keeps creation order (`freeze_rule = false`), so the freeze
+                // rule is inert — `apply_action` ignores `rank` below.
+                SuccessorEnum::All { actions, .. } => actions,
             };
             if actions.is_empty() {
                 dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
@@ -115,7 +117,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             }
             for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
-                    let child = state.apply_action(&action, &shared);
+                    let child = state.apply_action(&action, &shared, &[]);
                     dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
                 }
             }
