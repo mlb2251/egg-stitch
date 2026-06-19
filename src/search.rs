@@ -717,9 +717,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // each var `k` and candidate expansion shape `(disc, arity)`:
         //   sup = Σ_{match,row} usage·(substs/rows)·|matching enodes|   (action weight)
         //   hit = Σ_{match,row} usage·(substs/rows)·[≥1 matching enode] (matching substs)
+        // Per var, the candidate shapes in first-appearance order, each carrying
+        // (sup, hit). Insertion order (not a hash map) keeps the expand-action
+        // emission deterministic, so best-first's creation-order tie-break stays
+        // depth-first instead of hash-arbitrary.
         type Shape<F, O> = (<F as LanguageFamily>::Discriminant<O>, usize);
-        let mut sup: Vec<FxHashMap<Shape<F, O>, usize>> = (0..n).map(|_| FxHashMap::default()).collect();
-        let mut hit: Vec<FxHashMap<Shape<F, O>, usize>> = (0..n).map(|_| FxHashMap::default()).collect();
+        let mut shapes: Vec<Vec<(Shape<F, O>, usize, usize)>> = (0..n).map(|_| Vec::new()).collect();
+        let mut shape_idx: Vec<FxHashMap<Shape<F, O>, usize>> = (0..n).map(|_| FxHashMap::default()).collect();
         for m in &self.matches {
             for f in &m.factors {
                 let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
@@ -736,8 +740,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                                 continue;
                             }
                             let shape = (disc.clone(), *arity);
-                            *sup[k].entry(shape.clone()).or_insert(0) += count * w;
-                            *hit[k].entry(shape).or_insert(0) += w;
+                            match shape_idx[k].get(&shape) {
+                                Some(&p) => {
+                                    shapes[k][p].1 += count * w;
+                                    shapes[k][p].2 += w;
+                                }
+                                None => {
+                                    shape_idx[k].insert(shape.clone(), shapes[k].len());
+                                    shapes[k].push((shape, count * w, w));
+                                }
+                            }
                         }
                     }
                 }
@@ -753,7 +765,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // `apply_action` (via the returned `rank`). SMC (freeze_rule = false)
         // keeps creation order, so `rank`/`order` are the identity there.
         let (rank, order): (Vec<usize>, Vec<usize>) = if self.freeze_rule && n > 1 {
-            let fval: Vec<f64> = (0..n).map(|k| sup[k].iter().map(|(shape, &s)| s as f64 / hit[k][shape] as f64).fold(f64::INFINITY, f64::min)).collect();
+            let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|(_, s, h)| *s as f64 / *h as f64).fold(f64::INFINITY, f64::min)).collect();
             let mut order: Vec<usize> = (0..n).collect();
             order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
             let mut rank = vec![0usize; n];
@@ -835,8 +847,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if self.freeze_rule && self.pattern.var_frozen[var_idx] {
                 continue;
             }
-            // Reuse the shapes already aggregated up front.
-            for ((op, arity), support) in &sup[var_idx] {
+            // Reuse the shapes already aggregated up front (first-appearance order).
+            for ((op, arity), support, _) in &shapes[var_idx] {
                 out.push((Action::Expand { var_idx, op: op.clone(), arity: *arity }, *support));
             }
         }
@@ -848,14 +860,26 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 /// The e-graph is static during search, so an eclass's distinct enode shapes
 /// (and their multiplicities) never change — caching them lets the shape pass
 /// in `enumerate_successor_actions` skip re-walking enodes for every subst.
+/// Shapes are kept in enode first-appearance order (not hash order) so the
+/// expand-action emission downstream is deterministic and matches the enode
+/// layout — best-first breaks priority ties by creation order, so a stable
+/// emission order keeps tie-breaking depth-first rather than hash-arbitrary.
 fn compute_eclass_shapes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> FxHashMap<Id, Vec<(F::Discriminant<O>, usize, usize)>> {
     let mut out = FxHashMap::default();
     for class in egraph.classes() {
-        let mut hist: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
+        let mut idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
+        let mut hist: Vec<(F::Discriminant<O>, usize, usize)> = Vec::new();
         for node in &class.nodes {
-            *hist.entry((node.discriminant(), node.children().len())).or_insert(0) += 1;
+            let key = (node.discriminant(), node.children().len());
+            match idx.get(&key) {
+                Some(&p) => hist[p].2 += 1,
+                None => {
+                    idx.insert(key.clone(), hist.len());
+                    hist.push((key.0, key.1, 1));
+                }
+            }
         }
-        out.insert(class.id, hist.into_iter().map(|((d, a), c)| (d, a, c)).collect());
+        out.insert(class.id, hist);
     }
     out
 }
