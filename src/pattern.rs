@@ -12,11 +12,21 @@ use rustc_hash::FxHashMap;
 /// so a pattern is just "the same Language as programs, with pattern variables
 /// added to the Op slot."
 ///
-/// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds a
-/// node whose op is `OpWithVar::Var(egg::Var::from(k as u32))` — so the tree's
-/// var names match their DFS first-appearance order. `expand` and `reuse`
-/// preserve this by rewriting affected var leaves, so `pattern.to_string()`
-/// is canonical: alpha-equivalent patterns render identically.
+/// Leaf-name invariant: for every `k`, every `Id` in `vars[k]` holds a node
+/// whose op is `OpWithVar::Var(egg::Var::from(k as u32))` — leaf names always
+/// match their array index. `expand`/`reuse`/`canonicalize_vars` all preserve
+/// this.
+///
+/// During search, vars are numbered in append/creation order (`expand` appends
+/// new children at the end), *not* DFS first-appearance order — this keeps the
+/// deepening point's index climbing into the `var_idx > max_arity` expansion
+/// skip, which bounds runaway spines. The trade-off: `to_string` is not
+/// canonical mid-search (alpha-equivalent patterns built by different expansion
+/// sequences can render differently, so `SeenTracker` dedup is exact only when
+/// their numbering coincides — which the freeze rule arranges for
+/// search-reachable patterns). `canonicalize_vars` renumbers to DFS order,
+/// restoring canonicality; it's applied to the winning abstraction before
+/// output/rewrite.
 /// The storage type backing a `Pattern<F, O>`: the program language
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
@@ -65,10 +75,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         }
     }
 
-    /// Expands the variable at `var_idx` with `target`. New children are inserted
-    /// at list positions `var_idx..var_idx+k`; any vars that previously followed
-    /// `var_idx` shift right and get their in-tree `Var(n)` leaves rewritten to
-    /// match their new position, so the canonical-form invariant is preserved.
+    /// Expands the variable at `var_idx` with `target`. `var_idx`'s slot is
+    /// dropped, the trailing vars shift down one, and the new child vars are
+    /// *appended* at the end of the list (creation-order numbering), so a
+    /// deepening pattern's growth point climbs in index — see the type-level docs
+    /// and `canonicalize_vars`. All `Var(n)` leaves are rewritten to their new
+    /// names, preserving the leaf-name invariant.
     ///
     /// Each new child meta-var inherits the parent's binder depth, plus one if
     /// `target.discriminant().binds_child(j)` is true for that slot — i.e., a
@@ -77,8 +89,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// When `?#var_idx` occupies multiple positions (from a prior `reuse`), every
     /// occurrence is expanded *independently*: each gets its own copy of the new
     /// enode and its own freshly-created child nodes. The pattern stays a pure
-    /// tree — no node is shared between occurrences — so `vars[var_idx+j]` ends up
-    /// with one id per occurrence rather than a single DAG-shared id.
+    /// tree — no node is shared between occurrences — so each new child var ends
+    /// up with one id per occurrence rather than a single DAG-shared id.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         // Per-occurrence structural depths, snapshotted before any mutation.
         let depths = self.occurrence_depths();
@@ -100,30 +112,33 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let num_children = target.len();
         let target_disc = target.discriminant();
 
-        // Shift names of trailing vars: a var currently at post-removal index p
-        // will end up at post-insertion index p + num_children, so rename its leaves.
-        // (Skip the no-op case num_children == 1 where indices don't move.)
-        if num_children != 1 {
-            for p in var_idx..self.vars.len() {
-                let shifted = var_node::<F, O>((p + num_children) as u32);
-                for &id in &self.vars[p] {
-                    self.pattern[id] = shifted.clone();
-                }
+        // Removing `var_idx` shifted every trailing var down one slot, so rename
+        // its leaves `var(p+1) -> var(p)`. New children are *appended* at the end
+        // (creation-order numbering) rather than spliced in at `var_idx`, so the
+        // deepening point's index climbs and the `var_idx > max_arity` expansion
+        // skip can bound spine depth. `canonicalize_vars` restores DFS order for
+        // output.
+        for p in var_idx..self.vars.len() {
+            let shifted = var_node::<F, O>(p as u32);
+            for &id in &self.vars[p] {
+                self.pattern[id] = shifted.clone();
             }
         }
 
-        // Insert the `num_children` new var slots (names var_idx..var_idx+k).
-        // Positions are filled in below — one freshly-created node per occurrence
-        // of the expanded var, since we never share nodes across occurrences.
+        // Append the `num_children` new var slots at the end (names
+        // base..base+num_children). Positions are filled in below — one
+        // freshly-created node per occurrence of the expanded var, since we never
+        // share nodes across occurrences.
+        let base = self.vars.len();
         for j in 0..num_children {
-            self.vars.insert(var_idx + j, Vec::with_capacity(var_positions.len()));
+            self.vars.push(Vec::with_capacity(var_positions.len()));
             let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
-            self.var_depth.insert(var_idx + j, child_depth);
+            self.var_depth.push(child_depth);
             // The new enode replaces every occurrence of the parent var, so the
             // syntactic walk visits each new child exactly `parent_occ` times.
-            self.var_occurrences.insert(var_idx + j, parent_occ);
-            self.var_reusable.insert(var_idx + j, true);
-            self.var_frozen.insert(var_idx + j, false);
+            self.var_occurrences.push(parent_occ);
+            self.var_reusable.push(true);
+            self.var_frozen.push(false);
         }
 
         // Expand each occurrence of the var independently: build its own enode
@@ -136,23 +151,21 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             let disc = shift_db_disc::<F, O>(target_disc.clone(), delta);
             let mut new_children = Vec::with_capacity(num_children);
             for j in 0..num_children {
-                self.pattern.nodes.push(var_node::<F, O>((var_idx + j) as u32));
+                self.pattern.nodes.push(var_node::<F, O>((base + j) as u32));
                 let new_id = Id::from(self.pattern.nodes.len() - 1);
                 new_children.push(new_id);
-                self.vars[var_idx + j].push(new_id);
+                self.vars[base + j].push(new_id);
             }
             let new_node = F::make(F::map_discriminant(disc, OpWithVar::Node), new_children);
             self.pattern[var_id] = new_node;
         }
     }
 
-    /// Renumbers metavars into DFS first-appearance order. `expand`/`reuse`
-    /// already maintain this invariant incrementally, so this is the identity on
-    /// patterns they produce; it's provided as an explicit, order-source-agnostic
-    /// canonicalization to run on a result before output/rewrite (e.g. if a
-    /// future search numbers vars in a different order). Returns `perm` (old var
-    /// index -> new canonical index) so callers can remap index-aligned data such
-    /// as match factor slots.
+    /// Renumbers metavars into DFS first-appearance order, restoring the
+    /// canonical form. Search numbers vars in append/creation order (`expand`
+    /// appends), which is not DFS, so this is run on the winning abstraction
+    /// before output/rewrite. Returns `perm` (old var index -> new canonical
+    /// index) so callers can remap index-aligned data such as match factor slots.
     pub fn canonicalize_vars(&mut self) -> Vec<usize> {
         let n = self.vars.len();
         // RevExpr position -> owning var index.
@@ -490,21 +503,25 @@ mod tests {
     fn expand_nested_left_first() {
         let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
-        p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
+        p.expand(0, &op("-", 2)); // append order: (+ (- ?#1 ?#2) ?#0)
+        // `expand` numbers in append/creation order; `canonicalize_vars`
+        // restores DFS first-appearance order before we check canonical form.
+        p.canonicalize_vars();
         assert_eq!(p.to_string(), "(+ (- ?#0 ?#1) ?#2)");
         assert_eq!(p.vars.len(), 3);
         assert_vars_canonical(&p);
     }
 
     #[test]
-    fn canonicalize_vars_is_identity_on_canonical_patterns() {
-        // `expand`/`reuse` already maintain DFS first-appearance order, so
-        // canonicalize_vars must leave their output untouched (and report the
-        // identity permutation).
+    fn canonicalize_vars_is_idempotent() {
+        // `expand` numbers in append/creation order (not DFS), so the first
+        // canonicalize may renumber; a second canonicalize on the now-canonical
+        // pattern must be the identity (and leave it untouched).
         let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2));
-        p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
-        p.reuse(1, 2); // (+ (- ?#0 ?#1) ?#1)
+        p.expand(0, &op("-", 2));
+        p.reuse(1, 2);
+        p.canonicalize_vars();
         let before = p.to_string();
         let depth = p.var_depth.clone();
         let occ = p.var_occurrences.clone();
@@ -647,10 +664,14 @@ mod tests {
         a.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
 
         let mut b: Pattern<OpChildren, Op> = Pattern::single_var();
-        b.expand(0, &op("+", 2));
-        b.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) ?#2)
-        b.expand(2, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#2 ?#3))
+        b.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
+        b.expand(0, &op("*", 2)); // append order: (+ (* ?#1 ?#2) ?#0)
+        b.expand(0, &op("*", 2)); // expand the +'s 2nd child (now index 0): (+ (* ?#0 ?#1) (* ?#2 ?#3))
 
+        // Search numbers in append order; canonicalize to DFS before checking
+        // the canonical rendering.
+        a.canonicalize_vars();
+        b.canonicalize_vars();
         assert_ne!(a.to_string(), b.to_string());
         assert_eq!(a.to_string(), "(+ (* ?#0 ?#1) (* ?#0 ?#1))");
         assert_eq!(b.to_string(), "(+ (* ?#0 ?#1) (* ?#2 ?#3))");

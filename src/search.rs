@@ -249,11 +249,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// pattern-internal binders are handled at apply/cost time by η-wrapping
     /// (see `enumerate_candidates` and `shift_free_egraph`), so the match set
     /// stays permissive and search keeps exploring those branches.
-    fn build_subset_matches(parent_matches: &[MatchAtEClass], var_idx: usize, target: &F::Apply<O>, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
-        // var_idx → k contiguous slots; higher slots bump by k-1 (k may be 0 for
-        // a leaf, shifting them down — hence isize).
+    fn build_subset_matches(parent_matches: &[MatchAtEClass], var_idx: usize, target: &F::Apply<O>, num_vars: usize, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
+        // Mirrors `Pattern::expand`'s append numbering: `var_idx` is dropped,
+        // every higher slot shifts down by 1, and the `arity_e` child slots are
+        // *appended* at the end (names `base..base+arity_e`, base = num_vars-1).
+        // Slots stay strictly ascending since base exceeds every shifted slot.
         let arity_e = target.children().len();
-        let delta = arity_e as isize - 1;
+        let base = num_vars - 1;
         rebuild_matches(
             parent_matches,
             |m| {
@@ -261,30 +263,29 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let f = &m.factors[owner];
                 let mut new_slots: Vec<usize> = Vec::with_capacity(f.slots.len() + arity_e.saturating_sub(1));
                 for &s in &f.slots {
-                    if s == var_idx {
-                        new_slots.extend(var_idx..var_idx + arity_e);
-                    } else if s > var_idx {
-                        new_slots.push((s as isize + delta) as usize);
-                    } else {
+                    if s < var_idx {
                         new_slots.push(s);
+                    } else if s > var_idx {
+                        new_slots.push(s - 1);
                     }
                 }
+                new_slots.extend(base..base + arity_e);
                 let built = rebuild_factor(new_slots, &f.rows, |row, rows| {
                     for node in &shared.egraph[row[pos]].nodes {
                         if !node.matches(target) {
                             continue;
                         }
+                        // Drop the var_idx column, append the children at the end
+                        // to match the appended slot names.
                         let mut nr = row.to_vec();
                         nr.remove(pos);
-                        for (j, child_id) in node.children().iter().enumerate() {
-                            nr.insert(pos + j, *child_id);
-                        }
+                        nr.extend(node.children().iter().copied());
                         rows.push(nr);
                     }
                 })?;
                 Some((vec![owner], built))
             },
-            |f| renumber_factor(f, var_idx, delta),
+            |f| renumber_factor(f, var_idx, -1),
         )
     }
 
@@ -538,7 +539,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         *f = true;
                     }
                 }
-                Self::build_subset_matches(&self.matches, *var_idx, &target, shared)
+                Self::build_subset_matches(&self.matches, *var_idx, &target, self.pattern.vars.len(), shared)
             }
             Action::Reuse { keep, drop } => {
                 let var_idx = *keep;
