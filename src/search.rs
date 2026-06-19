@@ -74,12 +74,18 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     }
 }
 
-/// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k` —
-/// i.e. an invalid literal expansion at a hole of depth `d_k` (the var would
-/// escape its binder). Applied per-depth in the shape pass to the precomputed
-/// eclass shape histograms.
+/// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
 fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
     (dbidx as u32) >= d_k
+}
+
+/// True iff a candidate expansion shape `disc` cannot be a literal expansion at
+/// a hole of depth `depth` (a free DB-var leaf that would escape its binder).
+/// Takes the discriminant rather than a node so it applies directly to the
+/// precomputed eclass shape histograms.
+fn invalid_literal_expansion<D: StitchDisc>(disc: &D, depth: u32) -> bool {
+    let Some(dbidx) = disc.de_bruijn_index() else { return false };
+    target_is_free_db_var(dbidx, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -724,9 +730,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         // precomputed; each contributes `count·w` to `sup` and one
                         // `w` to `hit` (the per-shape-per-row dedup is implicit in
                         // the histogram). Free DB-var leaves above `d_k` are still
-                        // filtered per-depth (`invalid_literal_expansion`).
+                        // filtered per-depth.
                         for (disc, arity, count) in &shared.eclass_shapes[&row[pos]] {
-                            if disc.de_bruijn_index().is_some_and(|dbidx| target_is_free_db_var(dbidx, d_k)) {
+                            if invalid_literal_expansion(disc, d_k) {
                                 continue;
                             }
                             let shape = (disc.clone(), *arity);
