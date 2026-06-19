@@ -137,8 +137,9 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// path — recomputing it per call would be O(enodes) each time.
     pub shift_clamp: u32,
     /// Per-eclass `(discriminant, arity, enode-count)` shape histogram,
-    /// precomputed once (the e-graph is static during search).
-    pub eclass_shapes: FxHashMap<Id, EclassShapeHist<F, O>>,
+    /// precomputed once (the e-graph is static during search). Indexed by
+    /// canonical eclass id — sound because no unions happen during search.
+    pub eclass_shapes: Vec<EclassShapeHist<F, O>>,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -780,7 +781,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     // `w` per matching enode would. Histogram order is enode
                     // first-appearance order, so the emitted action order (and
                     // best-first's creation-order tie-break) is unchanged.
-                    for (disc, arity, count) in &shared.eclass_shapes[&row[pos]] {
+                    for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
                         if invalid_literal_expansion(disc, d_k) {
                             continue;
                         }
@@ -812,11 +813,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 /// subst. First-appearance order keeps the downstream expand-action emission
 /// (and thus best-first's creation-order tie-break) identical to walking the
 /// enodes directly.
-fn compute_eclass_shapes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> FxHashMap<Id, EclassShapeHist<F, O>> {
-    let mut out = FxHashMap::default();
+fn compute_eclass_shapes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> Vec<EclassShapeHist<F, O>> {
+    let len = egraph.classes().map(|c| usize::from(c.id)).max().map_or(0, |m| m + 1);
+    let mut out: Vec<EclassShapeHist<F, O>> = vec![Vec::new(); len];
     for class in egraph.classes() {
         let mut idx: FxHashMap<Shape<F, O>, usize> = FxHashMap::default();
-        let mut hist: EclassShapeHist<F, O> = Vec::new();
+        let hist = &mut out[usize::from(class.id)];
         for node in &class.nodes {
             let key = (node.discriminant(), node.children().len());
             match idx.get(&key) {
@@ -827,7 +829,6 @@ fn compute_eclass_shapes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F
                 }
             }
         }
-        out.insert(class.id, hist);
     }
     out
 }
