@@ -74,18 +74,12 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     }
 }
 
-/// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
+/// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k` —
+/// i.e. an invalid literal expansion at a hole of depth `d_k` (the var would
+/// escape its binder). Applied per-depth in the shape pass to the precomputed
+/// eclass shape histograms.
 fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
     (dbidx as u32) >= d_k
-}
-
-/// True iff `target` cannot be expanded to in a literal expansion.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
-where
-    L::Discriminant: StitchDisc,
-{
-    let Some(dbidx) = target.discriminant().de_bruijn_index() else { return false };
-    target_is_free_db_var(dbidx, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -132,6 +126,13 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// e-graph isn't unioned during search, and `shift_equal` is on the hot
     /// path — recomputing it per call would be O(enodes) each time.
     pub shift_clamp: u32,
+    /// Per-eclass `(discriminant, arity, enode-count)` histogram, precomputed
+    /// once (the e-graph is static during search). `enumerate_successor_actions`
+    /// reads this for the f-rank/expand shape pass instead of re-walking each
+    /// eclass's enodes on every (match, factor, row) it appears in — the same
+    /// eclass recurs across many substs, so caching the distinct shapes turns
+    /// the hot loop from an enode traversal into a short distinct-shape walk.
+    pub eclass_shapes: FxHashMap<Id, Vec<(F::Discriminant<O>, usize, usize)>>,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -719,15 +720,17 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 for (pos, &k) in f.slots.iter().enumerate() {
                     let d_k = self.pattern.var_depth[k];
                     for row in &f.rows {
-                        let mut per_row: FxHashMap<Shape<F, O>, usize> = FxHashMap::default();
-                        for node in &shared.egraph[row[pos]].nodes {
-                            if invalid_literal_expansion(node, d_k) {
+                        // The eclass's distinct shapes (with multiplicities) are
+                        // precomputed; each contributes `count·w` to `sup` and one
+                        // `w` to `hit` (the per-shape-per-row dedup is implicit in
+                        // the histogram). Free DB-var leaves above `d_k` are still
+                        // filtered per-depth (`invalid_literal_expansion`).
+                        for (disc, arity, count) in &shared.eclass_shapes[&row[pos]] {
+                            if disc.de_bruijn_index().is_some_and(|dbidx| target_is_free_db_var(dbidx, d_k)) {
                                 continue;
                             }
-                            *per_row.entry((node.discriminant(), node.children().len())).or_insert(0) += 1;
-                        }
-                        for (shape, c) in per_row {
-                            *sup[k].entry(shape.clone()).or_insert(0) += c * w;
+                            let shape = (disc.clone(), *arity);
+                            *sup[k].entry(shape.clone()).or_insert(0) += count * w;
                             *hit[k].entry(shape).or_insert(0) += w;
                         }
                     }
@@ -835,6 +838,22 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 }
 
+/// Precomputes each eclass's `(discriminant, arity, count)` shape histogram.
+/// The e-graph is static during search, so an eclass's distinct enode shapes
+/// (and their multiplicities) never change — caching them lets the shape pass
+/// in `enumerate_successor_actions` skip re-walking enodes for every subst.
+fn compute_eclass_shapes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> FxHashMap<Id, Vec<(F::Discriminant<O>, usize, usize)>> {
+    let mut out = FxHashMap::default();
+    for class in egraph.classes() {
+        let mut hist: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
+        for node in &class.nodes {
+            *hist.entry((node.discriminant(), node.children().len())).or_insert(0) += 1;
+        }
+        out.insert(class.id, hist.into_iter().map(|((d, a), c)| (d, a, c)).collect());
+    }
+    out
+}
+
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
 /// returns the initial corpus size alongside the populated `SharedSearchData`.
 pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> (SharedSearchData<F, O>, crate::cost::CostCache, usize) {
@@ -846,6 +865,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
+    let eclass_shapes = compute_eclass_shapes::<F, O>(&egraph);
     let shared = SharedSearchData {
         egraph,
         root,
@@ -853,6 +873,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         usage_counts,
         check_slow: args.check_slow,
         shift_clamp,
+        eclass_shapes,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, false);
