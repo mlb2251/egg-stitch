@@ -392,17 +392,25 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
+    let best_node_id = best.as_ref().map(|(_, id, _)| *id);
+    // Search numbers vars in append/creation order; canonicalize the winner to
+    // DFS first-appearance order and re-derive its cost selection before it's
+    // handed off for output/rewrite (cost is var-order invariant).
+    let best_pair = best.map(|(cost, id, _selection)| {
+        let mut state = nodes[id].state.clone();
+        state.canonicalize_vars();
+        let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &state, shared.check_slow);
+        debug_assert_eq!(selection.cost, cost, "canonicalization must not change cost");
+        (cost, SearchStateWithCostSelection { state, selection })
+    });
+
     println!("\n{}", "═══ RESULT ═══".green().bold());
-    if let (Some(iter), Some((cost, best_id, _))) = (best_found_at, best.as_ref()) {
-        let state = &nodes[*best_id].state;
+    if let (Some(iter), Some((cost, pair))) = (best_found_at, best_pair.as_ref()) {
         println!("{} {}", "best found at expansion:".dimmed(), iter.to_string().yellow());
-        println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
+        println!("{} {}", "pattern:".dimmed(), pair.state.pattern.to_string().cyan().bold());
         println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
         println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
     }
-
-    let best_node_id = best.as_ref().map(|(_, id, _)| *id);
-    let best_pair = best.map(|(cost, id, selection)| (cost, SearchStateWithCostSelection { state: nodes[id].state.clone(), selection }));
 
     let tree_log = if debug {
         let weights = shared.egraph.analysis.weights;

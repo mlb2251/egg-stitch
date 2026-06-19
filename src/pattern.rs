@@ -145,6 +145,67 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         }
     }
 
+    /// Renumbers metavars into DFS first-appearance order. `expand`/`reuse`
+    /// already maintain this invariant incrementally, so this is the identity on
+    /// patterns they produce; it's provided as an explicit, order-source-agnostic
+    /// canonicalization to run on a result before output/rewrite (e.g. if a
+    /// future search numbers vars in a different order). Returns `perm` (old var
+    /// index -> new canonical index) so callers can remap index-aligned data such
+    /// as match factor slots.
+    pub fn canonicalize_vars(&mut self) -> Vec<usize> {
+        let n = self.vars.len();
+        // RevExpr position -> owning var index.
+        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
+        for (k, ids) in self.vars.iter().enumerate() {
+            for &id in ids {
+                pos_to_k.insert(usize::from(id), k);
+            }
+        }
+        // DFS pre-order from the root (Id 0), ranking vars at first appearance.
+        let mut perm = vec![usize::MAX; n];
+        let mut next = 0usize;
+        let mut stack = vec![Id::from(0)];
+        while let Some(id) = stack.pop() {
+            if let Some(&k) = pos_to_k.get(&usize::from(id))
+                && perm[k] == usize::MAX
+            {
+                perm[k] = next;
+                next += 1;
+            }
+            for &c in self.pattern[id].children().iter().rev() {
+                stack.push(c);
+            }
+        }
+        debug_assert!(perm.iter().all(|&p| p != usize::MAX), "every var must appear in the tree");
+
+        // Reorder the index-aligned vecs (new[perm[k]] = old[k]).
+        let mut new_vars = vec![Vec::new(); n];
+        let mut new_depth = vec![0u32; n];
+        let mut new_occ = vec![0usize; n];
+        let mut new_reusable = vec![false; n];
+        let mut new_frozen = vec![false; n];
+        for (k, &nk) in perm.iter().enumerate() {
+            new_vars[nk] = std::mem::take(&mut self.vars[k]);
+            new_depth[nk] = self.var_depth[k];
+            new_occ[nk] = self.var_occurrences[k];
+            new_reusable[nk] = self.var_reusable[k];
+            new_frozen[nk] = self.var_frozen[k];
+        }
+        // Rename the leaves to the canonical var names.
+        for (k, ids) in new_vars.iter().enumerate() {
+            let name = var_node::<F, O>(k as u32);
+            for &id in ids {
+                self.pattern[id] = name.clone();
+            }
+        }
+        self.vars = new_vars;
+        self.var_depth = new_depth;
+        self.var_occurrences = new_occ;
+        self.var_reusable = new_reusable;
+        self.var_frozen = new_frozen;
+        perm
+    }
+
     /// Unifies two variables. The lower-indexed one is kept; the higher one is
     /// removed and its positions are rewritten to the kept var's name. Trailing
     /// vars shift left by one and have their leaves renamed accordingly. Args may
@@ -431,6 +492,50 @@ mod tests {
         p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
         assert_eq!(p.to_string(), "(+ (- ?#0 ?#1) ?#2)");
         assert_eq!(p.vars.len(), 3);
+        assert_vars_canonical(&p);
+    }
+
+    #[test]
+    fn canonicalize_vars_is_identity_on_canonical_patterns() {
+        // `expand`/`reuse` already maintain DFS first-appearance order, so
+        // canonicalize_vars must leave their output untouched (and report the
+        // identity permutation).
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
+        p.expand(0, &op("+", 2));
+        p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
+        p.reuse(1, 2); // (+ (- ?#0 ?#1) ?#1)
+        let before = p.to_string();
+        let depth = p.var_depth.clone();
+        let occ = p.var_occurrences.clone();
+        let perm = p.canonicalize_vars();
+        assert_eq!(perm, (0..p.vars.len()).collect::<Vec<_>>(), "already canonical => identity perm");
+        assert_eq!(p.to_string(), before);
+        assert_eq!(p.var_depth, depth);
+        assert_eq!(p.var_occurrences, occ);
+        assert_vars_canonical(&p);
+    }
+
+    #[test]
+    fn canonicalize_vars_reorders_non_canonical_numbering() {
+        // Build `(+ ?#0 ?#1)`, then manually swap the two vars' names/arrays so
+        // the leaves read `(+ ?#1 ?#0)` (not DFS order). canonicalize_vars must
+        // renumber back to `(+ ?#0 ?#1)` and report the swap permutation.
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
+        p.expand(0, &op("+", 2));
+        p.vars.swap(0, 1);
+        p.var_depth.swap(0, 1);
+        p.var_occurrences.swap(0, 1);
+        p.var_reusable.swap(0, 1);
+        p.var_frozen.swap(0, 1);
+        for (k, ids) in p.vars.clone().iter().enumerate() {
+            for &id in ids {
+                p.pattern[id] = var_node::<OpChildren, Op>(k as u32);
+            }
+        }
+        assert_eq!(p.to_string(), "(+ ?#1 ?#0)");
+        let perm = p.canonicalize_vars();
+        assert_eq!(perm, vec![1, 0]);
+        assert_eq!(p.to_string(), "(+ ?#0 ?#1)");
         assert_vars_canonical(&p);
     }
 
