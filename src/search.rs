@@ -648,6 +648,44 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         best
     }
 
+    /// The candidate expansion shapes for `?#var_idx`: every distinct
+    /// `(discriminant, arity)` its bound eclass admits (free DB-var leaves above
+    /// the hole's depth excluded), each paired with its `usage·(substs/rows)`-
+    /// weighted support summed over every (match, factor-row) the var appears in.
+    /// Reads the precomputed per-eclass shape histograms
+    /// ([`SharedSearchData::eclass_shapes`]) and keeps shapes in enode
+    /// first-appearance order so the emitted action order is deterministic.
+    fn expand_shapes(&self, var_idx: usize, shared: &SharedSearchData<F, O>) -> Vec<(Shape<F, O>, usize)> {
+        let d_k = self.pattern.var_depth[var_idx];
+        let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
+        let mut shape_idx: FxHashMap<Shape<F, O>, usize> = FxHashMap::default();
+        let mut shapes: Vec<(Shape<F, O>, usize)> = Vec::new();
+        for m in &self.matches {
+            let (fi, pos) = m.locate_slot(var_idx);
+            let f = &m.factors[fi];
+            // Each row of the owning factor stands in for `total/|f.rows|`
+            // full substs (the product of the other factors), so weight the
+            // per-row node contributions by that multiplier.
+            let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
+            for row in &f.rows {
+                for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
+                    if invalid_literal_expansion(disc, d_k) {
+                        continue;
+                    }
+                    let key = (disc.clone(), *arity);
+                    match shape_idx.get(&key) {
+                        Some(&idx) => shapes[idx].1 += count * w,
+                        None => {
+                            shape_idx.insert(key.clone(), shapes.len());
+                            shapes.push((key, count * w));
+                        }
+                    }
+                }
+            }
+        }
+        shapes
+    }
+
     /// Returns the enumerable successors of `self`. When dominance pruning
     /// fires, the single dominant child is built and returned via
     /// `SuccessorEnum::Dominant`; otherwise `SuccessorEnum::All` lists every
@@ -764,33 +802,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if self.freeze_rule && self.pattern.var_frozen[var_idx] {
                 continue;
             }
-            let d_k = self.pattern.var_depth[var_idx];
-            let mut shape_idx: FxHashMap<Shape<F, O>, usize> = FxHashMap::default();
-            let mut shapes: Vec<(Shape<F, O>, usize)> = Vec::new();
-            for m in &self.matches {
-                let (fi, pos) = m.locate_slot(var_idx);
-                let f = &m.factors[fi];
-                // Each row of the owning factor stands in for `total/|f.rows|`
-                // full substs (the product of the other factors), so weight the
-                // per-row node contributions by that multiplier.
-                let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
-                for row in &f.rows {
-                    for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
-                        if invalid_literal_expansion(disc, d_k) {
-                            continue;
-                        }
-                        let key = (disc.clone(), *arity);
-                        match shape_idx.get(&key) {
-                            Some(&idx) => shapes[idx].1 += count * w,
-                            None => {
-                                shape_idx.insert(key.clone(), shapes.len());
-                                shapes.push((key, count * w));
-                            }
-                        }
-                    }
-                }
-            }
-            for ((op, arity), support) in shapes {
+            for ((op, arity), support) in self.expand_shapes(var_idx, shared) {
                 out.push((Action::Expand { var_idx, op, arity }, support));
             }
         }
