@@ -61,20 +61,16 @@ KNOWN_DIVERGENCES = {
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
     # simple1 is `(a a a)`/`(b b b)`; the only compressing abstraction is
     # `(?#0 ?#0 ?#0)` (= `lam x. x x x`), which stitch finds (1.67x). egg-stitch
-    # represents and builds it under SMC (~1.5x on a larger corpus), and
-    # best-first reuses a var many times in general (`(f ?#0 ?#0 ?#0)`, even
-    # curried). The one shape best-first misses is this all-metavar
-    # self-application. Its forced construction is expand -> expand ->
-    # dominant-reuse, reaching `(?#0 ?#0 ?#1)` with *both* remaining slots
-    # non-reusable (expand stales pre-existing vars, the reuse stales the merged
-    # slot), so the final reuse(0,1) is skipped by best-first's reuse
-    # canonical-ordering rule (search.rs enumerate_successor_actions, gated on
-    # freeze_rule; SMC disables it) and the heap empties. A concrete anchor
-    # rescues it: the function slot is filled by concretization instead of a
-    # merge (`(f ?#0 ?#0 ?#0)`), or an arg stays fresh for the last merge
-    # (`(?#0 ?#0 z)`), so a valid reuse order exists. A best-first completeness
-    # gap (the rule's "stale+stale reuse is always redundant" assumption is
-    # false here), not a representational or cost limit.
+    # represents and builds it under SMC (~1.5x on a larger corpus); best-first
+    # can't. Cause: best-first's reuse canonical-ordering can't merge a var
+    # across a nesting boundary once an intervening expand has staled the
+    # partner slot. Building `(?#0 ?#0 ?#0)` reaches `(?#0 ?#0 ?#1)` with *both*
+    # remaining slots non-reusable (expand stales pre-existing vars; the prior
+    # reuse stales the merged slot), so the final reuse(0,1) is skipped
+    # (search.rs enumerate_successor_actions, gated on freeze_rule; SMC disables
+    # it) and the heap empties. This is a general best-first gap, not unique to
+    # self-application — e.g. `(f (g ?#0 ?#0) ?#0)` is also lost (best-first
+    # stalls at `(f (g ?#0 ?#0) ?#1)`). Not a representational or cost limit.
     "data/domains/stitch/simple1.json":
         {"want": "(?#0 ?#0 ?#0)", "got": "None"},
 }
