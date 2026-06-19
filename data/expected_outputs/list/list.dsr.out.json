@@ -6013,9 +6013,9 @@
       {
         "approx_cost": 498,
         "arity": 2,
-        "lambda": "(lam (lam (fold $1 0 (lam (lam (+ $0 (if (eq? $1 $2) 1 0)))))))",
+        "lambda": "(lam (lam (fold $1 0 (lam (lam (+ $0 (if (eq? $2 $1) 1 0)))))))",
         "num_matches": 2,
-        "pattern": "fn_61: (fold ?#0 0 (lam (lam (+ $0 (if (eq? $1 ?#1) 1 0)))))",
+        "pattern": "fn_61: (fold ?#0 0 (lam (lam (+ $0 (if (eq? ?#1 $1) 1 0)))))",
         "pattern_size": 23,
         "usage_matches": 2
       },
