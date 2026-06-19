@@ -59,11 +59,15 @@ KNOWN_DIVERGENCES = {
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
     "data/domains/ho-bugs/zip_fold_capture.json":
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
-    # stitch's only abstraction puts the same slot in operator *and* argument
-    # position: `(a a a)`/`(b b b)` -> `(?#0 ?#0 ?#0)`. egg-stitch can't
-    # represent a metavar that is simultaneously the function and its own
-    # argument, so it returns no abstraction (`got` is None). A genuine
-    # representational gap.
+    # simple1 is `(a a a)`/`(b b b)`; the only compressing abstraction is the
+    # self-application `(?#0 ?#0 ?#0)` (= `lam x. x x x`), which stitch finds
+    # (2 uses, 1.67x). egg-stitch *can* put a metavar in operator position in
+    # general (e.g. varying-head -> `(?#0 a b c)`), but its expansion can't tie
+    # one metavar across both the operator and its own arguments, so it never
+    # constructs this shape — even `--follow "(?#0 ?#0 ?#0)"` with every prune
+    # disabled dies after 6 expansions, and unconstrained it reports an empty
+    # library. So `got` is None: egg-stitch can't build the abstraction, not a
+    # cost disagreement.
     "data/domains/stitch/simple1.json":
         {"want": "(?#0 ?#0 ?#0)", "got": "None"},
 }
