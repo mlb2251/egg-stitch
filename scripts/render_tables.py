@@ -30,6 +30,9 @@ from expts.tables import (  # noqa: E402
     TABLE5_BFS_SWEEP,
     TABLE5_DOMAINS,
     TABLE5_ENUM_POINT,
+    TABLE6_BFS_SWEEP,
+    TABLE6_DOMAINS,
+    TABLE6_ENUM_POINT,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -739,6 +742,102 @@ def render_table5(saved: dict) -> None:
     print(f"wrote {geomean_path}", file=sys.stderr)
 
 
+# ─── table6: physics-derivative corpus (DSRs) ─────────────────────────────────
+# A single domain with table5's ours-only roster (no babble/Stitch). The
+# headline is the live-vs-at-start DSR contrast: enum (DSRs kept live during
+# search) vs enum-dsrs-at-start (one-shot canonicalisation).
+TABLE6_TITLE = "Physics-Derivative Compression (DSRs)"
+TABLE6_DOMAIN_LABELS = {"physics-deriv-8k": "Lample deriv (8k)"}
+TABLE6_PLOT_METHODS = ["enum", "smc", "enum-dsrs-at-start"]
+TABLE6_SWEEP_FOR_METHOD = {"enum": TABLE6_BFS_SWEEP, "smc": SMC_PARTICLE_SWEEP}
+TABLE6_SWEEP_POINT = {"enum": TABLE6_ENUM_POINT, "smc": TABLE_SMC_PARTICLES}
+TABLE6_METHOD_COLORS = {
+    "enum": line_color(0),
+    "smc": line_color(1),
+    "enum-dsrs-at-start": line_color(3),
+}
+TABLE6_METHOD_PLOT_LABELS = {
+    "enum": "E-Stitch: BFS",
+    "smc": "E-Stitch: SMC",
+    "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
+}
+TABLE6_TABLE_METHODS = ["enum", "smc", "enum-dsrs-at-start"]
+TABLE6_DATA_KEYS = {
+    "enum": f"enum-{TABLE6_ENUM_POINT}",
+    "smc": f"smc-{TABLE_SMC_PARTICLES}",
+    "enum-dsrs-at-start": "enum-dsrs-at-start",
+}
+TABLE6_COL_LABELS = {"enum": "BFS", "smc": "SMC", "enum-dsrs-at-start": "BFS/MT"}
+
+
+def render_table6_tex(saved: dict) -> str:
+    """Return a LaTeX ``tabular`` for table6: the physics-derivative corpus ×
+    ours methods, with Compression Ratio and Time (s) groups. A method that
+    timed out / OOM'd has ``compression_ratio: null`` and renders ``DNF``,
+    excluded from that row's bolding."""
+    domains = saved["domains"]
+    methods = TABLE6_TABLE_METHODS
+    n = len(methods)
+
+    def cells(values: list[float | None], spec: str, higher_is_better: bool) -> list[str]:
+        """bold_best, but render None as DNF (not N/A)."""
+        out = bold_best(values, spec, higher_is_better)
+        return [("DNF" if v is None else s) for v, s in zip(values, out)]
+
+    col_spec = "l r " + ("r" * n) + " " + ("r" * n)
+    lines = [
+        f"% {TABLE6_TITLE}: generated from results JSON",
+        "\\begin{tabular}{" + col_spec + "}",
+        "\\toprule",
+        "& \\multicolumn{1}{c}{Size} "
+        f"& \\multicolumn{{{n}}}{{c}}{{Compression Ratio}} "
+        f"& \\multicolumn{{{n}}}{{c}}{{Time (s)}} \\\\",
+        f"\\cmidrule(lr){{2-2}} \\cmidrule(lr){{3-{2 + n}}} "
+        f"\\cmidrule(lr){{{3 + n}-{2 + 2 * n}}}",
+    ]
+    method_hdr = " & ".join(TABLE6_COL_LABELS[m] for m in methods)
+    lines.append(f"Corpus & Original & {method_hdr} & {method_hdr} \\\\")
+    lines.append("\\midrule")
+    for domain in TABLE6_DOMAINS:
+        if domain not in domains:
+            continue
+        runs = domains[domain].get("runs", {})
+        cr_map = aggregate_methods_cr(runs)
+        t_map = aggregate_methods_time(runs)
+        crs = [cr_map.get(TABLE6_DATA_KEYS[m]) for m in methods]
+        ts = [t_map.get(TABLE6_DATA_KEYS[m]) for m in methods]
+        # Drop a DNF's elapsed time so it isn't mistaken for a real measurement.
+        ts = [t if c is not None else None for c, t in zip(crs, ts)]
+        label = TABLE6_DOMAIN_LABELS.get(domain, domain)
+        original = fmt(initial_size_for_domain(runs), ".0f")
+        cr_strs = cells(crs, ".2f", higher_is_better=True)
+        t_strs = cells(ts, ".2f", higher_is_better=False)
+        lines.append(" & ".join([label, original, *cr_strs, *t_strs]) + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    return "\n".join(lines)
+
+
+def render_table6(saved: dict) -> None:
+    """Write the CR-vs-time PNG(s) for table6 under figures/table6/."""
+    domain_dir = FIGURES_DIR / "table6"
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    for domain in TABLE6_DOMAINS:
+        if domain not in saved["domains"]:
+            continue
+        runs = saved["domains"][domain].get("runs", {})
+        title = f"{TABLE6_TITLE}\n{TABLE6_DOMAIN_LABELS.get(domain, domain)}"
+        plot_path = domain_dir / f"{domain}.png"
+        plot_cr_vs_time(
+            aggregate_methods_cr(runs), aggregate_methods_time(runs), title, plot_path,
+            methods=TABLE6_PLOT_METHODS,
+            sweep_for_method=TABLE6_SWEEP_FOR_METHOD,
+            sweep_point=TABLE6_SWEEP_POINT,
+            method_colors=TABLE6_METHOD_COLORS,
+            method_plot_labels=TABLE6_METHOD_PLOT_LABELS,
+        )
+        print(f"wrote {plot_path}", file=sys.stderr)
+
+
 def main() -> None:
     """Render each table as a LaTeX file and PNG plot under ``figures/``."""
     argparse.ArgumentParser(description=__doc__).parse_args()
@@ -792,6 +891,19 @@ def main() -> None:
         render_molecules(saved, FIGURES_DIR / "molecules")
     else:
         print(f"skipping table5: {table5_path} not present", file=sys.stderr)
+
+    # Table 6 (physics-derivative corpus) shares table5's ours-only roster/shape
+    # but a single domain, so it gets its own path — PNG + LaTeX, no babble.
+    table6_path = RESULTS_DIR / "table6.json"
+    if table6_path.exists():
+        with open(table6_path) as f:
+            saved = json.load(f)
+        tex_path = FIGURES_DIR / "table6.tex"
+        tex_path.write_text(f"% source: {table6_path}\n" + render_table6_tex(saved) + "\n")
+        print(f"wrote {tex_path}", file=sys.stderr)
+        render_table6(saved)
+    else:
+        print(f"skipping table6: {table6_path} not present", file=sys.stderr)
 
 
 if __name__ == "__main__":

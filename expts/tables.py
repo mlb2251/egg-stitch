@@ -24,7 +24,7 @@ from ._subproc import available_memory_bytes
 from .bench import MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
-from .runner import MOLECULE_FAMILIES
+from .runner import MOLECULE_FAMILIES, PHYSICS_DERIV_DOMAINS
 
 NUM_RUNS = 10
 
@@ -136,7 +136,10 @@ def _run_table(
     output_name: str,
 ) -> Path:
     """Run each ``(label, runner)`` on every domain ``NUM_RUNS`` times and save JSON."""
-    assert all(d in ALL_DOMAINS or d.startswith("molecules:") for d in domains), "domain typo"
+    assert all(
+        d in ALL_DOMAINS or d.startswith("molecules:") or d in PHYSICS_DERIV_DOMAINS
+        for d in domains
+    ), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "config": {"num_abstractions": num_abstractions},
@@ -265,4 +268,55 @@ def table5() -> Path:
         use_dsrs=True,
         folder_prefix="table5",
         output_name="table5.json",
+    )
+
+
+# Table 6: the 8000-program Lample/Charton derivative corpus (physics float
+# ops), with DSRs. The dreamcoder ``physics`` domain is already beta-reduced,
+# so its DSRs mostly fire once; this corpus is non-canonical arithmetic where
+# keeping the physics DSRs *live* during search beats one-shot canonicalisation
+# — so the headline contrast is enum (live DSRs) vs enum-dsrs-at-start. Babble
+# can't run it (the corpus is a flat program list, not a babble CompressionInput
+# / registered benchmark domain), so it's dropped from the roster. Same
+# extended best-first sweep and wall-clock/mem caps as table5.
+TABLE6_DOMAINS = PHYSICS_DERIV_DOMAINS
+TABLE6_TIMEOUT = TABLE5_TIMEOUT
+TABLE6_NUM_ABSTRACTIONS = TABLE5_NUM_ABSTRACTIONS
+TABLE6_BFS_SWEEP = TABLE5_BFS_SWEEP
+TABLE6_ENUM_POINT = TABLE5_ENUM_POINT
+
+
+def _table6_runners() -> tuple[tuple[str, object], ...]:
+    """Table 5's ours-only roster (Enum/SMC sweeps + the dsrs-only-at-start
+    baseline) minus babble, every runner capped at :data:`TABLE6_TIMEOUT` and
+    :data:`MEM_LIMIT_BYTES`."""
+    return (
+        _sweep_runners(timeout=TABLE6_TIMEOUT, bfs_steps=TABLE6_BFS_SWEEP, mem_limit=MEM_LIMIT_BYTES)
+        + (("enum-dsrs-at-start", OursBf(
+            num_steps=BASELINE_BFS_STEPS,
+            only_use_dsrs_at_start=True,
+            timeout=TABLE6_TIMEOUT,
+            mem_limit=MEM_LIMIT_BYTES,
+        )),)
+    )
+
+
+def table6() -> Path:
+    """Run the 8000-program physics-derivative corpus with DSRs, table5's
+    ours-only roster (Enum/SMC sweeps + the dsrs-only-at-start baseline), each
+    algorithm capped at 300s and 20 GiB."""
+    free = available_memory_bytes()
+    if free < MEM_LIMIT_BYTES:
+        raise SystemExit(
+            f"table6: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
+            f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
+            f"available. Free up memory or lower MEM_LIMIT_BYTES."
+        )
+    return _run_table(
+        domains=TABLE6_DOMAINS,
+        runners=_table6_runners(),
+        num_abstractions=TABLE6_NUM_ABSTRACTIONS,
+        use_dsrs=True,
+        folder_prefix="table6",
+        output_name="table6.json",
     )

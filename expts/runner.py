@@ -54,6 +54,15 @@ class Runner(Protocol):
 # corpora; op-children grammar, symmetry DSRs). See data/.../scramble/README.md.
 MOLECULE_FAMILIES = ["hexyl", "ester", "glycol"]
 
+# The Lample/Charton prim_bwd derivative corpus, mapped onto the physics float
+# ops (see scripts/lample_convert.py): a large *non-canonical* arithmetic
+# testbed where keeping the physics DSRs live during search still pays off,
+# unlike the already beta-reduced dreamcoder ``physics`` domain. Lambda-calc
+# grammar (apps-equal) + physics.rewrites DSRs. ``physics-deriv-8k`` is the
+# 8000-program slice under data/domains/lample-deriv-poly-8k/.
+PHYSICS_DERIV_CORPUS = {"physics-deriv-8k": "lample-deriv-poly-8k"}
+PHYSICS_DERIV_DOMAINS = list(PHYSICS_DERIV_CORPUS)
+
 
 def molecule_family(domain: str) -> str | None:
     """Return the family for a ``molecules:<family>`` domain, else None."""
@@ -62,9 +71,12 @@ def molecule_family(domain: str) -> str | None:
 
 
 def domain_type(domain: str) -> str:
-    """Return ``"cogsci"``, ``"dreamcoder"``, or ``"molecules"`` for a known domain."""
+    """Return ``"cogsci"``, ``"dreamcoder"``, ``"molecules"``, or
+    ``"physics-deriv"`` for a known domain."""
     if molecule_family(domain) is not None:
         return "molecules"
+    if domain in PHYSICS_DERIV_CORPUS:
+        return "physics-deriv"
     if domain in DREAMCODER_DOMAINS:
         return "dreamcoder"
     if domain in COGSCI_DOMAINS:
@@ -73,9 +85,10 @@ def domain_type(domain: str) -> str:
 
 
 def weighting_for(domain: str) -> Weighting:
-    """``"no-apps"`` for cogsci/molecules (flat op-children s-exprs),
-    ``"apps-equal"`` for dreamcoder (curried lambda-calc)."""
-    return "apps-equal" if domain_type(domain) == "dreamcoder" else "no-apps"
+    """``"apps-equal"`` for the curried lambda-calc domains (dreamcoder and the
+    physics-derivative corpus), ``"no-apps"`` for cogsci/molecules (flat
+    op-children s-exprs)."""
+    return "apps-equal" if domain_type(domain) in ("dreamcoder", "physics-deriv") else "no-apps"
 
 
 def input_files(domain: str) -> list[Path]:
@@ -87,6 +100,8 @@ def input_files(domain: str) -> list[Path]:
     fam = molecule_family(domain)
     if fam is not None:
         return [EGG_STITCH_DIR / "data" / "domains" / "molecules" / "scramble" / f"{fam}.scram.json"]
+    if domain in PHYSICS_DERIV_CORPUS:
+        return [EGG_STITCH_DIR / "data" / "domains" / PHYSICS_DERIV_CORPUS[domain] / "all.json"]
     if domain_type(domain) == "cogsci":
         return [EGG_STITCH_DIR / "data" / "domains" / "cogsci" / f"{domain}.json"]
     d = EGG_STITCH_DIR / "data" / "domains" / domain
@@ -98,12 +113,15 @@ def rewrites_path(domain: str) -> str | None:
     or ``None`` when no DSRs ship for it.
 
     Cogsci files live under ``drawings.<domain>.rewrites``; dreamcoder ones at
-    ``<domain>.rewrites``; molecules share one symmetry file. ``text``/``logo``/
-    ``towers`` have no DSRs.
+    ``<domain>.rewrites``; molecules share one symmetry file. The
+    physics-derivative corpus reuses the dreamcoder ``physics.rewrites``.
+    ``text``/``logo``/``towers`` have no DSRs.
     """
     dt = domain_type(domain)
     if dt == "molecules":
         return "data/domains/molecules/molecules.rewrites"
+    if dt == "physics-deriv":
+        return "../babble/harness/data/benchmark-dsrs/physics.rewrites"
     if dt == "dreamcoder":
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
         return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None
