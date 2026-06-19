@@ -59,20 +59,6 @@ KNOWN_DIVERGENCES = {
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
     "data/domains/ho-bugs/zip_fold_capture.json":
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
-    # simple1 is `(a a a)`/`(b b b)`; the only compressing abstraction is
-    # `(?#0 ?#0 ?#0)` (= `lam x. x x x`), which stitch finds (1.67x). egg-stitch
-    # represents and builds it under SMC (~1.5x on a larger corpus); best-first
-    # can't. Cause: best-first's reuse canonical-ordering can't merge a var
-    # across a nesting boundary once an intervening expand has staled the
-    # partner slot. Building `(?#0 ?#0 ?#0)` reaches `(?#0 ?#0 ?#1)` with *both*
-    # remaining slots non-reusable (expand stales pre-existing vars; the prior
-    # reuse stales the merged slot), so the final reuse(0,1) is skipped
-    # (search.rs enumerate_successor_actions, gated on freeze_rule; SMC disables
-    # it) and the heap empties. This is a general best-first gap, not unique to
-    # self-application — e.g. `(f (g ?#0 ?#0) ?#0)` is also lost (best-first
-    # stalls at `(f (g ?#0 ?#0) ?#1)`). Not a representational or cost limit.
-    "data/domains/stitch/simple1.json":
-        {"want": "(?#0 ?#0 ?#0)", "got": "None"},
 }
 
 
