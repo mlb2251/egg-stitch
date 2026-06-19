@@ -690,13 +690,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
         // `var_reusable` is a best-first canonical-ordering device, mirroring
         // the freeze rule. SMC (freeze_rule = false) ignores it so its reuse
-        // exploration stays unrestricted. Reusing two stale (non-reusable)
-        // vars always re-reaches a pattern already obtainable by reusing them
-        // earlier — when the later-created of the two was still in the fresh
-        // cohort — so we skip it as a duplicate. This holds regardless of the
-        // two vars' depths: a cross-depth reuse commutes past every expansion
-        // after the one that created the deeper var, so it too has an
-        // earlier-reuse canonical form.
+        // exploration stays unrestricted. We skip `Reuse(i, j)` only when both
+        // slots are stale, which canonicalizes merges into increasing-keep
+        // order: a merge stales everything below its kept slot, so a later
+        // merge with both endpoints there is the same set of merges in a
+        // non-canonical order. Staling stops at the kept slot (not the dropped
+        // one), so slots between a merged pair stay reusable — otherwise a
+        // second, interleaved pair would be wrongly skipped even though no
+        // earlier ordering reaches it (the intervening merge stales its slot).
         let enforce_reusable = self.freeze_rule;
         for i in 0..n {
             for j in (i + 1)..n {
