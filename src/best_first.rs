@@ -392,17 +392,22 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
+    let best_node_id = best.as_ref().map(|(_, id, _)| *id);
+    // Canonicalize the winner's var numbering (DFS first-appearance) before it's
+    // handed off for output/rewrite.
+    let best_pair = best.map(|(cost, id, selection)| {
+        let mut pair = SearchStateWithCostSelection { state: nodes[id].state.clone(), selection };
+        pair.canonicalize();
+        (cost, pair)
+    });
+
     println!("\n{}", "═══ RESULT ═══".green().bold());
-    if let (Some(iter), Some((cost, best_id, _))) = (best_found_at, best.as_ref()) {
-        let state = &nodes[*best_id].state;
+    if let (Some(iter), Some((cost, pair))) = (best_found_at, best_pair.as_ref()) {
         println!("{} {}", "best found at expansion:".dimmed(), iter.to_string().yellow());
-        println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
+        println!("{} {}", "pattern:".dimmed(), pair.state.pattern.to_string().cyan().bold());
         println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());
         println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
     }
-
-    let best_node_id = best.as_ref().map(|(_, id, _)| *id);
-    let best_pair = best.map(|(cost, id, selection)| (cost, SearchStateWithCostSelection { state: nodes[id].state.clone(), selection }));
 
     let tree_log = if debug {
         let weights = shared.egraph.analysis.weights;
