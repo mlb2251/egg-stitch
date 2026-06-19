@@ -59,15 +59,15 @@ KNOWN_DIVERGENCES = {
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
     "data/domains/ho-bugs/zip_fold_capture.json":
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
-    # simple1 is `(a a a)`/`(b b b)`; the only compressing abstraction is the
-    # self-application `(?#0 ?#0 ?#0)` (= `lam x. x x x`), which stitch finds
-    # (2 uses, 1.67x). egg-stitch *can* put a metavar in operator position in
-    # general (e.g. varying-head -> `(?#0 a b c)`), but its expansion can't tie
-    # one metavar across both the operator and its own arguments, so it never
-    # constructs this shape — even `--follow "(?#0 ?#0 ?#0)"` with every prune
-    # disabled dies after 6 expansions, and unconstrained it reports an empty
-    # library. So `got` is None: egg-stitch can't build the abstraction, not a
-    # cost disagreement.
+    # simple1 is `(a a a)`/`(b b b)`; the only compressing abstraction is
+    # `(?#0 ?#0 ?#0)` (= `lam x. x x x`), which stitch finds (2 uses, 1.67x).
+    # egg-stitch can't build an abstraction whose body has *no concrete symbol*
+    # — one that is purely a metavar applied to (copies of) itself. It abstracts
+    # operator position fine once there's any concrete anchor (`(a a z)*n ->
+    # (?#0 ?#0 z)`, `(q a a)*n -> (q ?#0 ?#0)`, `(?#0 a b c)`), but `(a a)*n`
+    # and `(a a a)*n` both yield an empty library no matter how many uses — so
+    # it's a construction gap (likely: abstractions are seeded from a concrete
+    # e-node, never a bare metavar in function position), not a cost call.
     "data/domains/stitch/simple1.json":
         {"want": "(?#0 ?#0 ?#0)", "got": "None"},
 }
