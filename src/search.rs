@@ -477,9 +477,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Canonicalizes the pattern's var numbering to DFS first-appearance order
     /// and remaps the match factor slots to match. Call on the winning state
     /// before output/rewrite so the abstraction's variable order is canonical.
-    /// Row count is preserved (a bijection on slots), so `num_substs` stays
-    /// valid.
-    pub fn canonicalize_vars(&mut self) {
+    /// Returns the old->new permutation so callers can remap other index-aligned
+    /// data (e.g. a `CostSelection`'s `variable_indices`). Row count is preserved
+    /// (a bijection on slots), so `num_substs` stays valid.
+    pub fn canonicalize_vars(&mut self) -> Vec<usize> {
         let perm = self.pattern.canonicalize_vars();
         for m in &mut self.matches {
             m.factors = m
@@ -497,6 +498,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 })
                 .collect();
         }
+        perm
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.

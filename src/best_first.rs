@@ -393,15 +393,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
     let best_node_id = best.as_ref().map(|(_, id, _)| *id);
-    // Search numbers vars in append/creation order; canonicalize the winner to
-    // DFS first-appearance order and re-derive its cost selection before it's
-    // handed off for output/rewrite (cost is var-order invariant).
-    let best_pair = best.map(|(cost, id, _selection)| {
-        let mut state = nodes[id].state.clone();
-        state.canonicalize_vars();
-        let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &state, shared.check_slow);
-        debug_assert_eq!(selection.cost, cost, "canonicalization must not change cost");
-        (cost, SearchStateWithCostSelection { state, selection })
+    // Canonicalize the winner's var numbering (DFS first-appearance) before it's
+    // handed off for output/rewrite.
+    let best_pair = best.map(|(cost, id, selection)| {
+        let mut pair = SearchStateWithCostSelection { state: nodes[id].state.clone(), selection };
+        pair.canonicalize();
+        (cost, pair)
     });
 
     println!("\n{}", "═══ RESULT ═══".green().bold());

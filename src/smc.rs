@@ -249,12 +249,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     lower_bound_pruner.print_stats();
 
-    // Canonicalize the winner's var numbering (DFS first-appearance) and
-    // re-derive its selection before output (cost is var-order invariant).
-    if let Some((cost, pair)) = best_so_far.as_mut() {
-        pair.state.canonicalize_vars();
-        pair.selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &pair.state, shared.check_slow);
-        debug_assert_eq!(pair.selection.cost, *cost, "canonicalization must not change cost");
+    // Canonicalize the winner's var numbering (DFS first-appearance) before
+    // output.
+    if let Some((_, pair)) = best_so_far.as_mut() {
+        pair.canonicalize();
     }
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
