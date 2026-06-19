@@ -13,9 +13,9 @@
     {
       "approx_cost": 36,
       "arity": 1,
-      "lambda": "(lam (f (g h i j k) $0))",
+      "lambda": "(lam (f (a b c d e) $0))",
       "num_matches": 4,
-      "pattern": "fn_0: (f (g h i j k) ?#0)",
+      "pattern": "fn_0: (f (a b c d e) ?#0)",
       "pattern_size": 7,
       "usage_matches": 4
     }
@@ -31,13 +31,13 @@
     "(f (g h i j k) k8)"
   ],
   "rewritten_programs": [
-    "(f (a b c d e) k1)",
-    "(fn_0 k2)",
-    "(f (a b c d e) k3)",
-    "(fn_0 k4)",
-    "(f (a b c d e) k5)",
-    "(fn_0 k6)",
-    "(f (a b c d e) k7)",
-    "(fn_0 k8)"
+    "(fn_0 k1)",
+    "(f (g h i j k) k2)",
+    "(fn_0 k3)",
+    "(f (g h i j k) k4)",
+    "(fn_0 k5)",
+    "(f (g h i j k) k6)",
+    "(fn_0 k7)",
+    "(f (g h i j k) k8)"
   ]
 }
