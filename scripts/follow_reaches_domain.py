@@ -60,14 +60,16 @@ KNOWN_DIVERGENCES = {
     "data/domains/ho-bugs/zip_fold_capture.json":
         {"want": "(fold ?#0 0. (lam (lam (+. $0 $1))))", "got": "(fold ?#0 0. (lam (lam (+. $0 (?#1 $1)))))"},
     # simple1 is `(a a a)`/`(b b b)`; the only compressing abstraction is
-    # `(?#0 ?#0 ?#0)` (= `lam x. x x x`), which stitch finds (2 uses, 1.67x).
-    # egg-stitch can't build an abstraction whose body has *no concrete symbol*
-    # — one that is purely a metavar applied to (copies of) itself. It abstracts
-    # operator position fine once there's any concrete anchor (`(a a z)*n ->
-    # (?#0 ?#0 z)`, `(q a a)*n -> (q ?#0 ?#0)`, `(?#0 a b c)`), but `(a a)*n`
-    # and `(a a a)*n` both yield an empty library no matter how many uses — so
-    # it's a construction gap (likely: abstractions are seeded from a concrete
-    # e-node, never a bare metavar in function position), not a cost call.
+    # `(?#0 ?#0 ?#0)` (= `lam x. x x x`), which stitch finds (1.67x). egg-stitch
+    # CAN represent and build it — SMC does, at ~1.5x on a larger corpus — and
+    # best-first reuses a var many times in general (`(f ?#0 ?#0 ?#0)`, even 4x,
+    # even curried). The narrow case best-first misses is the *all-metavar*
+    # self-application: a body with no concrete node anywhere. Any concrete
+    # anchor makes best-first find it (`(f ?#0 ?#0 ?#0)`, `(?#0 ?#0 z)`); only
+    # the bare `(?#0 ?#0 ?#0)` is lost (its canonical-ordering rules prune the
+    # one construction order that reaches it). So this is a best-first
+    # search-completeness gap, not a representational or cost limit. (Both
+    # backends report None: smc also misses it on this 2-program corpus.)
     "data/domains/stitch/simple1.json":
         {"want": "(?#0 ?#0 ?#0)", "got": "None"},
 }
