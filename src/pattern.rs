@@ -34,10 +34,12 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub var_occurrences: Vec<usize>,
     /// True iff `?#k` is in the freshest cohort. `expand` flips all
     /// pre-existing vars to false and inserts new children as true; `reuse`
-    /// flips `0..drop_idx` to false *except* the kept slot (reusing a variable
-    /// shouldn't stop us reusing it again). Search skips `Reuse(i, j)` only
-    /// when *both* are false — that pair would re-merge cohorts a prior action
-    /// already committed to (duplicate canonical).
+    /// flips only `0..keep_idx` to false (the kept slot itself stays true —
+    /// reusing a variable shouldn't stop us reusing it again — and the slots
+    /// *between* the merged pair are left alone, so a second interleaved pair
+    /// can still merge). Search skips `Reuse(i, j)` only when *both* are false —
+    /// that pair would re-merge cohorts a prior action already committed to
+    /// (duplicate canonical).
     pub var_reusable: Vec<bool>,
     /// True iff `?#k` is committed to never being expanded again (the
     /// best-first freeze rule). Maintained here purely as index-aligned
@@ -231,10 +233,14 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Stale every var below drop_idx so future reuses go in canonical
-        // (increasing-drop) order — but keep the merged slot reusable: if we
-        // reused a variable we should be able to reuse it again.
-        for r in &mut self.var_reusable[..drop_idx] {
+        // Stale only the vars below the *kept* (lower) slot, so future reuses
+        // go in canonical (increasing-keep) order. Crucially we leave the slots
+        // *between* keep_idx and drop_idx reusable: this merge says nothing
+        // about whether they can still pair with each other or with higher
+        // slots, and staling them (the old `..drop_idx`) wrongly blocked a
+        // second, interleaved pair from ever merging. The merged slot stays
+        // reusable too — reusing a variable shouldn't stop us reusing it again.
+        for r in &mut self.var_reusable[..keep_idx] {
             *r = false;
         }
         self.var_reusable[keep_idx] = true;
