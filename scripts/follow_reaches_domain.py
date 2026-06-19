@@ -10,8 +10,10 @@ A handful of inputs legitimately *don't* reproduce stitch's exact abstraction
 abstraction is unrepresentable in egg-stitch. Those are listed in
 `KNOWN_DIVERGENCES` and reported as XFAIL rather than failing the sweep; any
 failure *outside* that allow-list is a real regression. The list is exact
-(per input), so when egg-stitch improves and an entry starts passing it is
-flagged as an UNEXPECTED PASS to prune.
+(per input + recorded want/got), so the sweep fails on three things: a new
+failure, an allow-listed input whose divergence *changed*, and an allow-listed
+input that now *passes* (an UNEXPECTED PASS — the entry is stale and must be
+removed, or it would silently re-mask a future regression on that input).
 
 Usage:
     scripts/follow_reaches_domain.py DOMAIN_DIR [DOMAIN_DIR …] [-- extra args]
@@ -19,8 +21,7 @@ Usage:
 Extra args after `--` are forwarded to `follow_reaches.py` (and thence to
 every egg-stitch invocation).
 
-Exit 0 iff every non-allow-listed input passes (skips and XFAILs count as
-passes).
+Exit 0 iff every input passes or is a recorded XFAIL (skips count as passes).
 """
 
 import subprocess
@@ -146,10 +147,13 @@ def main():
         for f in failures:
             print(f"  {f}")
     if unexpected:
-        print("unexpected passes (prune from KNOWN_DIVERGENCES):")
+        print("unexpected passes — these now reproduce stitch; prune from KNOWN_DIVERGENCES:")
         for f in unexpected:
             print(f"  {f}")
-    sys.exit(0 if not failures else 1)
+    # Unexpected passes fail too: a divergence that's been fixed must be removed
+    # from the allow-list, not left to rot (and silently re-mask a future
+    # regression on the same input).
+    sys.exit(0 if not failures and not unexpected else 1)
 
 
 if __name__ == "__main__":
