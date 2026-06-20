@@ -50,8 +50,15 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// because cost accounting reads it on the hot path. Maintained incrementally
     /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// Per-var restriction level
+    /// Per-var restriction level (expand axis only now: is_expandable / Frozen).
     pub var_state: Vec<VarState>,
+    /// Best-first reuse-order canonicalization: the set of reuse pairs `(i, j)`
+    /// (`i < j`) currently allowed. A reuse is permitted only if its pair is in
+    /// here. Performing reuse `(i, j)` stales (removes) every pair
+    /// lexicographically before `(i, j)`; `expand` inserts fresh pairs for the
+    /// new vars (which are therefore *not* subject to earlier staling) and
+    /// renumbers the rest. Always kept in the current var-index space.
+    pub reuse_pairs: Vec<(usize, usize)>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -67,6 +74,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             var_depth: vec![0],
             var_occurrences: vec![1],
             var_state: vec![VarState::ReusableOrExpandable],
+            reuse_pairs: vec![],
         }
     }
 
@@ -137,6 +145,23 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             self.var_occurrences.insert(var_idx + j, parent_occ);
             self.var_state.insert(var_idx + j, VarState::ReusableOrExpandable);
         }
+
+        // Maintain reuse_pairs: every pre-existing pair joins two vars that both
+        // predate this expand, so reusing them now would be a reuse-before-expand
+        // diamond (reachable by reusing first) — stale them all. Keep only pairs
+        // that involve a new child, which could not have existed before.
+        let n_new = self.vars.len();
+        let mut np: Vec<(usize, usize)> = Vec::new();
+        for c in var_idx..(var_idx + num_children) {
+            for o in 0..n_new {
+                if o != c {
+                    np.push((c.min(o), c.max(o)));
+                }
+            }
+        }
+        np.sort_unstable();
+        np.dedup();
+        self.reuse_pairs = np;
 
         // Expand each occurrence of the var independently: build its own enode
         // with its own freshly-named Var children. No node is shared between
@@ -213,6 +238,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth = new_depth;
         self.var_occurrences = new_occ;
         self.var_state = new_state;
+        self.reuse_pairs.clear();
         perm
     }
 
@@ -253,6 +279,17 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             VarState::ReusableOrExpandable
         };
         self.var_state.remove(drop_idx);
+        // reuse_pairs: stale every pair lexicographically before (keep, drop),
+        // then drop the merged-away var's pairs and shift the rest down.
+        self.reuse_pairs.retain(|&pr| pr >= (keep_idx, drop_idx));
+        self.reuse_pairs = self
+            .reuse_pairs
+            .iter()
+            .filter_map(|&(a, b)| {
+                let f = |q: usize| if q == drop_idx { None } else if q < drop_idx { Some(q) } else { Some(q - 1) };
+                Some((f(a)?, f(b)?))
+            })
+            .collect();
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -282,6 +319,14 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
         self.var_state.remove(var_idx);
+        self.reuse_pairs = self
+            .reuse_pairs
+            .iter()
+            .filter_map(|&(a, b)| {
+                let f = |q: usize| if q == var_idx { None } else if q < var_idx { Some(q) } else { Some(q - 1) };
+                Some((f(a)?, f(b)?))
+            })
+            .collect();
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);
