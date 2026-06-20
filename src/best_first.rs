@@ -177,7 +177,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     });
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
-        s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.var_frozen.clone());
+        s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.frozen_mask());
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -243,7 +243,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         let parent_forced = nodes[node_id].forced;
         let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
-            SuccessorEnum::All { actions, rank } => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared, Some(&rank))).collect(),
+            SuccessorEnum::All { actions, rank } => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared, true, Some(&rank))).collect(),
         };
 
         if let Some(k) = args.max_forced_expansion.0 {
@@ -265,7 +265,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.pattern.clone(), child_state.pattern.var_frozen.clone())
+                && s.check_and_insert(child_state.pattern.clone(), child_state.pattern.frozen_mask())
             {
                 continue;
             }

@@ -2,7 +2,7 @@ use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
 use crate::factor::{Factor, rebuild_factor};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, identity_matches};
-use crate::pattern::Pattern;
+use crate::pattern::{Pattern, VarState};
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
@@ -182,11 +182,11 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// the match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
     /// Whether the best-first freeze rule is active. When `true`, expanding
-    /// `?#k` commits `?#0..?#(k-1)` to never being expanded again (the frozen
-    /// set is tracked per-var in `Pattern::var_frozen`); restricts only
-    /// `Expand`, not `Reuse` (whose ordering uses `Pattern::var_reusable`).
-    /// `false` disables the rule — SMC uses this to dedupe purely on the
-    /// pattern's `RecExpr`.
+    /// `?#k` commits `?#0..?#(k-1)` to never being expanded again, and a
+    /// non-dominant `Reuse` freezes the merged var (the frozen set is tracked
+    /// per-var in `Pattern::var_state` and is no longer necessarily a prefix);
+    /// reuse *ordering* uses the same field's reusable cohort. `false` disables the
+    /// rule — SMC uses this to dedupe purely on the pattern's `RecExpr`.
     pub freeze_rule: bool,
 }
 
@@ -411,7 +411,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         if !self.freeze_rule {
             return false;
         }
-        (0..self.pattern.vars.len()).filter(|&k| self.pattern.var_frozen[k]).any(|k| self.is_useless_var(k, shared))
+        (0..self.pattern.vars.len()).filter(|&k| self.pattern.var_state[k] == VarState::Frozen).any(|k| self.is_useless_var(k, shared))
     }
 
     /// True iff any metavar in the pattern is useless. Unlike
@@ -425,10 +425,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Total number of frozen vars. The frozen set is no longer a prefix (a
     /// non-dominant reuse can freeze a non-leading slot), so test individual
-    /// slots via `pattern.var_frozen[k]`; this count is the number of holes the
-    /// stub application keeps.
+    /// slots via `!pattern.var_state[k].is_expandable()`; this count is the
+    /// number of holes the stub application keeps.
     pub fn frozen_count(&self) -> usize {
-        self.pattern.var_frozen.iter().filter(|&&f| f).count()
+        self.pattern.var_state.iter().filter(|&&s| !s.is_expandable()).count()
     }
 
     /// Builds a child state by fully concretizing every useless *non-frozen*
@@ -443,7 +443,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// shifts the extraction to each occurrence's depth (sound — every surviving
     /// cross-depth reuse is a genuine shift-variant).
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
-        let mut targets: Vec<(usize, Id)> = (0..self.pattern.vars.len()).filter(|&k| !self.pattern.var_frozen[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
+        let mut targets: Vec<(usize, Id)> = (0..self.pattern.vars.len()).filter(|&k| self.pattern.var_state[k] != VarState::Frozen).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {
             return None;
         }
@@ -463,7 +463,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `useless_var_eclass` returns the eclass id iff these hold.
     ///
     /// Callers concretize only non-frozen vars; `pattern.concretize` removes the
-    /// slot's freeze bit and shifts the rest down, keeping `var_frozen` aligned.
+    /// slot's state and shifts the rest down, keeping `var_state` aligned.
     pub fn concretize(&mut self, var_idx: usize, eclass: Id, shared: &SharedSearchData<F, O>) {
         let mut extraction: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
         let mut memo: FxHashMap<Id, Id> = FxHashMap::default();
@@ -539,25 +539,29 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// cloning the parent's matches (only the surviving transformed factor
     /// rows get allocated in the child — the parent's `Vec<Factor>` data is
     /// not cloned-then-discarded). The pattern is cloned and mutated in
-    /// place; the freeze set (`Pattern::var_frozen`) is index-shifted by
-    /// `expand`/`reuse` and the expand-freeze policy is applied inline.
-    /// Used by best-first and by SMC after sampling so we don't materialise
-    /// child states for successors that don't get picked.
-    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, rank: Option<&[usize]>) -> SearchState<F, O> {
+    /// place; the freeze set (`Pattern::var_state`) is index-shifted by
+    /// `expand`/`reuse` and the freeze policy is applied inline: an `Expand`
+    /// freezes every var of lower rank (per `rank`), and a `Reuse` freezes the
+    /// merged var when `freeze_reused` is set (the caller passes `false` for the
+    /// dominant-reuse short-circuit). Used by best-first and by SMC after
+    /// sampling so we don't materialise child states for successors that don't
+    /// get picked.
+    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, freeze_reused: bool, rank: Option<&[usize]>) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
                 // Commit to freezing every var of *lower rank*: expanding the
-                // var at rank `r` forbids ever expanding a lower-rank var.
-                // Must precede `expand`: `rank` is in pre-expand numbering.
-                // Disabled for SMC (no freeze rule, so `rank` is `None`).
+                // var at rank `r` forbids ever expanding a lower-rank var. Set
+                // the parent's `var_state` (by rank) before `expand` shifts it
+                // into the child layout. Disabled for SMC (no freeze rule, so
+                // `rank` is `None`).
                 if self.freeze_rule {
                     let rank = rank.expect("freeze_rule requires a rank");
                     let rv = rank[*var_idx];
-                    for (j, frozen) in new_pattern.var_frozen.iter_mut().enumerate() {
+                    for (j, s) in new_pattern.var_state.iter_mut().enumerate() {
                         if rank[j] < rv {
-                            *frozen = true;
+                            *s = VarState::Frozen;
                         }
                     }
                 }
@@ -573,11 +577,20 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let d_a = self.pattern.var_depth[var_idx];
                 let d_b = self.pattern.var_depth[second_var_idx];
                 let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
-                // Reuse is unconstrained by the freeze rule (which only restricts
-                // syntactic expansions). `pattern.reuse` ORs the dropped slot's
-                // freeze bit into the kept slot before removing it, so the merged
-                // var is frozen iff either participant was.
                 new_pattern.reuse(var_idx, second_var_idx);
+                // Sequencing rule: a non-dominant reuse freezes the merged var.
+                // Re-expanding it would re-derive (via the reuse↔expand diamond)
+                // a pattern also reachable by expanding the two factors first and
+                // reusing afterwards, so freezing it keeps expand-then-reuse as
+                // the single canonical path. Frozen (like the expand-freeze rule)
+                // means a later-useless merged var is pruned, not inlined — under
+                // the forced-expansion cap that prune shrinks the bounded search.
+                // Skipped for the dominant short-circuit (the forced sole
+                // successor), where freezing would make `f(shared…)` unreachable.
+                // No-op under `freeze_rule = false`.
+                if self.freeze_rule && freeze_reused {
+                    new_pattern.var_state[var_idx.min(second_var_idx)] = VarState::Frozen;
+                }
                 Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
             }
         };
@@ -748,7 +761,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// rest. Disabled by `--no-opt-dominance-reuse`.
     ///
     /// Expand actions are filtered against the best-first canonical-ordering
-    /// rule: any frozen `var_idx` (`self.pattern.var_frozen[var_idx]`) or
+    /// rule: any frozen `var_idx` (`self.pattern.var_state[var_idx] == Frozen`) or
     /// `var_idx > max_arity` is skipped before the action is even constructed.
     /// SMC passes `max_arity = usize::MAX` and runs with `freeze_rule = false`,
     /// so the filter is a no-op for it.
@@ -780,27 +793,26 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // eclass used thousands of times looks like the same support as one
         // that fires on thousands of distinct one-off eclasses.
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
-
         // Per-var expansion shapes (first-appearance order, with support) and the
         // `rank`/`order`, in one egraph pass. See [`Self::shape_pass`].
         let (shapes, rank, order) = self.shape_pass(shared);
 
-        // `var_reusable` is a best-first canonical-ordering device, mirroring
-        // the freeze rule. SMC (freeze_rule = false) ignores it so its reuse
-        // exploration stays unrestricted. We skip `Reuse(i, j)` only when both
-        // slots are stale, which canonicalizes merges into increasing-keep
-        // order: a merge stales everything below its kept slot, so a later
-        // merge with both endpoints there is the same set of merges in a
-        // non-canonical order. Staling stops at the kept slot (not the dropped
-        // one), so slots between a merged pair stay reusable — otherwise a
-        // second, interleaved pair would be wrongly skipped even though no
-        // earlier ordering reaches it (the intervening merge stales its slot).
+        // The reusable cohort (`VarState::ReusableOrExpandable`) is a best-first
+        // canonical-ordering device, mirroring the freeze rule. SMC (freeze_rule
+        // = false) ignores it so its reuse exploration stays unrestricted. We
+        // skip `Reuse(i, j)` only when both slots are stale, which canonicalizes
+        // merges into increasing-keep order: a merge stales everything below its
+        // kept slot, so a later merge with both endpoints there is the same set
+        // of merges in a non-canonical order. Staling stops at the kept slot (not
+        // the dropped one), so slots between a merged pair stay reusable —
+        // otherwise a second, interleaved pair would be wrongly skipped even
+        // though no earlier ordering reaches it (#265).
         let enforce_reusable = self.freeze_rule;
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                if enforce_reusable && !self.pattern.var_reusable[i] && !self.pattern.var_reusable[j] {
+                if enforce_reusable && !self.pattern.var_state[i].is_reusable() && !self.pattern.var_state[j].is_reusable() {
                     continue;
                 }
                 // Count full substs with `shift_equal(vars[i], vars[j])` per
@@ -836,19 +848,21 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
-                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, Some(&rank));
+                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, false, Some(&rank));
                     return SuccessorEnum::Dominant { child, support };
                 }
                 out.push((Action::Reuse { keep: i, drop: j }, support));
             }
         }
         // Emit expands in rank order so the `max_arity` cap and heap tie-breaks
-        // act on the f-order.
+        // act on the f-order. The freeze rule (`!is_expandable()`) and `max_arity`
+        // are no-ops for SMC (freeze_rule = false, identity order, max_arity =
+        // usize::MAX).
         for &var_idx in &order {
             if rank[var_idx] > max_arity {
                 continue;
             }
-            if self.freeze_rule && self.pattern.var_frozen[var_idx] {
+            if self.freeze_rule && !self.pattern.var_state[var_idx].is_expandable() {
                 continue;
             }
             // Emit from the shapes `shape_pass` already computed (via

@@ -21,6 +21,24 @@ use rustc_hash::FxHashMap;
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
 
+/// Level of restriction for a variable. Entry order matters here for Ord.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VarState {
+    ReusableOrExpandable,
+    /// Can be literally expanded but not reused
+    Expandable,
+    Frozen,
+}
+
+impl VarState {
+    pub fn is_expandable(self) -> bool {
+        matches!(self, VarState::ReusableOrExpandable | VarState::Expandable)
+    }
+    pub fn is_reusable(self) -> bool {
+        matches!(self, VarState::ReusableOrExpandable)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
@@ -32,22 +50,8 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// because cost accounting reads it on the hot path. Maintained incrementally
     /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// True iff `?#k` is in the freshest cohort. `expand` flips all
-    /// pre-existing vars to false and inserts new children as true; `reuse`
-    /// flips only `0..keep_idx` to false (the kept slot itself stays true —
-    /// reusing a variable shouldn't stop us reusing it again — and the slots
-    /// *between* the merged pair are left alone, so a second interleaved pair
-    /// can still merge). Search skips `Reuse(i, j)` only when *both* are false —
-    /// that pair would re-merge cohorts a prior action already committed to
-    /// (duplicate canonical).
-    pub var_reusable: Vec<bool>,
-    /// True iff `?#k` is committed to never being expanded again (the
-    /// best-first freeze rule). Maintained here purely as index-aligned
-    /// bookkeeping — `expand`/`reuse`/`concretize` shift the bits to track
-    /// renumbering; the *policy* of which bits to set lives in
-    /// `SearchState::apply_action`. Excluded from `Pattern`'s `Eq`/`Hash`,
-    /// which key on syntax only.
-    pub var_frozen: Vec<bool>,
+    /// Per-var restriction level
+    pub var_state: Vec<VarState>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -62,9 +66,15 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
             var_occurrences: vec![1],
-            var_reusable: vec![true],
-            var_frozen: vec![false],
+            var_state: vec![VarState::ReusableOrExpandable],
         }
+    }
+
+    /// The hole mask: `true` at each expand-banned slot. Used as the
+    /// `SeenTracker` dedup key (flexibility is measured by the expand-banned set,
+    /// since those slots restrict future expansion).
+    pub fn frozen_mask(&self) -> Vec<bool> {
+        self.var_state.iter().map(|&s| !s.is_expandable()).collect()
     }
 
     /// Expands the variable at `var_idx` with `target`. New children are inserted
@@ -79,32 +89,32 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// When `?#var_idx` occupies multiple positions (from a prior `reuse`), every
     /// occurrence is expanded *independently*: each gets its own copy of the new
     /// enode and its own freshly-created child nodes. The pattern stays a pure
-    /// tree — no node is shared between occurrences — so `vars[var_idx+j]` ends up
-    /// with one id per occurrence rather than a single DAG-shared id.
+    /// tree — no node is shared between occurrences — so each new child var ends
+    /// up with one id per occurrence rather than a single DAG-shared id.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         // Per-occurrence structural depths, snapshotted before any mutation.
         let depths = self.occurrence_depths();
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_occ = self.var_occurrences.remove(var_idx);
-        self.var_reusable.remove(var_idx);
-        // Index-align the freeze bits; the expanded var's own bit is dropped
-        // (it had to be non-frozen to be expanded) and each new child starts
-        // non-frozen below.
-        self.var_frozen.remove(var_idx);
-        // Any expansion flips every *previously existing* var to non-reusable;
-        // only the children we insert below start out reusable. See
-        // `var_reusable` docs.
-        for r in &mut self.var_reusable {
-            *r = false;
+        // Drop the expanded var's own state (it had to be non-frozen to be
+        // expanded); each new child is inserted as `ReusableOrExpandable` below.
+        self.var_state.remove(var_idx);
+        // Any expansion demotes every *previously existing* fresh var out of the
+        // reusable cohort (`Frozen` stays frozen); only the children we insert
+        // below start reusable. See `VarState`.
+        for s in &mut self.var_state {
+            if *s == VarState::ReusableOrExpandable {
+                *s = VarState::Expandable;
+            }
         }
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
 
         // Shift names of trailing vars: a var currently at post-removal index p
-        // will end up at post-insertion index p + num_children, so rename its leaves.
-        // (Skip the no-op case num_children == 1 where indices don't move.)
+        // will end up at post-insertion index p + num_children, so rename its
+        // leaves. (Skip the no-op case num_children == 1 where indices don't move.)
         if num_children != 1 {
             for p in var_idx..self.vars.len() {
                 let shifted = var_node::<F, O>((p + num_children) as u32);
@@ -114,7 +124,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
 
-        // Insert the `num_children` new var slots (names var_idx..var_idx+k).
+        // Insert the `num_children` new var slots at `var_idx` (names
+        // var_idx..var_idx+k), preserving DFS first-appearance numbering.
         // Positions are filled in below — one freshly-created node per occurrence
         // of the expanded var, since we never share nodes across occurrences.
         for j in 0..num_children {
@@ -124,8 +135,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             // The new enode replaces every occurrence of the parent var, so the
             // syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
-            self.var_reusable.insert(var_idx + j, true);
-            self.var_frozen.insert(var_idx + j, false);
+            self.var_state.insert(var_idx + j, VarState::ReusableOrExpandable);
         }
 
         // Expand each occurrence of the var independently: build its own enode
@@ -185,14 +195,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let mut new_vars = vec![Vec::new(); n];
         let mut new_depth = vec![0u32; n];
         let mut new_occ = vec![0usize; n];
-        let mut new_reusable = vec![false; n];
-        let mut new_frozen = vec![false; n];
+        let mut new_state = vec![VarState::ReusableOrExpandable; n];
         for (k, &nk) in perm.iter().enumerate() {
             new_vars[nk] = std::mem::take(&mut self.vars[k]);
             new_depth[nk] = self.var_depth[k];
             new_occ[nk] = self.var_occurrences[k];
-            new_reusable[nk] = self.var_reusable[k];
-            new_frozen[nk] = self.var_frozen[k];
+            new_state[nk] = self.var_state[k];
         }
         // Rename the leaves to the canonical var names.
         for (k, ids) in new_vars.iter().enumerate() {
@@ -204,8 +212,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.vars = new_vars;
         self.var_depth = new_depth;
         self.var_occurrences = new_occ;
-        self.var_reusable = new_reusable;
-        self.var_frozen = new_frozen;
+        self.var_state = new_state;
         perm
     }
 
@@ -233,21 +240,19 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Stale only the vars below the *kept* (lower) slot, so future reuses
-        // go in canonical (increasing-keep) order. Crucially we leave the slots
-        // *between* keep_idx and drop_idx reusable: this merge says nothing
-        // about whether they can still pair with each other or with higher
-        // slots, and staling them (the old `..drop_idx`) wrongly blocked a
-        // second, interleaved pair from ever merging. The merged slot stays
-        // reusable too — reusing a variable shouldn't stop us reusing it again.
-        for r in &mut self.var_reusable[..keep_idx] {
-            *r = false;
+        // Stale vars below the *kept* slot, demoting them out of the reusable
+        // cohort but keeping them expandable. The merged slot's state is set below.
+        for s in &mut self.var_state[..keep_idx] {
+            if *s == VarState::ReusableOrExpandable {
+                *s = VarState::Expandable;
+            }
         }
-        self.var_reusable[keep_idx] = true;
-        self.var_reusable.remove(drop_idx);
-        // The merged var is frozen iff *either* participant was
-        self.var_frozen[keep_idx] = self.var_frozen[keep_idx] || self.var_frozen[drop_idx];
-        self.var_frozen.remove(drop_idx);
+        self.var_state[keep_idx] = if self.var_state[keep_idx] == VarState::Frozen || self.var_state[drop_idx] == VarState::Frozen {
+            VarState::Frozen
+        } else {
+            VarState::ReusableOrExpandable
+        };
+        self.var_state.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -276,8 +281,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let var_positions = self.vars.remove(var_idx);
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
-        self.var_reusable.remove(var_idx);
-        self.var_frozen.remove(var_idx);
+        self.var_state.remove(var_idx);
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);
@@ -532,8 +536,7 @@ mod tests {
         p.vars.swap(0, 1);
         p.var_depth.swap(0, 1);
         p.var_occurrences.swap(0, 1);
-        p.var_reusable.swap(0, 1);
-        p.var_frozen.swap(0, 1);
+        p.var_state.swap(0, 1);
         for (k, ids) in p.vars.clone().iter().enumerate() {
             for &id in ids {
                 p.pattern[id] = var_node::<OpChildren, Op>(k as u32);
