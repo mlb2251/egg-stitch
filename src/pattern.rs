@@ -24,24 +24,12 @@ use rustc_hash::FxHashMap;
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
 
-/// Per-var restriction level for the best-first canonical-ordering rules.
-///
-/// The states form a monotone order of increasing restriction — a var only ever
-/// moves rightward in the declaration order below, never back. (The `Ord` derive
-/// relies on that declaration order, so merges can take the `max`.) This
-/// collapses what were two index-aligned bitmaps (`reusable`, `frozen`): every
-/// transition keeps `expand-banned ⟹ not reusable`, so e.g. a reusable-and-frozen
-/// combination can't arise and isn't represented.
-///
-/// `Frozen` is reached two ways — the expand-freeze rule (expanding `?#k` freezes
-/// every earlier var) and the reuse-freeze rule (a non-dominant `Reuse` freezes
-/// the merged var) — but behaves identically afterwards: `?#k` stays a hole paid
-/// for at every call site, and when the var turns out *useless* (bound to one
-/// constant everywhere) the state is pruned (stitch argument-capture). Under the
-/// self-draining forced-expansion cap that prune shrinks the bounded search; an
-/// earlier model gave reuse-freeze its own state that instead *inlined* useless
-/// vars, but that only paid off in the legacy step-capped regime and was a net
-/// loss (e.g. wheels 5x slower) once best-first ran to convergence.
+/// Per-var restriction level for the best-first canonical-ordering rules. A
+/// monotone order of increasing restriction (a var only moves rightward), so the
+/// `Ord` derive lets a reuse merge take the `max`. Collapses what were two
+/// index-aligned bitmaps (`reusable`, `frozen`): `Frozen ⟹ not reusable`, so a
+/// reusable-and-frozen combination can't arise. `Frozen` (set by the expand- or
+/// reuse-freeze rule in `apply_action`) is a committed hole, pruned when useless.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VarState {
     /// Fresh cohort: may be both reused (as the fresh side of a canonical
@@ -78,15 +66,10 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// because cost accounting reads it on the hot path. Maintained incrementally
     /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// Per-var restriction level (see [`VarState`]). Maintained as index-aligned
-    /// bookkeeping — `expand`/`reuse`/`concretize` shift the entries to track
-    /// renumbering, demote reusability, and merge commitments (a reuse takes the
-    /// `max` of the two participants); the *policy* of which vars to newly ban
-    /// lives in `SearchState::apply_action`. The freshest cohort
-    /// (`ReusableOrExpandable`) drives canonical reuse ordering: search skips
-    /// `Reuse(i, j)` only when neither is in that cohort. The expand-banned set is
-    /// not necessarily a prefix. Excluded from `Pattern`'s `Eq`/`Hash`, which key
-    /// on syntax only.
+    /// Per-var restriction level (see [`VarState`]), index-aligned bookkeeping
+    /// that `expand`/`reuse`/`concretize` shift to track renumbering (a reuse
+    /// merges as the `max`); the *policy* of which vars to ban lives in
+    /// `SearchState::apply_action`. Excluded from `Pattern`'s `Eq`/`Hash`.
     pub var_state: Vec<VarState>,
 }
 
