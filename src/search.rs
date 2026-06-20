@@ -717,7 +717,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let n = self.pattern.vars.len();
         let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
         let (rank, order) = if self.freeze_rule && n > 1 {
-            let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|(_, s, h)| *s as f64 / *h as f64).fold(f64::INFINITY, f64::min)).collect();
+            let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|(_, s, h)| *s as f64 / *h as f64).fold(-f64::INFINITY, f64::max)).collect();
             let mut order: Vec<usize> = (0..n).collect();
             order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
             let mut rank = vec![0usize; n];
