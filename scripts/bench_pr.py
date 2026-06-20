@@ -309,11 +309,16 @@ def update_pr_report(pr_branch: str, report_section: str) -> None:
         print(f"\nbench_pr: updated Timing section on PR for {pr_branch}.")
 
 
-def _speedup_emoji(speedup: float) -> str:
-    """Green for >1.02, red for <0.98, gray for the in-between band."""
-    if speedup > 1.02:
+def _speedup_emoji(speedup: float, band: float = 0.02) -> str:
+    """Green above ``1+band``, red below ``1-band``, gray for the in-between band.
+
+    ``band`` is the half-width of the gray "no meaningful change" zone: 0.02 (2%)
+    for geomean rows, 0.05 (5%) for per-domain rows whose individual noise is
+    larger.
+    """
+    if speedup > 1 + band:
         return "🟢"
-    if speedup < 0.98:
+    if speedup < 1 - band:
         return "🔴"
     return "⚪"
 
@@ -414,11 +419,16 @@ def compression_section(base: str, pr: str) -> str:
 
 
 def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str,
-              domains: list[str] = DOMAINS) -> str:
+              domains: list[str] = DOMAINS, unconverged: set = frozenset()) -> str:
     """Return a GitHub-flavored markdown comparison table.
 
     Emits one row per entry in ``domains`` plus a trailing geomean row, for
     each of the ``enum`` and ``smc`` methods.
+
+    Per-domain rows use a 5% gray band (their per-cell noise is larger); the
+    geomean row keeps the tighter 2% band. A ``(domain, method)`` in
+    ``unconverged`` — its rel-SEM stayed above the sampler's target at the end
+    of the run — is flagged 🟡 in place of the speedup color.
     """
     lines = [
         f"### {title} — `{pr_label}` vs `{base_label}`",
@@ -439,8 +449,13 @@ def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str,
         labels = list(domains)
         rows.append(geomean(rows)); labels.append("geomean")
         for dom, (t_base, t_pr, speedup, c_base, c_pr) in zip(labels, rows):
+            is_geomean = dom == "geomean"
+            if not is_geomean and (dom, m) in unconverged:
+                emoji = "🟡"
+            else:
+                emoji = _speedup_emoji(speedup, 0.02 if is_geomean else 0.05)
             comp_warn = " ‼️" if c_pr / c_base < 0.99 else ""
-            lines.append(f"| {_speedup_emoji(speedup)}{comp_warn} | {dom} | {m} | {t_base:.3f} | {t_pr:.3f} | {speedup:.2f}x | {c_base:.3f} | {c_pr:.3f} |")
+            lines.append(f"| {emoji}{comp_warn} | {dom} | {m} | {t_base:.3f} | {t_pr:.3f} | {speedup:.2f}x | {c_base:.3f} | {c_pr:.3f} |")
     return "\n".join(lines)
 
 
@@ -558,19 +573,32 @@ def main() -> None:
         with_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("with_dsrs",) for dom in DOMAINS for m in methods}
         without_reps = {(d, dom, m): reps_done[(d, dom, m)] for d in ("without_dsrs",) for dom in DOMAINS for m in methods}
         mol_reps = {("with_dsrs", fam, m): reps_done[("with_dsrs", fam, m)] for fam in MOL_FAMILIES for m in methods}
+
+        def unconverged_set(dsr_label: str, domains: list[str]) -> set:
+            """{(domain, method)} whose final rel-SEM stayed >= TARGET_REL_SEM,
+            i.e. the adaptive sampler never drove the cell's noise under target
+            (it hit MAX_RUNS first)."""
+            return {
+                (dom, m) for dom in domains for m in methods
+                if cell_rel_sem((dsr_label, dom, m), reps_done[(dsr_label, dom, m)]) >= TARGET_REL_SEM
+            }
+
         with_md = fmt_table(base, pr,
                             summarize(session, "base", "with_dsrs", methods, with_reps),
                             summarize(session, "pr", "with_dsrs", methods, with_reps),
-                            "with DSRs")
+                            "with DSRs",
+                            unconverged=unconverged_set("with_dsrs", DOMAINS))
         without_md = fmt_table(base, pr,
                                summarize(session, "base", "without_dsrs", methods, without_reps),
                                summarize(session, "pr", "without_dsrs", methods, without_reps),
-                               "without DSRs")
+                               "without DSRs",
+                               unconverged=unconverged_set("without_dsrs", DOMAINS))
         mol_md = fmt_table(base, pr,
                            summarize(session, "base", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
                            summarize(session, "pr", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
                            "molecules (with DSRs)",
-                           domains=MOL_FAMILIES)
+                           domains=MOL_FAMILIES,
+                           unconverged=unconverged_set("with_dsrs", MOL_FAMILIES))
         timing_section = ("## Timing and fixture regressions\n\n"
                           + with_md + "\n\n" + without_md + "\n\n" + mol_md + "\n")
         report_section = comp_section.rstrip() + "\n\n" + timing_section
