@@ -583,7 +583,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
 
 /// Optimistic analysis producing a lower bound on achievable size. At a match
 /// root, the rewrite collapses to a single stub node plus the captured
-/// arguments at frozen-var slots (those with `var_frozen[k]`) — those holes are
+/// arguments at frozen-var slots (those that are holes, `!var_state[k].is_expandable()`) — those holes are
 /// committed to staying, so their args appear verbatim at every call site and
 /// must be paid for. Non-frozen vars can still be expanded into the body, so
 /// they contribute nothing here. Min taken across substs.
@@ -601,14 +601,14 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
     fn best(sizes: &StitchAnalysisRunner<F::Apply<O>, Self>, eclass: Id) -> i64 {
         let mut best = sizes.min_enode_size(eclass);
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
-            let var_frozen = &sizes.analysis.search_state.pattern.var_frozen;
+            let var_state = &sizes.analysis.search_state.pattern.var_state;
             let weights = sizes.weights();
             let stub_size = F::stub_application_size(sizes.analysis.search_state.frozen_count(), weights) as i64;
             // Only frozen slots contribute; their arg sizes are additively
             // separable, so the min over the product factors into a sum of
             // per-factor minima (factors with no frozen slot add 0).
             let factors = &sizes.analysis.search_state.matches[i].factors;
-            let rewrite_size = stub_size + factored_min(factors, |k, v| if var_frozen[k] { sizes.get(sizes.egraph.find(v)) } else { 0 });
+            let rewrite_size = stub_size + factored_min(factors, |k, v| if !var_state[k].is_expandable() { sizes.get(sizes.egraph.find(v)) } else { 0 });
             best = best.min(rewrite_size);
         }
         best
@@ -627,13 +627,13 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
 /// guarantees the search tree is finite. Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
     scratch.rewrite.fill(search_state);
-    let var_frozen = &search_state.pattern.var_frozen;
+    let var_state = &search_state.pattern.var_state;
     let mut arg_to_match_roots: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
     for m in &search_state.matches {
         let root = egraph.find(m.root_eclass);
         for f in &m.factors {
             for (p, &k) in f.slots.iter().enumerate() {
-                if var_frozen[k] {
+                if !var_state[k].is_expandable() {
                     for row in &f.rows {
                         arg_to_match_roots.entry(egraph.find(row[p])).or_default().push(root);
                     }
