@@ -12,44 +12,28 @@ use rustc_hash::FxHashMap;
 /// so a pattern is just "the same Language as programs, with pattern variables
 /// added to the Op slot."
 ///
-/// Leaf-name invariant: for every `k`, every `Id` in `vars[k]` holds a node
-/// whose op is `OpWithVar::Var(egg::Var::from(k as u32))` — leaf names always
-/// match their array index. `expand`/`reuse`/`canonicalize_vars` all preserve
-/// this.
-///
-/// Vars are numbered in DFS first-appearance order: `expand` inserts children at
-/// the hole's position (not in expansion order), so the numbering stays canonical
-/// and `to_string` renders alpha-equivalent patterns identically.
+/// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds a
+/// node whose op is `OpWithVar::Var(egg::Var::from(k as u32))` — so the tree's
+/// var names match their DFS first-appearance order. `expand` and `reuse`
+/// preserve this by rewriting affected var leaves, so `pattern.to_string()`
+/// is canonical: alpha-equivalent patterns render identically.
 /// The storage type backing a `Pattern<F, O>`: the program language
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
 
-/// Per-var restriction level for the best-first canonical-ordering rules. A
-/// monotone order of increasing restriction (a var only moves rightward), so the
-/// `Ord` derive lets a reuse merge take the `max`. Collapses what were two
-/// index-aligned bitmaps (`reusable`, `frozen`): `Frozen ⟹ not reusable`, so a
-/// reusable-and-frozen combination can't arise. `Frozen` (set by the expand- or
-/// reuse-freeze rule in `apply_action`) is a committed hole, pruned when useless.
+/// Level of restriction for a variable. Entry order matters here for Ord.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VarState {
-    /// Fresh cohort: may be both reused (as the fresh side of a canonical
-    /// reuse) and expanded.
     ReusableOrExpandable,
-    /// Stale: may still be expanded, but no longer reused as the fresh side.
+    /// Can be literally expanded but not reused
     Expandable,
-    /// Committed to never being expanded again (by either the expand-freeze or
-    /// the reuse-freeze rule); pruned when useless.
     Frozen,
 }
 
 impl VarState {
-    /// True iff `?#k` may still be expanded. The complement — `Frozen` — is
-    /// committed to staying a hole, so its argument is paid at every call site
-    /// and it counts in the stub size / lower bound.
     pub fn is_expandable(self) -> bool {
         matches!(self, VarState::ReusableOrExpandable | VarState::Expandable)
     }
-    /// True iff `?#k` may still be reused as the fresh side of a canonical reuse.
     pub fn is_reusable(self) -> bool {
         matches!(self, VarState::ReusableOrExpandable)
     }
@@ -66,10 +50,7 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// because cost accounting reads it on the hot path. Maintained incrementally
     /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// Per-var restriction level (see [`VarState`]), index-aligned bookkeeping
-    /// that `expand`/`reuse`/`concretize` shift to track renumbering (a reuse
-    /// merges as the `max`); the *policy* of which vars to ban lives in
-    /// `SearchState::apply_action`. Excluded from `Pattern`'s `Eq`/`Hash`.
+    /// Per-var restriction level
     pub var_state: Vec<VarState>,
 }
 
@@ -96,12 +77,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_state.iter().map(|&s| !s.is_expandable()).collect()
     }
 
-    /// Expands the variable at `var_idx` with `target`. `var_idx`'s slot is
-    /// dropped, the trailing vars shift down one, and the new child vars are
-    /// *appended* at the end of the list (creation-order numbering), so a
-    /// deepening pattern's growth point climbs in index — see the type-level docs
-    /// and `canonicalize_vars`. All `Var(n)` leaves are rewritten to their new
-    /// names, preserving the leaf-name invariant.
+    /// Expands the variable at `var_idx` with `target`. New children are inserted
+    /// at list positions `var_idx..var_idx+k`; any vars that previously followed
+    /// `var_idx` shift right and get their in-tree `Var(n)` leaves rewritten to
+    /// match their new position, so the canonical-form invariant is preserved.
     ///
     /// Each new child meta-var inherits the parent's binder depth, plus one if
     /// `target.discriminant().binds_child(j)` is true for that slot — i.e., a
@@ -261,10 +240,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Stale vars below the *kept* slot (not the dropped one — `..drop_idx`
-        // would wrongly block interleaved pairs from merging, #265), demoting
-        // them out of the reusable cohort but keeping them expandable. The merged
-        // slot's state is set below.
+        // Stale vars below the *kept* slot, demoting them out of the reusable
+        // cohort but keeping them expandable. The merged slot's state is set below.
         for s in &mut self.var_state[..keep_idx] {
             if *s == VarState::ReusableOrExpandable {
                 *s = VarState::Expandable;
@@ -523,25 +500,21 @@ mod tests {
     fn expand_nested_left_first() {
         let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
-        p.expand(0, &op("-", 2)); // append order: (+ (- ?#1 ?#2) ?#0)
-        // `expand` numbers in append/creation order; `canonicalize_vars`
-        // restores DFS first-appearance order before we check canonical form.
-        p.canonicalize_vars();
+        p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
         assert_eq!(p.to_string(), "(+ (- ?#0 ?#1) ?#2)");
         assert_eq!(p.vars.len(), 3);
         assert_vars_canonical(&p);
     }
 
     #[test]
-    fn canonicalize_vars_is_idempotent() {
-        // `expand` numbers in append/creation order (not DFS), so the first
-        // canonicalize may renumber; a second canonicalize on the now-canonical
-        // pattern must be the identity (and leave it untouched).
+    fn canonicalize_vars_is_identity_on_canonical_patterns() {
+        // `expand`/`reuse` already maintain DFS first-appearance order, so
+        // canonicalize_vars must leave their output untouched (and report the
+        // identity permutation).
         let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2));
-        p.expand(0, &op("-", 2));
-        p.reuse(1, 2);
-        p.canonicalize_vars();
+        p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
+        p.reuse(1, 2); // (+ (- ?#0 ?#1) ?#1)
         let before = p.to_string();
         let depth = p.var_depth.clone();
         let occ = p.var_occurrences.clone();
@@ -683,7 +656,7 @@ mod tests {
         a.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#0 ?#1))
 
         let mut b: Pattern<OpChildren, Op> = Pattern::single_var();
-        b.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
+        b.expand(0, &op("+", 2));
         b.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) ?#2)
         b.expand(2, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#2 ?#3))
 
