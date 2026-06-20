@@ -53,9 +53,9 @@ const NUM_ABSTRACTIONS: &str = "3";
 const MFE_CAP: &str = "3";
 
 /// Best-first step budget per round. The no-DSR runs keep the larger budget;
-/// the DSR runs converge by ~2k expansions (best found early, then no
-/// improvement), so a smaller budget keeps them fast instead of grinding to the
-/// cap for nothing.
+/// the DSR runs don't converge, but find their best early (~2k expansions) and
+/// then only grind to the cap, so a smaller budget keeps them fast (and the heap
+/// bounded) without changing the result.
 const NUM_STEPS_NODSR: &str = "50000";
 const NUM_STEPS_DSR: &str = "10000";
 
