@@ -543,15 +543,17 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `expand`/`reuse` and the expand-freeze policy is applied inline.
     /// Used by best-first and by SMC after sampling so we don't materialise
     /// child states for successors that don't get picked.
-    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, rank: &[usize]) -> SearchState<F, O> {
+    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, rank: Option<&[usize]>) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
                 // Commit to freezing every var of *lower rank*: expanding the
                 // var at rank `r` forbids ever expanding a lower-rank var.
-                // Disabled for SMC.
+                // Must precede `expand`: `rank` is in pre-expand numbering.
+                // Disabled for SMC (no freeze rule, so `rank` is `None`).
                 if self.freeze_rule {
+                    let rank = rank.expect("freeze_rule requires a rank");
                     let rv = rank[*var_idx];
                     for (j, frozen) in new_pattern.var_frozen.iter_mut().enumerate() {
                         if rank[j] < rv {
@@ -705,8 +707,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Non-expansive ordering over all vars, built from each var's [`Self::expand_shapes`].
-    /// `f(k) = the mean enodes per *matching* subst of `k`'s
-    /// cleanest expansion.
+    /// `f(k)` = the mean enodes per *matching* subst of `k`'s most-exploding
+    /// (least-clean) expansion.
     ///
     /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank
     /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
@@ -834,7 +836,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
-                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, &rank);
+                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, Some(&rank));
                     return SuccessorEnum::Dominant { child, support };
                 }
                 out.push((Action::Reuse { keep: i, drop: j }, support));
