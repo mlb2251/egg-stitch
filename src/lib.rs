@@ -90,6 +90,14 @@ pub struct Args {
     #[arg(long, default_value_t = 50_000_000)]
     pub node_limit: usize,
 
+    /// Per-rule, per-iteration match limit for e-saturation. A rule producing
+    /// more than this many matches in an iteration is skipped and temporarily
+    /// banned (egg's BackoffScheduler). Lowering it lets associative/commutative
+    /// rules fire while the egraph is small but cuts them off before they
+    /// explode it. Omit to use egg's default (1000).
+    #[arg(long)]
+    pub match_limit: Option<usize>,
+
     /// Follow pattern to constrain particle expansion.
     #[arg(short, long)]
     pub follow: Option<String>,
@@ -213,6 +221,18 @@ pub struct Args {
     /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
     #[arg(long = "max-forced-expansion", default_value = "none")]
     pub max_forced_expansion: MaxForcedExpansion,
+
+    /// Prune best-first successors with an over-cap factor, measured by
+    /// *size-weighted per-factor mass* — for the heaviest single factor, the sum
+    /// over its stored rows of the cost-analysis e-class sizes of the variables'
+    /// bindings (see `SearchState::max_factor_weight`). This excludes patterns
+    /// that descend into commutativity-bloated arithmetic e-classes (one
+    /// coordinate constant with exponentially many entangled parse trees) — which
+    /// `--max-forced-expansion` can't catch (those have ~zero forced expansion) —
+    /// while sparing high-usage patterns (many matches, tiny 1-row factors).
+    /// Omit to disable.
+    #[arg(long = "max-match-set")]
+    pub max_match_set: Option<usize>,
 
     /// Path to write JSON output.
     #[arg(short, long)]
@@ -340,7 +360,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 // With `--only-use-dsrs-at-start` the rules are not re-applied to
                 // the fresh egraph between abstractions.
                 let rule_file = if args.only_use_dsrs_at_start { None } else { args.rules.as_deref() };
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file, args.iter_limit, args.node_limit);
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file, args.iter_limit, args.node_limit, args.match_limit);
 
                 // `best_cost` is the search's score for this iteration: rewritten
                 // corpus + this abstraction's body. Earlier iterations rewrote the
@@ -428,11 +448,20 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// rules re-applied).
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
-pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, iter_limit: usize, node_limit: usize) -> (shared::SharedData<F, O>, Vec<String>) {
+pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(
+    data: shared::SharedData<F, O>,
+    state: &search::SearchState<F, O>,
+    candidate: &cost::CostCandidate,
+    fn_name: &str,
+    rule_file: Option<&str>,
+    iter_limit: usize,
+    node_limit: usize,
+    match_limit: Option<usize>,
+) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { egraph, root } = data;
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
     let programs = io::extract_programs::<F::Apply<O>>(&egraph, root);
     let weights = egraph.analysis.weights;
-    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit);
+    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit, match_limit);
     (fresh, programs)
 }

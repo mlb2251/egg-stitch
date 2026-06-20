@@ -149,6 +149,14 @@ class OursBf:
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
+    # Cap DSR e-saturation rounds (bounds an expanding rule set's e-graph).
+    iter_limit: int | None = field(default=None, repr=False)
+    # Per-factor match-set cap (bounds the abstraction match set so commutative
+    # rules can't OOM live; see egg-stitch ``--max-match-set``).
+    max_match_set: int | None = field(default=None, repr=False)
+    # Use this rewrites file instead of the domain's default (e.g. a custom DSR
+    # set). Path is relative to egg-stitch's cwd.
+    rewrites_override: str | None = field(default=None, repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         search_flags: dict[str, object] = {}
@@ -156,8 +164,13 @@ class OursBf:
             search_flags["num_steps"] = self.num_steps
         if self.max_forced_expansion is not None:
             search_flags["max_forced_expansion"] = self.max_forced_expansion
+        if self.iter_limit is not None:
+            search_flags["iter_limit"] = self.iter_limit
+        if self.max_match_set is not None:
+            search_flags["max_match_set"] = self.max_match_set
         return _run(
-            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
+            rounds=rounds, input_path=input_path,
+            rewrites_path=self.rewrites_override or rewrites_path,
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
             search_flags=search_flags,

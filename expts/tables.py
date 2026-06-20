@@ -19,7 +19,7 @@ from typing import Sequence
 
 from tqdm import tqdm
 
-from . import ALL_DOMAINS
+from . import ALL_DOMAINS, COGSCI_DOMAINS
 from ._subproc import available_memory_bytes
 from .bench import MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
@@ -319,4 +319,62 @@ def table6() -> Path:
         use_dsrs=True,
         folder_prefix="table6",
         output_name="table6.json",
+    )
+
+
+# Table 7: the cogsci drawing domains with a custom affine-transform-algebra DSR
+# set (data/domains/cogsci/drawings.algebra-choice2.rewrites), comparing DSRs
+# kept LIVE during search against applied only AT START. The algebra rules are
+# deliberately *non-confluent* (transform factoring, repeat<->unroll, overlay
+# assoc/comm, scale/translate interchange) — they expose multiple equivalent
+# normal forms whose best choice depends on the library being built. Live keeps
+# all forms so each abstraction can align to the matching one; at-start commits
+# to a single greedy min-term up front, so live wins (and the gap widens with
+# expressiveness). The commutative rules would explode the abstraction match set
+# if left unchecked, so each run carries the per-factor ``--max-match-set`` cap
+# and an ``--iter-limit`` that bounds the e-saturation. Fixed 4 abstractions.
+TABLE7_DOMAINS = COGSCI_DOMAINS
+TABLE7_REWRITES = "data/domains/cogsci/drawings.algebra-choice2.rewrites"
+TABLE7_NUM_ABSTRACTIONS = 4
+TABLE7_NUM_STEPS = 50_000
+TABLE7_ITER_LIMIT = 6
+TABLE7_MATCH_SET_CAP = 2000
+TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
+
+
+def _table7_runners() -> tuple[tuple[str, object], ...]:
+    """``enum-live`` vs ``enum-at-start``: the same best-first config and algebra
+    DSRs, differing only in whether the rules stay live during search."""
+    common = dict(
+        num_steps=TABLE7_NUM_STEPS,
+        iter_limit=TABLE7_ITER_LIMIT,
+        max_match_set=TABLE7_MATCH_SET_CAP,
+        rewrites_override=TABLE7_REWRITES,
+        timeout=TABLE7_TIMEOUT,
+        mem_limit=MEM_LIMIT_BYTES,
+    )
+    return (
+        ("enum-live", OursBf(only_use_dsrs_at_start=False, **common)),
+        ("enum-at-start", OursBf(only_use_dsrs_at_start=True, **common)),
+    )
+
+
+def table7() -> Path:
+    """Run the cogsci domains with the non-confluent affine-algebra DSRs, live
+    vs dsrs-only-at-start, at a fixed 4 abstractions with the per-factor
+    match-set cap. Demonstrates live > at-start on a non-confluent rule set."""
+    free = available_memory_bytes()
+    if free < MEM_LIMIT_BYTES:
+        raise SystemExit(
+            f"table7: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
+            f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
+            f"available. Free up memory or lower MEM_LIMIT_BYTES."
+        )
+    return _run_table(
+        domains=TABLE7_DOMAINS,
+        runners=_table7_runners(),
+        num_abstractions=TABLE7_NUM_ABSTRACTIONS,
+        use_dsrs=True,
+        folder_prefix="table7",
+        output_name="table7.json",
     )

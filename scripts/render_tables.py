@@ -33,6 +33,7 @@ from expts.tables import (  # noqa: E402
     TABLE6_BFS_SWEEP,
     TABLE6_DOMAINS,
     TABLE6_ENUM_POINT,
+    TABLE7_DOMAINS,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -838,6 +839,61 @@ def render_table6(saved: dict) -> None:
         print(f"wrote {plot_path}", file=sys.stderr)
 
 
+# ─── table7: affine-algebra DSRs, live vs at-start (cogsci) ───────────────────
+TABLE7_TITLE = "Affine-Algebra DSRs: Live vs At-Start (cogsci)"
+TABLE7_DOMAIN_LABELS = {
+    "dials": "Dials", "furniture": "Furniture",
+    "nuts-bolts": "Nuts \\& Bolts", "wheels": "Wheels",
+}
+TABLE7_METHODS = ["enum-live", "enum-at-start"]
+TABLE7_COL_LABELS = {"enum-live": "Live", "enum-at-start": "At-start"}
+
+
+def render_table7_tex(saved: dict) -> str:
+    """LaTeX tabular for table7: cogsci domains × {live, at-start} affine-algebra
+    DSRs, Compression Ratio (higher = better; raw initial / final, so comparable
+    across modes) and Time (s). The better CR per row is bolded — live should win
+    on the non-confluent rule set. DNF cells render ``DNF``."""
+    domains = saved["domains"]
+    methods = TABLE7_METHODS
+    n = len(methods)
+
+    def cells(values: list[float | None], spec: str, higher_is_better: bool) -> list[str]:
+        out = bold_best(values, spec, higher_is_better)
+        return [("DNF" if v is None else s) for v, s in zip(values, out)]
+
+    col_spec = "l r " + ("r" * n) + " " + ("r" * n)
+    lines = [
+        f"% {TABLE7_TITLE}: generated from results JSON",
+        "\\begin{tabular}{" + col_spec + "}",
+        "\\toprule",
+        "& \\multicolumn{1}{c}{Size} "
+        f"& \\multicolumn{{{n}}}{{c}}{{Compression Ratio}} "
+        f"& \\multicolumn{{{n}}}{{c}}{{Time (s)}} \\\\",
+        f"\\cmidrule(lr){{2-2}} \\cmidrule(lr){{3-{2 + n}}} "
+        f"\\cmidrule(lr){{{3 + n}-{2 + 2 * n}}}",
+    ]
+    method_hdr = " & ".join(TABLE7_COL_LABELS[m] for m in methods)
+    lines.append(f"Domain & Original & {method_hdr} & {method_hdr} \\\\")
+    lines.append("\\midrule")
+    for domain in TABLE7_DOMAINS:
+        if domain not in domains:
+            continue
+        runs = domains[domain].get("runs", {})
+        cr_map = aggregate_methods_cr(runs)
+        t_map = aggregate_methods_time(runs)
+        crs = [cr_map.get(m) for m in methods]
+        ts = [t_map.get(m) for m in methods]
+        ts = [t if c is not None else None for c, t in zip(crs, ts)]
+        label = TABLE7_DOMAIN_LABELS.get(domain, domain)
+        original = fmt(initial_size_for_domain(runs), ".0f")
+        cr_strs = cells(crs, ".2f", higher_is_better=True)
+        t_strs = cells(ts, ".2f", higher_is_better=False)
+        lines.append(" & ".join([label, original, *cr_strs, *t_strs]) + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    return "\n".join(lines)
+
+
 def main() -> None:
     """Render each table as a LaTeX file and PNG plot under ``figures/``."""
     argparse.ArgumentParser(description=__doc__).parse_args()
@@ -904,6 +960,17 @@ def main() -> None:
         render_table6(saved)
     else:
         print(f"skipping table6: {table6_path} not present", file=sys.stderr)
+
+    # Table 7 (affine-algebra DSRs live vs at-start on cogsci): LaTeX table only.
+    table7_path = RESULTS_DIR / "table7.json"
+    if table7_path.exists():
+        with open(table7_path) as f:
+            saved = json.load(f)
+        tex_path = FIGURES_DIR / "table7.tex"
+        tex_path.write_text(f"% source: {table7_path}\n" + render_table7_tex(saved) + "\n")
+        print(f"wrote {tex_path}", file=sys.stderr)
+    else:
+        print(f"skipping table7: {table7_path} not present", file=sys.stderr)
 
 
 if __name__ == "__main__":
