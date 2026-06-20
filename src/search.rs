@@ -541,7 +541,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// not cloned-then-discarded). The pattern is cloned and mutated in
     /// place; the freeze set (`Pattern::var_state`) is index-shifted by
     /// `expand`/`reuse` and the freeze policy is applied inline: an `Expand`
-    /// freezes every var of lower f-rank (per `rank`), and a `Reuse` freezes the
+    /// freezes every var of lower rank (per `rank`), and a `Reuse` freezes the
     /// merged var when `freeze_reused` is set (the caller passes `false` for the
     /// dominant-reuse short-circuit). Used by best-first and by SMC after
     /// sampling so we don't materialise child states for successors that don't
@@ -551,10 +551,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
-                // Commit to freezing every var of *lower f-rank*: expanding the
-                // var at f-rank `r` forbids ever expanding a lower-f-rank var.
-                // Set the parent's `var_state` (by rank) before `expand` shifts
-                // it into the child layout. Disabled for SMC.
+                // Commit to freezing every var of *lower rank*: expanding the
+                // var at rank `r` forbids ever expanding a lower-rank var. Set
+                // the parent's `var_state` (by rank) before `expand` shifts it
+                // into the child layout. Disabled for SMC.
                 if self.freeze_rule {
                     let rv = rank[*var_idx];
                     for (j, s) in new_pattern.var_state.iter_mut().enumerate() {
@@ -718,8 +718,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// Non-expansive ordering over all vars, built from each var's [`Self::expand_shapes`].
-    /// `f(k) = the mean enodes per *matching* subst of `k`'s
-    /// cleanest expansion.
+    /// `f(k)` = the mean enodes per *matching* subst of `k`'s most-exploding
+    /// (least-clean) expansion.
     ///
     /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank
     /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
@@ -852,7 +852,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 out.push((Action::Reuse { keep: i, drop: j }, support));
             }
         }
-        // Emit expands in f-rank order so the `max_arity` cap and heap tie-breaks
+        // Emit expands in rank order so the `max_arity` cap and heap tie-breaks
         // act on the f-order. The freeze rule (`!is_expandable()`) and `max_arity`
         // are no-ops for SMC (freeze_rule = false, identity order, max_arity =
         // usize::MAX).
