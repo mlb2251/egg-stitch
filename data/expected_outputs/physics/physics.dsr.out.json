@@ -36,9 +36,9 @@
       {
         "approx_cost": 439,
         "arity": 1,
-        "lambda": "(lam (lam (lam ($2 $0 (*. $1 $1)))))",
+        "lambda": "(lam (lam (lam ($2 (*. $1 $1) $0))))",
         "num_matches": 2,
-        "pattern": "fn_2: (lam (lam (?#0 $0 (*. $1 $1))))",
+        "pattern": "fn_2: (lam (lam (?#0 (*. $1 $1) $0)))",
         "pattern_size": 11,
         "usage_matches": 4
       }
