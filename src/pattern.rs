@@ -17,16 +17,9 @@ use rustc_hash::FxHashMap;
 /// match their array index. `expand`/`reuse`/`canonicalize_vars` all preserve
 /// this.
 ///
-/// During search, vars are numbered in append/creation order (`expand` appends
-/// new children at the end), *not* DFS first-appearance order — this keeps the
-/// deepening point's index climbing into the `var_idx > max_arity` expansion
-/// skip, which bounds runaway spines. The trade-off: `to_string` is not
-/// canonical mid-search (alpha-equivalent patterns built by different expansion
-/// sequences can render differently, so `SeenTracker` dedup is exact only when
-/// their numbering coincides — which the freeze rule arranges for
-/// search-reachable patterns). `canonicalize_vars` renumbers to DFS order,
-/// restoring canonicality; it's applied to the winning abstraction before
-/// output/rewrite.
+/// Vars are numbered in DFS first-appearance order: `expand` inserts children at
+/// the hole's position (not in expansion order), so the numbering stays canonical
+/// and `to_string` renders alpha-equivalent patterns identically.
 /// The storage type backing a `Pattern<F, O>`: the program language
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
@@ -285,15 +278,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Stale only the vars below the *kept* (lower) slot, so future reuses go
-        // in canonical (increasing-keep) order. Crucially we leave the slots
-        // *between* keep_idx and drop_idx reusable: this merge says nothing about
-        // whether they can still pair with each other or with higher slots, and
-        // staling them (the old `..drop_idx`) wrongly blocked a second,
-        // interleaved pair from ever merging (#265). Demote out of the reusable
-        // cohort but keep them expandable. The merged slot's state is set below
-        // (Frozen if either participant was, else reusable — reusing a variable
-        // shouldn't stop us reusing it again, so vars can reuse across nesting).
+        // Stale vars below the *kept* slot (not the dropped one — `..drop_idx`
+        // would wrongly block interleaved pairs from merging, #265), demoting
+        // them out of the reusable cohort but keeping them expandable. The merged
+        // slot's state is set below.
         for s in &mut self.var_state[..keep_idx] {
             if *s == VarState::ReusableOrExpandable {
                 *s = VarState::Expandable;
