@@ -287,14 +287,16 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Stale every var below drop_idx so future reuses go in canonical
-        // (increasing-drop) order, but keep the merged slot reusable — reusing a
-        // variable shouldn't stop us reusing it again, so vars can reuse across
-        // nesting (#258). It still inherits the more-restrictive *expand*
-        // commitment: Frozen if either participant was (Frozen ⟹ not reusable,
-        // so freezing wins). Whether the merge itself freezes the kept slot is a
-        // policy decision left to `SearchState::apply_action`.
-        for s in &mut self.var_state[..drop_idx] {
+        // Stale only the vars below the *kept* (lower) slot, so future reuses go
+        // in canonical (increasing-keep) order. Crucially we leave the slots
+        // *between* keep_idx and drop_idx reusable: this merge says nothing about
+        // whether they can still pair with each other or with higher slots, and
+        // staling them (the old `..drop_idx`) wrongly blocked a second,
+        // interleaved pair from ever merging (#265). Demote out of the reusable
+        // cohort but keep them expandable. The merged slot's state is set below
+        // (Frozen if either participant was, else reusable — reusing a variable
+        // shouldn't stop us reusing it again, so vars can reuse across nesting).
+        for s in &mut self.var_state[..keep_idx] {
             if *s == VarState::ReusableOrExpandable {
                 *s = VarState::Expandable;
             }

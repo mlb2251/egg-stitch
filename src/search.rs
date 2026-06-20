@@ -9,6 +9,15 @@ use egg::{Id, Language};
 use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
 
+/// A candidate expansion shape: an enode's discriminant paired with its arity.
+type Shape<F, O> = (<F as LanguageFamily>::Discriminant<O>, usize);
+/// Per-eclass histogram: each distinct enode shape `(disc, arity)` with its
+/// multiplicity, in enode first-appearance order.
+type EclassShapeHist<F, O> = Vec<(<F as LanguageFamily>::Discriminant<O>, usize, usize)>;
+/// Per var, its candidate expansion shapes (enode first-appearance order), each
+/// carrying weighted support (`sup`) and matching-subst count (`hit`).
+type VarShapes<F, O> = Vec<(Shape<F, O>, usize, usize)>;
+
 /// Tracks already-explored canonical patterns to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
 /// stats. Wrap in `Option<…>` at the call site — `None` disables the check
@@ -79,12 +88,10 @@ fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
     (dbidx as u32) >= d_k
 }
 
-/// True iff `target` cannot be expanded to in a literal expansion.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
-where
-    L::Discriminant: StitchDisc,
-{
-    let Some(dbidx) = target.discriminant().de_bruijn_index() else { return false };
+/// True iff a candidate expansion shape `disc` cannot be a literal expansion at
+/// a hole of depth `depth`
+fn invalid_literal_expansion<D: StitchDisc>(disc: &D, depth: u32) -> bool {
+    let Some(dbidx) = disc.de_bruijn_index() else { return false };
     target_is_free_db_var(dbidx, depth)
 }
 
@@ -132,6 +139,10 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// e-graph isn't unioned during search, and `shift_equal` is on the hot
     /// path — recomputing it per call would be O(enodes) each time.
     pub shift_clamp: u32,
+    /// Per-eclass `(discriminant, arity, enode-count)` shape histogram,
+    /// precomputed once (the e-graph is static during search). Indexed by
+    /// canonical eclass id — sound because no unions happen during search.
+    pub eclass_shapes: Vec<EclassShapeHist<F, O>>,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -147,8 +158,17 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
 /// child (dominance pruning fired) or a list of `(action, support)` pairs the
 /// caller can sample from. SMC builds children lazily only for sampled actions.
 pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
-    Dominant { child: SearchState<F, O>, support: usize },
-    All(Vec<(Action<F::Discriminant<O>>, usize)>),
+    Dominant {
+        child: SearchState<F, O>,
+        support: usize,
+    },
+    /// `(action, support)` pairs plus the rank (`var -> rank`) the freeze rule
+    /// in `apply_action` needs to mark the right vars frozen when an `Expand`
+    /// fires. Identity order for SMC.
+    All {
+        actions: Vec<(Action<F::Discriminant<O>>, usize)>,
+        rank: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -522,25 +542,29 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// not cloned-then-discarded). The pattern is cloned and mutated in
     /// place; the freeze set (`Pattern::var_state`) is index-shifted by
     /// `expand`/`reuse` and the freeze policy is applied inline: an `Expand`
-    /// freezes every earlier var, and a `Reuse` freezes the merged var when
-    /// `freeze_reused` is set (the caller passes `false` for the dominant-reuse
-    /// short-circuit). Used by best-first and by SMC after sampling so we don't
-    /// materialise child states for successors that don't get picked.
-    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, freeze_reused: bool) -> SearchState<F, O> {
+    /// freezes every var of lower f-rank (per `rank`), and a `Reuse` freezes the
+    /// merged var when `freeze_reused` is set (the caller passes `false` for the
+    /// dominant-reuse short-circuit). Used by best-first and by SMC after
+    /// sampling so we don't materialise child states for successors that don't
+    /// get picked.
+    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, freeze_reused: bool, rank: &[usize]) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
-                new_pattern.expand(*var_idx, &target);
-                // Commit to freezing every earlier var: expanding `?#k` forbids
-                // ever expanding `?#j` for `j < k`. Idempotent on already-frozen
-                // slots; freezes a leading run but the set need not stay a
-                // prefix (a reuse may have frozen a later slot). Disabled for SMC.
+                // Commit to freezing every var of *lower f-rank*: expanding the
+                // var at f-rank `r` forbids ever expanding a lower-f-rank var.
+                // Set the parent's `var_state` (by rank) before `expand` shifts
+                // it into the child layout. Disabled for SMC.
                 if self.freeze_rule {
-                    for s in &mut new_pattern.var_state[..*var_idx] {
-                        *s = VarState::Frozen;
+                    let rv = rank[*var_idx];
+                    for (j, s) in new_pattern.var_state.iter_mut().enumerate() {
+                        if rank[j] < rv {
+                            *s = VarState::Frozen;
+                        }
                     }
                 }
+                new_pattern.expand(*var_idx, &target);
                 Self::build_subset_matches(&self.matches, *var_idx, &target, self.pattern.vars.len(), shared)
             }
             Action::Reuse { keep, drop } => {
@@ -652,6 +676,75 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         best
     }
 
+    /// The candidate expansion shapes for `?#var_idx`: every distinct
+    /// `(discriminant, arity)` its bound eclass admits (free DB-var leaves above
+    /// the hole's depth excluded), each paired with its `usage·(substs/rows)`-
+    /// weighted support (`sup`) and matching-subst count (`hit`), summed over
+    /// every (match, factor-row) the var appears in. Reads the precomputed
+    /// per-eclass shape histograms ([`SharedSearchData::eclass_shapes`]) and keeps
+    /// shapes in enode first-appearance order so the emitted action order is
+    /// deterministic. (`hit` feeds the rank; the expand emission ignores it.)
+    fn expand_shapes(&self, var_idx: usize, shared: &SharedSearchData<F, O>) -> VarShapes<F, O> {
+        let d_k = self.pattern.var_depth[var_idx];
+        let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
+        let mut shape_idx: FxHashMap<Shape<F, O>, usize> = FxHashMap::default();
+        let mut shapes: VarShapes<F, O> = Vec::new();
+        for m in &self.matches {
+            let (fi, pos) = m.locate_slot(var_idx);
+            let f = &m.factors[fi];
+            // Each row of the owning factor stands in for `total/|f.rows|`
+            // full substs (the product of the other factors), so weight the
+            // per-row node contributions by that multiplier.
+            let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
+            for row in &f.rows {
+                for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
+                    if invalid_literal_expansion(disc, d_k) {
+                        continue;
+                    }
+                    let key = (disc.clone(), *arity);
+                    match shape_idx.get(&key) {
+                        Some(&idx) => {
+                            shapes[idx].1 += count * w;
+                            shapes[idx].2 += w;
+                        }
+                        None => {
+                            shape_idx.insert(key.clone(), shapes.len());
+                            shapes.push((key, count * w, w));
+                        }
+                    }
+                }
+            }
+        }
+        shapes
+    }
+
+    /// Non-expansive ordering over all vars, built from each var's [`Self::expand_shapes`].
+    /// `f(k) = the mean enodes per *matching* subst of `k`'s
+    /// cleanest expansion.
+    ///
+    /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank
+    /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
+    /// emission order so those act on `f` rather than creation order, *without*
+    /// renumbering the pattern. SMC (`freeze_rule = false`) keeps creation order:
+    /// `rank`/`order` are the identity.
+    fn shape_pass(&self, shared: &SharedSearchData<F, O>) -> (Vec<VarShapes<F, O>>, Vec<usize>, Vec<usize>) {
+        let n = self.pattern.vars.len();
+        let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
+        let (rank, order) = if self.freeze_rule && n > 1 {
+            let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|(_, s, h)| *s as f64 / *h as f64).fold(-f64::INFINITY, f64::max)).collect();
+            let mut order: Vec<usize> = (0..n).collect();
+            order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
+            let mut rank = vec![0usize; n];
+            for (r, &k) in order.iter().enumerate() {
+                rank[k] = r;
+            }
+            (rank, order)
+        } else {
+            ((0..n).collect(), (0..n).collect())
+        };
+        (shapes, rank, order)
+    }
+
     /// Returns the enumerable successors of `self`. When dominance pruning
     /// fires, the single dominant child is built and returned via
     /// `SuccessorEnum::Dominant`; otherwise `SuccessorEnum::All` lists every
@@ -679,7 +772,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `--no-opt-dominance-reuse`. Expand actions are emitted whenever
     /// `support > 0`; `subset_matches` then guarantees the child's match set is
     /// non-empty.
-    #[allow(clippy::type_complexity)]
     pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, opt_useless_inline: bool, max_arity: usize, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> SuccessorEnum<F, O> {
         // Useless-non-frozen inlining is a strictly dominating short-circuit:
         // a constant arg adds no compression, so specialising the body by
@@ -700,16 +792,20 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // eclass used thousands of times looks like the same support as one
         // that fires on thousands of distinct one-off eclasses.
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
+        // Per-var expansion shapes (first-appearance order, with support) and the
+        // `rank`/`order`, in one egraph pass. See [`Self::shape_pass`].
+        let (shapes, rank, order) = self.shape_pass(shared);
+
         // The reusable cohort (`VarState::ReusableOrExpandable`) is a best-first
         // canonical-ordering device, mirroring the freeze rule. SMC (freeze_rule
-        // = false) ignores it so its reuse exploration stays unrestricted.
-        // Reusing two stale (non-reusable)
-        // vars always re-reaches a pattern already obtainable by reusing them
-        // earlier — when the later-created of the two was still in the fresh
-        // cohort — so we skip it as a duplicate. This holds regardless of the
-        // two vars' depths: a cross-depth reuse commutes past every expansion
-        // after the one that created the deeper var, so it too has an
-        // earlier-reuse canonical form.
+        // = false) ignores it so its reuse exploration stays unrestricted. We
+        // skip `Reuse(i, j)` only when both slots are stale, which canonicalizes
+        // merges into increasing-keep order: a merge stales everything below its
+        // kept slot, so a later merge with both endpoints there is the same set
+        // of merges in a non-canonical order. Staling stops at the kept slot (not
+        // the dropped one), so slots between a merged pair stay reusable —
+        // otherwise a second, interleaved pair would be wrongly skipped even
+        // though no earlier ordering reaches it (#265).
         let enforce_reusable = self.freeze_rule;
         for i in 0..n {
             for j in (i + 1)..n {
@@ -751,55 +847,53 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
-                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, false);
+                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, false, &rank);
                     return SuccessorEnum::Dominant { child, support };
                 }
                 out.push((Action::Reuse { keep: i, drop: j }, support));
             }
         }
-        for var_idx in 0..n {
-            // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k (tracked in `var_state`); `max_arity` caps the
-            // eventual arity. Both checks are no-ops for SMC (freeze_rule =
-            // false, max_arity = usize::MAX).
-            if var_idx > max_arity {
+        // Emit expands in f-rank order so the `max_arity` cap and heap tie-breaks
+        // act on the f-order. The freeze rule (`!is_expandable()`) and `max_arity`
+        // are no-ops for SMC (freeze_rule = false, identity order, max_arity =
+        // usize::MAX).
+        for &var_idx in &order {
+            if rank[var_idx] > max_arity {
                 continue;
             }
             if self.freeze_rule && !self.pattern.var_state[var_idx].is_expandable() {
                 continue;
             }
-            let d_k = self.pattern.var_depth[var_idx];
-            let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
-            let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
-            for m in &self.matches {
-                let (fi, pos) = m.locate_slot(var_idx);
-                let f = &m.factors[fi];
-                // Each row of the owning factor stands in for `total/|f.rows|`
-                // full substs (the product of the other factors), so weight the
-                // per-row node contributions by that multiplier.
-                let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
-                for row in &f.rows {
-                    for node in &shared.egraph[row[pos]].nodes {
-                        if invalid_literal_expansion(node, d_k) {
-                            continue;
-                        }
-                        let key = (node.discriminant(), node.children().len());
-                        match shape_idx.get(&key) {
-                            Some(&idx) => shapes[idx].1 += w,
-                            None => {
-                                shape_idx.insert(key.clone(), shapes.len());
-                                shapes.push((key, w));
-                            }
-                        }
-                    }
-                }
-            }
-            for ((op, arity), support) in shapes {
-                out.push((Action::Expand { var_idx, op, arity }, support));
+            // Emit from the shapes `shape_pass` already computed (via
+            // `expand_shapes`) for every var — no recomputation here.
+            for ((op, arity), support, _) in &shapes[var_idx] {
+                out.push((Action::Expand { var_idx, op: op.clone(), arity: *arity }, *support));
             }
         }
-        SuccessorEnum::All(out)
+        SuccessorEnum::All { actions: out, rank }
     }
+}
+
+/// Precomputes each eclass's `(discriminant, arity, count)` shape histogram in
+/// enode first-appearance order. Works because e-graph is never mutated during search.
+fn compute_eclass_shapes<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>) -> Vec<EclassShapeHist<F, O>> {
+    let len = egraph.classes().map(|c| usize::from(c.id)).max().map_or(0, |m| m + 1);
+    let mut out: Vec<EclassShapeHist<F, O>> = vec![Vec::new(); len];
+    for class in egraph.classes() {
+        let mut idx: FxHashMap<Shape<F, O>, usize> = FxHashMap::default();
+        let hist = &mut out[usize::from(class.id)];
+        for node in &class.nodes {
+            let key = (node.discriminant(), node.children().len());
+            match idx.get(&key) {
+                Some(&p) => hist[p].2 += 1,
+                None => {
+                    idx.insert(key.clone(), hist.len());
+                    hist.push((key.0, key.1, 1));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Parses the shared-context fields out of CLI args, computes usage counts, and
@@ -813,6 +907,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
     let crate::shared::SharedData { egraph, root } = data;
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
+    let eclass_shapes = compute_eclass_shapes::<F, O>(&egraph);
     let shared = SharedSearchData {
         egraph,
         root,
@@ -820,6 +915,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         usage_counts,
         check_slow: args.check_slow,
         shift_clamp,
+        eclass_shapes,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, false);
