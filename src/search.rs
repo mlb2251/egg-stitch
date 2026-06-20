@@ -546,7 +546,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// dominant-reuse short-circuit). Used by best-first and by SMC after
     /// sampling so we don't materialise child states for successors that don't
     /// get picked.
-    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, freeze_reused: bool, rank: &[usize]) -> SearchState<F, O> {
+    pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, freeze_reused: bool, rank: Option<&[usize]>) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
@@ -554,8 +554,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // Commit to freezing every var of *lower rank*: expanding the
                 // var at rank `r` forbids ever expanding a lower-rank var. Set
                 // the parent's `var_state` (by rank) before `expand` shifts it
-                // into the child layout. Disabled for SMC.
+                // into the child layout. Disabled for SMC (no freeze rule, so
+                // `rank` is `None`).
                 if self.freeze_rule {
+                    let rank = rank.expect("freeze_rule requires a rank");
                     let rv = rank[*var_idx];
                     for (j, s) in new_pattern.var_state.iter_mut().enumerate() {
                         if rank[j] < rv {
@@ -846,7 +848,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
-                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, false, &rank);
+                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, false, Some(&rank));
                     return SuccessorEnum::Dominant { child, support };
                 }
                 out.push((Action::Reuse { keep: i, drop: j }, support));
