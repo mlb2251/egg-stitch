@@ -52,13 +52,6 @@ const NUM_ABSTRACTIONS: &str = "3";
 /// module docstring.
 const MFE_CAP: &str = "3";
 
-/// Best-first step budget per round. The no-DSR runs keep the larger budget;
-/// the DSR runs don't converge, but find their best early (~2k expansions) and
-/// then only grind to the cap, so a smaller budget keeps them fast (and the heap
-/// bounded) without changing the result.
-const NUM_STEPS_NODSR: &str = "50000";
-const NUM_STEPS_DSR: &str = "10000";
-
 /// Fixture path for a domain + variant tag (`nodsr` / `dsr`), mirroring the
 /// `data/expected_outputs/<...>` layout used by the other snapshot suites.
 fn expected_path(domain: &str, tag: &str) -> String {
@@ -68,12 +61,12 @@ fn expected_path(domain: &str, tag: &str) -> String {
 /// Runs best-first on a cogsci domain (optionally with DSR rules), writes its
 /// `--output` JSON to a unique temp file, reads it back, and strips the
 /// non-deterministic / bookkeeping fields so the result is a stable snapshot.
-fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, num_steps: &str, tag: &str) -> Value {
+fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, tag: &str) -> Value {
     let input = format!("data/domains/cogsci/{domain}.json");
     let out = std::env::temp_dir().join(format!("egg-stitch-cogsci-{}-{}-{}.json", std::process::id(), domain, tag));
     let out_str = out.to_str().expect("utf-8 temp path");
     let mut cmd = Command::new(BIN);
-    cmd.args(["--search", "best-first", "--input", &input, "--num-steps", num_steps, "--num-abstractions", NUM_ABSTRACTIONS, "--max-arity", "2", "--output", out_str]);
+    cmd.args(["--search", "best-first", "--input", &input, "--num-steps", "50000", "--num-abstractions", NUM_ABSTRACTIONS, "--max-arity", "2", "--output", out_str]);
     if let Some(r) = rules {
         cmd.args(["--rules", r]);
     }
@@ -120,14 +113,14 @@ fn bless_or_check(path: &str, value: &Value) {
 
 /// No-DSR variant: the input lives in-repo, so this always runs.
 fn check_nodsr(domain: &str) {
-    let v = run_bfs(domain, None, None, NUM_STEPS_NODSR, "nodsr");
+    let v = run_bfs(domain, None, None, "nodsr");
     bless_or_check(&expected_path(domain, "nodsr"), &v);
 }
 
 /// DSR variant: runs best-first with the in-repo per-domain rewrite rules.
 fn check_dsr(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
-    let v = run_bfs(domain, Some(&rules), None, NUM_STEPS_DSR, "dsr");
+    let v = run_bfs(domain, Some(&rules), None, "dsr");
     bless_or_check(&expected_path(domain, "dsr"), &v);
 }
 
@@ -136,7 +129,7 @@ fn check_dsr(domain: &str) {
 fn check_dsr_mfe(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
     let tag = format!("dsr-mfe{MFE_CAP}");
-    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), NUM_STEPS_DSR, &tag);
+    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), &tag);
     bless_or_check(&expected_path(domain, &tag), &v);
 }
 

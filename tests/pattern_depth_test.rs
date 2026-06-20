@@ -63,9 +63,7 @@ fn mixed_depths_are_independent() {
     // Build (@ (lam ?#0) ?#1): only the meta-var inside `lam` gets bumped.
     let mut p: Pat = Pattern::single_var();
     p.expand(0, &app()); // (@ ?#0 ?#1), depths [0, 0]
-    p.expand(0, &lam()); // append order: (@ (lam ?#1) ?#0), depths [0, 1]
-    // `expand` numbers in append order; canonicalize to DFS first-appearance.
-    p.canonicalize_vars();
+    p.expand(0, &lam()); // (@ (lam ?#0) ?#1), depths [1, 0]
     assert_eq!(p.var_depth, vec![1, 0]);
 }
 
