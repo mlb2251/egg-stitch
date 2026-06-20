@@ -812,7 +812,19 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                if enforce_reusable && !self.pattern.var_state[i].is_reusable() && !self.pattern.var_state[j].is_reusable() {
+                // Reuse canonicalization (best-first only), two guards:
+                //  * order: within an expand level reuse pairs must be
+                //    lexicographically non-decreasing — each reuse "stales" every
+                //    earlier pair (collapsed to `reuse_watermark`). Kills the
+                //    within-level absorption-order duplicates. `expand` resets the
+                //    watermark, so a reuse site created by a later/deeper expand
+                //    (e.g. a 3-way whose third occurrence appears after dominance
+                //    already merged the first pair) can still merge.
+                //  * vintage: at least one side must still be fresh
+                //    (`is_reusable`), banning the reuse↔expand diamond of two
+                //    post-expand-stale holes.
+                let one_fresh = self.pattern.var_state[i].is_reusable() || self.pattern.var_state[j].is_reusable();
+                if enforce_reusable && ((i, j) < self.pattern.reuse_watermark || !one_fresh) {
                     continue;
                 }
                 // Count full substs with `shift_equal(vars[i], vars[j])` per

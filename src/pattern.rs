@@ -50,8 +50,15 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// because cost accounting reads it on the hot path. Maintained incrementally
     /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// Per-var restriction level
+    /// Per-var restriction level (expand axis only now: is_expandable / Frozen).
     pub var_state: Vec<VarState>,
+    /// Reuse-order watermark (best-first): the last reuse's `(keep, drop)` pair.
+    /// A reuse `(i, j)` (`i < j`) is allowed only if `(i, j) >= reuse_watermark`
+    /// lexicographically — i.e. reuses within an expand level proceed in
+    /// non-decreasing pair order, which is the downward-closed "stale every
+    /// lexicographically-earlier pair" rule collapsed to one pair. Reset to
+    /// `(0, 0)` by `expand`, so each expand level orders its reuses afresh.
+    pub reuse_watermark: (usize, usize),
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -67,6 +74,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             var_depth: vec![0],
             var_occurrences: vec![1],
             var_state: vec![VarState::ReusableOrExpandable],
+            reuse_watermark: (0, 0),
         }
     }
 
@@ -100,6 +108,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         // Drop the expanded var's own state (it had to be non-frozen to be
         // expanded); each new child is inserted as `ReusableOrExpandable` below.
         self.var_state.remove(var_idx);
+        // Expansion restarts reuse ordering for the new level.
+        self.reuse_watermark = (0, 0);
         // Any expansion demotes every *previously existing* fresh var out of the
         // reusable cohort (`Frozen` stays frozen); only the children we insert
         // below start reusable. See `VarState`.
@@ -213,6 +223,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth = new_depth;
         self.var_occurrences = new_occ;
         self.var_state = new_state;
+        self.reuse_watermark = (0, 0);
         perm
     }
 
@@ -253,6 +264,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             VarState::ReusableOrExpandable
         };
         self.var_state.remove(drop_idx);
+        self.reuse_watermark = (keep_idx, drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -282,6 +294,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
         self.var_state.remove(var_idx);
+        self.reuse_watermark = (0, 0);
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);
