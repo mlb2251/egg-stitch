@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, compute_cost_and_select, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchOp};
-use crate::lower_bound::{LowerBoundPruner, PruneResult};
+use crate::lower_bound::{BudgetPruner, BudgetVerdict, LowerBoundPruner, PruneResult};
 use crate::search::{SearchState, SeenTracker, SharedSearchData, SuccessorEnum, setup_search};
 use egg::Language;
 
@@ -189,6 +189,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut cost_time: Duration = Duration::ZERO;
     let mut dominance_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
+    let mut budget_pruner = BudgetPruner::new(args.opt_budget_prune);
     let mut useless_frozen_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
     let search_start = Instant::now();
@@ -258,7 +259,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
         }
 
-        for child_state in successors {
+        for mut child_state in successors {
             if let Some(ref follow) = shared.follow
                 && !child_state.matches_follow(follow)
             {
@@ -280,12 +281,19 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
             // Optimistic lower bound on this child's descendants — every match
             // collapses to one node. Skip the full cost call (and the descent)
-            // when the bound already exceeds the current best.
+            // when the bound already exceeds the current best. Version-B budget
+            // pruning (when enabled) does the same node-level prune off one
+            // shared fixpoint *and* filters dead substs from `child_state` in
+            // place, so the cost call and all descendants see the smaller set.
             let cost_to_beat = best.as_ref().map_or(usize::MAX, |(c, _, _)| *c);
-            let child_lower_bound = match lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, cost_to_beat) {
-                PruneResult::Pruned => continue,
-                PruneResult::Keep(lb) => Some(lb),
-                PruneResult::Disabled => None,
+            let child_lower_bound = match budget_pruner.prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, &mut child_state, cost_to_beat) {
+                BudgetVerdict::PrunedNode | BudgetVerdict::Emptied => continue,
+                BudgetVerdict::Keep(lb) => Some(lb),
+                BudgetVerdict::Disabled => match lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, cost_to_beat) {
+                    PruneResult::Pruned => continue,
+                    PruneResult::Keep(lb) => Some(lb),
+                    PruneResult::Disabled => None,
+                },
             };
 
             let cost_t = Instant::now();
@@ -387,6 +395,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
+    budget_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());

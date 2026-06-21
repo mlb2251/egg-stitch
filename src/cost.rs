@@ -654,6 +654,227 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
     sizes.get(root) as usize + compute_pattern_size::<F, O>(&search_state.pattern, &egraph.analysis.weights)
 }
 
+/// Outcome of the Version-B budget analysis at one search node: the match set
+/// with budget-dead substitution *rows* removed (factoring preserved), plus
+/// before/after subst counts.
+pub struct BudgetPrune {
+    /// Input matches with dead rows filtered out; matches whose factored product
+    /// empties are dropped entirely. Subst-level, not just root-level.
+    pub matches: Vec<MatchAtEClass>,
+    /// The whole-node optimistic lower bound (identical to
+    /// [`compute_lower_bound`]) computed off the same fixpoint, so callers can
+    /// do the node-level prune without a second pass.
+    pub lb_root: usize,
+    /// Total substitutions across the input matches (`Σ num_substs`).
+    pub substs_before: usize,
+    /// Substitutions surviving the combined budget+local prune.
+    pub substs_after: usize,
+    /// Substitutions surviving the *local-only* prune (threshold `orig(root)`).
+    /// `substs_after_local - substs_after` is what the top-down budget buys
+    /// beyond the purely-local check.
+    pub substs_after_local: usize,
+    /// Matches dropped entirely (every subst pruned).
+    pub matches_emptied: usize,
+}
+
+/// Version B: top-down budget pruning of individual match roots.
+///
+/// Runs the same optimistic bottom-up `LowerBoundAnalysis` fixpoint as
+/// [`compute_lower_bound`] to obtain a per-eclass lower bound `lb(e)`, then
+/// sweeps root→leaf over the reverse postorder computing a budget `B(e)` — the
+/// largest cost `e`'s subtree can realize while `e` is still on a plausible min
+/// term. The bound discipline is asymmetric, which is exactly what makes this
+/// sound on top of a *bound* rather than an exact cost:
+///   - **competitors** (the other enodes at an ancestor) are charged their
+///     ORIGINAL size (`data.size`, the largest they can be) — an alternative
+///     branch may not wield its own optimistic compression to starve the
+///     branch under consideration;
+///   - **siblings** (the other children of the enode on the branch) are charged
+///     `lb` (maximally compressed).
+///
+/// Both choices are pointwise-favorable to the branch, so the favorable
+/// assignment dominates every real cost assignment: a match root whose stub
+/// exceeds `B(root)` loses under every realizable extraction and is safe to drop
+/// (and stays prunable in all descendants — `stub` is monotone ↑, `B` monotone
+/// ↓ under specialization).
+pub fn compute_budget_prunable<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> BudgetPrune {
+    // --- bottom-up: optimistic per-eclass lower bound (mirrors compute_lower_bound) ---
+    scratch.rewrite.fill(search_state);
+    let var_state = &search_state.pattern.var_state;
+    let mut arg_to_match_roots: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
+    for m in &search_state.matches {
+        let r = egraph.find(m.root_eclass);
+        for f in &m.factors {
+            for (p, &k) in f.slots.iter().enumerate() {
+                if !var_state[k].is_expandable() {
+                    for row in &f.rows {
+                        arg_to_match_roots.entry(egraph.find(row[p])).or_default().push(r);
+                    }
+                }
+            }
+        }
+    }
+    let analysis = LowerBoundAnalysis {
+        search_state,
+        eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+        arg_to_match_roots,
+    };
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
+    for m in &search_state.matches {
+        sizes.mark_dirty(m.root_eclass);
+    }
+    sizes.solve();
+    // Whole-node bound, identical to `compute_lower_bound`, off this fixpoint.
+    let lb_root = sizes.get(root) as usize + compute_pattern_size::<F, O>(&search_state.pattern, &egraph.analysis.weights);
+
+    // --- top-down: budget B(e) over the reverse postorder (root before children) ---
+    let weights = &egraph.analysis.weights;
+    let cap = cache.visit_order.iter().map(|&e| usize::from(e)).max().map_or(0, |m| m + 1);
+    // i64::MIN marks an eclass not yet reached by any parent route; `max` over
+    // routes keeps the most generous (largest) budget, since a match is kept if
+    // any route keeps it.
+    let mut budget = vec![i64::MIN; cap];
+    let root = egraph.find(root);
+    budget[usize::from(root)] = egraph[root].data.size as i64;
+    let orig = |e: Id| egraph[egraph.find(e)].data.size as i64;
+    let lb = |e: Id| sizes.get(egraph.find(e));
+    // Restrict the sweep to the ancestor-closure of the match roots: only those
+    // eclasses' budgets are ever read (at a match root) or feed one — a
+    // non-ancestor has no match root below it, so it neither needs a budget nor
+    // can propagate to one. The budgets computed at match roots are identical to
+    // a full sweep, since no non-ancestor is ever a parent of an ancestor.
+    let mut relevant = vec![false; cap];
+    let mut stack: Vec<Id> = Vec::new();
+    for m in &search_state.matches {
+        let i = usize::from(egraph.find(m.root_eclass));
+        if i < cap && !relevant[i] {
+            relevant[i] = true;
+            stack.push(egraph.find(m.root_eclass));
+        }
+    }
+    while let Some(e) = stack.pop() {
+        if let Some(parents) = cache.parents_of.get(&e) {
+            for &p in parents {
+                let pi = usize::from(p);
+                if pi < cap && !relevant[pi] {
+                    relevant[pi] = true;
+                    stack.push(p);
+                }
+            }
+        }
+    }
+    for &e in cache.visit_order.iter().rev() {
+        if !relevant[usize::from(e)] {
+            continue;
+        }
+        let be = budget[usize::from(e)];
+        if be == i64::MIN {
+            continue;
+        }
+        let enodes = &egraph[e].nodes;
+        // Original full-subtree cost of each enode — the competitor charge.
+        let orig_node: Vec<i64> = enodes.iter().map(|nd| nd.discriminant().intrinsic_size(weights) as i64 + nd.children().iter().map(|&c| orig(c)).sum::<i64>()).collect();
+        // Two smallest original alternatives, so the cheapest *other* enode is
+        // O(1) per enode below.
+        let (mut min1, mut min2) = (i64::MAX, i64::MAX);
+        for &v in &orig_node {
+            if v < min1 {
+                min2 = min1;
+                min1 = v;
+            } else if v < min2 {
+                min2 = v;
+            }
+        }
+        for (ei, nd) in enodes.iter().enumerate() {
+            // Cheapest competing enode at ORIGINAL size; i64::MAX when this is
+            // the only enode (no alternative constrains the branch).
+            let competitor = if orig_node[ei] > min1 { min1 } else { min2 };
+            // The enode's allowed cost: capped both by the room from above and
+            // by needing to beat the cheapest original competitor.
+            let cap_n = be.min(competitor);
+            let intrinsic = nd.discriminant().intrinsic_size(weights) as i64;
+            let children: Vec<Id> = nd.children().iter().map(|&c| egraph.find(c)).collect();
+            let total_child_lb: i64 = children.iter().map(|&c| lb(c)).sum();
+            for &c in &children {
+                // Only relevant children's budgets are ever used; non-ancestors
+                // are skipped (their siblings still count via `total_child_lb`).
+                let slot = usize::from(c);
+                if !relevant[slot] {
+                    continue;
+                }
+                // Room for this child = enode budget − intrinsic − LB of its
+                // siblings (a repeated child correctly leaves its other copies
+                // as siblings).
+                let cand = cap_n - intrinsic - (total_child_lb - lb(c));
+                if cand > budget[slot] {
+                    budget[slot] = cand;
+                }
+            }
+        }
+    }
+
+    // --- per-(match, factor, row) decision via the min-of-the-rest bound ---
+    // Row `r` of factor `f` is dead iff even paired with the cheapest row of
+    // every other factor its stub busts the threshold:
+    //   stub_size + rowcost_f(r) + Σ_{g≠f} min_row_cost(g)  ≥  T
+    // T = min(B(c)+1, orig(c)) folds in both the path budget (stub > B) and the
+    // local rule (stub ≥ own original size). Re-running the same scan under
+    // T = orig(c) alone isolates how much the path budget buys beyond local.
+    let stub_size = F::stub_application_size(search_state.frozen_count(), weights) as i64;
+    let mut out_matches: Vec<MatchAtEClass> = Vec::with_capacity(search_state.matches.len());
+    let mut substs_before = 0usize;
+    let mut substs_after = 0usize;
+    let mut substs_after_local = 0usize;
+    let mut matches_emptied = 0usize;
+    for m in &search_state.matches {
+        let r = egraph.find(m.root_eclass);
+        substs_before += m.num_substs();
+        // Per-row frozen-arg cost (non-frozen slots contribute 0) and per-factor
+        // minimum; both threshold passes reuse these.
+        let frowcosts: Vec<Vec<i64>> = m.factors.iter().map(|f| f.rows.iter().map(|row| f.slots.iter().enumerate().filter(|(_, k)| !var_state[**k].is_expandable()).map(|(p, _)| lb(row[p])).sum()).collect()).collect();
+        let fmin: Vec<i64> = frowcosts.iter().map(|rc| *rc.iter().min().expect("factor rows are non-empty")).collect();
+        let m_total: i64 = fmin.iter().sum();
+        // Filter rows under threshold `t`: keep row iff its smallest-possible
+        // stub (paired with every other factor's cheapest row) stays under `t`.
+        // Returns surviving factors (None if any factor empties) + subst product.
+        let filter = |t: i64| -> (Option<Vec<Factor>>, usize) {
+            let mut kept: Vec<Factor> = Vec::with_capacity(m.factors.len());
+            let mut prod = 1usize;
+            for (fi, f) in m.factors.iter().enumerate() {
+                let keep_bound = t - stub_size - (m_total - fmin[fi]);
+                let rows: Vec<Vec<Id>> = f.rows.iter().enumerate().filter(|&(ri, _)| frowcosts[fi][ri] < keep_bound).map(|(_, row)| row.clone()).collect();
+                if rows.is_empty() {
+                    return (None, 0);
+                }
+                prod *= rows.len();
+                kept.push(Factor { slots: f.slots.clone(), rows });
+            }
+            (Some(kept), prod)
+        };
+        let orig_c = orig(r);
+        // An unreached root keeps the path budget out of it (apply local only),
+        // which also keeps `combined ⊆ local` so `beyond-local ≥ 0`.
+        let b = budget[usize::from(r)];
+        let t_combined = if b == i64::MIN { orig_c } else { (b + 1).min(orig_c) };
+        let (kept, after) = filter(t_combined);
+        let (_, after_local) = filter(orig_c);
+        substs_after += after;
+        substs_after_local += after_local;
+        match kept {
+            Some(factors) => out_matches.push(MatchAtEClass { root_eclass: m.root_eclass, factors }),
+            None => matches_emptied += 1,
+        }
+    }
+    BudgetPrune {
+        matches: out_matches,
+        lb_root,
+        substs_before,
+        substs_after,
+        substs_after_local,
+        matches_emptied,
+    }
+}
+
 /// Consumes `egraph` and unions each match root with a `fn_name(args...)`
 /// node, then rebuilds. Source of truth for the rewrite — used both by
 /// `lib::apply_abstraction` (which extracts+reparses on top) and by
