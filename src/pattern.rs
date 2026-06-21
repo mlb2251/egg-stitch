@@ -241,10 +241,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         perm
     }
 
-    /// Unifies two variables. The lower-indexed one is kept; the higher one is
-    /// removed and its positions are rewritten to the kept var's name. Trailing
-    /// vars shift left by one and have their leaves renamed accordingly. Args may
-    /// be passed in either order.
     /// Removes var `removed` from `reuse_pairs`: drops every pair that touches it
     /// and shifts higher indices down by one, keeping the set index-aligned after
     /// the var is deleted (by `reuse`'s merge or by `concretize`).
@@ -259,6 +255,10 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             .collect();
     }
 
+    /// Unifies two variables. The lower-indexed one is kept; the higher one is
+    /// removed and its positions are rewritten to the kept var's name. Trailing
+    /// vars shift left by one and have their leaves renamed accordingly. Args may
+    /// be passed in either order.
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
