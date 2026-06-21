@@ -64,6 +64,21 @@ RULES_BY_REL = {
     "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
 }
 
+# Fixtures the equivalence oracle cannot tractably verify and so skips entirely.
+# The cogsci `*.algebra` fixtures use our affine-algebra rewrites
+# (drawings.rewrites), which are non-confluent and node-exploding (matmul,
+# overlay/arith commutativity, repeat-unroll) — the same blowup that forces
+# `--iter-limit` on the real search. `check_equiv` saturates without such a cap,
+# so it bails on the node limit (false negatives) and is brutally slow over the
+# 250-program corpus. These fixtures are instead pinned EXACTLY by the
+# `*_algebra` snapshot cases in `tests/cogsci_bfs_test.rs`.
+SKIP_RELS = {
+    "cogsci/dials.algebra.out.json",
+    "cogsci/furniture.algebra.out.json",
+    "cogsci/nuts-bolts.algebra.out.json",
+    "cogsci/wheels.algebra.out.json",
+}
+
 
 def main():
     paths = sorted(ROOT.rglob("*.out.json"))
@@ -75,6 +90,9 @@ def main():
     batches = {}
     for p in paths:
         rel = str(p.relative_to(ROOT))
+        if rel in SKIP_RELS:
+            print(f"skip (oracle-intractable, pinned by snapshot test): {rel}")
+            continue
         rules = RULES_BY_REL.get(rel)
         batches.setdefault(rules, []).append(p)
     overall = 0

@@ -40,9 +40,14 @@ FIGURES_DIR = PROJECT_ROOT / "figures"
 # theory; tables 2/4 (no-DSR runs) include text/logo/towers as well.
 TABLE_DOMAINS_DSR = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
 TABLE_DOMAINS_NO_DSR = TABLE_DOMAINS_DSR + ["text", "logo", "towers"]
+# Table 6: the four drawing domains run with our affine-algebra DSRs. Keys are
+# ``drawings:<domain>`` to match the table6.json results (see expts/tables.py).
+TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "furniture")]
 
 
 def domains_for_table(table: int) -> list[str]:
+    if table == 6:
+        return TABLE6_DOMAINS
     return TABLE_DOMAINS_DSR if table in TABLES_WITH_EGRAPH_MIN else TABLE_DOMAINS_NO_DSR
 
 
@@ -51,8 +56,11 @@ def methods_for_table(table: int) -> list[str]:
 
     DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add the
     dsrs-only-at-start "BFS@start" baseline; no-DSR tables (2 & 4) keep Stitch
-    and have no baseline.
+    and have no baseline. Table 6 (our affine DSRs) has no babble column — see
+    expts/tables.py — just our live search vs the at-start baseline.
     """
+    if table == 6:
+        return ["enum", "smc", BASELINE_METHOD]
     if table in TABLES_WITH_EGRAPH_MIN:
         return ["enum", "smc", BASELINE_METHOD, "babble"]
     return ["enum", "smc", "babble", "stitch"]
@@ -66,6 +74,11 @@ DOMAIN_LABELS = {
     "text": "Text",
     "logo": "Logo",
     "towers": "Towers",
+    # table6 drawing domains (affine-algebra DSRs)
+    "drawings:nuts-bolts": "Nuts \\& Bolts",
+    "drawings:dials": "Dials",
+    "drawings:wheels": "Wheels",
+    "drawings:furniture": "Furniture",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
 # DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add a
@@ -99,9 +112,10 @@ TABLE_TITLES = {
     2: "Compression Without Rewrites",
     3: "Compression Using Rewrites, Stacked Abstractions",
     4: "Compression Without Rewrites, Stacked Abstractions",
+    6: "Compression Using Affine-Algebra Rewrites, Stacked Abstractions",
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
-TABLES_WITH_EGRAPH_MIN = {1, 3}
+TABLES_WITH_EGRAPH_MIN = {1, 3, 6}
 # DSR tables (1 & 3) don't run Stitch (it doesn't accept DSRs) and omit the
 # Stitch column entirely (see ``render``), so neither borrows numbers from a
 # no-DSR counterpart. Kept as a map in case a future table wants to.
@@ -154,6 +168,10 @@ DOMAIN_PLOT_LABELS = {
     "text": "Text",
     "logo": "Logo",
     "towers": "Towers",
+    "drawings:nuts-bolts": "Nuts & Bolts",
+    "drawings:dials": "Dials",
+    "drawings:wheels": "Wheels",
+    "drawings:furniture": "Furniture",
 }
 
 
@@ -792,6 +810,30 @@ def main() -> None:
         render_molecules(saved, FIGURES_DIR / "molecules")
     else:
         print(f"skipping table5: {table5_path} not present", file=sys.stderr)
+
+    # Table 6 (drawing domains, our affine-algebra DSRs) uses the generic
+    # render() shape but has drawings:-prefixed domain keys, so it gets its own
+    # main() block rather than joining the tables 1-4 loop.
+    table6_path = RESULTS_DIR / "table6.json"
+    if table6_path.exists():
+        with open(table6_path) as f:
+            saved = json.load(f)
+        tex_path = FIGURES_DIR / "table6.tex"
+        tex_path.write_text(f"% source: {table6_path}\n" + render(saved, 6) + "\n")
+        print(f"wrote {tex_path}", file=sys.stderr)
+        domain_dir = FIGURES_DIR / "table6"
+        domain_dir.mkdir(exist_ok=True)
+        for domain in domains_for_table(6):
+            if domain not in saved["domains"]:
+                continue
+            plot_path = domain_dir / f"{domain.split(':', 1)[1]}.png"
+            plot_domain(saved, 6, domain, plot_path)
+            print(f"wrote {plot_path}", file=sys.stderr)
+        geomean_path = FIGURES_DIR / "table6_geomean.png"
+        plot_geomean(saved, 6, geomean_path)
+        print(f"wrote {geomean_path}", file=sys.stderr)
+    else:
+        print(f"skipping table6: {table6_path} not present", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -54,6 +54,12 @@ class Runner(Protocol):
 # corpora; op-children grammar, symmetry DSRs). See data/.../scramble/README.md.
 MOLECULE_FAMILIES = ["hexyl", "ester", "glycol"]
 
+# ``drawings:<cogsci-domain>`` is a pseudo-domain (same input corpus as the
+# plain cogsci domain) that runs with our affine-transform-algebra DSRs
+# (``data/domains/cogsci/drawings.rewrites``) instead of babble's per-domain
+# rewrites. Used by table6; mirrors the ``molecules:<family>`` convention.
+DRAWINGS_PREFIX = "drawings:"
+
 
 def molecule_family(domain: str) -> str | None:
     """Return the family for a ``molecules:<family>`` domain, else None."""
@@ -61,10 +67,17 @@ def molecule_family(domain: str) -> str | None:
     return domain[len(prefix):] if domain.startswith(prefix) else None
 
 
+def drawings_domain(domain: str) -> str | None:
+    """Return the cogsci domain for a ``drawings:<domain>`` pseudo-domain, else None."""
+    return domain[len(DRAWINGS_PREFIX):] if domain.startswith(DRAWINGS_PREFIX) else None
+
+
 def domain_type(domain: str) -> str:
-    """Return ``"cogsci"``, ``"dreamcoder"``, or ``"molecules"`` for a known domain."""
+    """Return ``"cogsci"``, ``"drawings"``, ``"dreamcoder"``, or ``"molecules"``."""
     if molecule_family(domain) is not None:
         return "molecules"
+    if drawings_domain(domain) is not None:
+        return "drawings"
     if domain in DREAMCODER_DOMAINS:
         return "dreamcoder"
     if domain in COGSCI_DOMAINS:
@@ -87,6 +100,9 @@ def input_files(domain: str) -> list[Path]:
     fam = molecule_family(domain)
     if fam is not None:
         return [EGG_STITCH_DIR / "data" / "domains" / "molecules" / "scramble" / f"{fam}.scram.json"]
+    dd = drawings_domain(domain)
+    if dd is not None:
+        return [EGG_STITCH_DIR / "data" / "domains" / "cogsci" / f"{dd}.json"]
     if domain_type(domain) == "cogsci":
         return [EGG_STITCH_DIR / "data" / "domains" / "cogsci" / f"{domain}.json"]
     d = EGG_STITCH_DIR / "data" / "domains" / domain
@@ -104,6 +120,12 @@ def rewrites_path(domain: str) -> str | None:
     dt = domain_type(domain)
     if dt == "molecules":
         return "data/domains/molecules/molecules.rewrites"
+    if dt == "drawings":
+        # Our affine-transform-algebra DSRs (the table6 default). Only our own
+        # runners use these — table6 has no babble column: babble can't parse
+        # the constant_folding/matmul directives, and giving it its own rewrites
+        # instead would confound the rule set with the search method.
+        return "data/domains/cogsci/drawings.rewrites"
     if dt == "dreamcoder":
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
         return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None
