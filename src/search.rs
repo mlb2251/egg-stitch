@@ -640,6 +640,25 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.matches.iter().any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
     }
 
+    /// The heaviest single factor's size-weighted mass: over every factor (of
+    /// every match), the sum across its stored rows of the cost-analysis e-class
+    /// sizes of the variables' bindings; we return the max over factors.
+    ///
+    /// Isolates the commutativity-blowup signature — one entangled factor (can't
+    /// `decompose`) holding the exponentially many equivalent parse trees of a
+    /// single coordinate. A high-*usage* pattern instead has many matches each
+    /// with tiny 1-row factors, so its per-factor mass stays small and it
+    /// survives the `--max-match-set` prune; capping the *sum* over all rows
+    /// would conflate the two.
+    pub fn max_factor_weight(&self, shared: &SharedSearchData<F, O>) -> usize {
+        self.matches
+            .iter()
+            .flat_map(|m| m.factors.iter())
+            .map(|f| f.rows.iter().map(|row| row.iter().map(|&id| shared.egraph[id].data.size as usize).sum::<usize>()).sum::<usize>())
+            .max()
+            .unwrap_or(0)
+    }
+
     /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
     /// Verbose-diagnostics only.
     pub fn min_term(&self, shared: &SharedSearchData<F, O>, eclass: Id) -> String {

@@ -214,6 +214,15 @@ pub struct Args {
     #[arg(long = "max-forced-expansion", default_value = "none")]
     pub max_forced_expansion: MaxForcedExpansion,
 
+    /// Prune best-first successors with an over-cap factor, measured by
+    /// *size-weighted per-factor mass* (see `SearchState::max_factor_weight`).
+    /// Excludes patterns that descend into commutativity-bloated arithmetic
+    /// e-classes (one coordinate constant with exponentially many entangled
+    /// parse trees) — which `--max-forced-expansion` can't catch (those have
+    /// ~zero forced expansion) — while sparing high-usage patterns. Omit to disable.
+    #[arg(long = "max-match-set")]
+    pub max_match_set: Option<usize>,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,

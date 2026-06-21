@@ -1,0 +1,48 @@
+// Affine-transform algebra for the cogsci drawing DSL (one file, all domains).
+//
+// Semantics from babble/src/bin/drawings/eval.rs:
+//   (T p (M s r x y))   maps each point  p |-> R(r)*(s*p) + (x,y)   [scale, then rotate, then translate]
+//   (C a b)             overlays two pictures; the result is order/grouping independent (commutative monoid)
+//   (repeat x n M)       repeats x n times; for M=(1 0 tx ty) each step is a translation by (tx,ty)
+//
+// Tags: [contract] shrinks the term (safe, like reducing identities); [expand] grows or
+// multiplies e-classes (powerful but risks e-graph blow-up, cf. the physics distributivity lesson).
+
+// Fold +-*/ reading every leaf as a float, and give each integer literal its float form (n => n.0).
+constant_folding: !integersarefloats
+
+// ── rotation-constant normalisation (so equal angles share a leaf) ──
+half_pi: 1.5708 <=> (/ (* 2 pi) 4)
+quarter_pi: 0.785398 <=> (/ (* 2 pi) 8)
+
+// ── identity transform is a no-op [contract] ──
+t_id: (T ?p (M 1 0 0 0)) => ?p
+
+// ── arithmetic identities: clean up +0 / *1 / *0 residue from composition [contract] ──
+add_id_r: (+ ?x 0) => ?x
+add_id_l: (+ 0 ?x) => ?x
+sub_id:   (- ?x 0) => ?x
+mul_id_r: (* ?x 1) => ?x
+mul_id_l: (* 1 ?x) => ?x
+mul_zero_r: (* ?x 0) => 0
+mul_zero_l: (* 0 ?x) => 0
+div_id:   (/ ?x 1) => ?x
+
+// ── transform composition: two nested transforms collapse to one [contract in T] ──
+// General (faithful, keeps rotation): scale multiplies, rotation adds, and the inner
+// translation is carried through the outer scale+rotation before adding the outer one.
+t_compose: (T (T ?p (M ?s1 ?r1 ?x1 ?y1)) (M ?s2 ?r2 ?x2 ?y2)) => (T ?p (M (* ?s1 ?s2) (+ ?r1 ?r2) (+ ?x2 (* ?s2 (- (* (cos ?r2) ?x1) (* (sin ?r2) ?y1)))) (+ ?y2 (* ?s2 (+ (* (sin ?r2) ?x1) (* (cos ?r2) ?y1))))))
+// Outer rotation zero: pure +-* arithmetic, so it folds to a single literal matrix (covers most matrices).
+t_compose_norot: (T (T ?p (M ?s1 ?r1 ?x1 ?y1)) (M ?s2 0 ?x2 ?y2)) => (T ?p (M (* ?s1 ?s2) ?r1 (+ ?x2 (* ?s2 ?x1)) (+ ?y2 (* ?s2 ?y1))))
+
+// ── Connect is a commutative monoid (overlay order/grouping is irrelevant) ──
+c_comm: (C ?a ?b) => (C ?b ?a)
+c_assoc: (C (C ?a ?b) ?c) <=> (C ?a (C ?b ?c))
+
+// ── a transform shared across an overlay factors out [contract <-> expand] ──
+t_factor: (C (T ?a ?m) (T ?b ?m)) <=> (T (C ?a ?b) ?m)
+
+// ── repeat <-> overlay, translation-only (the only case where step == a single T) ──
+rep_1: (repeat ?x 1 ?m) => ?x
+rep_unroll_2: (repeat ?x 2 (M 1 0 ?tx ?ty)) <=> (C ?x (T ?x (M 1 0 ?tx ?ty)))
+rep_unroll_3: (repeat ?x 3 (M 1 0 ?tx ?ty)) <=> (C (C ?x (T ?x (M 1 0 ?tx ?ty))) (T ?x (M 1 0 (* 2 ?tx) (* 2 ?ty))))

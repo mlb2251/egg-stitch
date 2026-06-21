@@ -136,7 +136,7 @@ where
         // A `constant_folding: !<kind>` directive expands to a built-in family of
         // folding rewrites rather than a single `lhs => rhs` rule.
         if name.trim() == "constant_folding" {
-            use crate::constant_folding::{FoldMode, folding_rewrites, successor_expansion_rewrite};
+            use crate::constant_folding::{FoldMode, folding_rewrites, matmul_fold_rewrite, round6_rewrite, successor_expansion_rewrite};
             match rewrite.trim() {
                 "!integers" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers)?),
                 "!floats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats)?),
@@ -147,7 +147,13 @@ where
                     rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats)?);
                 }
                 "!successors" => rewrites.push(successor_expansion_rewrite::<L, A>(1)?),
-                other => return Err(anyhow!("unknown constant_folding kind {other:?} (supported: !integers, !floats, !integersarefloats, !numbers, !successors)")),
+                // `!matmul` folds `(matmul (M …) (M …))` to its single literal
+                // product matrix (computed in Rust, no intermediate arithmetic).
+                "!matmul" => rewrites.push(matmul_fold_rewrite::<L, A>()?),
+                // `!round6` canonicalises every numeric literal to 6 decimals,
+                // killing float noise and unifying near-equal values.
+                "!round6" => rewrites.push(round6_rewrite::<L, A>()?),
+                other => return Err(anyhow!("unknown constant_folding kind {other:?} (supported: !integers, !floats, !integersarefloats, !numbers, !successors, !matmul, !round6)")),
             }
             continue;
         }

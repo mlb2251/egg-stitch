@@ -1,0 +1,56 @@
+// choice2-matmul: choice2 with composition routed through `matmul` NODES that are
+// then reduced by conventional rewrite rules (no Rust fold). A nested transform
+// becomes `(T x (matmul m1 m2))`; `matmul` of two matrices is reduced in a few
+// cases (identity, no-rotation, general-with-rotation), the arithmetic folding
+// via `!integersarefloats` and the exact trig rules below (so no precision noise).
+
+constant_folding: !integersarefloats
+
+// ── contract core ──
+t_id: (T ?p (M 1 0 0 0)) => ?p
+rep_1: (repeat ?x 1 ?m) => ?x
+add_id_r: (+ ?x 0) => ?x
+add_id_l: (+ 0 ?x) => ?x
+sub_id:   (- ?x 0) => ?x
+mul_id_r: (* ?x 1) => ?x
+mul_id_l: (* 1 ?x) => ?x
+mul_zero_r: (* ?x 0) => 0
+mul_zero_l: (* 0 ?x) => 0
+div_id:   (/ ?x 1) => ?x
+
+// ── introduce matmul for a nested transform ──
+mm_compose: (T (T ?x ?m1) ?m2) => (T ?x (matmul ?m1 ?m2))
+
+// ── reduce matmul, a few cases (conventional rewrites; chains reduce bottom-up) ──
+// identity
+mm_id_l: (matmul (M 1 0 0 0) ?m) => ?m
+mm_id_r: (matmul ?m (M 1 0 0 0)) => ?m
+// outer rotation zero: scale multiplies, inner translation carried through scale (no trig)
+mm_norot: (matmul (M ?s1 ?r1 ?x1 ?y1) (M ?s2 0 ?x2 ?y2)) => (M (* ?s1 ?s2) ?r1 (+ ?x2 (* ?s2 ?x1)) (+ ?y2 (* ?s2 ?y1)))
+// general: rotation adds, inner translation carried through outer scale+rotation
+mm_full: (matmul (M ?s1 ?r1 ?x1 ?y1) (M ?s2 ?r2 ?x2 ?y2)) => (M (* ?s1 ?s2) (+ ?r1 ?r2) (+ ?x2 (* ?s2 (- (* (cos ?r2) ?x1) (* (sin ?r2) ?y1)))) (+ ?y2 (* ?s2 (+ (* (sin ?r2) ?x1) (* (cos ?r2) ?y1)))))
+
+// ── trig at the angles that occur (exact — so rotational matmul folds cleanly) ──
+cos_0: (cos 0) => 1
+sin_0: (sin 0) => 0
+cos_halfpi: (cos (/ pi 2)) => 0
+sin_halfpi: (sin (/ pi 2)) => 1
+cos_pi: (cos pi) => -1
+sin_pi: (sin pi) => 0
+cos_qpi: (cos (/ pi 4)) => 0.7071067811865476
+sin_qpi: (sin (/ pi 4)) => 0.7071067811865476
+
+// ── angle normalisation ──
+ang_q: (/ (* 2 pi) 4) <=> (/ pi 2)
+ang_e: (/ (* 2 pi) 8) <=> (/ pi 4)
+ang_h: (/ (* 2 pi) 2) <=> pi
+
+// ── choice2's non-confluent "choice" rules ──
+t_factor: (C (T ?a ?m) (T ?b ?m)) <=> (T (C ?a ?b) ?m)
+c_assoc: (C (C ?a ?b) ?c) <=> (C ?a (C ?b ?c))
+c_comm: (C ?a ?b) <=> (C ?b ?a)
+rep_unroll_2: (repeat ?x 2 (M 1 0 ?tx ?ty)) <=> (C ?x (T ?x (M 1 0 ?tx ?ty)))
+rep_unroll_3: (repeat ?x 3 (M 1 0 ?tx ?ty)) <=> (C (C ?x (T ?x (M 1 0 ?tx ?ty))) (T ?x (M 1 0 (* 2 ?tx) (* 2 ?ty))))
+rep_unroll_rot_2: (repeat ?x 2 (M 1 ?r 0 0)) <=> (C ?x (T ?x (M 1 ?r 0 0)))
+rep_unroll_rot_3: (repeat ?x 3 (M 1 ?r 0 0)) <=> (C (C ?x (T ?x (M 1 ?r 0 0))) (T ?x (M 1 (+ ?r ?r) 0 0)))
+scale_trans_interchange: (T (T ?p (M 1 0 ?x ?y)) (M ?s 0 0 0)) <=> (T (T ?p (M ?s 0 0 0)) (M 1 0 (* ?x ?s) (* ?y ?s)))
