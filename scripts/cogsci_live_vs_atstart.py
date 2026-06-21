@@ -20,6 +20,9 @@ ABSTS = int(os.environ.get("ABSTS", 4))
 STEPS = int(os.environ.get("STEPS", 50000))
 ARITY = int(os.environ.get("ARITY", 2))
 ITER_LIMIT = int(os.environ.get("ITER_LIMIT", 6))
+# Per-factor match-set cap: bounds the abstraction-search blowup the non-confluent
+# choice rules cause (iter-limit can't catch it). Results were measured at 2000.
+MAX_MATCH_SET = int(os.environ.get("MAX_MATCH_SET", 2000))
 TIMEOUT = int(os.environ.get("TIMEOUT", 500))
 
 DOMAINS = ["dials", "furniture", "nuts-bolts", "wheels"]
@@ -40,7 +43,8 @@ def run(domain, rules_rel, at_start):
     cmd = [BIN, "-i", f"data/domains/cogsci/{domain}.json", "--output", outp,
            "--search", "best-first", "--language", "op-children",
            "--max-arity", str(ARITY), "--num-abstractions", str(ABSTS),
-           "--num-steps", str(STEPS), "--iter-limit", str(ITER_LIMIT), "-r", rules]
+           "--num-steps", str(STEPS), "--iter-limit", str(ITER_LIMIT),
+           "--max-match-set", str(MAX_MATCH_SET), "-r", rules]
     if at_start:
         cmd.append("--only-use-dsrs-at-start")
     try:

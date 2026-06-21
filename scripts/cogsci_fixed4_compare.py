@@ -25,6 +25,9 @@ TIMEOUT = int(os.environ.get("TIMEOUT", 600))
 # blow the e-graph up. Applied uniformly: baseline/ablate-choice converge well within
 # it, so they're unaffected; only the explosive "default" set is bounded.
 ITER_LIMIT = int(os.environ.get("ITER_LIMIT", 6))
+# Per-factor match-set cap: bounds the abstraction-search blowup the non-confluent
+# choice rules cause (iter-limit can't catch it). Results were measured at 2000.
+MAX_MATCH_SET = int(os.environ.get("MAX_MATCH_SET", 2000))
 
 DOMAINS = ["dials", "nuts-bolts"]
 RULESETS = {
@@ -41,7 +44,8 @@ def run(domain, rules_rel):
     cmd = [BIN, "-i", f"data/domains/cogsci/{domain}.json", "--output", outp,
            "--search", "best-first", "--language", "op-children",
            "--max-arity", str(ARITY), "--num-abstractions", str(ABSTS),
-           "--num-steps", str(STEPS), "--iter-limit", str(ITER_LIMIT), "-r", rules]
+           "--num-steps", str(STEPS), "--iter-limit", str(ITER_LIMIT),
+           "--max-match-set", str(MAX_MATCH_SET), "-r", rules]
     try:
         subprocess.run(cmd, cwd=ROOT, check=True, timeout=TIMEOUT,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)

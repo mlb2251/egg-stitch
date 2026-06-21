@@ -1,8 +1,11 @@
-// ABLATION of drawings.rewrites: the non-confluent "choice" rules are removed,
-// leaving only the confluent contracting core (transform composition + trig folding +
-// angle normalization). Every rule has an unconditionally-simpler direction, so this
-// canonicalizes to a fixed normal form — LIVE rewriting ties applying-at-start here,
-// which is the baseline the default's choice rules are meant to beat.
+// ABLATION of drawings.rewrites: the non-confluent "choice" rules (overlay
+// assoc/comm, transform factoring, repeat-unroll, scale/translate interchange) are
+// removed, leaving the contracting core (transform composition + trig folding) plus
+// bidirectional angle normalization. Isolates what the choice rules contribute. On
+// dials this ties live==at-start, so the choice rules are what create the default's
+// live advantage; on nuts-bolts live still beats at-start here (the gap there comes
+// from the core + cost-vs-abstraction mismatch, not the choice rules), so the
+// live-vs-at-start story is domain-dependent rather than choice-rule-exclusive.
 
 constant_folding: !integersarefloats
 

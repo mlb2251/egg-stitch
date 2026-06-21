@@ -19,6 +19,10 @@ BIN = os.path.join(ROOT, "target", "release", "egg-stitch")
 ABSTS = int(os.environ.get("ABSTS", 5))
 STEPS = int(os.environ.get("STEPS", 20000))
 ARITY = int(os.environ.get("ARITY", 2))
+ITER_LIMIT = int(os.environ.get("ITER_LIMIT", 6))
+# Per-factor match-set cap: bounds the abstraction-search blowup the non-confluent
+# choice rules cause (iter-limit can't catch it). Results were measured at 2000.
+MAX_MATCH_SET = int(os.environ.get("MAX_MATCH_SET", 2000))
 TIMEOUT = int(os.environ.get("TIMEOUT", 240))
 
 DOMAINS = ["dials", "nuts-bolts"]
@@ -38,7 +42,8 @@ def run(domain, rules_rel):
     cmd = [BIN, "-i", f"data/domains/cogsci/{domain}.json",
            "--search", "best-first", "--language", "op-children",
            "--max-arity", str(ARITY), "--num-abstractions", str(ABSTS),
-           "--num-steps", str(STEPS), "-r", rules]
+           "--num-steps", str(STEPS), "--iter-limit", str(ITER_LIMIT),
+           "--max-match-set", str(MAX_MATCH_SET), "-r", rules]
     try:
         p = subprocess.run(cmd, cwd=ROOT, timeout=TIMEOUT,
                            capture_output=True, text=True)
