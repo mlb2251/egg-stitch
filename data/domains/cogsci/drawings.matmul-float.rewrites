@@ -1,0 +1,32 @@
+// matmul-float: composition handled via `matmul` NODES rather than expanded into
+// coordinate arithmetic. A nested transform becomes `(T x (matmul m1 m2))`; the
+// `!matmul` fold reduces a matmul of two CONSTANT matrices to the single literal
+// product matrix (computed in Rust — no intermediate `+`/`*` nodes); `!round6`
+// canonicalises the float results (snaps cos(pi/2)'s 6e-17 to 0); the `pi`
+// literal lets the fold read rotation angles. Identity matmul is eliminated.
+
+constant_folding: !integersarefloats
+constant_folding: !matmul
+constant_folding: !round6
+
+// pi as a literal so angle fields reduce to floats the fold can read
+pi_lit: pi => 3.141592653589793
+
+// ── identity transform + arithmetic identities ──
+t_id: (T ?p (M 1 0 0 0)) => ?p
+add_id_r: (+ ?x 0) => ?x
+add_id_l: (+ 0 ?x) => ?x
+sub_id:   (- ?x 0) => ?x
+mul_id_r: (* ?x 1) => ?x
+mul_id_l: (* 1 ?x) => ?x
+mul_zero_r: (* ?x 0) => 0
+mul_zero_l: (* 0 ?x) => 0
+div_id:   (/ ?x 1) => ?x
+rep_1: (repeat ?x 1 ?m) => ?x
+
+// ── introduce matmul for nested transforms; eliminate identity matmul ──
+// (no mm_assoc: the fold canonicalises every grouping to the same product, so
+//  associativity is redundant and only inflates the matmul match set.)
+mm_compose: (T (T ?x ?m1) ?m2) => (T ?x (matmul ?m1 ?m2))
+mm_id_l: (matmul (M 1 0 0 0) ?m) => ?m
+mm_id_r: (matmul ?m (M 1 0 0 0)) => ?m

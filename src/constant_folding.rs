@@ -158,6 +158,40 @@ impl<L: StitchLanguage, A: Analysis<L>> Applier<L, A> for IntAsFloat {
     }
 }
 
+/// Canonical float string: round to 6 decimal places (snapping float noise such
+/// as `cos(pi/2) = 6e-17` to 0 and collapsing values that agree to 6 decimals
+/// onto one literal) and format as a plain decimal so it unifies with the
+/// corpus's literal leaves.
+fn round6(x: f64) -> String {
+    let r = (x * 1e6).round() / 1e6;
+    let r = if r == 0.0 { 0.0 } else { r }; // normalise -0.0
+    format!("{r:?}")
+}
+
+/// Applier behind `!round6`: adds the 6-decimal-rounded form of any numeric
+/// literal e-class and unions it in, so noise-equal / near-equal numbers (e.g. a
+/// fold's `1e-16` and `0`, or `0.7853981…` and `0.785398`) share one literal.
+#[derive(Clone)]
+struct RoundLiteral;
+
+impl<L: StitchLanguage, A: Analysis<L>> Applier<L, A> for RoundLiteral {
+    fn apply_one(&self, egraph: &mut EGraph<L, A>, eclass: Id, _subst: &Subst, _ast: Option<&PatternAst<L>>, _name: Symbol) -> Vec<Id> {
+        let Some(num) = eclass_number(egraph, eclass) else { return vec![] };
+        let id = egraph.add(L::from_op(&round6(num.as_f64()), vec![]).expect("float leaf is a valid 0-arity op"));
+        if egraph.union(eclass, id) { vec![id] } else { vec![] }
+    }
+}
+
+/// Builds the `!round6` rewrite (see [`RoundLiteral`]).
+pub fn round6_rewrite<L, A>() -> anyhow::Result<Rewrite<L, A>>
+where
+    L: StitchLanguage,
+    A: Analysis<L>,
+{
+    let searcher: Pattern<L> = L::parse_pattern_ast("?n")?.into();
+    Rewrite::new("round6", searcher, RoundLiteral).map_err(|e| anyhow!("{e}"))
+}
+
 impl<L: StitchLanguage, A: Analysis<L>> Applier<L, A> for NumberFold {
     fn apply_one(&self, egraph: &mut EGraph<L, A>, eclass: Id, subst: &Subst, _ast: Option<&PatternAst<L>>, _name: Symbol) -> Vec<Id> {
         let Some(x) = eclass_number(egraph, subst[self.a]) else { return vec![] };
@@ -219,6 +253,75 @@ impl<L: StitchLanguage, A: Analysis<L>> Applier<L, A> for SuccessorExpand {
         let id = egraph.add_expr(&expr);
         if egraph.union(eclass, id) { vec![id] } else { vec![] }
     }
+}
+
+/// Find an `(M s r x y)` e-node in `id` and return its four field e-classes.
+fn matrix_fields<L: StitchLanguage, A: Analysis<L>>(egraph: &EGraph<L, A>, id: Id) -> Option<[Id; 4]> {
+    egraph[id].nodes.iter().find_map(|n| {
+        let c = n.children();
+        (n.to_string() == "M" && c.len() == 4).then(|| [c[0], c[1], c[2], c[3]])
+    })
+}
+
+/// Read a scalar matrix-field e-class as an f64 *only if it is already a constant
+/// leaf* — a numeric literal or `pi`. No recursion into `+ - * /`/trig: those are
+/// left to `constant_folding` (which, with a `pi => 3.14…` rule, reduces angle
+/// expressions to literals first). This keeps the matmul fold O(1) per field and
+/// makes it fire only once both inputs are fully-constant matrices.
+fn eval_scalar<L: StitchLanguage, A: Analysis<L>>(egraph: &EGraph<L, A>, id: Id) -> Option<f64> {
+    egraph[id].nodes.iter().find_map(|n| {
+        if !n.children().is_empty() {
+            return None;
+        }
+        let s = n.to_string();
+        if s == "pi" { Some(std::f64::consts::PI) } else { s.parse::<f64>().ok() }
+    })
+}
+
+/// Applier behind `!matmul`: when `(matmul A B)` has both children resolvable to
+/// concrete affine matrices `(M s r x y)` (fields evaluable to f64), computes the
+/// composite — `A` applied first then `B`, per the drawings `Transform` semantics
+/// (`p ↦ R(r)·(s·p) + (x,y)`) — and unions the single literal result matrix into
+/// the e-class. Emits *only* the reduced `(M …)` (no intermediate `+`/`*` nodes),
+/// so composing transforms never materialises coordinate-arithmetic trees.
+#[derive(Clone)]
+struct MatmulFold {
+    a: Var,
+    b: Var,
+}
+
+impl<L: StitchLanguage, A: Analysis<L>> Applier<L, A> for MatmulFold {
+    fn apply_one(&self, egraph: &mut EGraph<L, A>, eclass: Id, subst: &Subst, _ast: Option<&PatternAst<L>>, _name: Symbol) -> Vec<Id> {
+        let Some(ma) = matrix_fields(egraph, subst[self.a]) else { return vec![] };
+        let Some(mb) = matrix_fields(egraph, subst[self.b]) else { return vec![] };
+        let v = [ma[0], ma[1], ma[2], ma[3], mb[0], mb[1], mb[2], mb[3]].map(|id| eval_scalar(egraph, id));
+        let [Some(s1), Some(r1), Some(x1), Some(y1), Some(s2), Some(r2), Some(x2), Some(y2)] = v else { return vec![] };
+        // A first, then B: scale multiplies, rotation adds, and A's translation is
+        // carried through B's scale+rotation before B's translation is added.
+        let (s, r) = (s1 * s2, r1 + r2);
+        let (cos, sin) = (r2.cos(), r2.sin());
+        let x = x2 + s2 * (cos * x1 - sin * y1);
+        let y = y2 + s2 * (sin * x1 + cos * y1);
+        if ![s, r, x, y].iter().all(|f| f.is_finite()) {
+            return vec![];
+        }
+        let mut leaf = |v: f64| egraph.add(L::from_op(&format!("{v:?}"), vec![]).expect("float leaf is a valid 0-arity op"));
+        let (sl, rl, xl, yl) = (leaf(s), leaf(r), leaf(x), leaf(y));
+        let Ok(m_node) = L::from_op("M", vec![sl, rl, xl, yl]) else { return vec![] };
+        let m = egraph.add(m_node);
+        if egraph.union(eclass, m) { vec![m] } else { vec![] }
+    }
+}
+
+/// Builds the `!matmul` fold rewrite (see [`MatmulFold`]).
+pub fn matmul_fold_rewrite<L, A>() -> anyhow::Result<Rewrite<L, A>>
+where
+    L: StitchLanguage,
+    A: Analysis<L>,
+{
+    let (a, b): (Var, Var) = ("?a".parse().unwrap(), "?b".parse().unwrap());
+    let searcher: Pattern<L> = L::parse_pattern_ast("(matmul ?a ?b)")?.into();
+    Rewrite::new("matmul-fold", searcher, MatmulFold { a, b }).map_err(|e| anyhow!("{e}"))
 }
 
 #[cfg(test)]
