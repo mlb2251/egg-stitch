@@ -1,0 +1,4 @@
+// The operator list restricts which operators fold: only `+` is listed, so
+// `(+ 1 2)` folds to `3` (unifying with the literal `3`) while `(* 4 5)` is left
+// unfolded and survives in the abstraction body — proving `*` is excluded.
+constant_folding: !integers (params (ops (+)))
