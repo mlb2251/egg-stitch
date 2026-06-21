@@ -21,21 +21,20 @@ use rustc_hash::FxHashMap;
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
 
-/// Level of restriction for a variable. Entry order matters here for Ord.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// Whether a pattern variable is still a hole or has been committed. Reuse
+/// eligibility is tracked separately in [`Pattern::reuse_pairs`], so this is the
+/// expand axis only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VarState {
-    ReusableOrExpandable,
-    /// Can be literally expanded but not reused
+    /// A live hole: can still be expanded.
     Expandable,
+    /// Committed — a merged block or an expand-frozen argument; not expandable.
     Frozen,
 }
 
 impl VarState {
     pub fn is_expandable(self) -> bool {
-        matches!(self, VarState::ReusableOrExpandable | VarState::Expandable)
-    }
-    pub fn is_reusable(self) -> bool {
-        matches!(self, VarState::ReusableOrExpandable)
+        matches!(self, VarState::Expandable)
     }
 }
 
@@ -73,7 +72,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
             var_occurrences: vec![1],
-            var_state: vec![VarState::ReusableOrExpandable],
+            var_state: vec![VarState::Expandable],
             reuse_pairs: vec![],
         }
     }
@@ -106,16 +105,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_occ = self.var_occurrences.remove(var_idx);
         // Drop the expanded var's own state (it had to be non-frozen to be
-        // expanded); each new child is inserted as `ReusableOrExpandable` below.
+        // expanded); each new child is inserted as `Expandable` below.
         self.var_state.remove(var_idx);
-        // Any expansion demotes every *previously existing* fresh var out of the
-        // reusable cohort (`Frozen` stays frozen); only the children we insert
-        // below start reusable. See `VarState`.
-        for s in &mut self.var_state {
-            if *s == VarState::ReusableOrExpandable {
-                *s = VarState::Expandable;
-            }
-        }
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
@@ -143,7 +134,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             // The new enode replaces every occurrence of the parent var, so the
             // syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
-            self.var_state.insert(var_idx + j, VarState::ReusableOrExpandable);
+            self.var_state.insert(var_idx + j, VarState::Expandable);
         }
 
         // Maintain reuse_pairs: every pre-existing pair joins two vars that both
@@ -219,7 +210,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let mut new_vars = vec![Vec::new(); n];
         let mut new_depth = vec![0u32; n];
         let mut new_occ = vec![0usize; n];
-        let mut new_state = vec![VarState::ReusableOrExpandable; n];
+        let mut new_state = vec![VarState::Expandable; n];
         for (k, &nk) in perm.iter().enumerate() {
             new_vars[nk] = std::mem::take(&mut self.vars[k]);
             new_depth[nk] = self.var_depth[k];
@@ -279,17 +270,11 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Stale vars below the *kept* slot, demoting them out of the reusable
-        // cohort but keeping them expandable. The merged slot's state is set below.
-        for s in &mut self.var_state[..keep_idx] {
-            if *s == VarState::ReusableOrExpandable {
-                *s = VarState::Expandable;
-            }
-        }
+        // The merged slot stays a live hole unless either input was frozen.
         self.var_state[keep_idx] = if self.var_state[keep_idx] == VarState::Frozen || self.var_state[drop_idx] == VarState::Frozen {
             VarState::Frozen
         } else {
-            VarState::ReusableOrExpandable
+            VarState::Expandable
         };
         self.var_state.remove(drop_idx);
         // reuse_pairs: stale every pair lexicographically before (keep, drop),
