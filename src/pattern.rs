@@ -21,23 +21,6 @@ use rustc_hash::FxHashMap;
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
 
-/// Whether a pattern variable is still a hole or has been committed. Reuse
-/// eligibility is tracked separately in [`Pattern::reuse_pairs`], so this is the
-/// expand axis only.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VarState {
-    /// A live hole: can still be expanded.
-    Expandable,
-    /// Committed — a merged block or an expand-frozen argument; not expandable.
-    Frozen,
-}
-
-impl VarState {
-    pub fn is_expandable(self) -> bool {
-        matches!(self, VarState::Expandable)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
@@ -49,8 +32,10 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// because cost accounting reads it on the hot path. Maintained incrementally
     /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// Per-var restriction level (expand axis only now: is_expandable / Frozen).
-    pub var_state: Vec<VarState>,
+    /// Per-var commit flag (expand axis): `true` at each committed slot — a
+    /// merged block or an expand-frozen argument, both non-expandable — `false`
+    /// at a live hole. Reuse eligibility lives separately in `reuse_pairs`.
+    pub var_frozen: Vec<bool>,
     /// Best-first reuse-order canonicalization: the reuse pairs `(i, j)` (`i < j`)
     /// currently allowed. A reuse is permitted only if its pair is in here.
     /// `reuse(i, j)` stales (removes) every pair lexicographically before
@@ -72,7 +57,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
             var_occurrences: vec![1],
-            var_state: vec![VarState::Expandable],
+            var_frozen: vec![false],
             reuse_pairs: vec![],
         }
     }
@@ -81,7 +66,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// `SeenTracker` dedup key (flexibility is measured by the expand-banned set,
     /// since those slots restrict future expansion).
     pub fn frozen_mask(&self) -> Vec<bool> {
-        self.var_state.iter().map(|&s| !s.is_expandable()).collect()
+        self.var_frozen.clone()
     }
 
     /// Expands the variable at `var_idx` with `target`. New children are inserted
@@ -106,7 +91,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let parent_occ = self.var_occurrences.remove(var_idx);
         // Drop the expanded var's own state (it had to be non-frozen to be
         // expanded); each new child is inserted as `Expandable` below.
-        self.var_state.remove(var_idx);
+        self.var_frozen.remove(var_idx);
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
@@ -134,7 +119,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             // The new enode replaces every occurrence of the parent var, so the
             // syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
-            self.var_state.insert(var_idx + j, VarState::Expandable);
+            self.var_frozen.insert(var_idx + j, false);
         }
 
         // Maintain reuse_pairs: every pre-existing pair joins two vars that both
@@ -210,12 +195,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let mut new_vars = vec![Vec::new(); n];
         let mut new_depth = vec![0u32; n];
         let mut new_occ = vec![0usize; n];
-        let mut new_state = vec![VarState::Expandable; n];
+        let mut new_state = vec![false; n];
         for (k, &nk) in perm.iter().enumerate() {
             new_vars[nk] = std::mem::take(&mut self.vars[k]);
             new_depth[nk] = self.var_depth[k];
             new_occ[nk] = self.var_occurrences[k];
-            new_state[nk] = self.var_state[k];
+            new_state[nk] = self.var_frozen[k];
         }
         // Rename the leaves to the canonical var names.
         for (k, ids) in new_vars.iter().enumerate() {
@@ -227,7 +212,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.vars = new_vars;
         self.var_depth = new_depth;
         self.var_occurrences = new_occ;
-        self.var_state = new_state;
+        self.var_frozen = new_state;
         self.reuse_pairs.clear();
         perm
     }
@@ -270,13 +255,9 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // The merged slot stays a live hole unless either input was frozen.
-        self.var_state[keep_idx] = if self.var_state[keep_idx] == VarState::Frozen || self.var_state[drop_idx] == VarState::Frozen {
-            VarState::Frozen
-        } else {
-            VarState::Expandable
-        };
-        self.var_state.remove(drop_idx);
+        // The merged slot is committed iff either input was.
+        self.var_frozen[keep_idx] = self.var_frozen[keep_idx] || self.var_frozen[drop_idx];
+        self.var_frozen.remove(drop_idx);
         // reuse_pairs: stale every pair lexicographically before (keep, drop),
         // then drop the merged-away var's pairs and shift the rest down.
         self.reuse_pairs.retain(|&pr| pr >= (keep_idx, drop_idx));
@@ -309,7 +290,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let var_positions = self.vars.remove(var_idx);
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
-        self.var_state.remove(var_idx);
+        self.var_frozen.remove(var_idx);
         self.drop_var_from_reuse_pairs(var_idx);
 
         for p in var_idx..self.vars.len() {
@@ -565,7 +546,7 @@ mod tests {
         p.vars.swap(0, 1);
         p.var_depth.swap(0, 1);
         p.var_occurrences.swap(0, 1);
-        p.var_state.swap(0, 1);
+        p.var_frozen.swap(0, 1);
         for (k, ids) in p.vars.clone().iter().enumerate() {
             for &id in ids {
                 p.pattern[id] = var_node::<OpChildren, Op>(k as u32);
