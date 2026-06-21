@@ -439,9 +439,11 @@ fn constant_folding_ops_list_trig() {
 }
 
 /// `(params (ops (+)))`: the operator list restricts folding to `+` only. `(+ 1 2)`
-/// folds to `3` (unifying with the literal `3`), while `(* 4 5)` — its operator
-/// left out of the list — stays unfolded and survives verbatim in the abstraction
-/// body `(f (g 3 (* 4 5) z) ?#0)`. Pins that the list is honored as an allowlist.
+/// folds to `3` (unifying with the literal `3`, baked into the abstraction), but
+/// `(* 4 5)` — its operator left out of the list — does NOT fold, so it fails to
+/// unify with the literal `20` the other programs write and must be passed as an
+/// argument (arity 2). Pins that the list is honored as an allowlist: the `+`
+/// side bakes in, the excluded `*` side does not.
 #[test]
 fn constant_folding_ops_list_restricts() {
     check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_restrict.json", &["-r", "data/domains/simple-arithmetic/fold_ops_restrict.rewrites"], true);
