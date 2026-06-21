@@ -13,8 +13,12 @@ no-rules abstraction on a circuit with **genuine non-canonical shared structure*
   ≥6 nodes, then stride-sampled to 800. Regenerate with `python3 scripts/aig_to_egg.py`
   (deterministic — reproduces `all.json` byte-for-byte).
 - `and_ac.rewrites` — the minimal AND associative/commutative + double-negation
-  rule set used for the live / at-start runs. NOT a complete boolean axiomatization
-  (no De Morgan / absorption / distributivity) — just the explosive AC fragment.
+  rule set. NOT a complete boolean axiomatization — just the explosive AC fragment.
+- `and_or_demorgan.rewrites` — AC + double-negation **plus an explicit `or`
+  operator and the AND<->OR De Morgan bridges**. Captures real *semantic*
+  equivalence (a cell's AND-tree and OR-tree decompositions), not just operand
+  reorderings, and minimizes cones to negation-normal-form (after-rules 32262 ->
+  22659). Still not complete (no distributivity/absorption).
 
 ## Why this corpus
 The AC-census (`scripts/aig_cones.py`) shows the multiplier cones have real
@@ -23,8 +27,22 @@ AND-AC + double-negation (63% mergeable) — vs ~0% on every arithmetic/spreadsh
 corpus tried. It is the one corpus where live-DSR's edge **over at-start** is large.
 
 ## Headline result (see `scripts/test_aig_mult_regression.py`)
-SMC, op-children, max-arity 4, 5000 particles / 100 steps, temp 1000, seed 1:
-final cost over 10 abstractions **baseline 13599 < live-AC 14364 < at-start 15526**.
-Live beats at-start (AC unifies operand orderings → more matches) but loses to the
-no-rules baseline: live front-loads (best early cells) then starves, while at-start
-breaks cross-program alignment up front. Neither beats plain abstraction-finding.
+SMC, op-children, max-arity 4, 5000 particles / 100 steps, temp 1000, seed 1;
+final cost over 10 abstractions:
+
+| rules | baseline | live | at-start |
+|-------|----------|------|----------|
+| AC (`and_ac`)            | 13599 | 14364 | 15526 |
+| De Morgan (`and_or_demorgan`) | 13599 | **12980** | 16212 |
+
+With the **AC-only** fragment, live beats at-start (AC unifies operand orderings ->
+more matches) but loses to the no-rules baseline: live front-loads (best early
+cells) then starves; at-start breaks cross-program alignment up front.
+
+With **De Morgan** (real semantic equivalence, not just reorderings), **live (12980)
+beats the no-rules baseline (13599)** wire-to-wire — the only configuration that
+does — while at-start (16212) does worst of all. The richer ruleset both lifts live
+past baseline and sinks at-start further: live keeps all equivalent forms and founds
+its library on natural product-of-sums cells (XNOR directly), at-start picks an
+inconsistent per-program min-term. The win is description-length compression of the
+netlist structure, not boolean minimization.

@@ -1,0 +1,7 @@
+and_comm: (and ?x ?y) => (and ?y ?x)
+and_assoc: (and (and ?a ?b) ?c) => (and ?a (and ?b ?c))
+or_comm: (or ?x ?y) => (or ?y ?x)
+or_assoc: (or (or ?a ?b) ?c) => (or ?a (or ?b ?c))
+notnot: (not (not ?x)) => ?x
+demorgan_and: (not (and ?a ?b)) <=> (or (not ?a) (not ?b))
+demorgan_or: (not (or ?a ?b)) <=> (and (not ?a) (not ?b))

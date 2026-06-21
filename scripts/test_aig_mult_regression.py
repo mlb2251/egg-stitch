@@ -22,6 +22,7 @@ BIN = os.path.join(ROOT, "target", "release", "egg-stitch")
 AIG = os.path.join(ROOT, "data", "domains", "mult", "multiplier.aig")
 CORPUS = os.path.join(ROOT, "data", "domains", "mult", "all.json")
 RULES = os.path.join(ROOT, "data", "domains", "mult", "and_ac.rewrites")
+RULES_DM = os.path.join(ROOT, "data", "domains", "mult", "and_or_demorgan.rewrites")
 
 # ---- golden values (from the investigation; SMC seed 1, arity 4, 5000/100, temp 1000) ----
 CENSUS = {"cones_ge6": 26804, "unique_raw": 1721, "unique_ac": 642}
@@ -44,6 +45,25 @@ ROLLOUT = {
                 "(and (not ?#0) ?#1)",
                 "(and ?#0 (not ?#1))",
                 "(fn_1 ?#0 (fn_0 ?#1 ?#2))"]},
+}
+
+# De Morgan ruleset (and_or_demorgan.rewrites): introduces `or` + the AND<->OR
+# bridges, capturing real semantic equivalence. This is the ONLY configuration
+# where live abstraction beats the no-rules baseline (12980 < 13599 at 10 absts);
+# at-start does worst (16212). The 4-abstraction prefixes locked here:
+ROLLOUT_DM = {
+    "live-DM": {
+        "costs": [18075, 15714, 15158, 14620],
+        "fns": ["(and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",   # XNOR, product-of-sums
+                "(and (or ?#0 (not ?#1)) ?#2)",
+                "(fn_1 ?#0 ?#1 (or ?#2 ?#3))",
+                "(and (or ?#0 ?#1) ?#2)"]},
+    "at-start-DM": {
+        "costs": [20314, 19455, 18867, 18281],
+        "fns": ["(and (or ?#0 ?#1) (or ?#2 ?#3))",
+                "(not (or ?#0 ?#1))",
+                "(and ?#0 (not ?#1))",
+                "(and ?#0 (or ?#1 ?#2))"]},
 }
 
 fails = []
@@ -81,7 +101,7 @@ def corpus_regen():
     check("corpus size", len(committed), 800)
 
 
-def rollout(name, at_start):
+def rollout(name, at_start, rules, golden):
     out = os.path.join("/tmp", f"reg_{name}.json")
     cmd = [BIN, "-i", CORPUS, "--output", out, "--search", "smc",
            "--language", "op-children", "--max-arity", "4", "--num-abstractions", "4",
@@ -89,16 +109,16 @@ def rollout(name, at_start):
            "--seed", "1", "--iter-limit", "30"]
     if at_start:
         cmd.append("--only-use-dsrs-at-start")
-    if name != "baseline":
-        cmd += ["-r", RULES]
+    if rules is not None:
+        cmd += ["-r", rules]
     p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if p.returncode != 0:
         check(f"{name} run", f"rc={p.returncode}", "rc=0")
         return
     d = json.load(open(out))
-    check(f"{name} costs", d["cost_at_end_of_each_iter"], ROLLOUT[name]["costs"])
+    check(f"{name} costs", d["cost_at_end_of_each_iter"], golden["costs"])
     check(f"{name} abstractions",
-          [a["pattern"].split(": ", 1)[1] for a in d["library"]], ROLLOUT[name]["fns"])
+          [a["pattern"].split(": ", 1)[1] for a in d["library"]], golden["fns"])
 
 
 def main():
@@ -107,10 +127,13 @@ def main():
         sys.exit(2)
     census()
     corpus_regen()
-    print("4-abstraction SMC rollout (seed 1):")
-    rollout("baseline", False)
-    rollout("live", False)
-    rollout("at-start", True)
+    print("4-abstraction SMC rollout, AC rules (seed 1):")
+    rollout("baseline", False, None, ROLLOUT["baseline"])
+    rollout("live", False, RULES, ROLLOUT["live"])
+    rollout("at-start", True, RULES, ROLLOUT["at-start"])
+    print("4-abstraction SMC rollout, De Morgan rules (seed 1):")
+    rollout("live-DM", False, RULES_DM, ROLLOUT_DM["live-DM"])
+    rollout("at-start-DM", True, RULES_DM, ROLLOUT_DM["at-start-DM"])
     print()
     if fails:
         print(f"REGRESSION FAILED: {len(fails)} check(s) — {fails}")
