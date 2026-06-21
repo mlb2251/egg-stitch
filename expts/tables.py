@@ -24,7 +24,7 @@ from ._subproc import available_memory_bytes
 from .bench import MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
-from .runner import MOLECULE_FAMILIES
+from .runner import EPFL_CIRCUITS, MOLECULE_FAMILIES
 
 NUM_RUNS = 10
 
@@ -136,7 +136,10 @@ def _run_table(
     output_name: str,
 ) -> Path:
     """Run each ``(label, runner)`` on every domain ``NUM_RUNS`` times and save JSON."""
-    assert all(d in ALL_DOMAINS or d.startswith("molecules:") for d in domains), "domain typo"
+    assert all(
+        d in ALL_DOMAINS or d.startswith("molecules:") or d.startswith("epfl-circuits:")
+        for d in domains
+    ), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "config": {"num_abstractions": num_abstractions},
@@ -268,4 +271,55 @@ def table5() -> Path:
         use_dsrs=True,
         folder_prefix="table5",
         output_name="table5.json",
+    )
+
+
+# Table 7: the EPFL multiplier (epfl-circuits) input-bounded corpus, with the
+# factoring DSRs. Unlike table5's tool sweep, this is one SMC operating point in
+# three rule configs -- no-rules baseline, live (DSRs during search), and
+# dsrs-only-at-start -- the comparison the corpus is built to expose. SMC at the
+# experiment's operating point (5000 particles, max-arity 4); every config capped
+# like table5. babble/Stitch have no theory for these boolean circuits, so the
+# roster is just the three ours-SMC configs.
+TABLE7_DOMAINS = [f"epfl-circuits:{c}" for c in EPFL_CIRCUITS]
+TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
+TABLE7_NUM_ABSTRACTIONS = 4
+TABLE7_SMC_PARTICLES = 5000
+TABLE7_MAX_ARITY = 4
+
+
+def _table7_runners() -> tuple[tuple[str, object], ...]:
+    """The three SMC rule configs, each capped at :data:`TABLE7_TIMEOUT` and
+    :data:`MEM_LIMIT_BYTES`: no-rules baseline, live DSRs, and dsrs-only-at-start."""
+    common = dict(
+        num_particles=TABLE7_SMC_PARTICLES,
+        max_arity=TABLE7_MAX_ARITY,
+        timeout=TABLE7_TIMEOUT,
+        mem_limit=MEM_LIMIT_BYTES,
+    )
+    return (
+        ("smc-baseline", OursSmc(no_dsrs=True, **common)),
+        ("smc-live", OursSmc(**common)),
+        ("smc-at-start", OursSmc(only_use_dsrs_at_start=True, **common)),
+    )
+
+
+def table7() -> Path:
+    """Run the EPFL multiplier corpus with the factoring DSRs: SMC in three rule
+    configs (no-rules baseline / live / dsrs-only-at-start), 4 abstractions, each
+    capped at 300s and 20 GiB."""
+    free = available_memory_bytes()
+    if free < MEM_LIMIT_BYTES:
+        raise SystemExit(
+            f"table7: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
+            f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
+            f"available. Free up memory or lower MEM_LIMIT_BYTES."
+        )
+    return _run_table(
+        domains=TABLE7_DOMAINS,
+        runners=_table7_runners(),
+        num_abstractions=TABLE7_NUM_ABSTRACTIONS,
+        use_dsrs=True,
+        folder_prefix="table7",
+        output_name="table7.json",
     )

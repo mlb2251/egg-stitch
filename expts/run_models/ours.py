@@ -174,12 +174,19 @@ class OursSmc:
     num_particles: int = 1000
     temperature: float = 1000.0
     max_arity: int = MAX_ARITY
+    # ``only_use_dsrs_at_start`` switches DSRs from live-during-search to a
+    # one-shot canonicalisation pass; ``no_dsrs`` drops them entirely (the
+    # no-rules baseline, even when the table supplies a rewrites file). Both are
+    # excluded from repr so the method label stays a plain ``OursSmc(...)``.
+    only_use_dsrs_at_start: bool = field(default=False, repr=False)
+    no_dsrs: bool = field(default=False, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
-            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
+            rounds=rounds, input_path=input_path,
+            rewrites_path=None if self.no_dsrs else rewrites_path,
             weighting=weighting, search="smc",
             max_arity=self.max_arity,
             search_flags={
@@ -187,5 +194,6 @@ class OursSmc:
                 "num_particles": self.num_particles,
                 "temperature": self.temperature,
             },
+            only_use_dsrs_at_start=self.only_use_dsrs_at_start,
             timeout=self.timeout, mem_limit=self.mem_limit,
         )

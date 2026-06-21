@@ -54,6 +54,11 @@ class Runner(Protocol):
 # corpora; op-children grammar, symmetry DSRs). See data/.../scramble/README.md.
 MOLECULE_FAMILIES = ["hexyl", "ester", "glycol"]
 
+# EPFL benchmark circuits as op-children corpora under data/domains/epfl-circuits/,
+# named ``epfl-circuits:<circuit>`` (k-feasible-cut gate cones, AND/OR DSRs). The
+# source .aig files and generators live in scripts/epfl-circuits/.
+EPFL_CIRCUITS = ["mult"]
+
 
 def molecule_family(domain: str) -> str | None:
     """Return the family for a ``molecules:<family>`` domain, else None."""
@@ -61,10 +66,19 @@ def molecule_family(domain: str) -> str | None:
     return domain[len(prefix):] if domain.startswith(prefix) else None
 
 
+def epfl_circuit(domain: str) -> str | None:
+    """Return the circuit for an ``epfl-circuits:<circuit>`` domain, else None."""
+    prefix = "epfl-circuits:"
+    return domain[len(prefix):] if domain.startswith(prefix) else None
+
+
 def domain_type(domain: str) -> str:
-    """Return ``"cogsci"``, ``"dreamcoder"``, or ``"molecules"`` for a known domain."""
+    """Return ``"cogsci"``, ``"dreamcoder"``, ``"molecules"``, or
+    ``"epfl-circuits"`` for a known domain."""
     if molecule_family(domain) is not None:
         return "molecules"
+    if epfl_circuit(domain) is not None:
+        return "epfl-circuits"
     if domain in DREAMCODER_DOMAINS:
         return "dreamcoder"
     if domain in COGSCI_DOMAINS:
@@ -87,6 +101,9 @@ def input_files(domain: str) -> list[Path]:
     fam = molecule_family(domain)
     if fam is not None:
         return [EGG_STITCH_DIR / "data" / "domains" / "molecules" / "scramble" / f"{fam}.scram.json"]
+    circ = epfl_circuit(domain)
+    if circ is not None:
+        return [EGG_STITCH_DIR / "data" / "domains" / "epfl-circuits" / f"{circ}.json"]
     if domain_type(domain) == "cogsci":
         return [EGG_STITCH_DIR / "data" / "domains" / "cogsci" / f"{domain}.json"]
     d = EGG_STITCH_DIR / "data" / "domains" / domain
@@ -104,6 +121,8 @@ def rewrites_path(domain: str) -> str | None:
     dt = domain_type(domain)
     if dt == "molecules":
         return "data/domains/molecules/molecules.rewrites"
+    if dt == "epfl-circuits":
+        return "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
     if dt == "dreamcoder":
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
         return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None

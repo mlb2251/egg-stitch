@@ -5,3 +5,10 @@ fail-fast = false
 [[profile.default.overrides]]
 filter = "test(/check_slow/)"
 slow-timeout = "2m"
+
+# The AIG-multiplier live-DSR rollout (tests/aig_mult_test.rs) runs a 5000-particle
+# SMC search per config; the live-factoring one takes ~2min locally and more on
+# CI, over the 2m default. Warn at 5m, terminate only after 15m (hang backstop).
+[[profile.default.overrides]]
+filter = "test(/aig_mult/)"
+slow-timeout = { period = "5m", terminate-after = 3 }
