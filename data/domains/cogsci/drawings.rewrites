@@ -14,7 +14,9 @@
 //   drawings.ablate-matmul       — compose eagerly via t_compose, no matmul nodes
 //   drawings.ablate-choice       — drop the non-confluent choice rules (confluent core)
 //   drawings.forward-arith-commute — + commute coordinate arithmetic (add_comm/mul_comm)
-//   drawings.forward-matmul-fold  — reduce matmul via the Rust !matmul fold + !round6
+//   drawings.forward-matmul-fold  — reduce matmul symbolically, then fold its
+//                                    coordinate arithmetic (incl. sin/cos/pi) via the
+//                                    general constant_folding op list + !round6
 
 constant_folding: !integersarefloats
 

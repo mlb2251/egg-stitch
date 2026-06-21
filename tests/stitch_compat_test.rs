@@ -428,6 +428,27 @@ fn constant_folding_integers_are_floats() {
     check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_int_as_float.json", &["-r", "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"], true);
 }
 
+/// `(params (ops (cos pi)))`: the operator list pulls in the unary trig function
+/// `cos` and the constant `pi`. `(cos pi)` folds — `pi => 3.141592653589793`,
+/// then `cos(…) => -1.0` — unifying the first program with the literal `-1.0` the
+/// others write, so the abstraction bakes the angle in: `(f (g -1.0 y z) ?#0)`.
+/// Pins that the operator list reaches `sin`/`cos`/`pi`, not just arithmetic.
+#[test]
+fn constant_folding_ops_list_trig() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_trig.json", &["-r", "data/domains/simple-arithmetic/fold_ops_trig.rewrites"], true);
+}
+
+/// `(params (ops (+)))`: the operator list restricts folding to `+` only. `(+ 1 2)`
+/// folds to `3` (unifying with the literal `3`, baked into the abstraction), but
+/// `(* 4 5)` — its operator left out of the list — does NOT fold, so it fails to
+/// unify with the literal `20` the other programs write and must be passed as an
+/// argument (arity 2). Pins that the list is honored as an allowlist: the `+`
+/// side bakes in, the excluded `*` side does not.
+#[test]
+fn constant_folding_ops_list_restricts() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_restrict.json", &["-r", "data/domains/simple-arithmetic/fold_ops_restrict.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
