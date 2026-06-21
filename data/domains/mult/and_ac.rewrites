@@ -1,0 +1,3 @@
+and_comm: (and ?x ?y) => (and ?y ?x)
+and_assoc: (and (and ?a ?b) ?c) => (and ?a (and ?b ?c))
+notnot: (not (not ?x)) => ?x
