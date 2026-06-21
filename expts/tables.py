@@ -274,13 +274,9 @@ def table5() -> Path:
     )
 
 
-# Table 7: the EPFL multiplier (epfl-circuits) input-bounded corpus, with the
-# factoring DSRs. Unlike table5's tool sweep, this is one SMC operating point in
-# three rule configs -- no-rules baseline, live (DSRs during search), and
-# dsrs-only-at-start -- the comparison the corpus is built to expose. SMC at the
-# experiment's operating point (5000 particles, max-arity 4); every config capped
-# like table5. babble/Stitch have no theory for these boolean circuits, so the
-# roster is just the three ours-SMC configs.
+# Table 7: the EPFL circuits with the factoring DSRs, one SMC operating point in
+# three rule configs (no-rules baseline / live / dsrs-only-at-start). babble and
+# Stitch have no theory for these boolean circuits, so the roster is ours-SMC only.
 TABLE7_DOMAINS = [f"epfl-circuits:{c}" for c in EPFL_CIRCUITS]
 TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE7_NUM_ABSTRACTIONS = 4
@@ -289,8 +285,8 @@ TABLE7_MAX_ARITY = 4
 
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:
-    """The three SMC rule configs, each capped at :data:`TABLE7_TIMEOUT` and
-    :data:`MEM_LIMIT_BYTES`: no-rules baseline, live DSRs, and dsrs-only-at-start."""
+    """The three SMC rule configs (no-rules baseline, live, dsrs-only-at-start),
+    each capped at :data:`TABLE7_TIMEOUT` and :data:`MEM_LIMIT_BYTES`."""
     common = dict(
         num_particles=TABLE7_SMC_PARTICLES,
         max_arity=TABLE7_MAX_ARITY,

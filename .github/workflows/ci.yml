@@ -37,14 +37,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
-      - name: cargo nextest (excluding check_slow and aig_mult)
-        run: cargo nextest run --release -E 'not test(/check_slow/) and not test(/aig_mult/)'
+      - name: cargo nextest (excluding check_slow and epfl_circuits)
+        run: cargo nextest run --release -E 'not test(/check_slow/) and not binary(epfl_circuits_test)'
 
-  # AIG-multiplier live-DSR snapshot suite (tests/aig_mult_test.rs). Runs in its
-  # own job, single-threaded: the SMC rollouts are far heavier (memory + time)
-  # than the parallel `test` job's cases, and the corpus-provenance check shells
-  # out to scripts/epfl-circuits/aig_to_egg.py (hence setup-python).
-  test-aig-mult:
+  # EPFL-circuit snapshot suite (tests/epfl_circuits_test.rs), in its own
+  # single-threaded job (the SMC rollouts are heavier than the `test` job's cases).
+  # Needs python (the regen check) and the gitignored .aig blobs, fetched first.
+  test-epfl-circuits:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,8 +53,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: cargo nextest aig_mult (single-threaded)
-        run: cargo nextest run --release -E 'test(/aig_mult/)' --test-threads=1
+      - name: fetch vendored .aig circuits
+        run: python3 scripts/epfl-circuits/fetch_aigs.py
+      - name: cargo nextest epfl-circuits (single-threaded)
+        run: cargo nextest run --release -E 'binary(epfl_circuits_test)' --test-threads=1
 
   test-check-slow:
     runs-on: ubuntu-latest
@@ -132,7 +133,7 @@ jobs:
           # These domains are excluded from the lambda-calc search/follow sweeps
           # below, as op-children (not lambda-calc) corpora: `molecules` holds
           # paired canon/scram corpora under subdirs, and `epfl-circuits` holds
-          # the AIG boolean corpora (their own snapshot suite is `test-aig-mult`).
+          # the AIG boolean corpora (their own snapshot suite is `test-epfl-circuits`).
           skip="molecules epfl-circuits"
           domains=$(ls -1 data/domains | grep -vxF "$(printf '%s\n' $skip)" | jq -R . | jq -sc .)
           echo "domains=$domains" >> "$GITHUB_OUTPUT"

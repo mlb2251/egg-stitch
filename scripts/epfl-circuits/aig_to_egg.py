@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build an egg-stitch op-children corpus from an AIGER circuit's **input-bounded**
-gate cones (k-feasible cuts, named signal leaves, so abstraction introduces
-metavars over inputs). The multiplier carries genuine non-canonical AND/NOT
-structure; with the best (factoring) ruleset, *live* abstraction beats both the
-no-rules baseline and at-start canonicalisation by a wide margin on these cuts.
-Usage: aig_to_egg.py [file.aig] [K] [circuit] [out.json]"""
+"""Build an egg-stitch op-children corpus from an EPFL circuit's input-bounded
+gate cones (k-feasible cuts, named signal leaves so abstraction can metavar over
+inputs).
+
+Usage: aig_to_egg.py [circuit] [K] [out.json]
+The circuit key selects the vendored `scripts/epfl-circuits/<circuit>.aig`."""
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from aig_cones import read_aig, kcone, to_tup, size
@@ -13,14 +13,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Repo root is three levels up: scripts/epfl-circuits/aig_to_egg.py.
 ROOT = os.path.dirname(os.path.dirname(HERE))
 DOMAIN = os.path.join(ROOT, "data", "domains", "epfl-circuits")
-# The source .aig lives alongside the generators (it's input data, not a corpus).
-AIG = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "multiplier.aig")
+CIRCUIT = sys.argv[1] if len(sys.argv) > 1 else "mult"
 K = int(sys.argv[2]) if len(sys.argv) > 2 else 6
-CIRCUIT = sys.argv[3] if len(sys.argv) > 3 else "mult"
-# Optional explicit output path (argv[4]); defaults to
+# Optional explicit output path (argv[3]); defaults to
 # data/domains/epfl-circuits/<circuit>.json. The byte-identity regression test
 # passes a temp path so it can regenerate without clobbering the committed corpus.
-OUT = sys.argv[4] if len(sys.argv) > 4 else None
+OUT = sys.argv[3] if len(sys.argv) > 3 else None
+# The source .aig lives alongside the generators (it's input data, not a corpus).
+AIG = os.path.join(HERE, f"{CIRCUIT}.aig")
 N = 800
 
 

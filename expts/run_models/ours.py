@@ -174,10 +174,8 @@ class OursSmc:
     num_particles: int = 1000
     temperature: float = 1000.0
     max_arity: int = MAX_ARITY
-    # ``only_use_dsrs_at_start`` switches DSRs from live-during-search to a
-    # one-shot canonicalisation pass; ``no_dsrs`` drops them entirely (the
-    # no-rules baseline, even when the table supplies a rewrites file). Both are
-    # excluded from repr so the method label stays a plain ``OursSmc(...)``.
+    # at-start = one-shot DSR canonicalisation; no_dsrs = drop DSRs entirely (the
+    # no-rules baseline). repr=False keeps the method label a plain OursSmc(...).
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
     no_dsrs: bool = field(default=False, repr=False)
     timeout: float | None = field(default=None, repr=False)
