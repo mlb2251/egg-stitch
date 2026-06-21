@@ -8,13 +8,14 @@
 // interchange): keeping them LIVE beats applying the rules only at-start on all four
 // domains. They are what creates the gap where the confluent core alone ties (dials);
 // on some domains (nuts-bolts) live already beats at-start without them — see
-// drawings.ablate-choice.
+// the ablate-choice ablation.
 //
-// Ablations of this file (each changes ONE axis):
-//   drawings.ablate-matmul       — compose eagerly via t_compose, no matmul nodes
-//   drawings.ablate-choice       — drop the non-confluent choice rules (confluent core)
+// Ablations of this file live in scripts/drawings_ablation/ (run them via
+// cogsci_rules_compare.py there); each changes ONE axis:
+//   drawings.ablate-matmul         — compose eagerly via t_compose, no matmul nodes
+//   drawings.ablate-choice         — drop the non-confluent choice rules (confluent core)
 //   drawings.forward-arith-commute — + commute coordinate arithmetic (add_comm/mul_comm)
-//   drawings.forward-matmul-fold  — reduce matmul via the Rust !matmul fold + !round6
+//   drawings.forward-matmul-fold   — reduce matmul via the Rust !matmul fold + !round6
 
 constant_folding: !integersarefloats
 

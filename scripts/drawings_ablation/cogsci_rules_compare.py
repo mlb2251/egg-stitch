@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Head-to-head: existing babble drawing rewrites vs the new affine-algebra rules.
+"""Ablation comparison for the affine-algebra drawing rewrites.
 
-For each (domain, ruleset) we run egg-stitch best-first and capture, from stdout,
+Runs the default rule set (data/domains/cogsci/drawings.rewrites) against each
+ablation in this directory, plus babble's per-domain rewrites as a baseline. For
+each (domain, ruleset) we run egg-stitch best-first and capture, from stdout,
 (a) the canonical corpus cost after the rules are applied ("Weight ... after rules")
 and the e-graph size, and (b) the sequence of abstractions best-first finds
 ("[expansion N] new best: COST PATTERN"). A hard wall-clock cap keeps it bounded;
@@ -14,8 +16,10 @@ import re
 import subprocess
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# scripts/drawings_ablation/<this file> -> repo root is three levels up.
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BIN = os.path.join(ROOT, "target", "release", "egg-stitch")
+ABL = "scripts/drawings_ablation"  # rule paths below are relative to ROOT (the cwd)
 ABSTS = int(os.environ.get("ABSTS", 5))
 STEPS = int(os.environ.get("STEPS", 20000))
 ARITY = int(os.environ.get("ARITY", 2))
@@ -29,6 +33,10 @@ DOMAINS = ["dials", "nuts-bolts"]
 RULESETS = {
     "baseline": "../babble/harness/data/benchmark-dsrs/drawings.{d}.rewrites",
     "default": "data/domains/cogsci/drawings.rewrites",
+    "ablate-matmul": f"{ABL}/drawings.ablate-matmul.rewrites",
+    "ablate-choice": f"{ABL}/drawings.ablate-choice.rewrites",
+    "forward-arith-commute": f"{ABL}/drawings.forward-arith-commute.rewrites",
+    "forward-matmul-fold": f"{ABL}/drawings.forward-matmul-fold.rewrites",
 }
 
 W_AFTER = re.compile(r"after rules:\s*(\d+)")
