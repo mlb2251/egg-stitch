@@ -148,7 +148,7 @@ class OursBf:
     # wall-clock seconds. Excluded from repr so the method label is unchanged.
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
     # Caps the per-factor abstraction match-set mass; bounds the blowup the
-    # non-confluent affine DSRs cause (table6 sets it). Excluded from repr so
+    # non-confluent algebraic DSRs cause (table6 sets it). Excluded from repr so
     # the method label is unchanged.
     max_match_set: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)

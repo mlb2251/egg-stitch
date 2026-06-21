@@ -57,7 +57,7 @@ def _sweep_runners(
     ``mem_limit`` (bytes) its address space; None means no cap. ``bfs_steps``
     overrides the best-first step sweep (table5 extends it). ``max_match_set``
     caps the per-factor abstraction match-set mass on the best-first runners
-    (table6 sets it for the non-confluent affine DSRs).
+    (table6 sets it for the non-confluent algebraic DSRs).
     """
     bfs = tuple((f"enum-{n}", OursBf(num_steps=n, timeout=timeout, mem_limit=mem_limit, max_match_set=max_match_set)) for n in bfs_steps)
     smc = tuple((f"smc-{p}", OursSmc(num_particles=p, timeout=timeout, mem_limit=mem_limit)) for p in SMC_PARTICLE_SWEEP)
@@ -274,7 +274,7 @@ def table5() -> Path:
     )
 
 
-# Table 6: the cogsci drawing domains run with OUR affine-transform-algebra
+# Table 6: the cogsci drawing domains run with OUR algebraic drawing
 # DSRs (data/domains/cogsci/drawings.rewrites) instead of babble's per-domain
 # rewrites. Holds the rule set fixed (ours) and varies only how the rules are
 # used — Enum/SMC live vs the dsrs-only-at-start baseline — so the table
@@ -285,7 +285,7 @@ TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "fu
 TABLE6_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE6_NUM_ABSTRACTIONS = 4
 # Per-factor match-set cap: bounds the abstraction-search blowup the
-# non-confluent affine choice rules cause (iter-limit can't catch it).
+# non-confluent algebraic choice rules cause (iter-limit can't catch it).
 TABLE6_MAX_MATCH_SET = 2000
 
 
@@ -305,7 +305,7 @@ def _table6_runners() -> tuple[tuple[str, object], ...]:
 
 
 def table6() -> Path:
-    """Run the cogsci drawing domains with our affine-algebra DSRs, Enum/SMC
+    """Run the cogsci drawing domains with our algebraic drawing DSRs, Enum/SMC
     sweeps + the dsrs-only-at-start baseline, each algorithm capped at 300s and
     20 GiB. Fixed 4 abstractions; no babble (see TABLE6 note above)."""
     free = available_memory_bytes()

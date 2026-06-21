@@ -40,7 +40,7 @@ FIGURES_DIR = PROJECT_ROOT / "figures"
 # theory; tables 2/4 (no-DSR runs) include text/logo/towers as well.
 TABLE_DOMAINS_DSR = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
 TABLE_DOMAINS_NO_DSR = TABLE_DOMAINS_DSR + ["text", "logo", "towers"]
-# Table 6: the four drawing domains run with our affine-algebra DSRs. Keys are
+# Table 6: the four drawing domains run with our algebraic drawing DSRs. Keys are
 # ``drawings:<domain>`` to match the table6.json results (see expts/tables.py).
 TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "furniture")]
 
@@ -56,7 +56,7 @@ def methods_for_table(table: int) -> list[str]:
 
     DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add the
     dsrs-only-at-start "BFS@start" baseline; no-DSR tables (2 & 4) keep Stitch
-    and have no baseline. Table 6 (our affine DSRs) has no babble column — see
+    and have no baseline. Table 6 (our algebraic DSRs) has no babble column — see
     expts/tables.py — just our live search vs the at-start baseline.
     """
     if table == 6:
@@ -74,7 +74,7 @@ DOMAIN_LABELS = {
     "text": "Text",
     "logo": "Logo",
     "towers": "Towers",
-    # table6 drawing domains (affine-algebra DSRs)
+    # table6 drawing domains (algebraic drawing DSRs)
     "drawings:nuts-bolts": "Nuts \\& Bolts",
     "drawings:dials": "Dials",
     "drawings:wheels": "Wheels",
@@ -112,7 +112,7 @@ TABLE_TITLES = {
     2: "Compression Without Rewrites",
     3: "Compression Using Rewrites, Stacked Abstractions",
     4: "Compression Without Rewrites, Stacked Abstractions",
-    6: "Compression Using Affine-Algebra Rewrites, Stacked Abstractions",
+    6: "Compression Using Algebraic Drawing Rewrites, Stacked Abstractions",
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
 TABLES_WITH_EGRAPH_MIN = {1, 3, 6}
@@ -811,7 +811,7 @@ def main() -> None:
     else:
         print(f"skipping table5: {table5_path} not present", file=sys.stderr)
 
-    # Table 6 (drawing domains, our affine-algebra DSRs) uses the generic
+    # Table 6 (drawing domains, our algebraic drawing DSRs) uses the generic
     # render() shape but has drawings:-prefixed domain keys, so it gets its own
     # main() block rather than joining the tables 1-4 loop.
     table6_path = RESULTS_DIR / "table6.json"

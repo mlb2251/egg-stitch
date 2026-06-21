@@ -1,4 +1,4 @@
-// DEFAULT affine-transform-algebra rewrites for the cogsci drawing domain.
+// DEFAULT algebraic rewrites for the cogsci drawing domain.
 // Composition is routed through `matmul` NODES that are then reduced by conventional
 // rewrite rules (no Rust fold): a nested transform becomes `(T x (matmul m1 m2))`;
 // `matmul` of two matrices reduces in a few cases (identity, no-rotation,

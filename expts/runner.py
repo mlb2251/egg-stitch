@@ -55,7 +55,7 @@ class Runner(Protocol):
 MOLECULE_FAMILIES = ["hexyl", "ester", "glycol"]
 
 # ``drawings:<cogsci-domain>`` is a pseudo-domain (same input corpus as the
-# plain cogsci domain) that runs with our affine-transform-algebra DSRs
+# plain cogsci domain) that runs with our algebraic drawing DSRs
 # (``data/domains/cogsci/drawings.rewrites``) instead of babble's per-domain
 # rewrites. Used by table6; mirrors the ``molecules:<family>`` convention.
 DRAWINGS_PREFIX = "drawings:"
@@ -121,7 +121,7 @@ def rewrites_path(domain: str) -> str | None:
     if dt == "molecules":
         return "data/domains/molecules/molecules.rewrites"
     if dt == "drawings":
-        # Our affine-transform-algebra DSRs (the table6 default). Only our own
+        # Our algebraic drawing DSRs (the table6 default). Only our own
         # runners use these — table6 has no babble column: babble can't parse
         # the constant_folding/matmul directives, and giving it its own rewrites
         # instead would confound the rule set with the search method.

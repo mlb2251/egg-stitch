@@ -25,7 +25,7 @@
 //! regression guard for `within_forced_expansion_cap` — breaking the prune (so
 //! it never fires, or over-fires) shifts these costs off their frozen values.
 //!
-//! A fourth variant (tag `algebra`) runs our affine-transform-algebra rewrites
+//! A fourth variant (tag `algebra`) runs our algebraic drawing rewrites
 //! (`data/domains/cogsci/drawings.rewrites`, the table6 default) with the
 //! `--max-match-set` per-factor cap. It guards that ruleset's behaviour and the
 //! match-set prune; unlike the `dsr` variant, the *same* rule file is used for
@@ -58,23 +58,23 @@ const NUM_ABSTRACTIONS: &str = "3";
 /// module docstring.
 const MFE_CAP: &str = "3";
 
-/// Our affine-transform-algebra rewrite set (the recommended default), applied
+/// Our algebraic drawing rewrite set (the recommended default), applied
 /// across every drawing domain — distinct from the per-domain babble rewrites
 /// the `dsr` variant uses. Pins the table6 ruleset's behaviour.
 const ALGEBRA_RULES: &str = "data/domains/cogsci/drawings.rewrites";
 
-/// `--max-match-set` per-factor cap for the affine-algebra variant. The
+/// `--max-match-set` per-factor cap for the algebra variant. The
 /// non-confluent choice rules blow the abstraction match set up without it
 /// (and `--max-forced-expansion` can't catch that); 2000 is the table6 value.
 const MMS_CAP: &str = "2000";
 
-/// `--iter-limit` for the affine-algebra variant. REQUIRED for these rules:
+/// `--iter-limit` for the algebra variant. REQUIRED for these rules:
 /// without it the matmul/choice rules saturate the DSR e-graph without bound
 /// (~60k nodes vs ~1.4k) and best-first explodes. The babble per-domain
 /// rewrites (`dsr` variants) are confluent and need no such cap.
 const ALGEBRA_ITER_LIMIT: &str = "6";
 
-/// `--num-steps` for the affine-algebra variant — lower than the babble
+/// `--num-steps` for the algebra variant — lower than the babble
 /// variants' 50000. These richer rules cost ~2 GiB/run at 50000 steps, and
 /// nextest runs the four domains concurrently, which OOMs the CI runner. At
 /// 10000 each run is <1.7 GiB / <14 s and wheels still reaches its converged
@@ -172,7 +172,7 @@ fn check_dsr_mfe(domain: &str) {
     bless_or_check(&expected_path(domain, &tag), &v);
 }
 
-/// Affine-algebra variant: best-first with our `drawings.rewrites` (the table6
+/// Algebra variant: best-first with our `drawings.rewrites` (the table6
 /// default) and the `--max-match-set` cap. Regression guard for that ruleset and
 /// the match-set prune across the stacked rounds.
 fn check_algebra(domain: &str) {

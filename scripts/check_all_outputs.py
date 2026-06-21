@@ -65,7 +65,7 @@ RULES_BY_REL = {
 }
 
 # Fixtures the equivalence oracle cannot tractably verify and so skips entirely.
-# The cogsci `*.algebra` fixtures use our affine-algebra rewrites
+# The cogsci `*.algebra` fixtures use our algebraic drawing rewrites
 # (drawings.rewrites), which are non-confluent and node-exploding (matmul,
 # overlay/arith commutativity, repeat-unroll) — the same blowup that forces
 # `--iter-limit` on the real search. `check_equiv` saturates without such a cap,

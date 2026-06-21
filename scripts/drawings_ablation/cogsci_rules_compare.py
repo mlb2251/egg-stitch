@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ablation comparison for the affine-algebra drawing rewrites.
+"""Ablation comparison for the algebraic drawing rewrites.
 
 Runs the default rule set (data/domains/cogsci/drawings.rewrites) against each
 ablation in this directory, plus babble's per-domain rewrites as a baseline. For
