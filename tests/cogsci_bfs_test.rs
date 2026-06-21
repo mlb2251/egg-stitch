@@ -74,6 +74,17 @@ const MMS_CAP: &str = "2000";
 /// rewrites (`dsr` variants) are confluent and need no such cap.
 const ALGEBRA_ITER_LIMIT: &str = "6";
 
+/// `--num-steps` for the affine-algebra variant — lower than the babble
+/// variants' 50000. These richer rules cost ~2 GiB/run at 50000 steps, and
+/// nextest runs the four domains concurrently, which OOMs the CI runner. At
+/// 10000 each run is <1.7 GiB / <14 s and wheels still reaches its converged
+/// cost, so the snapshot is unchanged in substance but fits the CI budget.
+const ALGEBRA_STEPS: &str = "10000";
+
+/// `--num-steps` for the babble DSR / no-DSR variants (their lighter rules run
+/// comfortably within budget at this count).
+const STEPS: &str = "50000";
+
 /// Fixture path for a domain + variant tag (`nodsr` / `dsr`), mirroring the
 /// `data/expected_outputs/<...>` layout used by the other snapshot suites.
 fn expected_path(domain: &str, tag: &str) -> String {
@@ -83,12 +94,12 @@ fn expected_path(domain: &str, tag: &str) -> String {
 /// Runs best-first on a cogsci domain (optionally with DSR rules), writes its
 /// `--output` JSON to a unique temp file, reads it back, and strips the
 /// non-deterministic / bookkeeping fields so the result is a stable snapshot.
-fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, mms: Option<&str>, il: Option<&str>, tag: &str) -> Value {
+fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, mms: Option<&str>, il: Option<&str>, steps: &str, tag: &str) -> Value {
     let input = format!("data/domains/cogsci/{domain}.json");
     let out = std::env::temp_dir().join(format!("egg-stitch-cogsci-{}-{}-{}.json", std::process::id(), domain, tag));
     let out_str = out.to_str().expect("utf-8 temp path");
     let mut cmd = Command::new(BIN);
-    cmd.args(["--search", "best-first", "--input", &input, "--num-steps", "50000", "--num-abstractions", NUM_ABSTRACTIONS, "--max-arity", "2", "--output", out_str]);
+    cmd.args(["--search", "best-first", "--input", &input, "--num-steps", steps, "--num-abstractions", NUM_ABSTRACTIONS, "--max-arity", "2", "--output", out_str]);
     if let Some(r) = rules {
         cmd.args(["--rules", r]);
     }
@@ -141,14 +152,14 @@ fn bless_or_check(path: &str, value: &Value) {
 
 /// No-DSR variant: the input lives in-repo, so this always runs.
 fn check_nodsr(domain: &str) {
-    let v = run_bfs(domain, None, None, None, None, "nodsr");
+    let v = run_bfs(domain, None, None, None, None, STEPS, "nodsr");
     bless_or_check(&expected_path(domain, "nodsr"), &v);
 }
 
 /// DSR variant: runs best-first with the in-repo per-domain rewrite rules.
 fn check_dsr(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
-    let v = run_bfs(domain, Some(&rules), None, None, None, "dsr");
+    let v = run_bfs(domain, Some(&rules), None, None, None, STEPS, "dsr");
     bless_or_check(&expected_path(domain, "dsr"), &v);
 }
 
@@ -157,7 +168,7 @@ fn check_dsr(domain: &str) {
 fn check_dsr_mfe(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
     let tag = format!("dsr-mfe{MFE_CAP}");
-    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), None, None, &tag);
+    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), None, None, STEPS, &tag);
     bless_or_check(&expected_path(domain, &tag), &v);
 }
 
@@ -165,7 +176,7 @@ fn check_dsr_mfe(domain: &str) {
 /// default) and the `--max-match-set` cap. Regression guard for that ruleset and
 /// the match-set prune across the stacked rounds.
 fn check_algebra(domain: &str) {
-    let v = run_bfs(domain, Some(ALGEBRA_RULES), None, Some(MMS_CAP), Some(ALGEBRA_ITER_LIMIT), "algebra");
+    let v = run_bfs(domain, Some(ALGEBRA_RULES), None, Some(MMS_CAP), Some(ALGEBRA_ITER_LIMIT), ALGEBRA_STEPS, "algebra");
     bless_or_check(&expected_path(domain, "algebra"), &v);
 }
 
