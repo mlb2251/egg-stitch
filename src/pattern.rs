@@ -151,16 +151,15 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         // diamond (reachable by reusing first) — stale them all. Keep only pairs
         // that involve a new child, which could not have existed before.
         let n_new = self.vars.len();
+        let is_new = |q: usize| var_idx <= q && q < var_idx + num_children;
         let mut np: Vec<(usize, usize)> = Vec::new();
-        for c in var_idx..(var_idx + num_children) {
-            for o in 0..n_new {
-                if o != c {
-                    np.push((c.min(o), c.max(o)));
+        for a in 0..n_new {
+            for b in (a + 1)..n_new {
+                if is_new(a) || is_new(b) {
+                    np.push((a, b));
                 }
             }
         }
-        np.sort_unstable();
-        np.dedup();
         self.reuse_pairs = np;
 
         // Expand each occurrence of the var independently: build its own enode
@@ -246,6 +245,20 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// removed and its positions are rewritten to the kept var's name. Trailing
     /// vars shift left by one and have their leaves renamed accordingly. Args may
     /// be passed in either order.
+    /// Removes var `removed` from `reuse_pairs`: drops every pair that touches it
+    /// and shifts higher indices down by one, keeping the set index-aligned after
+    /// the var is deleted (by `reuse`'s merge or by `concretize`).
+    fn drop_var_from_reuse_pairs(&mut self, removed: usize) {
+        self.reuse_pairs = self
+            .reuse_pairs
+            .iter()
+            .filter_map(|&(a, b)| {
+                let f = |q: usize| if q == removed { None } else if q < removed { Some(q) } else { Some(q - 1) };
+                Some((f(a)?, f(b)?))
+            })
+            .collect();
+    }
+
     pub fn reuse(&mut self, var_idx: usize, second_var_idx: usize) {
         assert_ne!(var_idx, second_var_idx, "reuse requires two distinct vars");
         let (keep_idx, drop_idx) = if var_idx < second_var_idx { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
@@ -282,14 +295,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         // reuse_pairs: stale every pair lexicographically before (keep, drop),
         // then drop the merged-away var's pairs and shift the rest down.
         self.reuse_pairs.retain(|&pr| pr >= (keep_idx, drop_idx));
-        self.reuse_pairs = self
-            .reuse_pairs
-            .iter()
-            .filter_map(|&(a, b)| {
-                let f = |q: usize| if q == drop_idx { None } else if q < drop_idx { Some(q) } else { Some(q - 1) };
-                Some((f(a)?, f(b)?))
-            })
-            .collect();
+        self.drop_var_from_reuse_pairs(drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -319,14 +325,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
         self.var_state.remove(var_idx);
-        self.reuse_pairs = self
-            .reuse_pairs
-            .iter()
-            .filter_map(|&(a, b)| {
-                let f = |q: usize| if q == var_idx { None } else if q < var_idx { Some(q) } else { Some(q - 1) };
-                Some((f(a)?, f(b)?))
-            })
-            .collect();
+        self.drop_var_from_reuse_pairs(var_idx);
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);
