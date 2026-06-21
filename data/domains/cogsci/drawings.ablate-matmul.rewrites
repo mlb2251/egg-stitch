@@ -1,5 +1,7 @@
-// Contract set + bounded equivalence rules that add canonicalization power
-// (esp. rotation alignment) WITHOUT the C-monoid explosion. No c_comm/c_assoc.
+// ABLATION of drawings.rewrites: same rule coverage (incl. the non-confluent choice
+// rules), but transform composition is folded EAGERLY via t_compose/t_compose_norot
+// instead of being routed through `matmul` nodes. Tests the matmul-node encoding;
+// compression matches the default — the encoding is the only difference.
 
 constant_folding: !integersarefloats
 
@@ -34,3 +36,15 @@ ang_q: (/ (* 2 pi) 4) <=> (/ pi 2)
 ang_e: (/ (* 2 pi) 8) <=> (/ pi 4)
 ang_h: (/ (* 2 pi) 2) <=> pi
 
+
+// ── non-confluent "choice" rules: two normal forms, best pick depends on the library ──
+t_factor: (C (T ?a ?m) (T ?b ?m)) <=> (T (C ?a ?b) ?m)
+rep_unroll_2: (repeat ?x 2 (M 1 0 ?tx ?ty)) <=> (C ?x (T ?x (M 1 0 ?tx ?ty)))
+rep_unroll_3: (repeat ?x 3 (M 1 0 ?tx ?ty)) <=> (C (C ?x (T ?x (M 1 0 ?tx ?ty))) (T ?x (M 1 0 (* 2 ?tx) (* 2 ?ty))))
+
+// ── more non-confluent choice rules ──
+c_assoc: (C (C ?a ?b) ?c) <=> (C ?a (C ?b ?c))
+c_comm: (C ?a ?b) <=> (C ?b ?a)
+rep_unroll_rot_2: (repeat ?x 2 (M 1 ?r 0 0)) <=> (C ?x (T ?x (M 1 ?r 0 0)))
+rep_unroll_rot_3: (repeat ?x 3 (M 1 ?r 0 0)) <=> (C (C ?x (T ?x (M 1 ?r 0 0))) (T ?x (M 1 (+ ?r ?r) 0 0)))
+scale_trans_interchange: (T (T ?p (M 1 0 ?x ?y)) (M ?s 0 0 0)) <=> (T (T ?p (M ?s 0 0 0)) (M 1 0 (* ?x ?s) (* ?y ?s)))

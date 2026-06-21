@@ -1,9 +1,8 @@
-// matmul-float: composition handled via `matmul` NODES rather than expanded into
-// coordinate arithmetic. A nested transform becomes `(T x (matmul m1 m2))`; the
-// `!matmul` fold reduces a matmul of two CONSTANT matrices to the single literal
-// product matrix (computed in Rust — no intermediate `+`/`*` nodes); `!round6`
-// canonicalises the float results (snaps cos(pi/2)'s 6e-17 to 0); the `pi`
-// literal lets the fold read rotation angles. Identity matmul is eliminated.
+// FORWARD ablation of drawings.rewrites: matmul of two CONSTANT matrices is reduced
+// by the Rust `!matmul` fold (computing the literal product matrix in one step, no
+// intermediate `+`/`*` nodes) instead of the default's symbolic mm_norot/mm_full
+// rewrites. `!round6` canonicalises the float results (snaps cos(pi/2)'s 6e-17 to 0);
+// the `pi` literal lets the fold read rotation angles. Identity matmul is eliminated.
 
 constant_folding: !integersarefloats
 constant_folding: !matmul

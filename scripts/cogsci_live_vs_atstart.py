@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Comprehensive cogsci rule comparison at a fixed 4 abstractions.
 
-Covers all four cogsci domains x {baseline, affine-algebra-contract, -full} x
+Covers all four cogsci domains x {baseline, ablate-choice (confluent core), default} x
 {live, DSRs-only-at-start}. Live = rules active during search and re-applied
 between abstractions; at-start = normalize once, extract min-term, search a
 rule-free e-graph (--only-use-dsrs-at-start). Reports final cost (lower = better,
@@ -23,10 +23,12 @@ ITER_LIMIT = int(os.environ.get("ITER_LIMIT", 6))
 TIMEOUT = int(os.environ.get("TIMEOUT", 500))
 
 DOMAINS = ["dials", "furniture", "nuts-bolts", "wheels"]
+# ablate-choice = confluent core (live should TIE at-start);
+# default = full set incl. non-confluent choice rules (live should BEAT at-start).
 RULESETS = {
-    "baseline": "../babble/harness/data/benchmark-dsrs/drawings.{d}.rewrites",
-    "contract": "data/domains/cogsci/drawings.algebra-contract.rewrites",
-    "full":     "data/domains/cogsci/drawings.algebra.rewrites",
+    "baseline":     "../babble/harness/data/benchmark-dsrs/drawings.{d}.rewrites",
+    "ablate-choice": "data/domains/cogsci/drawings.ablate-choice.rewrites",
+    "default":       "data/domains/cogsci/drawings.rewrites",
 }
 
 
@@ -73,11 +75,11 @@ def main():
     print("\nlive final cost, baseline vs best algebra (lower=better):", flush=True)
     for domain in DOMAINS:
         b = results[(domain, "baseline")][0]
-        c = results[(domain, "contract")][0]
-        f = results[(domain, "full")][0]
+        c = results[(domain, "ablate-choice")][0]
+        f = results[(domain, "default")][0]
         best = min(x for x in (c, f) if x is not None) if (c or f) else None
         impr = (f"{(b - best) / b * 100:+.1f}%" if b and best else "n/a")
-        print(f"  {domain:<11} baseline={b}  contract={c}  full={f}   algebra best vs baseline: {impr}", flush=True)
+        print(f"  {domain:<11} baseline={b}  ablate-choice={c}  default={f}   algebra best vs baseline: {impr}", flush=True)
 
 
 if __name__ == "__main__":

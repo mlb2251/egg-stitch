@@ -24,7 +24,7 @@ TIMEOUT = int(os.environ.get("TIMEOUT", 240))
 DOMAINS = ["dials", "nuts-bolts"]
 RULESETS = {
     "baseline": "../babble/harness/data/benchmark-dsrs/drawings.{d}.rewrites",
-    "algebra": "data/domains/cogsci/drawings.algebra.rewrites",
+    "default": "data/domains/cogsci/drawings.rewrites",
 }
 
 W_AFTER = re.compile(r"after rules:\s*(\d+)")

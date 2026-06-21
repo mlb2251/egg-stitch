@@ -22,15 +22,15 @@ STEPS = int(os.environ.get("STEPS", 50000))
 ARITY = int(os.environ.get("ARITY", 2))
 TIMEOUT = int(os.environ.get("TIMEOUT", 600))
 # Cap DSR e-saturation rounds so the expanding rules (c_comm/assoc/unroll) can't
-# blow the e-graph up. Applied uniformly: baseline/contract converge well within
-# it, so they're unaffected; only the explosive "full" set is bounded.
+# blow the e-graph up. Applied uniformly: baseline/ablate-choice converge well within
+# it, so they're unaffected; only the explosive "default" set is bounded.
 ITER_LIMIT = int(os.environ.get("ITER_LIMIT", 6))
 
 DOMAINS = ["dials", "nuts-bolts"]
 RULESETS = {
-    "baseline":  "../babble/harness/data/benchmark-dsrs/drawings.{d}.rewrites",
-    "algebra-contract": "data/domains/cogsci/drawings.algebra-contract.rewrites",
-    "algebra-full":     "data/domains/cogsci/drawings.algebra.rewrites",
+    "baseline":      "../babble/harness/data/benchmark-dsrs/drawings.{d}.rewrites",
+    "ablate-choice": "data/domains/cogsci/drawings.ablate-choice.rewrites",
+    "default":       "data/domains/cogsci/drawings.rewrites",
 }
 
 

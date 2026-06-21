@@ -1,5 +1,8 @@
-// Contract set + bounded equivalence rules that add canonicalization power
-// (esp. rotation alignment) WITHOUT the C-monoid explosion. No c_comm/c_assoc.
+// ABLATION of drawings.rewrites: the non-confluent "choice" rules are removed,
+// leaving only the confluent contracting core (transform composition + trig folding +
+// angle normalization). Every rule has an unconditionally-simpler direction, so this
+// canonicalizes to a fixed normal form — LIVE rewriting ties applying-at-start here,
+// which is the baseline the default's choice rules are meant to beat.
 
 constant_folding: !integersarefloats
 
@@ -34,6 +37,3 @@ ang_q: (/ (* 2 pi) 4) <=> (/ pi 2)
 ang_e: (/ (* 2 pi) 8) <=> (/ pi 4)
 ang_h: (/ (* 2 pi) 2) <=> pi
 
-// ── arithmetic commutativity: bounded (acts on small coordinate exprs, not the picture) ──
-add_comm: (+ ?a ?b) <=> (+ ?b ?a)
-mul_comm: (* ?a ?b) <=> (* ?b ?a)
