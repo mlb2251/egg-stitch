@@ -25,6 +25,12 @@
 //! regression guard for `within_forced_expansion_cap` — breaking the prune (so
 //! it never fires, or over-fires) shifts these costs off their frozen values.
 //!
+//! A fourth variant (tag `algebra`) runs our affine-transform-algebra rewrites
+//! (`data/domains/cogsci/drawings.rewrites`, the table6 default) with the
+//! `--max-match-set` per-factor cap. It guards that ruleset's behaviour and the
+//! match-set prune; unlike the `dsr` variant, the *same* rule file is used for
+//! every domain.
+//!
 //! To regenerate all fixtures after a legitimate behavior change, run with
 //! `BLESS=1`:
 //!
@@ -52,6 +58,22 @@ const NUM_ABSTRACTIONS: &str = "3";
 /// module docstring.
 const MFE_CAP: &str = "3";
 
+/// Our affine-transform-algebra rewrite set (the recommended default), applied
+/// across every drawing domain — distinct from the per-domain babble rewrites
+/// the `dsr` variant uses. Pins the table6 ruleset's behaviour.
+const ALGEBRA_RULES: &str = "data/domains/cogsci/drawings.rewrites";
+
+/// `--max-match-set` per-factor cap for the affine-algebra variant. The
+/// non-confluent choice rules blow the abstraction match set up without it
+/// (and `--max-forced-expansion` can't catch that); 2000 is the table6 value.
+const MMS_CAP: &str = "2000";
+
+/// `--iter-limit` for the affine-algebra variant. REQUIRED for these rules:
+/// without it the matmul/choice rules saturate the DSR e-graph without bound
+/// (~60k nodes vs ~1.4k) and best-first explodes. The babble per-domain
+/// rewrites (`dsr` variants) are confluent and need no such cap.
+const ALGEBRA_ITER_LIMIT: &str = "6";
+
 /// Fixture path for a domain + variant tag (`nodsr` / `dsr`), mirroring the
 /// `data/expected_outputs/<...>` layout used by the other snapshot suites.
 fn expected_path(domain: &str, tag: &str) -> String {
@@ -61,7 +83,7 @@ fn expected_path(domain: &str, tag: &str) -> String {
 /// Runs best-first on a cogsci domain (optionally with DSR rules), writes its
 /// `--output` JSON to a unique temp file, reads it back, and strips the
 /// non-deterministic / bookkeeping fields so the result is a stable snapshot.
-fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, tag: &str) -> Value {
+fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, mms: Option<&str>, il: Option<&str>, tag: &str) -> Value {
     let input = format!("data/domains/cogsci/{domain}.json");
     let out = std::env::temp_dir().join(format!("egg-stitch-cogsci-{}-{}-{}.json", std::process::id(), domain, tag));
     let out_str = out.to_str().expect("utf-8 temp path");
@@ -72,6 +94,12 @@ fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, tag: &str) -> V
     }
     if let Some(cap) = mfe {
         cmd.args(["--max-forced-expansion", cap]);
+    }
+    if let Some(cap) = mms {
+        cmd.args(["--max-match-set", cap]);
+    }
+    if let Some(cap) = il {
+        cmd.args(["--iter-limit", cap]);
     }
     let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
     assert!(status.success(), "best-first run failed for {input}");
@@ -113,14 +141,14 @@ fn bless_or_check(path: &str, value: &Value) {
 
 /// No-DSR variant: the input lives in-repo, so this always runs.
 fn check_nodsr(domain: &str) {
-    let v = run_bfs(domain, None, None, "nodsr");
+    let v = run_bfs(domain, None, None, None, None, "nodsr");
     bless_or_check(&expected_path(domain, "nodsr"), &v);
 }
 
 /// DSR variant: runs best-first with the in-repo per-domain rewrite rules.
 fn check_dsr(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
-    let v = run_bfs(domain, Some(&rules), None, "dsr");
+    let v = run_bfs(domain, Some(&rules), None, None, None, "dsr");
     bless_or_check(&expected_path(domain, "dsr"), &v);
 }
 
@@ -129,8 +157,16 @@ fn check_dsr(domain: &str) {
 fn check_dsr_mfe(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
     let tag = format!("dsr-mfe{MFE_CAP}");
-    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), &tag);
+    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), None, None, &tag);
     bless_or_check(&expected_path(domain, &tag), &v);
+}
+
+/// Affine-algebra variant: best-first with our `drawings.rewrites` (the table6
+/// default) and the `--max-match-set` cap. Regression guard for that ruleset and
+/// the match-set prune across the stacked rounds.
+fn check_algebra(domain: &str) {
+    let v = run_bfs(domain, Some(ALGEBRA_RULES), None, Some(MMS_CAP), Some(ALGEBRA_ITER_LIMIT), "algebra");
+    bless_or_check(&expected_path(domain, "algebra"), &v);
 }
 
 #[test]
@@ -191,4 +227,24 @@ fn furniture_dsr_mfe() {
 #[test]
 fn nuts_bolts_dsr_mfe() {
     check_dsr_mfe("nuts-bolts");
+}
+
+#[test]
+fn dials_algebra() {
+    check_algebra("dials");
+}
+
+#[test]
+fn wheels_algebra() {
+    check_algebra("wheels");
+}
+
+#[test]
+fn furniture_algebra() {
+    check_algebra("furniture");
+}
+
+#[test]
+fn nuts_bolts_algebra() {
+    check_algebra("nuts-bolts");
 }

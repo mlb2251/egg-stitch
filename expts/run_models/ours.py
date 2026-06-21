@@ -147,6 +147,10 @@ class OursBf:
     # live during search (the "dsrs-only-at-start" baseline). ``timeout`` caps
     # wall-clock seconds. Excluded from repr so the method label is unchanged.
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
+    # Caps the per-factor abstraction match-set mass; bounds the blowup the
+    # non-confluent affine DSRs cause (table6 sets it). Excluded from repr so
+    # the method label is unchanged.
+    max_match_set: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
 
@@ -156,6 +160,8 @@ class OursBf:
             search_flags["num_steps"] = self.num_steps
         if self.max_forced_expansion is not None:
             search_flags["max_forced_expansion"] = self.max_forced_expansion
+        if self.max_match_set is not None:
+            search_flags["max_match_set"] = self.max_match_set
         return _run(
             rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
             weighting=weighting, search="best-first",
