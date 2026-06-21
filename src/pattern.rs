@@ -225,7 +225,15 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             .reuse_pairs
             .iter()
             .filter_map(|&(a, b)| {
-                let f = |q: usize| if q == removed { None } else if q < removed { Some(q) } else { Some(q - 1) };
+                let f = |q: usize| {
+                    if q == removed {
+                        None
+                    } else if q < removed {
+                        Some(q)
+                    } else {
+                        Some(q - 1)
+                    }
+                };
                 Some((f(a)?, f(b)?))
             })
             .collect();
