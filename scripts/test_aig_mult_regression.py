@@ -23,6 +23,7 @@ AIG = os.path.join(ROOT, "data", "domains", "mult", "multiplier.aig")
 CORPUS = os.path.join(ROOT, "data", "domains", "mult", "all.json")
 RULES = os.path.join(ROOT, "data", "domains", "mult", "and_ac.rewrites")
 RULES_DM = os.path.join(ROOT, "data", "domains", "mult", "and_or_demorgan.rewrites")
+RULES_FAC = os.path.join(ROOT, "data", "domains", "mult", "and_or_demorgan_factor.rewrites")
 
 # ---- golden values (from the investigation; SMC seed 1, arity 4, 5000/100, temp 1000) ----
 CENSUS = {"cones_ge6": 26804, "unique_raw": 1721, "unique_ac": 642}
@@ -64,6 +65,27 @@ ROLLOUT_DM = {
                 "(not (or ?#0 ?#1))",
                 "(and ?#0 (not ?#1))",
                 "(and ?#0 (or ?#1 ?#2))"]},
+}
+
+# De Morgan + distributivity-factoring + absorption + idempotence
+# (and_or_demorgan_factor.rewrites): the size-reducing factoring direction
+# collapses redundant product-of-sums (e.g. (a|~b)(a|c) -> a|(~b&c)), simplifying
+# further (after-rules 22659 -> 21021) WITHOUT the blow-up of the expanding
+# distributive direction. live improves to 12401 at 10 absts (best of all,
+# baseline 13599); at-start 15463. The 4-abstraction prefixes locked here:
+ROLLOUT_FAC = {
+    "live-FAC": {
+        "costs": [16495, 14717, 14106, 13701],
+        "fns": ["(and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",   # XNOR, product-of-sums
+                "(and (or (not ?#0) ?#1) ?#2)",
+                "(or (and (not ?#0) ?#1) ?#2)",
+                "(and (not ?#0) (and (fn_0 ?#1 ?#2) ?#3))"]},
+    "at-start-FAC": {
+        "costs": [19372, 18486, 17841, 17305],
+        "fns": ["(and (or ?#0 ?#1) (or ?#2 ?#3))",
+                "(and (not ?#0) ?#1)",
+                "(and ?#0 (not ?#1))",
+                "(not (or ?#0 ?#1))"]},
 }
 
 fails = []
@@ -134,6 +156,9 @@ def main():
     print("4-abstraction SMC rollout, De Morgan rules (seed 1):")
     rollout("live-DM", False, RULES_DM, ROLLOUT_DM["live-DM"])
     rollout("at-start-DM", True, RULES_DM, ROLLOUT_DM["at-start-DM"])
+    print("4-abstraction SMC rollout, De Morgan + factoring rules (seed 1):")
+    rollout("live-FAC", False, RULES_FAC, ROLLOUT_FAC["live-FAC"])
+    rollout("at-start-FAC", True, RULES_FAC, ROLLOUT_FAC["at-start-FAC"])
     print()
     if fails:
         print(f"REGRESSION FAILED: {len(fails)} check(s) — {fails}")

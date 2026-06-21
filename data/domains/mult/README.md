@@ -19,6 +19,11 @@ no-rules abstraction on a circuit with **genuine non-canonical shared structure*
   equivalence (a cell's AND-tree and OR-tree decompositions), not just operand
   reorderings, and minimizes cones to negation-normal-form (after-rules 32262 ->
   22659). Still not complete (no distributivity/absorption).
+- `and_or_demorgan_factor.rewrites` — De Morgan PLUS the size-reducing
+  distributivity-**factoring** direction `(a|x)(a|y) => a|(x&y)` + absorption +
+  idempotence. Collapses redundant product-of-sums (e.g. the doubled-literal
+  `(a|~b)(a|c)` cells) without the blow-up of the *expanding* distributive
+  direction. Simplifies further (after-rules 22659 -> 21021).
 
 ## Why this corpus
 The AC-census (`scripts/aig_cones.py`) shows the multiplier cones have real
@@ -32,8 +37,14 @@ final cost over 10 abstractions:
 
 | rules | baseline | live | at-start |
 |-------|----------|------|----------|
-| AC (`and_ac`)            | 13599 | 14364 | 15526 |
-| De Morgan (`and_or_demorgan`) | 13599 | **12980** | 16212 |
+| AC (`and_ac`)                      | 13599 | 14364 | 15526 |
+| De Morgan (`and_or_demorgan`)      | 13599 | 12980 | 16212 |
+| + factoring (`and_or_demorgan_factor`) | 13599 | **12401** | 15463 |
+
+Live's final cost improves monotonically with ruleset richness (AC 14364 -> De
+Morgan 12980 -> +factoring 12401) while baseline stays 13599; live crosses baseline
+at De Morgan and pulls further ahead with factoring (~9%). at-start loses to
+baseline under every ruleset.
 
 With the **AC-only** fragment, live beats at-start (AC unifies operand orderings ->
 more matches) but loses to the no-rules baseline: live front-loads (best early
