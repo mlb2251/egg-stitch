@@ -797,32 +797,23 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // `rank`/`order`, in one egraph pass. See [`Self::shape_pass`].
         let (shapes, rank, order) = self.shape_pass(shared);
 
-        // The reusable cohort (`VarState::ReusableOrExpandable`) is a best-first
-        // canonical-ordering device, mirroring the freeze rule. SMC (freeze_rule
-        // = false) ignores it so its reuse exploration stays unrestricted. We
-        // skip `Reuse(i, j)` only when both slots are stale, which canonicalizes
-        // merges into increasing-keep order: a merge stales everything below its
-        // kept slot, so a later merge with both endpoints there is the same set
-        // of merges in a non-canonical order. Staling stops at the kept slot (not
-        // the dropped one), so slots between a merged pair stay reusable —
-        // otherwise a second, interleaved pair would be wrongly skipped even
-        // though no earlier ordering reaches it (#265).
+        // `reuse_pairs` is the best-first reuse-order canonicalization (SMC,
+        // freeze_rule = false, ignores it). It holds exactly the reuse pairs
+        // currently allowed; `Reuse(i, j)` is canonical iff `(i, j)` is in it. It
+        // is maintained in `Pattern` (see `reuse`/`expand`): a reuse stales every
+        // lexicographically-earlier pair — so within an expand level reuses run
+        // in non-decreasing pair order, killing the absorption-order duplicates —
+        // while an expand stales every pre-existing pair (both endpoints predate
+        // it, so reusing them now is a reuse<->expand diamond reachable by reusing
+        // first) and keeps only pairs that involve a new child. Together these
+        // make every reachable pattern reachable exactly once.
         let enforce_reusable = self.freeze_rule;
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                // Reuse canonicalization (best-first only), two guards:
-                //  * order: within an expand level reuse pairs must be
-                //    lexicographically non-decreasing — each reuse "stales" every
-                //    earlier pair (collapsed to `reuse_watermark`). Kills the
-                //    within-level absorption-order duplicates. `expand` resets the
-                //    watermark, so a reuse site created by a later/deeper expand
-                //    (e.g. a 3-way whose third occurrence appears after dominance
-                //    already merged the first pair) can still merge.
-                //  * vintage: at least one side must still be fresh
-                //    (`is_reusable`), banning the reuse↔expand diamond of two
-                //    post-expand-stale holes.
+                // Skip unless this pair is still allowed by the canonical
+                // reuse order (see `reuse_pairs` above).
                 if enforce_reusable && !self.pattern.reuse_pairs.contains(&(i, j)) {
                     continue;
                 }

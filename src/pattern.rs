@@ -52,12 +52,12 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub var_occurrences: Vec<usize>,
     /// Per-var restriction level (expand axis only now: is_expandable / Frozen).
     pub var_state: Vec<VarState>,
-    /// Best-first reuse-order canonicalization: the set of reuse pairs `(i, j)`
-    /// (`i < j`) currently allowed. A reuse is permitted only if its pair is in
-    /// here. Performing reuse `(i, j)` stales (removes) every pair
-    /// lexicographically before `(i, j)`; `expand` inserts fresh pairs for the
-    /// new vars (which are therefore *not* subject to earlier staling) and
-    /// renumbers the rest. Always kept in the current var-index space.
+    /// Best-first reuse-order canonicalization: the reuse pairs `(i, j)` (`i < j`)
+    /// currently allowed. A reuse is permitted only if its pair is in here.
+    /// `reuse(i, j)` stales (removes) every pair lexicographically before
+    /// `(i, j)`, then drops the merged-away var's pairs. `expand` stales every
+    /// pre-existing pair (both endpoints predate it) and repopulates with exactly
+    /// the pairs that involve a new child. Always in the current var-index space.
     pub reuse_pairs: Vec<(usize, usize)>,
 }
 
