@@ -50,16 +50,19 @@ def _sweep_runners(
     bfs_steps: tuple[int, ...] = BFS_STEP_SWEEP,
     mem_limit: int | None = None,
     max_arity: int = MAX_ARITY,
+    iter_limit: int | None = None,
 ) -> tuple[tuple[str, object], ...]:
     """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value.
 
     ``timeout`` (seconds) caps each tool invocation's wall-clock and
     ``mem_limit`` (bytes) its address space; None means no cap. ``bfs_steps``
     overrides the best-first step sweep (table5 extends it). ``max_arity`` raises
-    the abstraction arity cap (table7 uses 4).
+    the abstraction arity cap (table7 uses 4). ``iter_limit`` caps e-saturation
+    iterations (table7 uses 30; None keeps the binary default of 100).
     """
-    bfs = tuple((f"enum-{n}", OursBf(num_steps=n, max_arity=max_arity, timeout=timeout, mem_limit=mem_limit)) for n in bfs_steps)
-    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, max_arity=max_arity, timeout=timeout, mem_limit=mem_limit)) for p in SMC_PARTICLE_SWEEP)
+    common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit)
+    bfs = tuple((f"enum-{n}", OursBf(num_steps=n, **common)) for n in bfs_steps)
+    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, **common)) for p in SMC_PARTICLE_SWEEP)
     return bfs + smc
 
 
@@ -284,6 +287,10 @@ TABLE7_DOMAINS = [f"epfl-circuits:{c}" for c in EPFL_CIRCUITS]
 TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE7_NUM_ABSTRACTIONS = 4
 TABLE7_MAX_ARITY = 4
+# Cap e-saturation at 30 iterations (vs the binary default 100). The factoring
+# DSRs blow the e-graph up on these cones, and 100 iterations runs ~4-5x slower
+# for no better result -- past the timeout at the high sweep points.
+TABLE7_ITER_LIMIT = 30
 # Best-first grinds on these blown-up cones (the high steps just hit the timeout),
 # so cap the sweep at 20k -- below table5's, which extended to 100k.
 TABLE7_BFS_SWEEP = BFS_STEP_SWEEP[:-1]
@@ -296,11 +303,11 @@ def _table7_runners() -> tuple[tuple[str, object], ...]:
     """Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start and no-rules Enum
     baselines, every runner at max-arity 4 and capped at :data:`TABLE7_TIMEOUT` /
     :data:`MEM_LIMIT_BYTES`."""
-    caps = dict(timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
+    common = dict(max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
     return (
-        _sweep_runners(bfs_steps=TABLE7_BFS_SWEEP, max_arity=TABLE7_MAX_ARITY, **caps)
-        + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, max_arity=TABLE7_MAX_ARITY, **caps)),)
-        + (("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True, max_arity=TABLE7_MAX_ARITY, **caps)),)
+        _sweep_runners(bfs_steps=TABLE7_BFS_SWEEP, **common)
+        + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
+        + (("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **common)),)
     )
 
 
