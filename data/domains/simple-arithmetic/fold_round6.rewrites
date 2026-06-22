@@ -1,6 +1,1 @@
-// `!round` with `places` 6. Two fields exercise both directions:
-//  - first g-arg (POSITIVE): 0.7071067811865476 and 0.707107 both round to
-//    0.707107, so they unify and the value is baked into the abstraction.
-//  - second g-arg (NEGATIVE): 0.1234561 and 0.1234567 are close but round to
-//    0.123456 vs 0.123457 at 6 places, so they do NOT unify and stay an argument.
 constant_folding: !round (params (places 6))
