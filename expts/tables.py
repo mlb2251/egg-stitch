@@ -228,6 +228,9 @@ TABLE5_NUM_ABSTRACTIONS = 4
 # operating point for this domain.
 TABLE5_BFS_SWEEP = BFS_STEP_SWEEP + (100_000,)
 TABLE5_ENUM_POINT = 100_000
+# Representative SMC operating point for this domain (matches the canonical
+# ``TABLE_SMC_PARTICLES`` point used by the tables renderer).
+TABLE5_SMC_POINT = 1_000
 
 
 def _table5_runners() -> tuple[tuple[str, object], ...]:

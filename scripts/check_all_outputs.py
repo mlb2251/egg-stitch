@@ -48,6 +48,8 @@ RULES_BY_REL = {
     "simple-arithmetic/const_fold_floats.out.json": "data/domains/simple-arithmetic/const_fold_floats.rewrites",
     "simple-arithmetic/const_fold_int_as_float.out.json": "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites",
     "simple-arithmetic/fold_after_rewrite.out.json": "data/domains/simple-arithmetic/fold_after_rewrite.rewrites",
+    "simple-arithmetic/fold_ops_trig.out.json": "data/domains/simple-arithmetic/fold_ops_trig.rewrites",
+    "simple-arithmetic/fold_ops_restrict.out.json": "data/domains/simple-arithmetic/fold_ops_restrict.rewrites",
     "test/arith_unify.out.json": "data/test/arith.rewrites",
     "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
     "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",

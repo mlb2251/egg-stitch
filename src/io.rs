@@ -114,7 +114,11 @@ where
 ///
 /// A `constant_folding: !<kind>` directive line adds built-in numeric rewrites:
 /// `!numbers` folds `+ - * /` over literal leaves, and `!successors` expands an
-/// integer literal `n` into `(+ 1 (n-1))` (see [`crate::constant_folding`]).
+/// integer literal `n` into `(+ 1 (n-1))` (see [`crate::constant_folding`]). The
+/// fold-mode kinds (`!integers`, `!floats`, `!integersarefloats`, `!numbers`)
+/// may carry a `(params …)` block, e.g.
+/// `constant_folding: !integersarefloats (params (ops (+ * / sin cos pi)))`;
+/// with no params they default to `+ - * /`.
 ///
 /// Panics if a rule violates the structural conditions behind
 /// `fv(c) = fv(MinTerm(c))` (see [`rule_fv_verdict`]).
@@ -136,15 +140,26 @@ where
         // A `constant_folding: !<kind>` directive expands to a built-in family of
         // folding rewrites rather than a single `lhs => rhs` rule.
         if name.trim() == "constant_folding" {
-            use crate::constant_folding::{FoldMode, folding_rewrites, successor_expansion_rewrite};
-            match rewrite.trim() {
-                "!integers" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers)?),
-                "!floats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats)?),
-                "!integersarefloats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::IntegersAreFloats)?),
+            use crate::constant_folding::{FoldMode, FoldingParams, folding_rewrites, successor_expansion_rewrite};
+            // An optional `(params …)` block may follow the kind, e.g.
+            // `!integersarefloats (params (ops (+ * / sin cos pi)))`.
+            let directive = rewrite.trim();
+            let (kind, rest) = directive.split_once(char::is_whitespace).unwrap_or((directive, ""));
+            let rest = rest.trim();
+            // Only the fold-mode kinds take params; the standalone appliers don't.
+            let params_allowed = matches!(kind, "!integers" | "!floats" | "!integersarefloats" | "!numbers");
+            if !rest.is_empty() && !params_allowed {
+                return Err(anyhow!("constant_folding: {kind} does not take parameters"));
+            }
+            let ops = FoldingParams::parse(rest)?.ops;
+            match kind {
+                "!integers" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers, &ops)?),
+                "!floats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats, &ops)?),
+                "!integersarefloats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::IntegersAreFloats, &ops)?),
                 // `!numbers` is `!integers` and `!floats` combined (the original behaviour).
                 "!numbers" => {
-                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers)?);
-                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats)?);
+                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers, &ops)?);
+                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats, &ops)?);
                 }
                 "!successors" => rewrites.push(successor_expansion_rewrite::<L, A>(1)?),
                 other => return Err(anyhow!("unknown constant_folding kind {other:?} (supported: !integers, !floats, !integersarefloats, !numbers, !successors)")),
