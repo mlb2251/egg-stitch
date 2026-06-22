@@ -1,0 +1,6 @@
+// `!round` with `places` 3 — the argument controls granularity. Two fields:
+//  - first g-arg (POSITIVE): 0.7071, 0.7072, 0.707 all round to 0.707 (they would
+//    NOT unify at 6 places), so the value is baked into the abstraction.
+//  - second g-arg (NEGATIVE): 0.1114 and 0.1116 are close but round to 0.111 vs
+//    0.112 at 3 places, so they do NOT unify and stay an argument.
+constant_folding: !round (params (places 3))

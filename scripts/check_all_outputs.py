@@ -50,6 +50,8 @@ RULES_BY_REL = {
     "simple-arithmetic/fold_after_rewrite.out.json": "data/domains/simple-arithmetic/fold_after_rewrite.rewrites",
     "simple-arithmetic/fold_ops_trig.out.json": "data/domains/simple-arithmetic/fold_ops_trig.rewrites",
     "simple-arithmetic/fold_ops_restrict.out.json": "data/domains/simple-arithmetic/fold_ops_restrict.rewrites",
+    "simple-arithmetic/fold_round6.out.json": "data/domains/simple-arithmetic/fold_round6.rewrites",
+    "simple-arithmetic/fold_round3.out.json": "data/domains/simple-arithmetic/fold_round3.rewrites",
     "test/arith_unify.out.json": "data/test/arith.rewrites",
     "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
     "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",
