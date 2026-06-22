@@ -28,6 +28,10 @@
 //! - `!successors` — the inverse direction: expands an integer literal `n` into
 //!   `(+ 1 (n-1))`, exposing the `(+ ?n 1)` form that successor-style rules
 //!   consume. Bounded so it terminates (see [`successor_expansion_rewrite`]).
+//! - `!round` — rounds every numeric literal to a fixed number of decimal places
+//!   (the `places` param, default 6), snapping float noise and unifying
+//!   near-equal values: `constant_folding: !round (params (places 6))` (see
+//!   [`round_rewrite`]).
 
 use crate::lang::{Op, OpChildrenLanguage, StitchLanguage};
 use anyhow::anyhow;
@@ -227,12 +231,14 @@ impl Num {
 
 /// Parameters for a `constant_folding` directive, written as an s-expression and
 /// read with [`OpChildrenLanguage`] so it shares the corpus surface syntax, e.g.
-/// `(params (ops (+ * / -)))`. Each child of `params` is a `(<key> <value>…)`
-/// node; new keys can be added without changing the directive grammar.
+/// `(params (ops (+ * / -)))` or `(params (places 6))`. Each child of `params` is
+/// a `(<key> <value>…)` node; new keys can be added without changing the grammar.
 #[derive(Default)]
 pub struct FoldingParams {
     /// Operators to fold (the `ops` key); empty means "use [`DEFAULT_OPS`]".
     pub ops: Vec<String>,
+    /// Decimal places to round to (the `places` key), consumed by `!round`.
+    pub places: Option<i32>,
 }
 
 impl FoldingParams {
@@ -253,11 +259,24 @@ impl FoldingParams {
             let node = &nodes[usize::from(key)];
             match node.op.to_string().as_str() {
                 "ops" => params.ops = read_ops(nodes, &node.children)?,
-                other => return Err(anyhow!("constant_folding: unknown param key {other:?} (supported: ops)")),
+                "places" => params.places = Some(read_int(nodes, &node.children)?),
+                other => return Err(anyhow!("constant_folding: unknown param key {other:?} (supported: ops, places)")),
             }
         }
         Ok(params)
     }
+}
+
+/// Reads a `(places <n>)`-style value: a single integer leaf.
+fn read_int(nodes: &[OpChildrenLanguage<Op>], children: &[Id]) -> anyhow::Result<i32> {
+    let [val] = children else {
+        return Err(anyhow!("constant_folding: places takes a single integer"));
+    };
+    let leaf = &nodes[usize::from(*val)];
+    if !leaf.children.is_empty() {
+        return Err(anyhow!("constant_folding: places must be an integer literal"));
+    }
+    leaf.op.to_string().parse::<i32>().map_err(|_| anyhow!("constant_folding: places must be an integer, got {:?}", leaf.op.to_string()))
 }
 
 /// Reads the operators in an `(ops (<op> <op>…))` value: the head operator plus
@@ -359,6 +378,43 @@ impl<L: StitchLanguage, A: Analysis<L>> Applier<L, A> for OpFold {
 /// whose display parses as a number.
 fn eclass_number<L: StitchLanguage, A: Analysis<L>>(egraph: &EGraph<L, A>, id: Id) -> Option<Num> {
     egraph[id].nodes.iter().find_map(|n| if n.children().is_empty() { Num::parse(&n.to_string()) } else { None })
+}
+
+/// Canonical float string rounded to `places` decimals (snapping float noise such
+/// as `cos(pi/2) = 6e-17` to 0 and collapsing values that agree to `places`
+/// decimals onto one literal) and formatted as a plain decimal so it unifies with
+/// the corpus's literal leaves.
+fn round_to(x: f64, places: i32) -> String {
+    let scale = 10f64.powi(places);
+    let r = (x * scale).round() / scale;
+    let r = if r == 0.0 { 0.0 } else { r }; // normalise -0.0
+    format!("{r:?}")
+}
+
+/// Applier behind `!round`: adds the `places`-decimal-rounded form of any numeric
+/// literal e-class and unions it in, so noise-equal / near-equal numbers (e.g. a
+/// fold's `1e-16` and `0`, or `0.7853981…` and `0.785398`) share one literal.
+#[derive(Clone)]
+struct RoundLiteral {
+    places: i32,
+}
+
+impl<L: StitchLanguage, A: Analysis<L>> Applier<L, A> for RoundLiteral {
+    fn apply_one(&self, egraph: &mut EGraph<L, A>, eclass: Id, _subst: &Subst, _ast: Option<&PatternAst<L>>, _name: Symbol) -> Vec<Id> {
+        let Some(num) = eclass_number(egraph, eclass) else { return vec![] };
+        let id = egraph.add(L::from_op(&round_to(num.as_f64(), self.places), vec![]).expect("float leaf is a valid 0-arity op"));
+        if egraph.union(eclass, id) { vec![id] } else { vec![] }
+    }
+}
+
+/// Builds the `!round` rewrite (see [`RoundLiteral`]) rounding to `places` decimals.
+pub fn round_rewrite<L, A>(places: i32) -> anyhow::Result<Rewrite<L, A>>
+where
+    L: StitchLanguage,
+    A: Analysis<L>,
+{
+    let searcher: Pattern<L> = L::parse_pattern_ast("?n")?.into();
+    Rewrite::new("round", searcher, RoundLiteral { places }).map_err(|e| anyhow!("{e}"))
 }
 
 /// Builds the `!successors` expansion rewrite: any integer literal `n > floor`
@@ -553,6 +609,37 @@ mod tests {
         assert!(FoldingParams::parse("(ops (+ *))").is_err()); // missing the `params` wrapper
         assert!(FoldingParams::parse("(params (nope (+)))").is_err()); // unknown key
         assert!(FoldingParams::parse("(params (ops (+ (* 1 2))))").is_err()); // non-leaf operator
+    }
+
+    #[test]
+    fn parses_params_places() {
+        assert_eq!(FoldingParams::parse("(params (places 6))").unwrap().places, Some(6));
+        assert_eq!(FoldingParams::parse("(params (places 2))").unwrap().places, Some(2));
+        assert!(FoldingParams::parse("  ").unwrap().places.is_none());
+        assert!(FoldingParams::parse("(params (places x))").is_err()); // not an integer
+        assert!(FoldingParams::parse("(params (places 1 2))").is_err()); // not a single value
+    }
+
+    /// True iff `a` and `b` land in the same e-class after saturating with `!round`.
+    fn round_same_class(a: &str, b: &str, places: i32) -> bool {
+        let mut egraph: EGraph<L, StitchAnalysis> = EGraph::new(StitchAnalysis::new(Weights::default()));
+        let (ia, ib) = (egraph.add_expr(&a.parse().unwrap()), egraph.add_expr(&b.parse().unwrap()));
+        egraph.rebuild();
+        let rules = vec![round_rewrite::<L, StitchAnalysis>(places).unwrap()];
+        let runner: egg::Runner<L, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(Weights::default())).with_egraph(egraph).run(&rules);
+        runner.egraph.find(ia) == runner.egraph.find(ib)
+    }
+
+    #[test]
+    fn round_unifies_near_equal() {
+        // 6 places: the long trig constant collapses onto its 6-decimal form.
+        assert!(round_same_class("0.7071067811865476", "0.707107", 6));
+        // Float noise snaps to 0.
+        assert!(round_same_class("0.0000000000000001", "0.0", 6));
+        // `places` controls granularity: 0.7071 and 0.7072 differ at 6 places but
+        // agree at 3.
+        assert!(!round_same_class("0.7071", "0.7072", 6));
+        assert!(round_same_class("0.7071", "0.7072", 3));
     }
 
     /// Runs the `!successors` expander (floor `floor`) on a single literal to
