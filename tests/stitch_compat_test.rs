@@ -428,6 +428,50 @@ fn constant_folding_integers_are_floats() {
     check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_int_as_float.json", &["-r", "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"], true);
 }
 
+/// `(params (ops (cos pi)))`: the operator list pulls in the unary trig function
+/// `cos` and the constant `pi`. `(cos pi)` folds — `pi => 3.141592653589793`,
+/// then `cos(…) => -1.0` — unifying the first program with the literal `-1.0` the
+/// others write, so the abstraction bakes the angle in: `(f (g -1.0 y z) ?#0)`.
+/// Pins that the operator list reaches `sin`/`cos`/`pi`, not just arithmetic.
+#[test]
+fn constant_folding_ops_list_trig() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_trig.json", &["-r", "data/domains/simple-arithmetic/fold_ops_trig.rewrites"], true);
+}
+
+/// `(params (ops (+)))`: the operator list restricts folding to `+` only. `(+ 1 2)`
+/// folds to `3` (unifying with the literal `3`, baked into the abstraction), but
+/// `(* 4 5)` — its operator left out of the list — does NOT fold, so it fails to
+/// unify with the literal `20` the other programs write and must be passed as an
+/// argument (arity 2). Pins that the list is honored as an allowlist: the `+`
+/// side bakes in, the excluded `*` side does not.
+#[test]
+fn constant_folding_ops_list_restricts() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_restrict.json", &["-r", "data/domains/simple-arithmetic/fold_ops_restrict.rewrites"], true);
+}
+
+/// `!round (params (places 6))`, exercising both directions. POSITIVE: the first
+/// `g` arg (`0.7071067811865476` vs `0.707107`) rounds to the same value, so all
+/// three programs unify on it (`matches 3`) and it is baked into the abstraction.
+/// NEGATIVE: the second arg (`0.1234561` vs `0.1234567`) is close but rounds to
+/// `0.123456` vs `0.123457` at 6 places, so it does NOT unify and stays a parameter
+/// — giving the arity-2 `(f (g 0.7071067811865476 ?#0 z) ?#1)` (the baked literal
+/// is one representative of the unified e-class).
+#[test]
+fn constant_folding_round_places6() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_round6.json", &["-r", "data/domains/simple-arithmetic/fold_round6.rewrites"], true);
+}
+
+/// `!round (params (places 3))`: the `places` argument controls granularity, again
+/// both directions. POSITIVE: the first `g` arg (`0.7071`/`0.7072`/`0.707`) all
+/// collapse to `0.707` at 3 places (they would NOT unify at 6), so all three unify
+/// and it is baked in. NEGATIVE: the second arg (`0.1114` vs `0.1116`) is close but
+/// rounds to `0.111` vs `0.112`, so it stays a parameter — giving the arity-2
+/// `(f (g 0.7072 ?#0 z) ?#1)`.
+#[test]
+fn constant_folding_round_places3() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_round3.json", &["-r", "data/domains/simple-arithmetic/fold_round3.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
