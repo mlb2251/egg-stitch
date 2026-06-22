@@ -383,9 +383,17 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
     println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
     println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
-    let (seen_len, seen_hits, seen_secs) = seen.as_ref().map_or((0, 0, 0.0), |s| (s.len(), s.hits, s.time.as_secs_f64()));
+    let (seen_len, seen_hits, seen_secs, egraph_hits, exact_hits) = seen
+        .as_ref()
+        .map_or((0, 0, 0.0, 0, 0), |s| (s.len(), s.hits, s.time.as_secs_f64(), s.egraph_hits, s.exact_hits));
     println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
-    println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
+    println!(
+        "{} {} {} {}",
+        "seen-set hits:".dimmed(),
+        seen_hits.to_string().bold(),
+        format!("(egraph hits: {egraph_hits}, exact hits: {exact_hits})"),
+        format!("(time: {:.3}s)", seen_secs).dimmed(),
+    );
     let (fp_len, fp_hits, fp_skips, fp_capped, fp_secs) = footprints.as_ref().map_or((0, 0, 0, 0, 0.0), |f| (f.len(), f.hits, f.proxy_skips, f.capped, f.time.as_secs_f64()));
     println!("{} {}", "footprint-set size:".dimmed(), fp_len.to_string().bold());
     println!("{} {} {}", "footprint-set hits:".dimmed(), fp_hits.to_string().bold(), format!("(proxy-skips: {}, capped: {}, time: {:.3}s)", fp_skips, fp_capped, fp_secs).dimmed());

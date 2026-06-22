@@ -1,12 +1,12 @@
 use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
 use crate::factor::{Factor, rebuild_factor};
-use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
+use crate::lang::{LanguageFamily, OpWithFrozenVar, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
-use egg::{Id, Language};
-use rustc_hash::FxHashMap;
+use egg::{Id, Language, RecExpr};
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::time::{Duration, Instant};
 
 /// A candidate expansion shape: an enode's discriminant paired with its arity.
@@ -41,8 +41,21 @@ type VarShapes<F, O> = Vec<VarShape<F, O>>;
 /// the prior one had forbidden.
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     map: FxHashMap<Pattern<F, O>, Vec<bool>>,
+    /// Experimental second seen-set: a pure hash-cons egraph (no analysis, no
+    /// unions) over the frozen-var language. Each pattern is converted into a
+    /// `RecExpr<F::Apply<OpWithFrozenVar<O>>>` and looked up / inserted here, so
+    /// the freeze mask is part of the *term* rather than a side value. Shadow-run
+    /// alongside `map` to validate the encoding — `map` still drives the search.
+    seen_egraph: egg::EGraph<F::Apply<OpWithFrozenVar<O>>, ()>,
     pub hits: usize,
+    /// Calls that would skip under *exact*-mask matching rather than subset
+    /// domination: same `map` lookup, but the stored mask must equal `frozen`
+    /// exactly. `hits - exact_hits` is the extra dedup subset-domination buys.
+    pub exact_hits: usize,
     pub time: Duration,
+    /// Total calls the shadow seen-egraph deduped (exact `(syntax, frozen)`
+    /// membership, modulo congruence). The `map`-side total is `hits`.
+    pub egraph_hits: usize,
 }
 
 /// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
@@ -51,12 +64,49 @@ fn frozen_subset(a: &[bool], b: &[bool]) -> bool {
     a.iter().zip(b).all(|(&fa, &fb)| !fa || fb)
 }
 
+/// Convert a pattern plus its freeze mask into a `RecExpr` over the frozen-var
+/// language: every `Var(k)` leaf becomes `FrozenVar(k)` iff `frozen[k]`, so the
+/// freeze bit is encoded structurally. Reuses the existing `RevExpr -> RecExpr`
+/// conversion, then functor-maps each node's leaf-op slot via
+/// `LanguageFamily::map_discriminant` (structural variants pass through; only
+/// the leaf op is rewritten), preserving children and node order.
+fn pattern_to_frozen_recexpr<F: LanguageFamily, O: StitchOp>(
+    pattern: &Pattern<F, O>,
+    frozen: &[bool],
+) -> RecExpr<F::Apply<OpWithFrozenVar<O>>> {
+    // The canonical invariant numbers `?#k` as `egg::Var::from(k)`, so build the
+    // frozen set keyed by that same `Var` rather than recovering `k` per leaf.
+    let frozen_vars: FxHashSet<egg::Var> = frozen
+        .iter()
+        .enumerate()
+        .filter_map(|(k, &f)| f.then(|| egg::Var::from(k as u32)))
+        .collect();
+    let src: RecExpr<F::Apply<OpWithVar<O>>> = pattern.pattern.clone().into();
+    let src_nodes: Vec<F::Apply<OpWithVar<O>>> = src.into();
+    let nodes: Vec<F::Apply<OpWithFrozenVar<O>>> = src_nodes
+        .into_iter()
+        .map(|node| {
+            let kids = node.children().to_vec();
+            let disc = F::map_discriminant(node.discriminant(), |op| match op {
+                OpWithVar::Node(o) => OpWithFrozenVar::Node(o),
+                OpWithVar::Var(v) if frozen_vars.contains(&v) => OpWithFrozenVar::FrozenVar(v),
+                OpWithVar::Var(v) => OpWithFrozenVar::Var(v),
+            });
+            F::make(disc, kids)
+        })
+        .collect();
+    RecExpr::from(nodes)
+}
+
 impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
     fn default() -> Self {
         Self {
             map: FxHashMap::default(),
+            seen_egraph: egg::EGraph::new(()),
             hits: 0,
+            exact_hits: 0,
             time: Duration::ZERO,
+            egraph_hits: 0,
         }
     }
 }
@@ -72,25 +122,54 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
+    /// Number of e-classes in the shadow seen-egraph (one per distinct
+    /// `(syntax, frozen)` term inserted, modulo congruence).
+    pub fn egraph_len(&self) -> usize {
+        self.seen_egraph.number_of_classes()
+    }
     /// Records `pattern` at `frozen` if this is the first visit or a
     /// not-dominated one; returns `true` (skip) if a recorded visit's frozen
     /// set is a subset of `frozen` — the prior visit was at least as flexible,
     /// so all of this visit's reachable successors are already reachable from
     /// it.
+    ///
+    /// The `map` result drives the search and is unchanged. In parallel we run
+    /// the egraph-backed and exact-match seen-sets, tallying each side's total
+    /// hits so a POC run can compare their dedup power against `map`.
     pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen: Vec<bool>) -> bool {
         let t = Instant::now();
-        let skip = match self.map.get(&pattern) {
-            Some(existing) if frozen_subset(existing, &frozen) => true,
-            _ => {
-                self.map.insert(pattern, frozen);
-                false
+
+        // Egraph side (shadow): exact `(syntax, frozen)` membership. Look up
+        // before inserting so `egraph_skip` reflects prior visits only.
+        let recexpr = pattern_to_frozen_recexpr(&pattern, &frozen);
+        let egraph_skip = self.seen_egraph.lookup_expr(&recexpr).is_some();
+        self.seen_egraph.add_expr(&recexpr);
+        if egraph_skip {
+            self.egraph_hits += 1;
+        }
+
+        // Map side (source of truth): subset-domination, overwrite on miss. The
+        // exact-match shadow shares this lookup but is checked independently of
+        // the subset decision: it counts a hit whenever the stored mask equals
+        // `frozen` exactly — a stricter rule than subset domination.
+        let map_skip = match self.map.get(&pattern) {
+            Some(existing) => {
+                if *existing == frozen {
+                    self.exact_hits += 1;
+                }
+                frozen_subset(existing, &frozen)
             }
+            None => false,
         };
+        if !map_skip {
+            self.map.insert(pattern, frozen);
+        }
+
         self.time += t.elapsed();
-        if skip {
+        if map_skip {
             self.hits += 1;
         }
-        skip
+        map_skip
     }
 }
 
