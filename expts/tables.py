@@ -297,8 +297,8 @@ TABLE7_ITER_LIMIT = 30
 TABLE7_BFS_SWEEP = tuple(n for n in BFS_STEP_SWEEP if n <= 5000)
 TABLE7_SMC_SWEEP = tuple(p for p in SMC_PARTICLE_SWEEP if p <= 2000)
 # Representative operating points for the table cells / filled plot markers.
-TABLE7_ENUM_POINT = TABLE7_BFS_SWEEP[-1]
-TABLE7_SMC_POINT = TABLE7_SMC_SWEEP[-1]
+TABLE7_ENUM_POINT = 2000
+TABLE7_SMC_POINT = 2000
 
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:
