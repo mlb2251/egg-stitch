@@ -171,20 +171,15 @@ pub struct Args {
 
     /// Disable the useless-frozen-variable check (on by default).
     /// When a frozen metavar `?#k` is bound to the same e-class in every
-    /// match and that e-class has no above-pattern free vars, the state
-    /// is pruned — the abstraction adds no compression at that slot.
+    /// subst and that e-class has no above-pattern free db vars, the state
+    /// is pruned.
     /// Stitch analog: "argument capture" / `is_useless_abstract`.
     #[arg(long = "no-opt-useless-frozen", action = clap::ArgAction::SetFalse)]
     pub opt_useless_frozen: bool,
 
     /// Disable the useless-non-frozen inlining short-circuit (on by default).
-    /// When a non-frozen metavar `?#k` is bound to the same e-class in every
-    /// match (and that e-class has no above-pattern free vars), this emits a
-    /// single dominant successor that one-step expands `?#k` (and any other
-    /// such non-frozen vars) to the size-minimal enode shape of its e-class —
-    /// inlining a constant arg specialises the body without giving up matches.
-    /// `frozen_count` is preserved since the move runs "before" any normal
-    /// expand in the canonical order.
+    /// Equivalent of `--no-opt-useless-frozen` but for non-frozen metavars
+    /// and instead of pruning, it just inlines it with the min term.
     #[arg(long = "no-opt-useless-inline", action = clap::ArgAction::SetFalse)]
     pub opt_useless_inline: bool,
 
