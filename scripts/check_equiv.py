@@ -135,10 +135,16 @@ def parse_rewrites(path):
             # same folding (integer and float, to cover integer-valued-float
             # successors like `(+ 1.0 5.0)`).
             if _name.strip() == "constant_folding":
-                # `!<kind>` optionally followed by a `(params (ops (…)))` block.
+                # `!<kind>` optionally followed by a `(params …)` block.
                 parts = body.strip().split(None, 1)
                 kind = parts[0]
-                ops = _parse_fold_ops(parts[1]) if len(parts) > 1 else None
+                rest = parts[1] if len(parts) > 1 else ""
+                # `!round` rounds every numeric literal to `places` decimals,
+                # emitted as a `("!round", places)` sentinel `saturate` reads.
+                if kind == "!round":
+                    rules.append(("!round", _parse_fold_places(rest)))
+                    continue
+                ops = _parse_fold_ops(rest) if rest else None
                 modes = {
                     "!integers": ("integers",),
                     "!floats": ("floats",),
@@ -189,6 +195,30 @@ def _parse_fold_ops(rest):
                 raise ValueError(f"constant_folding: operator must be a leaf symbol: {o!r}")
         ops = group
     return ops
+
+
+def _parse_fold_places(rest):
+    """Parse a `(params (places N))` block into the integer decimal count, or 6 if
+    absent. Mirrors `FoldingParams::places` in `crate::constant_folding`."""
+    rest = rest.strip()
+    if not rest:
+        return 6
+    sexp, _ = parse_sexp(tokenize(rest), 0)
+    if not isinstance(sexp, list) or not sexp or sexp[0] != "params":
+        raise ValueError(f"constant_folding params must be a (params …) block: {rest!r}")
+    places = 6
+    for child in sexp[1:]:
+        if not isinstance(child, list) or not child:
+            raise ValueError(f"malformed constant_folding param: {child!r}")
+        if child[0] != "places":
+            raise ValueError(f"unknown constant_folding param key: {child[0]!r}")
+        if len(child) != 2 or not isinstance(child[1], str):
+            raise ValueError("constant_folding: places takes a single integer")
+        try:
+            places = int(child[1])
+        except ValueError:
+            raise ValueError(f"constant_folding: places must be an integer: {child[1]!r}")
+    return places
 
 
 # ---------- β-reduction (de Bruijn, $0 = innermost) ----------
@@ -683,6 +713,27 @@ def _fold_step(eg, modes, ops):
     return unions
 
 
+def _round_to(x, places):
+    """`x` rounded to `places` decimals, half away from zero — matching Rust's
+    `f64::round` (Python's `round` is banker's rounding, which would diverge)."""
+    scale = 10.0 ** places
+    y = x * scale
+    r = (math.floor(y + 0.5) if y >= 0 else math.ceil(y - 0.5)) / scale
+    return 0.0 if r == 0.0 else r  # normalise -0.0
+
+
+def _round_step(eg, places):
+    """Round every numeric-literal e-class to `places` decimals and union the
+    rounded literal in — mirrors the Rust `!round` applier, so near-equal floats
+    (and float noise) collapse onto one leaf."""
+    unions = False
+    for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
+        f = _eclass_float(eg, eid)
+        if f is not None and eg.union(eid, eg.add(("sym", repr(_round_to(f, places))), ())):
+            unions = True
+    return unions
+
+
 def saturate(eg, rules, max_iters, max_nodes, goal=None):
     """Run e-saturation: each iteration applies every DSR pattern rule to every
     matching e-class, fires β on every `App(Lam(_), _)`, and (if a
@@ -701,7 +752,9 @@ def saturate(eg, rules, max_iters, max_nodes, goal=None):
     fold_specs = [r for r in rules if r[0] == "!fold"]
     fold_modes = {r[1] for r in fold_specs}
     fold_ops = frozenset().union(*(r[2] if r[2] is not None else DEFAULT_FOLD_OPS for r in fold_specs)) if fold_specs else frozenset()
-    pattern_rules = [r for r in rules if r[0] != "!fold"]
+    # `!round` places (smallest wins if several are declared — strictest snap).
+    round_places = min((r[1] for r in rules if r[0] == "!round"), default=None)
+    pattern_rules = [r for r in rules if r[0] not in ("!fold", "!round")]
     for it in range(max_iters):
         if eg.total_nodes() > max_nodes:
             return ("nodes", it)
@@ -742,6 +795,10 @@ def saturate(eg, rules, max_iters, max_nodes, goal=None):
 
         # 3. Numeric folding (constant_folding directive).
         if fold_modes and _fold_step(eg, fold_modes, fold_ops):
+            unions_made = True
+
+        # 4. Rounding (`!round` directive).
+        if round_places is not None and _round_step(eg, round_places):
             unions_made = True
 
         eg.rebuild()

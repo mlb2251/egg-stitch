@@ -17,7 +17,7 @@
 //   drawings.forward-arith-commute — + commute coordinate arithmetic (add_comm/mul_comm)
 //   drawings.forward-matmul-fold   — reduce matmul symbolically, then fold its
 //                                    coordinate arithmetic (incl. sin/cos/pi) via the
-//                                    general constant_folding op list + !round6
+//                                    general constant_folding op list + !round
 
 constant_folding: !integersarefloats
 

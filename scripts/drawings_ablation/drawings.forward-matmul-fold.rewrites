@@ -3,12 +3,12 @@
 // then collapsed by the general `constant_folding` operator list — which now
 // folds `sin`/`cos`/`pi` as well as `+ - * /` — instead of a bespoke Rust matmul
 // fold. Folding `pi` to a literal lets `sin`/`cos` evaluate any rotation angle, so
-// no exact-trig table or angle-normalisation rules are needed; `!round6` snaps the
+// no exact-trig table or angle-normalisation rules are needed; `!round` snaps the
 // resulting float noise (e.g. cos(pi/2)'s 6e-17) to clean literals. This shows the
 // general folding framework subsumes the special-purpose matmul fold.
 
 constant_folding: !integersarefloats (params (ops (+ - * / sin cos pi)))
-constant_folding: !round6
+constant_folding: !round (params (places 6))
 
 // ── identity transform + arithmetic identities ──
 t_id: (T ?p (M 1 0 0 0)) => ?p

@@ -449,6 +449,29 @@ fn constant_folding_ops_list_restricts() {
     check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_restrict.json", &["-r", "data/domains/simple-arithmetic/fold_ops_restrict.rewrites"], true);
 }
 
+/// `!round (params (places 6))`, exercising both directions. POSITIVE: the first
+/// `g` arg (`0.7071067811865476` vs `0.707107`) rounds to the same value, so all
+/// three programs unify on it (`matches 3`) and it is baked into the abstraction.
+/// NEGATIVE: the second arg (`0.1234561` vs `0.1234567`) is close but rounds to
+/// `0.123456` vs `0.123457` at 6 places, so it does NOT unify and stays a parameter
+/// — giving the arity-2 `(f (g 0.7071067811865476 ?#0 z) ?#1)` (the baked literal
+/// is one representative of the unified e-class).
+#[test]
+fn constant_folding_round_places6() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_round6.json", &["-r", "data/domains/simple-arithmetic/fold_round6.rewrites"], true);
+}
+
+/// `!round (params (places 3))`: the `places` argument controls granularity, again
+/// both directions. POSITIVE: the first `g` arg (`0.7071`/`0.7072`/`0.707`) all
+/// collapse to `0.707` at 3 places (they would NOT unify at 6), so all three unify
+/// and it is baked in. NEGATIVE: the second arg (`0.1114` vs `0.1116`) is close but
+/// rounds to `0.111` vs `0.112`, so it stays a parameter — giving the arity-2
+/// `(f (g 0.7072 ?#0 z) ?#1)`.
+#[test]
+fn constant_folding_round_places3() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_round3.json", &["-r", "data/domains/simple-arithmetic/fold_round3.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
