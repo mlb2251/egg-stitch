@@ -1,0 +1,24 @@
+// Minimal, arithmetic-clean transform algebra: identity removal + scale/rotation
+// propagation only. No translation composition (that's the bushy-arithmetic source),
+// no overlay commutativity. Goal: useful reduction that stays bounded with no cap.
+
+constant_folding: !integersarefloats
+
+// ── identity ──
+t_id: (T ?p (M 1 0 0 0)) => ?p
+add_id_r: (+ ?x 0) => ?x
+add_id_l: (+ 0 ?x) => ?x
+sub_id:   (- ?x 0) => ?x
+mul_id_r: (* ?x 1) => ?x
+mul_id_l: (* 1 ?x) => ?x
+mul_zero_r: (* ?x 0) => 0
+mul_zero_l: (* 0 ?x) => 0
+div_id:   (/ ?x 1) => ?x
+
+// ── scaling/rotation: origin-centred composition is clean (scale*, rotate+, no
+//    translation cross-terms), so it folds to a single literal matrix ──
+t_compose_origin: (T (T ?p (M ?s1 ?r1 0 0)) (M ?s2 ?r2 0 0)) => (T ?p (M (* ?s1 ?s2) (+ ?r1 ?r2) 0 0))
+
+// ── scale propagation: push a scale past a translate (the cross-term is a single
+//    multiply per coordinate, not a tree) ──
+scale_trans: (T (T ?p (M 1 0 ?x ?y)) (M ?s 0 0 0)) <=> (T (T ?p (M ?s 0 0 0)) (M 1 0 (* ?x ?s) (* ?y ?s)))

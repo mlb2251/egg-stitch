@@ -1,0 +1,62 @@
+// Contract set + bounded equivalence rules that add canonicalization power
+// (esp. rotation alignment) WITHOUT the C-monoid explosion. No c_comm/c_assoc.
+
+constant_folding: !integersarefloats
+
+// ── contract core ──
+t_id: (T ?p (M 1 0 0 0)) => ?p
+t_compose_norot: (T (T ?p (M ?s1 ?r1 ?x1 ?y1)) (M ?s2 0 ?x2 ?y2)) => (T ?p (M (* ?s1 ?s2) ?r1 (+ ?x2 (* ?s2 ?x1)) (+ ?y2 (* ?s2 ?y1))))
+rep_1: (repeat ?x 1 ?m) => ?x
+add_id_r: (+ ?x 0) => ?x
+add_id_l: (+ 0 ?x) => ?x
+sub_id:   (- ?x 0) => ?x
+mul_id_r: (* ?x 1) => ?x
+mul_id_l: (* 1 ?x) => ?x
+mul_zero_r: (* ?x 0) => 0
+mul_zero_l: (* 0 ?x) => 0
+div_id:   (/ ?x 1) => ?x
+
+// ── general transform composition (rotation), now foldable via the trig rules below ──
+t_compose: (T (T ?p (M ?s1 ?r1 ?x1 ?y1)) (M ?s2 ?r2 ?x2 ?y2)) => (T ?p (M (* ?s1 ?s2) (+ ?r1 ?r2) (+ ?x2 (* ?s2 (- (* (cos ?r2) ?x1) (* (sin ?r2) ?y1)))) (+ ?y2 (* ?s2 (+ (* (sin ?r2) ?x1) (* (cos ?r2) ?y1))))))
+
+// ── trig of the angles that actually occur, so rotation composition folds [contract] ──
+cos_0: (cos 0) => 1
+sin_0: (sin 0) => 0
+cos_halfpi: (cos (/ pi 2)) => 0
+sin_halfpi: (sin (/ pi 2)) => 1
+cos_pi: (cos pi) => -1
+sin_pi: (sin pi) => 0
+cos_qpi: (cos (/ pi 4)) => 0.7071067811865476
+sin_qpi: (sin (/ pi 4)) => 0.7071067811865476
+
+// ── angle normalisation so equal rotations share a representative ──
+ang_q: (/ (* 2 pi) 4) <=> (/ pi 2)
+ang_e: (/ (* 2 pi) 8) <=> (/ pi 4)
+ang_h: (/ (* 2 pi) 2) <=> pi
+
+
+// ── non-confluent "choice" rules: two normal forms, best pick depends on the library ──
+t_factor: (C (T ?a ?m) (T ?b ?m)) <=> (T (C ?a ?b) ?m)
+rep_unroll_2: (repeat ?x 2 (M 1 0 ?tx ?ty)) <=> (C ?x (T ?x (M 1 0 ?tx ?ty)))
+rep_unroll_3: (repeat ?x 3 (M 1 0 ?tx ?ty)) <=> (C (C ?x (T ?x (M 1 0 ?tx ?ty))) (T ?x (M 1 0 (* 2 ?tx) (* 2 ?ty))))
+
+// ── more non-confluent choice rules ──
+c_assoc: (C (C ?a ?b) ?c) <=> (C ?a (C ?b ?c))
+c_comm: (C ?a ?b) <=> (C ?b ?a)
+rep_unroll_rot_2: (repeat ?x 2 (M 1 ?r 0 0)) <=> (C ?x (T ?x (M 1 ?r 0 0)))
+rep_unroll_rot_3: (repeat ?x 3 (M 1 ?r 0 0)) <=> (C (C ?x (T ?x (M 1 ?r 0 0))) (T ?x (M 1 (+ ?r ?r) 0 0)))
+scale_trans_interchange: (T (T ?p (M 1 0 ?x ?y)) (M ?s 0 0 0)) <=> (T (T ?p (M ?s 0 0 0)) (M 1 0 (* ?x ?s) (* ?y ?s)))
+
+// ── hexagonal trig (the 30/60-degree angles nuts-bolts uses), so rotation composes there ──
+cos_pi6: (cos (/ pi 6)) => 0.8660254037844387
+sin_pi6: (sin (/ pi 6)) => 0.5
+cos_pi3: (cos (/ pi 3)) => 0.5
+sin_pi3: (sin (/ pi 3)) => 0.8660254037844387
+ang_sixth: (/ (* 2 pi) 6) <=> (/ pi 3)
+
+// ── push an origin-centred transform through a repeat (non-confluent; aligns a
+//    scaled/rotated symmetric motif with its un-repeated form) ──
+// rotation-step repeat: outer scale+rotate about origin commutes with the rotation steps.
+tr_thru_rot_rep: (T (repeat ?x ?n (M 1 ?r 0 0)) (M ?s ?r2 0 0)) <=> (repeat (T ?x (M ?s ?r2 0 0)) ?n (M 1 ?r 0 0))
+// translation-step repeat: outer scale about origin scales the step translation.
+tr_thru_trans_rep: (T (repeat ?x ?n (M 1 0 ?tx ?ty)) (M ?s 0 0 0)) <=> (repeat (T ?x (M ?s 0 0 0)) ?n (M 1 0 (* ?s ?tx) (* ?s ?ty)))
