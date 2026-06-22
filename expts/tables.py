@@ -293,8 +293,8 @@ TABLE7_MAX_ARITY = 4
 # for no better result -- past the timeout at the high sweep points.
 TABLE7_ITER_LIMIT = 30
 # Best-first and high particle counts both grind on these blown-up cones, so cap
-# the sweep low -- enum to 5000 steps, SMC to 2000 particles (well below table5's).
-TABLE7_BFS_SWEEP = tuple(n for n in BFS_STEP_SWEEP if n <= 5000)
+# the sweep low -- enum to 2000 steps, SMC to 2000 particles (well below table5's).
+TABLE7_BFS_SWEEP = tuple(n for n in BFS_STEP_SWEEP if n <= 2000)
 TABLE7_SMC_SWEEP = tuple(p for p in SMC_PARTICLE_SWEEP if p <= 2000)
 # Representative operating points for the table cells / filled plot markers.
 TABLE7_ENUM_POINT = 2000
