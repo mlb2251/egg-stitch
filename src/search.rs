@@ -14,9 +14,20 @@ type Shape<F, O> = (<F as LanguageFamily>::Discriminant<O>, usize);
 /// Per-eclass histogram: each distinct enode shape `(disc, arity)` with its
 /// multiplicity, in enode first-appearance order.
 type EclassShapeHist<F, O> = Vec<(<F as LanguageFamily>::Discriminant<O>, usize, usize)>;
-/// Per var, its candidate expansion shapes (enode first-appearance order), each
-/// carrying weighted support (`sup`) and matching-subst count (`hit`).
-type VarShapes<F, O> = Vec<(Shape<F, O>, usize, usize)>;
+/// A candidate expansion shape for a var together with the statistics that drive
+/// successor emission and ordering. Built by [`SearchState::expand_shapes`].
+struct VarShape<F: LanguageFamily, O: StitchOp> {
+    shape: Shape<F, O>,
+    /// Usage-weighted support `Σ_(r, σ) usage(r) n(σ)`, where `n(σ)` is the
+    /// number of enodes of this shape at the var's binding
+    support: usize,
+    /// Numerator of the explosion estimate `Σ_(r, σ) n(σ)`
+    expand_enodes: usize,
+    /// Denominator of the explosion estimate `Σ_(r, σ) 1` (total full substs)
+    substs: usize,
+}
+/// Per var, its candidate expansion shapes in enode first-appearance order.
+type VarShapes<F, O> = Vec<VarShape<F, O>>;
 
 /// Tracks already-explored canonical patterns to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
@@ -679,12 +690,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// The candidate expansion shapes for `?#var_idx`: every distinct
     /// `(discriminant, arity)` its bound eclass admits (free DB-var leaves above
-    /// the hole's depth excluded), each paired with its `usage·(substs/rows)`-
-    /// weighted support (`sup`) and matching-subst count (`hit`), summed over
+    /// the hole's depth excluded), each with the [`VarShape`] stats summed over
     /// every (match, factor-row) the var appears in. Reads the precomputed
     /// per-eclass shape histograms ([`SharedSearchData::eclass_shapes`]) and keeps
     /// shapes in enode first-appearance order so the emitted action order is
-    /// deterministic. (`hit` feeds the rank; the expand emission ignores it.)
+    /// deterministic.
     fn expand_shapes(&self, var_idx: usize, shared: &SharedSearchData<F, O>) -> VarShapes<F, O> {
         let d_k = self.pattern.var_depth[var_idx];
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
@@ -695,8 +705,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let f = &m.factors[fi];
             // Each row of the owning factor stands in for `total/|f.rows|`
             // full substs (the product of the other factors), so weight the
-            // per-row node contributions by that multiplier.
-            let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
+            // per-row node contributions by that multiplier. `support` adds the
+            // usage factor on top; the rank stats deliberately omit it.
+            let w = m.num_substs() / f.rows.len();
+            let wu = usage(m.root_eclass) * w;
             for row in &f.rows {
                 for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
                     if invalid_literal_expansion(disc, d_k) {
@@ -705,12 +717,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     let key = (disc.clone(), *arity);
                     match shape_idx.get(&key) {
                         Some(&idx) => {
-                            shapes[idx].1 += count * w;
-                            shapes[idx].2 += w;
+                            shapes[idx].support += count * wu;
+                            shapes[idx].expand_enodes += count * w;
+                            shapes[idx].substs += w;
                         }
                         None => {
                             shape_idx.insert(key.clone(), shapes.len());
-                            shapes.push((key, count * w, w));
+                            shapes.push(VarShape {
+                                shape: key,
+                                support: count * wu,
+                                expand_enodes: count * w,
+                                substs: w,
+                            });
                         }
                     }
                 }
@@ -732,7 +750,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let n = self.pattern.vars.len();
         let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
         let (rank, order) = if self.freeze_rule && n > 1 {
-            let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|(_, s, h)| *s as f64 / *h as f64).fold(-f64::INFINITY, f64::max)).collect();
+            let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|s| s.expand_enodes as f64 / s.substs as f64).fold(-f64::INFINITY, f64::max)).collect();
             let mut order: Vec<usize> = (0..n).collect();
             order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
             let mut rank = vec![0usize; n];
@@ -869,8 +887,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
             // Emit from the shapes `shape_pass` already computed (via
             // `expand_shapes`) for every var — no recomputation here.
-            for ((op, arity), support, _) in &shapes[var_idx] {
-                out.push((Action::Expand { var_idx, op: op.clone(), arity: *arity }, *support));
+            for s in &shapes[var_idx] {
+                let (op, arity) = &s.shape;
+                out.push((Action::Expand { var_idx, op: op.clone(), arity: *arity }, s.support));
             }
         }
         SuccessorEnum::All { actions: out, rank }
