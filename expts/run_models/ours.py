@@ -143,10 +143,11 @@ class OursBf:
     num_steps: int | None = 500
     max_forced_expansion: int | None = None
     max_arity: int = MAX_ARITY
-    # When True, DSRs canonicalise the initial egraph once instead of staying
-    # live during search (the "dsrs-only-at-start" baseline). ``timeout`` caps
-    # wall-clock seconds. Excluded from repr so the method label is unchanged.
+    # only_use_dsrs_at_start = canonicalise once up front (dsrs-only-at-start
+    # baseline); no_dsrs = drop DSRs entirely (no-rules baseline). repr=False keeps
+    # the method label unchanged.
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
+    no_dsrs: bool = field(default=False, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
 
@@ -157,7 +158,8 @@ class OursBf:
         if self.max_forced_expansion is not None:
             search_flags["max_forced_expansion"] = self.max_forced_expansion
         return _run(
-            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
+            rounds=rounds, input_path=input_path,
+            rewrites_path=None if self.no_dsrs else rewrites_path,
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
             search_flags=search_flags,
@@ -174,17 +176,12 @@ class OursSmc:
     num_particles: int = 1000
     temperature: float = 1000.0
     max_arity: int = MAX_ARITY
-    # at-start = one-shot DSR canonicalisation; no_dsrs = drop DSRs entirely (the
-    # no-rules baseline). repr=False keeps the method label a plain OursSmc(...).
-    only_use_dsrs_at_start: bool = field(default=False, repr=False)
-    no_dsrs: bool = field(default=False, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
-            rounds=rounds, input_path=input_path,
-            rewrites_path=None if self.no_dsrs else rewrites_path,
+            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
             weighting=weighting, search="smc",
             max_arity=self.max_arity,
             search_flags={
@@ -192,6 +189,5 @@ class OursSmc:
                 "num_particles": self.num_particles,
                 "temperature": self.temperature,
             },
-            only_use_dsrs_at_start=self.only_use_dsrs_at_start,
             timeout=self.timeout, mem_limit=self.mem_limit,
         )

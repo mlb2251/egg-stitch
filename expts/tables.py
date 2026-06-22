@@ -21,7 +21,7 @@ from tqdm import tqdm
 
 from . import ALL_DOMAINS
 from ._subproc import available_memory_bytes
-from .bench import MEM_LIMIT_BYTES
+from .bench import MAX_ARITY, MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
 from .runner import EPFL_CIRCUITS, MOLECULE_FAMILIES
@@ -49,15 +49,17 @@ def _sweep_runners(
     timeout: float | None = None,
     bfs_steps: tuple[int, ...] = BFS_STEP_SWEEP,
     mem_limit: int | None = None,
+    max_arity: int = MAX_ARITY,
 ) -> tuple[tuple[str, object], ...]:
     """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value.
 
     ``timeout`` (seconds) caps each tool invocation's wall-clock and
     ``mem_limit`` (bytes) its address space; None means no cap. ``bfs_steps``
-    overrides the best-first step sweep (table5 extends it).
+    overrides the best-first step sweep (table5 extends it). ``max_arity`` raises
+    the abstraction arity cap (table7 uses 4).
     """
-    bfs = tuple((f"enum-{n}", OursBf(num_steps=n, timeout=timeout, mem_limit=mem_limit)) for n in bfs_steps)
-    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, timeout=timeout, mem_limit=mem_limit)) for p in SMC_PARTICLE_SWEEP)
+    bfs = tuple((f"enum-{n}", OursBf(num_steps=n, max_arity=max_arity, timeout=timeout, mem_limit=mem_limit)) for n in bfs_steps)
+    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, max_arity=max_arity, timeout=timeout, mem_limit=mem_limit)) for p in SMC_PARTICLE_SWEEP)
     return bfs + smc
 
 
@@ -274,36 +276,32 @@ def table5() -> Path:
     )
 
 
-# Table 7: the EPFL circuits with the factoring DSRs, one SMC operating point in
-# three rule configs (no-rules baseline / live / dsrs-only-at-start). babble and
-# Stitch have no theory for these boolean circuits, so the roster is ours-SMC only.
+# Table 7: the EPFL circuits with the factoring DSRs. Table 5's roster (Enum/SMC
+# sweeps + dsrs-only-at-start) at max-arity 4, plus a no-rules Enum baseline so the
+# three-way baseline/live/at-start shows. babble/Stitch have no theory for these
+# boolean circuits, so they're dropped.
 TABLE7_DOMAINS = [f"epfl-circuits:{c}" for c in EPFL_CIRCUITS]
 TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE7_NUM_ABSTRACTIONS = 4
-TABLE7_SMC_PARTICLES = 5000
 TABLE7_MAX_ARITY = 4
+TABLE7_BFS_SWEEP = BFS_STEP_SWEEP + (100_000,)
 
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:
-    """The three SMC rule configs (no-rules baseline, live, dsrs-only-at-start),
-    each capped at :data:`TABLE7_TIMEOUT` and :data:`MEM_LIMIT_BYTES`."""
-    common = dict(
-        num_particles=TABLE7_SMC_PARTICLES,
-        max_arity=TABLE7_MAX_ARITY,
-        timeout=TABLE7_TIMEOUT,
-        mem_limit=MEM_LIMIT_BYTES,
-    )
+    """Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start and no-rules Enum
+    baselines, every runner at max-arity 4 and capped at :data:`TABLE7_TIMEOUT` /
+    :data:`MEM_LIMIT_BYTES`."""
+    caps = dict(timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
     return (
-        ("smc-baseline", OursSmc(no_dsrs=True, **common)),
-        ("smc-live", OursSmc(**common)),
-        ("smc-at-start", OursSmc(only_use_dsrs_at_start=True, **common)),
+        _sweep_runners(bfs_steps=TABLE7_BFS_SWEEP, max_arity=TABLE7_MAX_ARITY, **caps)
+        + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, max_arity=TABLE7_MAX_ARITY, **caps)),)
+        + (("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True, max_arity=TABLE7_MAX_ARITY, **caps)),)
     )
 
 
 def table7() -> Path:
-    """Run the EPFL multiplier corpus with the factoring DSRs: SMC in three rule
-    configs (no-rules baseline / live / dsrs-only-at-start), 4 abstractions, each
-    capped at 300s and 20 GiB."""
+    """Run the EPFL circuits with the factoring DSRs: table5 roster + a no-rules
+    Enum baseline, max-arity 4, 4 abstractions, each capped at 300s and 20 GiB."""
     free = available_memory_bytes()
     if free < MEM_LIMIT_BYTES:
         raise SystemExit(
