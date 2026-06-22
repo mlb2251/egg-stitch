@@ -170,7 +170,7 @@ def nuts_bolts_enum():
         max_forced_expansion=40,
         opt_seen=True,
         no_opt_useless_inline=True,
-        verbose=True,
+        # verbose=True,
         # no_freeze_rule=True,
     )
 
