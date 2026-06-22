@@ -1,0 +1,83 @@
+{
+  "epfl-circuits:mult": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=200, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:mult",
+        "file": "mult",
+        "initial_cost": 36301,
+        "final_cost": 11299,
+        "compression_ratio": 3.2127621913443667,
+        "elapsed_secs": 61.008339643478394,
+        "library": [
+          "fn_0: (and (not (and ?#0 (or (not ?#1) ?#2))) (or ?#2 (not (not (or (not ?#1) ?#0)))))",
+          "fn_1: (and (or (not ?#0) ?#1) ?#2)",
+          "fn_2: (fn_0 ?#0 (or ?#1 (or ?#2 ?#3)) (and ?#1 (or ?#3 ?#2)))",
+          "fn_3: (and (not ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 20576.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          13560,
+          12118,
+          11662,
+          11300
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:square": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=200, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 9393,
+        "compression_ratio": 3.2983072500798465,
+        "elapsed_secs": 60.09344720840454,
+        "library": [
+          "fn_0: (or (and (not (not ?#0)) (not ?#1)) (and (not ?#0) ?#1))",
+          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
+          "fn_2: (not (or ?#0 ?#1))",
+          "fn_3: (and (or ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 18243.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10816,
+          9963,
+          9667,
+          9394
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:bar": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=200, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:bar",
+        "file": "bar",
+        "initial_cost": 13609,
+        "final_cost": 7352,
+        "compression_ratio": 1.8510609357997825,
+        "elapsed_secs": 28.636894464492798,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) ?#2)",
+          "fn_1: (fn_0 ?#0 s129 (not (and s129 ?#1)))",
+          "fn_2: (fn_0 (fn_0 s174 ?#0 ?#1) (and (not ?#2) s187) ?#3)",
+          "fn_3: (fn_0 (fn_0 (and ?#0 s129) s130 ?#1) (and (not s129) (and s130 ?#2)) ?#3)"
+        ],
+        "egraph_min_term_size": 10860.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          8473,
+          7984,
+          7609,
+          7353
+        ]
+      }
+    ]
+  ]
+}

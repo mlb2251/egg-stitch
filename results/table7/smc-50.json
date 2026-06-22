@@ -1,0 +1,73 @@
+{
+  "epfl-circuits:mult": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:mult",
+        "file": "mult",
+        "initial_cost": 36301,
+        "final_cost": 9462,
+        "compression_ratio": 3.8365039103783554,
+        "elapsed_secs": 19.297446489334106,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",
+          "fn_1: (and ?#0 (not (and ?#1 ?#2)))",
+          "fn_2: (and (not (fn_0 ?#0 ?#1)) (and ?#2 ?#3))",
+          "fn_3: (or (not ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 20576.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10970,
+          10127,
+          9730,
+          9463
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:square": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": null,
+        "compression_ratio": null,
+        "elapsed_secs": 300.0,
+        "library": [],
+        "egraph_min_term_size": null,
+        "timed_out": true,
+        "cost_at_end_of_each_iter": null
+      }
+    ]
+  ],
+  "epfl-circuits:bar": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:bar",
+        "file": "bar",
+        "initial_cost": 13609,
+        "final_cost": 7520,
+        "compression_ratio": 1.8097074468085106,
+        "elapsed_secs": 8.405141830444336,
+        "library": [
+          "fn_0: (and ?#0 (or ?#1 (not ?#2)))",
+          "fn_1: (fn_0 (not ?#0) ?#1 ?#2)",
+          "fn_2: (and (not ?#0) ?#1)",
+          "fn_3: (fn_1 (and s129 ?#0) s129 ?#1)"
+        ],
+        "egraph_min_term_size": 10860.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          8473,
+          8108,
+          7806,
+          7521
+        ]
+      }
+    ]
+  ]
+}

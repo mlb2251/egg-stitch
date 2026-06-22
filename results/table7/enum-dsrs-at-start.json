@@ -1,0 +1,83 @@
+{
+  "epfl-circuits:mult": [
+    [
+      {
+        "method": "OursBf(num_steps=10000000, max_forced_expansion=None, max_arity=4)",
+        "domain": "epfl-circuits:mult",
+        "file": "mult",
+        "initial_cost": 36301,
+        "final_cost": 16399,
+        "compression_ratio": 2.213610586011342,
+        "elapsed_secs": 10.098375797271729,
+        "library": [
+          "fn_0: (or (and ?#0 (or ?#1 (not ?#2))) (and ?#2 (not (or ?#0 ?#1))))",
+          "fn_1: (and ?#0 (or ?#1 ?#2))",
+          "fn_2: (not (or ?#0 ?#1))",
+          "fn_3: (and (or ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 20574.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          18977,
+          17652,
+          16978,
+          16400
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:square": [
+    [
+      {
+        "method": "OursBf(num_steps=10000000, max_forced_expansion=None, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 14985,
+        "compression_ratio": 2.0674674674674676,
+        "elapsed_secs": 10.198786973953247,
+        "library": [
+          "fn_0: (and ?#0 (or ?#1 ?#2))",
+          "fn_1: (not (or ?#0 ?#1))",
+          "fn_2: (and (or ?#0 ?#1) ?#2)",
+          "fn_3: (fn_0 (or ?#0 ?#1) ?#2 ?#3)"
+        ],
+        "egraph_min_term_size": 18243.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          16858,
+          15984,
+          15424,
+          14986
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:bar": [
+    [
+      {
+        "method": "OursBf(num_steps=10000000, max_forced_expansion=None, max_arity=4)",
+        "domain": "epfl-circuits:bar",
+        "file": "bar",
+        "initial_cost": 13609,
+        "final_cost": 8996,
+        "compression_ratio": 1.5127834593152512,
+        "elapsed_secs": 1.9625744819641113,
+        "library": [
+          "fn_0: (and ?#0 (or ?#1 ?#2))",
+          "fn_1: (and ?#0 (not ?#1))",
+          "fn_2: (and (not ?#0) ?#1)",
+          "fn_3: (and (or (not ?#0) ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 10860.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10136,
+          9612,
+          9299,
+          8997
+        ]
+      }
+    ]
+  ]
+}

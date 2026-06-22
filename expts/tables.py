@@ -26,7 +26,7 @@ from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
 from .runner import EPFL_CIRCUITS, MOLECULE_FAMILIES
 
-NUM_RUNS = 10
+NUM_RUNS = 1
 
 # Table 1 / 3: babble has no equational theory for text/logo/towers, so the
 # "with DSRs" comparison excludes them.
@@ -287,6 +287,9 @@ TABLE7_MAX_ARITY = 4
 # Best-first grinds on these blown-up cones (the high steps just hit the timeout),
 # so cap the sweep at 20k -- below table5's, which extended to 100k.
 TABLE7_BFS_SWEEP = BFS_STEP_SWEEP[:-1]
+# Representative enum operating point for the table cells / filled plot marker
+# (the top of the capped sweep, mirroring TABLE5_ENUM_POINT).
+TABLE7_ENUM_POINT = TABLE7_BFS_SWEEP[-1]
 
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:
