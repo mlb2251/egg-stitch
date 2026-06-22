@@ -48,6 +48,7 @@ SMC_PARTICLE_SWEEP: tuple[int, ...] = (20, 50, 100, 200, 500, 1000, 2000, 5000)
 def _sweep_runners(
     timeout: float | None = None,
     bfs_steps: tuple[int, ...] = BFS_STEP_SWEEP,
+    smc_particles: tuple[int, ...] = SMC_PARTICLE_SWEEP,
     mem_limit: int | None = None,
     max_arity: int = MAX_ARITY,
     iter_limit: int | None = None,
@@ -55,14 +56,14 @@ def _sweep_runners(
     """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value.
 
     ``timeout`` (seconds) caps each tool invocation's wall-clock and
-    ``mem_limit`` (bytes) its address space; None means no cap. ``bfs_steps``
-    overrides the best-first step sweep (table5 extends it). ``max_arity`` raises
-    the abstraction arity cap (table7 uses 4). ``iter_limit`` caps e-saturation
-    iterations (table7 uses 30; None keeps the binary default of 100).
+    ``mem_limit`` (bytes) its address space; None means no cap. ``bfs_steps`` /
+    ``smc_particles`` override the sweeps (table5 extends them, table7 truncates).
+    ``max_arity`` raises the abstraction arity cap (table7 uses 4). ``iter_limit``
+    caps e-saturation iterations (table7 uses 30; None keeps the binary default).
     """
     common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit)
     bfs = tuple((f"enum-{n}", OursBf(num_steps=n, **common)) for n in bfs_steps)
-    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, **common)) for p in SMC_PARTICLE_SWEEP)
+    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, **common)) for p in smc_particles)
     return bfs + smc
 
 
@@ -291,12 +292,13 @@ TABLE7_MAX_ARITY = 4
 # DSRs blow the e-graph up on these cones, and 100 iterations runs ~4-5x slower
 # for no better result -- past the timeout at the high sweep points.
 TABLE7_ITER_LIMIT = 30
-# Best-first grinds on these blown-up cones (the high steps just hit the timeout),
-# so cap the sweep at 20k -- below table5's, which extended to 100k.
-TABLE7_BFS_SWEEP = BFS_STEP_SWEEP[:-1]
-# Representative enum operating point for the table cells / filled plot marker
-# (the top of the capped sweep, mirroring TABLE5_ENUM_POINT).
+# Best-first and high particle counts both grind on these blown-up cones, so cap
+# the sweep low -- enum to 5000 steps, SMC to 2000 particles (well below table5's).
+TABLE7_BFS_SWEEP = tuple(n for n in BFS_STEP_SWEEP if n <= 5000)
+TABLE7_SMC_SWEEP = tuple(p for p in SMC_PARTICLE_SWEEP if p <= 2000)
+# Representative operating points for the table cells / filled plot markers.
 TABLE7_ENUM_POINT = TABLE7_BFS_SWEEP[-1]
+TABLE7_SMC_POINT = TABLE7_SMC_SWEEP[-1]
 
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:
@@ -305,7 +307,7 @@ def _table7_runners() -> tuple[tuple[str, object], ...]:
     :data:`MEM_LIMIT_BYTES`."""
     common = dict(max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
     return (
-        _sweep_runners(bfs_steps=TABLE7_BFS_SWEEP, **common)
+        _sweep_runners(bfs_steps=TABLE7_BFS_SWEEP, smc_particles=TABLE7_SMC_SWEEP, **common)
         + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
         + (("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **common)),)
     )
