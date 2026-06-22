@@ -284,7 +284,9 @@ TABLE7_DOMAINS = [f"epfl-circuits:{c}" for c in EPFL_CIRCUITS]
 TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE7_NUM_ABSTRACTIONS = 4
 TABLE7_MAX_ARITY = 4
-TABLE7_BFS_SWEEP = BFS_STEP_SWEEP + (100_000,)
+# Best-first grinds on these blown-up cones (the high steps just hit the timeout),
+# so cap the sweep at 20k -- below table5's, which extended to 100k.
+TABLE7_BFS_SWEEP = BFS_STEP_SWEEP[:-1]
 
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:
