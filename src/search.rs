@@ -18,16 +18,12 @@ type EclassShapeHist<F, O> = Vec<(<F as LanguageFamily>::Discriminant<O>, usize,
 /// successor emission and ordering. Built by [`SearchState::expand_shapes`].
 struct VarShape<F: LanguageFamily, O: StitchOp> {
     shape: Shape<F, O>,
-    /// Usage-weighted support `Σ count · usage(root) · (substs/rows)`. Emitted as
-    /// the SMC action weight so the distribution tracks compression value rather
-    /// than hash-cons distinctness (see the comment in [`SearchState::successors`]).
+    /// Usage-weighted support `Σ_(r, σ) usage(r) n(σ)`, where `n(σ)` is the
+    /// number of enodes of this shape at the var's binding
     support: usize,
-    /// Numerator of the explosion estimate: plain `Σ count · (substs/rows)`. Usage
-    /// is excluded on purpose — the ordering measures structural per-subst
-    /// branching, not corpus frequency.
+    /// Numerator of the explosion estimate `Σ_(r, σ) n(σ)`
     expand_enodes: usize,
-    /// Denominator of the explosion estimate: plain `Σ (substs/rows)`.
-    /// `expand_enodes / substs` is the mean enodes per matching subst.
+    /// Denominator of the explosion estimate `Σ_(r, σ) 1` (total full substs)
     substs: usize,
 }
 /// Per var, its candidate expansion shapes in enode first-appearance order.
