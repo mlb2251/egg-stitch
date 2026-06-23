@@ -37,8 +37,26 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
-      - name: cargo nextest (excluding check_slow)
-        run: cargo nextest run --release -E 'not test(/check_slow/)'
+      - name: cargo nextest (excluding check_slow and epfl_circuits)
+        run: cargo nextest run --release -E 'not test(/check_slow/) and not binary(epfl_circuits_test)'
+
+  # EPFL-circuit snapshot suite (tests/epfl_circuits_test.rs), in its own
+  # single-threaded job (the SMC rollouts are heavier than the `test` job's cases).
+  # Needs python (the regen check) and the gitignored .aig blobs, fetched first.
+  test-epfl-circuits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: fetch vendored .aig circuits
+        run: python3 scripts/epfl-circuits/fetch_aigs.py
+      - name: cargo nextest epfl-circuits (single-threaded)
+        run: cargo nextest run --release -E 'binary(epfl_circuits_test)' --test-threads=1
 
   test-check-slow:
     runs-on: ubuntu-latest
@@ -113,11 +131,11 @@ jobs:
         run: |
           split_per_file="cogsci"
           # These domains are excluded from the lambda-calc search/follow sweeps
-          # below. `molecules` is an op-children domain (not lambda-calc) holding
-          # paired canon/scram corpora under subdirs, so the generic sweeps don't
-          # apply to it.
-          skip="molecules"
-          domains=$(ls -1 data/domains | grep -vxF "$skip" | jq -R . | jq -sc .)
+          # below, as op-children (not lambda-calc) corpora: `molecules` holds
+          # paired canon/scram corpora under subdirs, and `epfl-circuits` holds
+          # the AIG boolean corpora (their own snapshot suite is `test-epfl-circuits`).
+          skip="molecules epfl-circuits"
+          domains=$(ls -1 data/domains | grep -vxF "$(printf '%s\n' $skip)" | jq -R . | jq -sc .)
           echo "domains=$domains" >> "$GITHUB_OUTPUT"
           targets=$(
             for d in data/domains/*/; do
