@@ -127,22 +127,35 @@ def parse_rewrites(path):
                 continue
             _name, body = line.split(":", 1)
             # A `constant_folding` directive enables built-in numeric folding (see
-            # `crate::constant_folding`), emitted here as `("!fold", mode)` sentinels
-            # that `saturate` reads. Folding proves equivalences in both directions
-            # — `(+ 1 2) => 3` puts the expanded and collapsed forms in one e-class —
-            # so `!successors` is modelled by the same folding (integer and float, to
-            # cover integer-valued-float successors like `(+ 1.0 5.0)`).
+            # `crate::constant_folding`), emitted here as `("!fold", mode, ops)`
+            # sentinels that `saturate` reads (`ops` is the frozenset of operators
+            # to fold, or None for the default `+ - * /`). Folding proves
+            # equivalences in both directions — `(+ 1 2) => 3` puts the expanded and
+            # collapsed forms in one e-class — so `!successors` is modelled by the
+            # same folding (integer and float, to cover integer-valued-float
+            # successors like `(+ 1.0 5.0)`).
             if _name.strip() == "constant_folding":
+                # `!<kind>` optionally followed by a `(params …)` block.
+                parts = body.strip().split(None, 1)
+                kind = parts[0]
+                rest = parts[1] if len(parts) > 1 else ""
+                # `!round` rounds every numeric literal to `places` decimals,
+                # emitted as a `("!round", places)` sentinel `saturate` reads.
+                if kind == "!round":
+                    rules.append(("!round", _parse_fold_places(rest)))
+                    continue
+                ops = _parse_fold_ops(rest) if rest else None
                 modes = {
                     "!integers": ("integers",),
                     "!floats": ("floats",),
                     "!integersarefloats": ("integersarefloats",),
                     "!numbers": ("integers", "floats"),
                     "!successors": ("integers", "floats"),
-                }.get(body.strip())
+                }.get(kind)
                 if modes is None:
-                    raise ValueError(f"unknown constant_folding kind: {body.strip()!r}")
-                rules.extend(("!fold", m) for m in modes)
+                    raise ValueError(f"unknown constant_folding kind: {kind!r}")
+                ops_key = frozenset(ops) if ops is not None else None
+                rules.extend(("!fold", m, ops_key) for m in modes)
                 continue
             if "<=>" in body:
                 lhs, rhs = body.split("<=>", 1)
@@ -155,6 +168,57 @@ def parse_rewrites(path):
             else:
                 raise ValueError(f"rule has no => or <=>: {raw!r}")
     return rules
+
+
+def _parse_fold_ops(rest):
+    """Parse a `(params (ops (<op> …)))` block into the list of operator symbols
+    (the `ops` group's members), or None when absent. Mirrors `FoldingParams` in
+    `crate::constant_folding`: the wrapper must be `params`, `ops` takes a single
+    group, and every operator must be a leaf symbol."""
+    rest = rest.strip()
+    if not rest:
+        return None
+    sexp, _ = parse_sexp(tokenize(rest), 0)
+    if not isinstance(sexp, list) or not sexp or sexp[0] != "params":
+        raise ValueError(f"constant_folding params must be a (params …) block: {rest!r}")
+    ops = None
+    for child in sexp[1:]:
+        if not isinstance(child, list) or not child:
+            raise ValueError(f"malformed constant_folding param: {child!r}")
+        if child[0] != "ops":
+            raise ValueError(f"unknown constant_folding param key: {child[0]!r}")
+        if len(child) != 2:
+            raise ValueError("constant_folding: ops takes a single (op …) group")
+        group = child[1] if isinstance(child[1], list) else [child[1]]
+        for o in group:
+            if not isinstance(o, str):
+                raise ValueError(f"constant_folding: operator must be a leaf symbol: {o!r}")
+        ops = group
+    return ops
+
+
+def _parse_fold_places(rest):
+    """Parse a `(params (places N))` block into the integer decimal count, or 6 if
+    absent. Mirrors `FoldingParams::places` in `crate::constant_folding`."""
+    rest = rest.strip()
+    if not rest:
+        return 6
+    sexp, _ = parse_sexp(tokenize(rest), 0)
+    if not isinstance(sexp, list) or not sexp or sexp[0] != "params":
+        raise ValueError(f"constant_folding params must be a (params …) block: {rest!r}")
+    places = 6
+    for child in sexp[1:]:
+        if not isinstance(child, list) or not child:
+            raise ValueError(f"malformed constant_folding param: {child!r}")
+        if child[0] != "places":
+            raise ValueError(f"unknown constant_folding param key: {child[0]!r}")
+        if len(child) != 2 or not isinstance(child[1], str):
+            raise ValueError("constant_folding: places takes a single integer")
+        try:
+            places = int(child[1])
+        except ValueError:
+            raise ValueError(f"constant_folding: places must be an integer: {child[1]!r}")
+    return places
 
 
 # ---------- β-reduction (de Bruijn, $0 = innermost) ----------
@@ -473,6 +537,9 @@ def term_size(t):
 
 # Binary arithmetic operators the `constant_folding` directives collapse.
 ARITH_FOLD_OPS = ("+", "-", "*", "/")
+DEFAULT_FOLD_OPS = frozenset(ARITH_FOLD_OPS)
+UNARY_FOLD = {"sin": math.sin, "cos": math.cos, "tan": math.tan, "sqrt": math.sqrt}
+CONST_FOLD = {"pi": math.pi, "e": math.e, "tau": math.tau}
 
 
 def _leaf_nums(eg, eid):
@@ -546,9 +613,22 @@ def _eval_float(op, a, b):
     return repr(r) if math.isfinite(r) else None
 
 
-def _arith_sites(eg):
-    """Yield `(eid, op_sym, a_eid, b_eid)` for every `(binop a b)` e-node — a flat
-    `(op a b)` desugars to `app(app(sym(op), a), b)`."""
+def _eval_unary(op, x):
+    """Unary float-function fold (`sin cos tan sqrt`); declines on a domain error
+    or non-finite result. `repr` matches the Rust `{:?}` leaf form."""
+    f = UNARY_FOLD.get(op)
+    if f is None:
+        return None
+    try:
+        r = f(x)
+    except ValueError:
+        return None
+    return repr(r) if math.isfinite(r) else None
+
+
+def _arith_sites(eg, allowed):
+    """Yield `(eid, op_sym, a_eid, b_eid)` for every `(binop a b)` e-node whose
+    operator is in `allowed` — a flat `(op a b)` desugars to `app(app(sym(op), a), b)`."""
     for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
         for op, kids in list(eg.eclass_nodes.get(eid, ())):
             if op != "app" or len(kids) != 2:
@@ -558,9 +638,22 @@ def _arith_sites(eg):
                 if iop != "app" or len(ikids) != 2:
                     continue
                 op_eid, a_eid = ikids
-                fold_op = next((s for s in ARITH_FOLD_OPS if _eclass_has_sym(eg, op_eid, s)), None)
+                fold_op = next((s for s in allowed if _eclass_has_sym(eg, op_eid, s)), None)
                 if fold_op is not None:
                     yield eid, fold_op, a_eid, b_eid
+
+
+def _unary_sites(eg, allowed):
+    """Yield `(eid, op_sym, a_eid)` for every `(unop a)` e-node whose operator is
+    in `allowed` — a flat `(op a)` desugars to `app(sym(op), a)`."""
+    for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
+        for op, kids in list(eg.eclass_nodes.get(eid, ())):
+            if op != "app" or len(kids) != 2:
+                continue
+            f_eid, a_eid = kids
+            op_sym = next((s for s in allowed if _eclass_has_sym(eg, f_eid, s)), None)
+            if op_sym is not None:
+                yield eid, op_sym, a_eid
 
 
 def _int_as_float_step(eg):
@@ -574,17 +667,19 @@ def _int_as_float_step(eg):
     return unions
 
 
-def _fold_step(eg, modes):
+def _fold_step(eg, modes, ops):
     """One folding pass for the active `modes` (a subset of
-    {"integers", "floats", "integersarefloats"}), mirroring the Rust appliers:
-    integer folding on integer operands, float folding when a float operand is
-    present (or on every op under `integersarefloats`), plus the `n => n.0`
-    companion for `integersarefloats`."""
+    {"integers", "floats", "integersarefloats"}) over the operator set `ops`,
+    mirroring the Rust appliers: integer folding on integer operands, float
+    folding when a float operand is present (or on every op under
+    `integersarefloats`), the unary float functions and nullary constants (both
+    skipped in integer-only mode, like the Rust `UnOp`/`ConstOp` evals), plus the
+    `n => n.0` companion for `integersarefloats`."""
     iaf = "integersarefloats" in modes
     do_int = "integers" in modes
     do_float = "floats" in modes or iaf
     unions = _int_as_float_step(eg) if iaf else False
-    for eid, op, a_eid, b_eid in _arith_sites(eg):
+    for eid, op, a_eid, b_eid in _arith_sites(eg, ops & DEFAULT_FOLD_OPS):
         if do_int:
             ai, bi = _eclass_int(eg, a_eid), _eclass_int(eg, b_eid)
             if ai is not None and bi is not None:
@@ -599,6 +694,43 @@ def _fold_step(eg, modes):
                 r = _eval_float(op, af, bf)
                 if r is not None and eg.union(eid, eg.add(("sym", r), ())):
                     unions = True
+    if do_float:
+        # Unary float functions: in plain `!floats` they need a float operand;
+        # under `integersarefloats` every operand reads as a float.
+        for eid, op, a_eid in _unary_sites(eg, ops & set(UNARY_FOLD)):
+            af = _eclass_float(eg, a_eid)
+            if af is None or (not iaf and not _eclass_has_float(eg, a_eid)):
+                continue
+            r = _eval_unary(op, af)
+            if r is not None and eg.union(eid, eg.add(("sym", r), ())):
+                unions = True
+        # Nullary constants: a `pi`/`e`/`tau` leaf unions with its float value.
+        for name in ops & set(CONST_FOLD):
+            lit = eg.add(("sym", repr(CONST_FOLD[name])), ())
+            for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
+                if _eclass_has_sym(eg, eid, name) and eg.union(eid, lit):
+                    unions = True
+    return unions
+
+
+def _round_to(x, places):
+    """`x` rounded to `places` decimals, half away from zero — matching Rust's
+    `f64::round` (Python's `round` is banker's rounding, which would diverge)."""
+    scale = 10.0 ** places
+    y = x * scale
+    r = (math.floor(y + 0.5) if y >= 0 else math.ceil(y - 0.5)) / scale
+    return 0.0 if r == 0.0 else r  # normalise -0.0
+
+
+def _round_step(eg, places):
+    """Round every numeric-literal e-class to `places` decimals and union the
+    rounded literal in — mirrors the Rust `!round` applier, so near-equal floats
+    (and float noise) collapse onto one leaf."""
+    unions = False
+    for eid in list(set(eg.find(e) for e in eg.eclass_nodes)):
+        f = _eclass_float(eg, eid)
+        if f is not None and eg.union(eid, eg.add(("sym", repr(_round_to(f, places))), ())):
+            unions = True
     return unions
 
 
@@ -617,8 +749,12 @@ def saturate(eg, rules, max_iters, max_nodes, goal=None):
 
     Returns ("ok", iters) on goal-reached/fixpoint, ("iters", iters) if iteration
     cap hit, ("nodes", iters) if node cap hit."""
-    fold_modes = {r[1] for r in rules if r[0] == "!fold"}
-    pattern_rules = [r for r in rules if r[0] != "!fold"]
+    fold_specs = [r for r in rules if r[0] == "!fold"]
+    fold_modes = {r[1] for r in fold_specs}
+    fold_ops = frozenset().union(*(r[2] if r[2] is not None else DEFAULT_FOLD_OPS for r in fold_specs)) if fold_specs else frozenset()
+    # `!round` places (smallest wins if several are declared — strictest snap).
+    round_places = min((r[1] for r in rules if r[0] == "!round"), default=None)
+    pattern_rules = [r for r in rules if r[0] not in ("!fold", "!round")]
     for it in range(max_iters):
         if eg.total_nodes() > max_nodes:
             return ("nodes", it)
@@ -658,7 +794,11 @@ def saturate(eg, rules, max_iters, max_nodes, goal=None):
                 unions_made = True
 
         # 3. Numeric folding (constant_folding directive).
-        if fold_modes and _fold_step(eg, fold_modes):
+        if fold_modes and _fold_step(eg, fold_modes, fold_ops):
+            unions_made = True
+
+        # 4. Rounding (`!round` directive).
+        if round_places is not None and _round_step(eg, round_places):
             unions_made = True
 
         eg.rebuild()

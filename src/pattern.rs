@@ -32,19 +32,17 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// because cost accounting reads it on the hot path. Maintained incrementally
     /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// True iff `?#k` is in the freshest cohort. `expand` flips all
-    /// pre-existing vars to false and inserts new children as true; `reuse`
-    /// flips `0..drop_idx` to false (including the kept slot). Search skips
-    /// `Reuse(i, j)` only when *both* are false — that pair would re-merge
-    /// cohorts a prior action already committed to (duplicate canonical).
-    pub var_reusable: Vec<bool>,
-    /// True iff `?#k` is committed to never being expanded again (the
-    /// best-first freeze rule). Maintained here purely as index-aligned
-    /// bookkeeping — `expand`/`reuse`/`concretize` shift the bits to track
-    /// renumbering; the *policy* of which bits to set lives in
-    /// `SearchState::apply_action`. Excluded from `Pattern`'s `Eq`/`Hash`,
-    /// which key on syntax only.
+    /// Per-var commit flag (expand axis): `true` at each committed slot — a
+    /// merged block or an expand-frozen argument, both non-expandable — `false`
+    /// at a live hole. Reuse eligibility lives separately in `reuse_pairs`.
     pub var_frozen: Vec<bool>,
+    /// Best-first reuse-order canonicalization: the reuse pairs `(i, j)` (`i < j`)
+    /// currently allowed. A reuse is permitted only if its pair is in here.
+    /// `reuse(i, j)` stales (removes) every pair lexicographically before
+    /// `(i, j)`, then drops the merged-away var's pairs. `expand` stales every
+    /// pre-existing pair (both endpoints predate it) and repopulates with exactly
+    /// the pairs that involve a new child. Always in the current var-index space.
+    pub reuse_pairs: Vec<(usize, usize)>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -59,9 +57,16 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             vars: vec![vec![0.into()]],
             var_depth: vec![0],
             var_occurrences: vec![1],
-            var_reusable: vec![true],
             var_frozen: vec![false],
+            reuse_pairs: vec![],
         }
+    }
+
+    /// The hole mask: `true` at each expand-banned slot. Used as the
+    /// `SeenTracker` dedup key (flexibility is measured by the expand-banned set,
+    /// since those slots restrict future expansion).
+    pub fn frozen_mask(&self) -> Vec<bool> {
+        self.var_frozen.clone()
     }
 
     /// Expands the variable at `var_idx` with `target`. New children are inserted
@@ -76,32 +81,24 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// When `?#var_idx` occupies multiple positions (from a prior `reuse`), every
     /// occurrence is expanded *independently*: each gets its own copy of the new
     /// enode and its own freshly-created child nodes. The pattern stays a pure
-    /// tree — no node is shared between occurrences — so `vars[var_idx+j]` ends up
-    /// with one id per occurrence rather than a single DAG-shared id.
+    /// tree — no node is shared between occurrences — so each new child var ends
+    /// up with one id per occurrence rather than a single DAG-shared id.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         // Per-occurrence structural depths, snapshotted before any mutation.
         let depths = self.occurrence_depths();
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_occ = self.var_occurrences.remove(var_idx);
-        self.var_reusable.remove(var_idx);
-        // Index-align the freeze bits; the expanded var's own bit is dropped
-        // (it had to be non-frozen to be expanded) and each new child starts
-        // non-frozen below.
+        // Drop the expanded var's own state (it had to be non-frozen to be
+        // expanded); each new child is inserted as `Expandable` below.
         self.var_frozen.remove(var_idx);
-        // Any expansion flips every *previously existing* var to non-reusable;
-        // only the children we insert below start out reusable. See
-        // `var_reusable` docs.
-        for r in &mut self.var_reusable {
-            *r = false;
-        }
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
 
         // Shift names of trailing vars: a var currently at post-removal index p
-        // will end up at post-insertion index p + num_children, so rename its leaves.
-        // (Skip the no-op case num_children == 1 where indices don't move.)
+        // will end up at post-insertion index p + num_children, so rename its
+        // leaves. (Skip the no-op case num_children == 1 where indices don't move.)
         if num_children != 1 {
             for p in var_idx..self.vars.len() {
                 let shifted = var_node::<F, O>((p + num_children) as u32);
@@ -111,7 +108,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
 
-        // Insert the `num_children` new var slots (names var_idx..var_idx+k).
+        // Insert the `num_children` new var slots at `var_idx` (names
+        // var_idx..var_idx+k), preserving DFS first-appearance numbering.
         // Positions are filled in below — one freshly-created node per occurrence
         // of the expanded var, since we never share nodes across occurrences.
         for j in 0..num_children {
@@ -121,9 +119,24 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             // The new enode replaces every occurrence of the parent var, so the
             // syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
-            self.var_reusable.insert(var_idx + j, true);
             self.var_frozen.insert(var_idx + j, false);
         }
+
+        // Maintain reuse_pairs: every pre-existing pair joins two vars that both
+        // predate this expand, so reusing them now would be a reuse-before-expand
+        // diamond (reachable by reusing first) — stale them all. Keep only pairs
+        // that involve a new child, which could not have existed before.
+        let n_new = self.vars.len();
+        let is_new = |q: usize| var_idx <= q && q < var_idx + num_children;
+        let mut np: Vec<(usize, usize)> = Vec::new();
+        for a in 0..n_new {
+            for b in (a + 1)..n_new {
+                if is_new(a) || is_new(b) {
+                    np.push((a, b));
+                }
+            }
+        }
+        self.reuse_pairs = np;
 
         // Expand each occurrence of the var independently: build its own enode
         // with its own freshly-named Var children. No node is shared between
@@ -143,6 +156,87 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             let new_node = F::make(F::map_discriminant(disc, OpWithVar::Node), new_children);
             self.pattern[var_id] = new_node;
         }
+    }
+
+    /// Renumbers metavars into DFS first-appearance order. `expand`/`reuse`
+    /// already maintain this invariant incrementally, so this is the identity on
+    /// patterns they produce; it's provided as an explicit, order-source-agnostic
+    /// canonicalization to run on a result before output/rewrite (e.g. if a
+    /// future search numbers vars in a different order). Returns `perm` (old var
+    /// index -> new canonical index) so callers can remap index-aligned data such
+    /// as match factor slots.
+    pub fn canonicalize_vars(&mut self) -> Vec<usize> {
+        let n = self.vars.len();
+        // RevExpr position -> owning var index.
+        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
+        for (k, ids) in self.vars.iter().enumerate() {
+            for &id in ids {
+                pos_to_k.insert(usize::from(id), k);
+            }
+        }
+        // DFS pre-order from the root (Id 0), ranking vars at first appearance.
+        let mut perm = vec![usize::MAX; n];
+        let mut next = 0usize;
+        let mut stack = vec![Id::from(0)];
+        while let Some(id) = stack.pop() {
+            if let Some(&k) = pos_to_k.get(&usize::from(id))
+                && perm[k] == usize::MAX
+            {
+                perm[k] = next;
+                next += 1;
+            }
+            for &c in self.pattern[id].children().iter().rev() {
+                stack.push(c);
+            }
+        }
+        debug_assert!(perm.iter().all(|&p| p != usize::MAX), "every var must appear in the tree");
+
+        // Reorder the index-aligned vecs (new[perm[k]] = old[k]).
+        let mut new_vars = vec![Vec::new(); n];
+        let mut new_depth = vec![0u32; n];
+        let mut new_occ = vec![0usize; n];
+        let mut new_state = vec![false; n];
+        for (k, &nk) in perm.iter().enumerate() {
+            new_vars[nk] = std::mem::take(&mut self.vars[k]);
+            new_depth[nk] = self.var_depth[k];
+            new_occ[nk] = self.var_occurrences[k];
+            new_state[nk] = self.var_frozen[k];
+        }
+        // Rename the leaves to the canonical var names.
+        for (k, ids) in new_vars.iter().enumerate() {
+            let name = var_node::<F, O>(k as u32);
+            for &id in ids {
+                self.pattern[id] = name.clone();
+            }
+        }
+        self.vars = new_vars;
+        self.var_depth = new_depth;
+        self.var_occurrences = new_occ;
+        self.var_frozen = new_state;
+        self.reuse_pairs.clear();
+        perm
+    }
+
+    /// Removes var `removed` from `reuse_pairs`: drops every pair that touches it
+    /// and shifts higher indices down by one, keeping the set index-aligned after
+    /// the var is deleted (by `reuse`'s merge or by `concretize`).
+    fn drop_var_from_reuse_pairs(&mut self, removed: usize) {
+        self.reuse_pairs = self
+            .reuse_pairs
+            .iter()
+            .filter_map(|&(a, b)| {
+                let f = |q: usize| {
+                    if q == removed {
+                        None
+                    } else if q < removed {
+                        Some(q)
+                    } else {
+                        Some(q - 1)
+                    }
+                };
+                Some((f(a)?, f(b)?))
+            })
+            .collect();
     }
 
     /// Unifies two variables. The lower-indexed one is kept; the higher one is
@@ -169,17 +263,13 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth[keep_idx] = merged_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Reusing (i, j) commits to a canonical order: any var strictly below
-        // the *higher* of the two participating indices becomes non-reusable,
-        // so future reuses must involve indices ≥ drop_idx (including the
-        // kept slot itself, since we've moved past it).
-        for r in &mut self.var_reusable[..drop_idx] {
-            *r = false;
-        }
-        self.var_reusable.remove(drop_idx);
-        // The merged var is frozen iff *either* participant was
+        // The merged slot is committed iff either input was.
         self.var_frozen[keep_idx] = self.var_frozen[keep_idx] || self.var_frozen[drop_idx];
         self.var_frozen.remove(drop_idx);
+        // reuse_pairs: stale every pair lexicographically before (keep, drop),
+        // then drop the merged-away var's pairs and shift the rest down.
+        self.reuse_pairs.retain(|&pr| pr >= (keep_idx, drop_idx));
+        self.drop_var_from_reuse_pairs(drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -208,8 +298,8 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let var_positions = self.vars.remove(var_idx);
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
-        self.var_reusable.remove(var_idx);
         self.var_frozen.remove(var_idx);
+        self.drop_var_from_reuse_pairs(var_idx);
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);
@@ -431,6 +521,49 @@ mod tests {
         p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
         assert_eq!(p.to_string(), "(+ (- ?#0 ?#1) ?#2)");
         assert_eq!(p.vars.len(), 3);
+        assert_vars_canonical(&p);
+    }
+
+    #[test]
+    fn canonicalize_vars_is_identity_on_canonical_patterns() {
+        // `expand`/`reuse` already maintain DFS first-appearance order, so
+        // canonicalize_vars must leave their output untouched (and report the
+        // identity permutation).
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
+        p.expand(0, &op("+", 2));
+        p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
+        p.reuse(1, 2); // (+ (- ?#0 ?#1) ?#1)
+        let before = p.to_string();
+        let depth = p.var_depth.clone();
+        let occ = p.var_occurrences.clone();
+        let perm = p.canonicalize_vars();
+        assert_eq!(perm, (0..p.vars.len()).collect::<Vec<_>>(), "already canonical => identity perm");
+        assert_eq!(p.to_string(), before);
+        assert_eq!(p.var_depth, depth);
+        assert_eq!(p.var_occurrences, occ);
+        assert_vars_canonical(&p);
+    }
+
+    #[test]
+    fn canonicalize_vars_reorders_non_canonical_numbering() {
+        // Build `(+ ?#0 ?#1)`, then manually swap the two vars' names/arrays so
+        // the leaves read `(+ ?#1 ?#0)` (not DFS order). canonicalize_vars must
+        // renumber back to `(+ ?#0 ?#1)` and report the swap permutation.
+        let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
+        p.expand(0, &op("+", 2));
+        p.vars.swap(0, 1);
+        p.var_depth.swap(0, 1);
+        p.var_occurrences.swap(0, 1);
+        p.var_frozen.swap(0, 1);
+        for (k, ids) in p.vars.clone().iter().enumerate() {
+            for &id in ids {
+                p.pattern[id] = var_node::<OpChildren, Op>(k as u32);
+            }
+        }
+        assert_eq!(p.to_string(), "(+ ?#1 ?#0)");
+        let perm = p.canonicalize_vars();
+        assert_eq!(perm, vec![1, 0]);
+        assert_eq!(p.to_string(), "(+ ?#0 ?#1)");
         assert_vars_canonical(&p);
     }
 

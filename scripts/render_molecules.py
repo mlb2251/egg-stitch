@@ -8,7 +8,8 @@ per-iteration cost trajectory this renderer draws:
   ``enum-dsrs-at-start`` -- DSRs canonicalise the egraph once, then search
                             runs rule-free (the "Stitch on E-graph min term"
                             baseline);
-  ``enum-100000``        -- DSRs kept live during search (E-Stitch).
+  ``smc-1000``           -- DSRs kept live during search (E-Stitch), with the
+                            SMC sampler at the canonical 1000-particle point.
 
 Each family gets its own figure, with compression ratio on the y axis and
 step number on the x axis. Step 0 is the normalized starting point
@@ -30,7 +31,7 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-from expts.tables import TABLE5_DOMAINS, TABLE5_ENUM_POINT  # noqa: E402
+from expts.tables import TABLE5_DOMAINS, TABLE5_SMC_POINT  # noqa: E402
 
 RESULTS_PATH = PROJECT_ROOT / "results" / "table5.json"
 DEFAULT_OUT_DIR = PROJECT_ROOT / "figures" / "molecules"
@@ -39,7 +40,7 @@ DEFAULT_MAX_STEP = 4
 # Logical method name -> the table5 method key holding its run data.
 METHOD_DATA_KEY = {
     "DSR-canon": "enum-dsrs-at-start",
-    "search-DSR": f"enum-{TABLE5_ENUM_POINT}",
+    "search-DSR": f"smc-{TABLE5_SMC_POINT}",
 }
 METHODS = ("DSR-canon", "search-DSR")
 METHOD_COLORS = {

@@ -48,6 +48,10 @@ RULES_BY_REL = {
     "simple-arithmetic/const_fold_floats.out.json": "data/domains/simple-arithmetic/const_fold_floats.rewrites",
     "simple-arithmetic/const_fold_int_as_float.out.json": "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites",
     "simple-arithmetic/fold_after_rewrite.out.json": "data/domains/simple-arithmetic/fold_after_rewrite.rewrites",
+    "simple-arithmetic/fold_ops_trig.out.json": "data/domains/simple-arithmetic/fold_ops_trig.rewrites",
+    "simple-arithmetic/fold_ops_restrict.out.json": "data/domains/simple-arithmetic/fold_ops_restrict.rewrites",
+    "simple-arithmetic/fold_round6.out.json": "data/domains/simple-arithmetic/fold_round6.rewrites",
+    "simple-arithmetic/fold_round3.out.json": "data/domains/simple-arithmetic/fold_round3.rewrites",
     "test/arith_unify.out.json": "data/test/arith.rewrites",
     "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
     "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",
@@ -62,6 +66,25 @@ RULES_BY_REL = {
     "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
 }
 
+# epfl-circuits (op-children AIG cones): the factoring DSRs (De Morgan +
+# distributivity) are what make the rewritten cones equivalent, so β alone can't
+# bridge them -- the `<circuit>.factoring.live` fixtures are checked against that
+# rule file (the no-rules `<circuit>.baseline` ones stay β-only). Blessed by
+# `tests/epfl_circuits_test.rs`.
+RULES_BY_REL.update({
+    f"epfl-circuits/{p.name}": "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+    for p in sorted((ROOT / "epfl-circuits").glob("*.factoring.live.out.json"))
+})
+
+# The dsrs-only-at-start fixtures canonicalise the corpus deeply before
+# abstracting, so re-deriving the equivalence needs far more saturation than is
+# practical here (30 iters isn't close, and raising it is too slow for CI). Skip
+# them in the equivalence sweep; they stay regression-locked by the snapshot test.
+SKIP_REL = {
+    str(p.relative_to(ROOT))
+    for p in (ROOT / "epfl-circuits").glob("*.factoring.at-start.out.json")
+}
+
 
 def main():
     paths = sorted(ROOT.rglob("*.out.json"))
@@ -73,6 +96,8 @@ def main():
     batches = {}
     for p in paths:
         rel = str(p.relative_to(ROOT))
+        if rel in SKIP_REL:
+            continue
         rules = RULES_BY_REL.get(rel)
         batches.setdefault(rules, []).append(p)
     overall = 0

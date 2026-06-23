@@ -1,0 +1,4 @@
+// Exercises the `(params (ops …))` operator list with the unary trig function
+// `cos` and the constant `pi`: `(cos pi)` folds to `-1.0`, unifying the first
+// program with the literal `-1.0` the other two write.
+constant_folding: !integersarefloats (params (ops (cos pi)))

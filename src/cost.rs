@@ -55,6 +55,26 @@ pub struct SearchStateWithCostSelection<F: crate::lang::LanguageFamily, O: crate
     pub selection: CostSelection,
 }
 
+impl<F: LanguageFamily, O: StitchOp> SearchStateWithCostSelection<F, O> {
+    /// Canonicalizes the winning state's variable order (DFS first-appearance)
+    /// and remaps the selection's `variable_indices` by the same permutation.
+    /// Run on the winner before output/rewrite. We permute the existing
+    /// selection rather than re-running `compute_cost_and_select` because the
+    /// optimiser breaks ties between equal-cost candidates nondeterministically
+    /// (hash-order dependent) — recomputing could pick a different candidate and
+    /// make output flaky. The permutation preserves the exact selection (cost is
+    /// var-order invariant), just renumbered.
+    pub fn canonicalize(&mut self) {
+        let perm = self.state.canonicalize_vars();
+        let vi = &self.selection.candidate.variable_indices;
+        let mut new_vi = vec![Vec::new(); vi.len()];
+        for (k, &nk) in perm.iter().enumerate() {
+            new_vi[nk] = vi[k].clone();
+        }
+        self.selection.candidate.variable_indices = new_vi;
+    }
+}
+
 /// Build a copy of `eclass` in `egraph` with every free DB leaf permuted onto
 /// wrap-lam slots in preparation for the call-site β at `?#k`. For each free
 /// `$n` at recursion depth `initial_depth` (so its index relative to our root
@@ -563,7 +583,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
 
 /// Optimistic analysis producing a lower bound on achievable size. At a match
 /// root, the rewrite collapses to a single stub node plus the captured
-/// arguments at frozen-var slots (those with `var_frozen[k]`) — those holes are
+/// arguments at frozen-var slots (those that are holes, `var_frozen[k]`) — those holes are
 /// committed to staying, so their args appear verbatim at every call site and
 /// must be paid for. Non-frozen vars can still be expanded into the body, so
 /// they contribute nothing here. Min taken across substs.
@@ -598,9 +618,13 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
     }
 }
 
-/// Computes an optimistic lower bound on corpus size. Each match contributes a
-/// 1-node stub plus the minimum total size of its frozen-var arguments (those
-/// can no longer shrink via further expansion). Reuses allocations in `scratch`.
+/// Optimistic lower bound on the objective `corpus + body`. Corpus side: each
+/// match contributes a 1-node stub plus the minimum total size of its frozen-var
+/// arguments (those can no longer shrink via further expansion). Body side: the
+/// current pattern size — monotone non-decreasing under expand/reuse and a lower
+/// bound on the final `compute_body_size_with_ho` (the HO term is non-negative),
+/// so it both tightens the bound and, being unbounded in pattern depth,
+/// guarantees the search tree is finite. Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
     scratch.rewrite.fill(search_state);
     let var_frozen = &search_state.pattern.var_frozen;
@@ -627,7 +651,7 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         sizes.mark_dirty(m.root_eclass);
     }
     sizes.solve();
-    sizes.get(root) as usize
+    sizes.get(root) as usize + compute_pattern_size::<F, O>(&search_state.pattern, &egraph.analysis.weights)
 }
 
 /// Consumes `egraph` and unions each match root with a `fn_name(args...)`

@@ -61,13 +61,23 @@ def _sweep_runners(
     return bfs + smc
 
 
-# Runner rosters — Table 1/3 share the no-Stitch roster, Table 2/4 share
-# the with-Stitch roster.
+# Best-first operating point for the single dsrs-only-at-start baseline row
+# (the "BFS@start" column on the DSR tables and table5). It collapses to a
+# small rule-free e-graph, so we just let best-first run essentially to
+# exhaustion — the step budget is set far above what any input needs.
+BASELINE_BFS_STEPS = 10_000_000
+
+# Runner rosters — Table 2/4 share the with-Stitch roster; Table 1/3 (DSRs,
+# no Stitch) add a "dsrs-only-at-start" baseline: best-first that canonicalises
+# with the DSRs once instead of keeping them live (the BFS@start column).
 BASE_RUNNERS: tuple[tuple[str, object], ...] = _sweep_runners() + (
     ("babble", Babble()),
 )
 RUNNERS_WITH_STITCH: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
     ("stitch", Stitch()),
+)
+DSR_RUNNERS: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
+    ("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True)),
 )
 
 
@@ -157,10 +167,11 @@ def _run_table(
 
 
 def table1() -> Path:
-    """Run Enum, SMC, and babble on the Table 1 domains with DSRs."""
+    """Run Enum, SMC, babble, and the dsrs-only-at-start baseline on the
+    Table 1 domains with DSRs."""
     return _run_table(
         domains=TABLE1_DOMAINS,
-        runners=BASE_RUNNERS,
+        runners=DSR_RUNNERS,
         num_abstractions=1,
         use_dsrs=True,
         folder_prefix="table1",
@@ -184,7 +195,7 @@ def table3() -> Path:
     """Run the Table 1 setup with 20 stacked abstractions."""
     return _run_table(
         domains=TABLE1_DOMAINS,
-        runners=BASE_RUNNERS,
+        runners=DSR_RUNNERS,
         num_abstractions=20,
         use_dsrs=True,
         folder_prefix="table3",
@@ -217,10 +228,9 @@ TABLE5_NUM_ABSTRACTIONS = 4
 # operating point for this domain.
 TABLE5_BFS_SWEEP = BFS_STEP_SWEEP + (100_000,)
 TABLE5_ENUM_POINT = 100_000
-# Best-first operating point for the single dsrs-only-at-start baseline row.
-# It collapses to a small rule-free e-graph and converges well before 10k, so
-# extra steps don't change it (kept at render_tables' canonical 10k point).
-BASELINE_BFS_STEPS = 10_000
+# Representative SMC operating point for this domain (matches the canonical
+# ``TABLE_SMC_PARTICLES`` point used by the tables renderer).
+TABLE5_SMC_POINT = 1_000
 
 
 def _table5_runners() -> tuple[tuple[str, object], ...]:

@@ -428,6 +428,50 @@ fn constant_folding_integers_are_floats() {
     check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_int_as_float.json", &["-r", "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"], true);
 }
 
+/// `(params (ops (cos pi)))`: the operator list pulls in the unary trig function
+/// `cos` and the constant `pi`. `(cos pi)` folds — `pi => 3.141592653589793`,
+/// then `cos(…) => -1.0` — unifying the first program with the literal `-1.0` the
+/// others write, so the abstraction bakes the angle in: `(f (g -1.0 y z) ?#0)`.
+/// Pins that the operator list reaches `sin`/`cos`/`pi`, not just arithmetic.
+#[test]
+fn constant_folding_ops_list_trig() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_trig.json", &["-r", "data/domains/simple-arithmetic/fold_ops_trig.rewrites"], true);
+}
+
+/// `(params (ops (+)))`: the operator list restricts folding to `+` only. `(+ 1 2)`
+/// folds to `3` (unifying with the literal `3`, baked into the abstraction), but
+/// `(* 4 5)` — its operator left out of the list — does NOT fold, so it fails to
+/// unify with the literal `20` the other programs write and must be passed as an
+/// argument (arity 2). Pins that the list is honored as an allowlist: the `+`
+/// side bakes in, the excluded `*` side does not.
+#[test]
+fn constant_folding_ops_list_restricts() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_restrict.json", &["-r", "data/domains/simple-arithmetic/fold_ops_restrict.rewrites"], true);
+}
+
+/// `!round (params (places 6))`, exercising both directions. POSITIVE: the first
+/// `g` arg (`0.7071067811865476` vs `0.707107`) rounds to the same value, so all
+/// three programs unify on it (`matches 3`) and it is baked into the abstraction.
+/// NEGATIVE: the second arg (`0.1234561` vs `0.1234567`) is close but rounds to
+/// `0.123456` vs `0.123457` at 6 places, so it does NOT unify and stays a parameter
+/// — giving the arity-2 `(f (g 0.7071067811865476 ?#0 z) ?#1)` (the baked literal
+/// is one representative of the unified e-class).
+#[test]
+fn constant_folding_round_places6() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_round6.json", &["-r", "data/domains/simple-arithmetic/fold_round6.rewrites"], true);
+}
+
+/// `!round (params (places 3))`: the `places` argument controls granularity, again
+/// both directions. POSITIVE: the first `g` arg (`0.7071`/`0.7072`/`0.707`) all
+/// collapse to `0.707` at 3 places (they would NOT unify at 6), so all three unify
+/// and it is baked in. NEGATIVE: the second arg (`0.1114` vs `0.1116`) is close but
+/// rounds to `0.111` vs `0.112`, so it stays a parameter — giving the arity-2
+/// `(f (g 0.7072 ?#0 z) ?#1)`.
+#[test]
+fn constant_folding_round_places3() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_round3.json", &["-r", "data/domains/simple-arithmetic/fold_round3.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
@@ -839,6 +883,71 @@ fn crossed_wrap_collapse() {
 #[test]
 fn cross_depth_ho_capture() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_ho_capture.json", LAMBDA, true);
+}
+
+/// Regression (minimised from `cogsci/dials` DSR + `--max-forced-expansion 3`):
+/// a 3-way metavar reuse whose three occurrences are an *early single* and a
+/// *later sibling pair* at a deeper level. The optimal abstraction reuses `?#1`
+/// three times:
+///
+/// ```text
+/// (C ?#0 (T (T (T l (M 1 0 -0.5 0)) (M ?#1 (/ pi 4) 0 0))
+///           (M 1 0 (* ?#1 (* 0.5 (cos (/ pi 4)))) (* ?#1 (* 0.5 (sin (/ pi 4)))))))
+/// ```
+///
+/// The DSRs (`reroll_2_x_r` / `r3roll_2_x`) re-root the corpus through `repeat`
+/// wrappers, so best-first reaches the bare `(C ?#0 …)` form via a path that has
+/// already merged some other vars. A reuse canonical-ordering that stales *every*
+/// lower-indexed var on each merge then marks the middle (`cos`) occurrence
+/// non-absorbable before it can be merged — stranding it, so the search settles
+/// for a worse 2-way abstraction (the `M`-position merged with `sin`, `cos` left
+/// alone). This pins that the 3-way stays reachable: the body must reuse one
+/// metavar three times. Best-first is deterministic, so this is exact.
+#[test]
+fn dials_reroll_three_way_reuse() {
+    let input = "data/test/dials_reroll_3way.json";
+    let args = &["--rules", "data/test/dials_reroll_3way.rewrites", "--max-forced-expansion", "3", "--max-arity", "2"];
+    let v = run_backend("best-first", input, args);
+    let bodies = abstraction_bodies(&v);
+    assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
+    // The 3-way reuse means one metavar (`#1`) occurs three times in the body;
+    // the regressed 2-way abstraction has a max of two.
+    let body = &bodies[0];
+    let max_reuse = (0..8).map(|k| body.matches(&format!("#{k}")).count()).max().unwrap_or(0);
+    assert!(max_reuse >= 3, "expected a metavar reused 3× (the 3-way reuse), got max {max_reuse} in body: {body}");
+}
+
+/// Regression (minimised from `cogsci/nuts-bolts` DSR): a 3-way reuse that the
+/// search can only reach via a *non-canonical* merge order, because dominance and
+/// expand order force the hand. The optimal abstraction reuses `?#0` three times:
+///
+/// ```text
+/// (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))
+/// ```
+///
+/// Two of the three occurrences — the `repeat` count and the `(/ (* 2 pi) ?#0)`
+/// angle — are always equal, so reuse *dominance* force-merges them as a single
+/// successor the moment they exist, which is *before* the third occurrence
+/// (`(tan (/ pi ?#0))`, created by a deeper, later expand) is even present. So the
+/// 3-way can only be completed by either (a) prepending the late `tan` occurrence
+/// to the already-merged count/angle block, or (b) — with dominance off — a
+/// "late" merge of two post-expand-stale slots. This distinguishes it from
+/// `dials_reroll_three_way_reuse`, whose 3-way *is* reachable in canonical order:
+/// a reuse canonicalization can pass dials yet still strand this one.
+///
+/// Pins that the 3-way stays reachable (one metavar reused three times) despite
+/// the forced non-canonical order. The lone `scale_1_T` self-loop rule supplies
+/// the `(T … (M 1.0 0 0 0))` wrapper nesting that sets up the expand order.
+#[test]
+fn nuts_bolts_dominance_three_way_reuse() {
+    let input = "data/test/nuts_bolts_3way_reuse.json";
+    let args = &["--rules", "data/test/nuts_bolts_3way_reuse.rewrites", "--max-arity", "2"];
+    let v = run_backend("best-first", input, args);
+    let bodies = abstraction_bodies(&v);
+    assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
+    let body = &bodies[0];
+    let max_reuse = (0..8).map(|k| body.matches(&format!("#{k}")).count()).max().unwrap_or(0);
+    assert!(max_reuse >= 3, "expected a metavar reused 3× (the 3-way reuse), got max {max_reuse} in body: {body}");
 }
 
 /// Hand-built `data/test/` corpora whose rule sets each introduce an identity

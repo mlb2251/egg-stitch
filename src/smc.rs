@@ -101,7 +101,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                     dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
                     continue;
                 }
-                SuccessorEnum::All(actions) => actions,
+                // SMC keeps creation order (`freeze_rule = false`), so the freeze
+                // rule is inert — `apply_action` ignores `rank` below.
+                SuccessorEnum::All { actions, .. } => actions,
             };
             if actions.is_empty() {
                 dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
@@ -115,7 +117,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             }
             for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
-                    let child = state.apply_action(&action, &shared);
+                    let child = state.apply_action(&action, &shared, true, None);
                     dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
                 }
             }
@@ -248,6 +250,12 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
     lower_bound_pruner.print_stats();
+
+    // Canonicalize the winner's var numbering (DFS first-appearance) before
+    // output.
+    if let Some((_, pair)) = best_so_far.as_mut() {
+        pair.canonicalize();
+    }
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, best))) = (best_found_at, best_so_far.as_ref()) {

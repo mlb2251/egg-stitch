@@ -142,8 +142,10 @@ impl<O: StitchOp> FromOp for LambdaCalcLanguage<O> {
             (LambdaCalcDisc::Lam, &[b]) => Self::Lam([b]),
             (LambdaCalcDisc::Programs, _) => Self::Programs(children),
             (LambdaCalcDisc::Leaf(o), &[]) => Self::Leaf(o),
-            // Multi-arity leaves get curried automatically so RecExpr/Pattern parsers
-            // (which call `from_op` once per node) yield the appified shape directly.
+            // A leaf op applied to children isn't a single node here. The parsers
+            // (`parse_program` / `parse_pattern_ast`) appify into curried `App`
+            // chains before constructing, so they never reach `from_op` with this
+            // shape; anything that does is a caller bug.
             (LambdaCalcDisc::Leaf(_), _) => panic!("multi-arity application of {op:?} can't be a single LambdaCalcLanguage node; appify first"),
             (LambdaCalcDisc::App, _) | (LambdaCalcDisc::Lam, _) => panic!("{op:?} expects fixed arity, got {} children", children.len()),
         })

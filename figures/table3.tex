@@ -4,15 +4,15 @@
 \toprule
 & \multicolumn{2}{c}{Size} & \multicolumn{4}{c}{Compression Ratio} & \multicolumn{4}{c}{Time (s)} \\
 \cmidrule(lr){2-3} \cmidrule(lr){4-7} \cmidrule(lr){8-11}
-Domain & Original & E-graph min & BFS & SMC & babble & Stitch & BFS & SMC & babble & Stitch \\
+Domain & Original & E-graph min & BFS & SMC & BFS/MT & babble & BFS & SMC & BFS/MT & babble \\
 \midrule
-Nuts \& Bolts & 19008 & 19008 & \textbf{14.86} & 13.43 & 11.76 & \textbf{14.86}$^{\star}$ & 10.118 & 13.796 & 33.818 & \textbf{0.099}$^{\star}$ \\
-Dials & 35712 & 20582 & \textbf{10.53} & 10.52 & 8.37 & 7.94$^{\star}$ & 0.958 & 1.284 & 71.670 & \textbf{0.450}$^{\star}$ \\
-Wheels & 35426 & 30256 & 6.85 & \textbf{6.95} & 6.68 & 6.17$^{\star}$ & 3.444 & 6.625 & 62.368 & \textbf{0.413}$^{\star}$ \\
-Furniture & 42935 & 37027 & 6.97 & \textbf{6.98} & 4.40 & 6.64$^{\star}$ & 1.092 & 13.317 & 101.243 & \textbf{0.581}$^{\star}$ \\
-List & 523 & 522 & \textbf{1.20} & \textbf{1.20} & 1.09 & 1.18$^{\star}$ & 5.169 & 10.762 & 160.924 & \textbf{1.672}$^{\star}$ \\
-Physics & 518 & 518 & \textbf{1.45} & \textbf{1.45} & 1.42 & 1.43$^{\star}$ & 1.702 & 4.161 & 17.359 & \textbf{0.373}$^{\star}$ \\
+Nuts \& Bolts & 19008 & 19008 & \textbf{14.86} & 13.43 & \textbf{14.86} & 11.76 & 10.995 & 13.786 & \textbf{0.093} & 33.245 \\
+Dials & 35712 & 20582 & \textbf{10.53} & \textbf{10.53} & \textbf{10.53} & 8.37 & 0.597 & 1.262 & \textbf{0.204} & 71.759 \\
+Wheels & 35426 & 30256 & 6.85 & \textbf{6.97} & 6.65 & 6.68 & 2.377 & 6.834 & \textbf{0.553} & 62.319 \\
+Furniture & 42935 & 37027 & 6.94 & \textbf{6.99} & 6.94 & 4.40 & 2.072 & 12.936 & \textbf{0.778} & 101.323 \\
+List & 523 & 522 & \textbf{1.20} & \textbf{1.20} & 1.19 & 1.09 & 5.246 & 10.565 & \textbf{4.420} & 161.679 \\
+Physics & 518 & 518 & \textbf{1.45} & \textbf{1.45} & 1.44 & 1.42 & 1.699 & 4.062 & \textbf{0.951} & 17.305 \\
 \midrule
-Geo. mean &  &  & \textbf{4.85} & 4.78 & 4.06 & 4.49$^{\star}$ & 2.616 & 6.419 & 59.133 & \textbf{0.434}$^{\star}$ \\
+Geo. mean &  &  & \textbf{4.84} & 4.78 & 4.81 & 4.06 & 2.570 & 6.357 & \textbf{0.570} & 58.992 \\
 \bottomrule
 \end{tabular}
