@@ -654,21 +654,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.matches.iter().any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
     }
 
-    /// Heaviest single factor's row count (max over every match's factors).
-    ///
-    /// The commutativity-blowup signature: one entangled factor holding many
-    /// equivalent parse trees as rows. Max over factors (not summed, nor the
-    /// `num_substs` product) spares high-usage patterns, whose matches each have
-    /// tiny 1-row factors; and being a row count, not a size-weighted mass, it
-    /// doesn't penalise factors that merely bind large concrete subterms.
-    pub fn max_factor_rows(&self) -> usize {
-        self.matches.iter().flat_map(|m| m.factors.iter()).map(|f| f.rows.len()).max().unwrap_or(0)
-    }
-
     /// Whether this state is within the `--max-match-set` row cap (`true` when
     /// unset). The blowup guard both drivers apply when admitting a successor.
     pub fn within_match_set_cap(&self, max_match_set: Option<usize>) -> bool {
-        max_match_set.is_none_or(|cap| self.max_factor_rows() <= cap)
+        let max_factor_rows = self.matches.iter().flat_map(|m| m.factors.iter()).map(|f| f.rows.len()).max().unwrap_or(0);
+        max_match_set.is_none_or(|cap| max_factor_rows <= cap)
     }
 
     /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.

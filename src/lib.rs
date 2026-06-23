@@ -209,17 +209,14 @@ pub struct Args {
     #[arg(long = "max-forced-expansion", default_value = "none")]
     pub max_forced_expansion: MaxForcedExpansion,
 
-    /// Prune best-first/SMC successors whose heaviest factor exceeds this many
-    /// rows (`SearchState::max_factor_rows`): catches commutativity blowup that
-    /// `--max-forced-expansion` misses, while sparing high-usage patterns. Omit
-    /// to disable.
+    /// Prune best-first/SMC successors whose largest factor exceeds
+    /// this many rows. Must be >= `--decompose-min-rows`.
     #[arg(long = "max-match-set")]
     pub max_match_set: Option<usize>,
 
-    /// Minimum factor rows before `Factor::decompose` attempts a split; below
-    /// this the `O(slots²·rows)` scan doesn't repay itself. Must be `<=
-    /// --max-match-set` (asserted at startup) so the cap only prunes factors
-    /// that already had a chance to decompose.
+    /// Minimum factor rows before `Factor::decompose` attempts a split
+    /// Set higher to avoid unnecessary scans, set lower to reduce memory
+    /// pressure.
     #[arg(long = "decompose-min-rows", default_value_t = 48)]
     pub decompose_min_rows: usize,
 
