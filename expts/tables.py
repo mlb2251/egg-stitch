@@ -291,6 +291,11 @@ TABLE6_NUM_ABSTRACTIONS = 4
 TABLE6_NUM_STEPS = 50_000
 TABLE6_ITER_LIMIT = 6
 TABLE6_MATCH_SET_CAP = 2000
+# Arity 4 (vs the other tables' 2): the drawing domains have deeper repeated
+# part-hierarchies, and higher arity both raises absolute compression and widens
+# the live-vs-at-start gap (more holes => more normal-form alignment that live can
+# exploit but at-start commits away). May revert to 2 for cross-table parity.
+TABLE6_MAX_ARITY = 4
 TABLE6_SMC_PARTICLES = 1000
 TABLE6_SMC_STEPS = 1000
 TABLE6_SMC_TEMPERATURE = 1000.0
@@ -304,6 +309,7 @@ def _table6_runners() -> tuple[tuple[str, object], ...]:
     common = dict(
         iter_limit=TABLE6_ITER_LIMIT,
         max_match_set=TABLE6_MATCH_SET_CAP,
+        max_arity=TABLE6_MAX_ARITY,
         rewrites_override=TABLE6_REWRITES,
         timeout=TABLE6_TIMEOUT,
         mem_limit=MEM_LIMIT_BYTES,

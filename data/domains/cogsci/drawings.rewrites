@@ -63,6 +63,12 @@ sin_qpi: (sin (/ pi 4)) => 0.7071067811865476
 ang_q: (/ (* 2 pi) 4) <=> (/ pi 2)
 ang_e: (/ (* 2 pi) 8) <=> (/ pi 4)
 ang_h: (/ (* 2 pi) 2) <=> pi
+// Lift decimal angle literals (wheels/furniture encode rotations numerically, e.g.
+// 1.5708, rather than symbolically) back to symbolic `pi` forms, so they hit the
+// trig table above and share the `pi` subterm across rotated parts instead of being
+// opaque floats. The reverse of folding angles to concrete values.
+ang_lift_q: 1.5708 <=> (/ pi 2)
+ang_lift_e: 0.785398 <=> (/ pi 4)
 
 // ── choice2's non-confluent "choice" rules ──
 t_factor: (C (T ?a ?m) (T ?b ?m)) <=> (T (C ?a ?b) ?m)
