@@ -92,10 +92,6 @@ METHOD_PLOT_LABELS = {
 # Plots use the full sweep regardless.
 TABLE_BFS_STEPS = 10000
 TABLE_SMC_PARTICLES = 1000
-# table7 reports one tick below the canonical points on each sweep grid
-# (BFS_STEP_SWEEP / SMC_PARTICLE_SWEEP): BFS 10000 -> 5000, SMC 1000 -> 500.
-TABLE7_BFS_STEPS = 5000
-TABLE7_SMC_PARTICLES = 500
 TABLE_DATA_KEYS = {
     "enum": f"enum-{TABLE_BFS_STEPS}",
     "smc": f"smc-{TABLE_SMC_PARTICLES}",
@@ -664,8 +660,8 @@ TABLE7_SPEC = FamilySpec(
     plot_methods=["enum", "smc", "enum-dsrs-at-start", "enum-baseline"],
     table_methods=["enum", "smc", "enum-dsrs-at-start", "enum-baseline"],
     data_keys={
-        "enum": f"enum-{TABLE7_BFS_STEPS}",
-        "smc": f"smc-{TABLE7_SMC_PARTICLES}",
+        "enum": f"enum-{TABLE_BFS_STEPS}",
+        "smc": f"smc-{TABLE_SMC_PARTICLES}",
         "enum-dsrs-at-start": "enum-dsrs-at-start",
         "enum-baseline": "enum-baseline",
     },
@@ -676,7 +672,7 @@ TABLE7_SPEC = FamilySpec(
         "enum-baseline": "BFS/NR",
     },
     sweep_for_method={"enum": TABLE7_BFS_SWEEP, "smc": TABLE7_SMC_SWEEP},
-    sweep_point={"enum": TABLE7_BFS_STEPS, "smc": TABLE7_SMC_PARTICLES},
+    sweep_point={"enum": TABLE_BFS_STEPS, "smc": TABLE_SMC_PARTICLES},
     method_colors={
         "enum": line_color(0),
         "smc": line_color(1),
