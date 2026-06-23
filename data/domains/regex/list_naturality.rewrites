@@ -1,0 +1,4 @@
+map_cons:  (@ (@ map ?f) (@ (@ cons ?a) ?x)) <=> (@ (@ cons (@ ?f ?a)) (@ (@ map ?f) ?x))
+map_index: (@ (@ index ?i) (@ (@ map ?f) ?x)) <=> (@ ?f (@ (@ index ?i) ?x))
+cdr_map:   (@ cdr (@ (@ map ?f) ?x)) <=> (@ (@ map ?f) (@ cdr ?x))
+car_map:   (@ car (@ (@ map ?f) ?x)) <=> (@ ?f (@ car ?x))

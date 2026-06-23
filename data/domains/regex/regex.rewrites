@@ -1,0 +1,7 @@
+alt_comm:  (Alt ?a ?b) <=> (Alt ?b ?a)
+alt_assoc: (Alt (Alt ?a ?b) ?c) <=> (Alt ?a (Alt ?b ?c))
+cat_assoc: (Cat (Cat ?a ?b) ?c) <=> (Cat ?a (Cat ?b ?c))
+distrib_l: (Cat ?a (Alt ?b ?c)) <=> (Alt (Cat ?a ?b) (Cat ?a ?c))
+distrib_r: (Cat (Alt ?a ?b) ?c) <=> (Alt (Cat ?a ?c) (Cat ?b ?c))
+plus_def:  (Plus ?a) <=> (Cat ?a (Star ?a))
+opt_def:   (Opt ?a) <=> (Alt ?a Eps)
