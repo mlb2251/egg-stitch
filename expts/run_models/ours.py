@@ -155,7 +155,7 @@ class OursBf:
     # live with it bounded; table6 sets it). Excluded from repr.
     iter_limit: int | None = field(default=None, repr=False)
     # Overrides the domain's default rewrites file with a specific ruleset
-    # (table6 points at drawings.algebra-choice2.rewrites). Excluded from repr.
+    # (table6 pins drawings.rewrites). Excluded from repr.
     rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)

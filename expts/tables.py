@@ -274,19 +274,19 @@ def table5() -> Path:
     )
 
 
-# Table 6: the cogsci drawing domains with a custom affine-transform-algebra DSR
-# set (data/domains/cogsci/drawings.algebra-choice2.rewrites), comparing DSRs
-# kept LIVE during search against applied only AT START. The algebra rules are
-# deliberately *non-confluent* (transform factoring, repeat<->unroll, overlay
-# assoc/comm, scale/translate interchange) — they expose multiple equivalent
-# normal forms whose best choice depends on the library being built. Live keeps
-# all forms so each abstraction can align to the matching one; at-start commits
-# to a single greedy min-term up front, so live wins (and the gap widens with
-# expressiveness). The commutative rules would explode the abstraction match set
-# if left unchecked, so each run carries the per-factor ``--max-match-set`` cap
-# and an ``--iter-limit`` that bounds the e-saturation. Fixed 4 abstractions.
+# Table 6: the cogsci drawing domains with our algebraic drawing DSRs
+# (data/domains/cogsci/drawings.rewrites), comparing the DSRs kept LIVE during
+# search against applied only AT START. The rules are deliberately *non-confluent*
+# (transform factoring, repeat<->unroll, overlay assoc/comm, scale/translate
+# interchange) — they expose multiple equivalent normal forms whose best choice
+# depends on the library being built. Live keeps all forms so each abstraction can
+# align to the matching one; at-start commits to a single greedy min-term up front,
+# so live wins (and the gap widens with expressiveness). The commutative rules
+# would explode the abstraction match set if left unchecked, so each run carries the
+# per-factor ``--max-match-set`` cap and an ``--iter-limit`` that bounds the
+# e-saturation. Fixed 4 abstractions.
 TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "furniture")]
-TABLE6_REWRITES = "data/domains/cogsci/drawings.algebra-choice2.rewrites"
+TABLE6_REWRITES = "data/domains/cogsci/drawings.rewrites"
 TABLE6_NUM_ABSTRACTIONS = 4
 TABLE6_NUM_STEPS = 50_000
 TABLE6_ITER_LIMIT = 6
