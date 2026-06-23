@@ -25,16 +25,35 @@ Both are *frozen* for reproducibility; the generators regenerate from the local
 Python/pygments install (environment-dependent — provenance, not a reproducible
 build).
 
-### Edge by corpus (best-first, 15 abstractions, `regex.rewrites`)
+### The edge is an early-abstraction effect, not an aggregate-compression win
 
-| corpus | baseline | at-start | live | live gap vs at-start |
-|---|---|---|---|---|
-| `regex` (lib mine) | 3653 | 3653 | 3554 | ~100 (~2.8%) |
-| `regex_pygments`    | 4401 | **4532** (worse than baseline) | **4307** | **~225 (~5%)** |
+Final corpus+library cost, best-first:
 
-On the higher-structure pygments corpus the gap roughly doubles **and** applying
-the rules up front becomes strictly *worse* than using no rules, while keeping
-them live is best — the cleanest form of the result.
+| corpus | size | abstractions | baseline | at-start | live |
+|---|---|---|---|---|---|
+| `regex` (lib mine) | 250 | 15 | 3653 | 3653 | 3554 |
+| `regex_pygments` | 300 | 15 | 4401 | 4532 | 4307 |
+| `regex_pygments` | 957 | 40 | 13133 | 12983 | 12996 |
+
+The *aggregate* final-cost gap is ratio/density-dependent and **dilutes at scale**:
+on the 300-regex subset at 15 abstractions live leads at-start by ~225 (and at-start
+is even worse than no rules at all), but on the full 957-regex corpus with a
+corpus-proportional 40-abstraction budget the final costs essentially tie
+(live −13). Both runs converge (drained heaps), so this is not a budget artifact.
+
+The robust signal is **per-step ordering — live finds the meaningful, shared
+abstractions first.** On 957/40 the per-step gap (at-start − live) rises to ~75 by
+step ~8, then at-start recovers the same structure in later rounds and the totals
+tie out:
+
+```
+step:  1   2   3   4   5   6   7   8   9  10  ...  36  37  38  39  40
+gap:  29  12  32  22  22  72  73  75  75  75  ... -14 -13 -13 -13 -13
+```
+
+So the claim is **"live surfaces meaningful/shared abstractions earlier,"** not
+"live compresses more in aggregate." The durable evidence is (a) the first-K
+abstractions' match counts and content, and (b) the live-only content idioms below.
 
 ## Rewrite rules — `regex.rewrites`
 
