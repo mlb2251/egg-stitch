@@ -5,18 +5,36 @@ abstraction search beats applying them **once up front**
 (`--only-use-dsrs-at-start`) — qualitatively, by surfacing shared, named idioms
 that at-start can only bake as one-off constants.
 
-## Corpus
+## Corpora
 
-`regex.json` — 250 real regexes mined from the locally-installed Python
-libraries (string literals passed to `re.*`), restricted to the
-alternation-bearing, moderate-size, deduplicated subset. Each is encoded as an
-egg-stitch op-children tree over `Cat / Alt / Star / Plus / Opt / Rep` with
-**interned leaf tokens** (`L0, L1, …`); `regex_legend.json` maps each `Ln` back
-to the original regex fragment (a literal char, escape, or `[...]` class).
+Two frozen corpora, both encoded as egg-stitch op-children trees over
+`Cat / Alt / Star / Plus / Opt / Rep` with **interned leaf tokens** (`L0, L1, …`);
+the matching `*_legend.json` maps each `Ln` back to the original regex fragment
+(a literal char, escape, or `[...]` class).
 
-The corpus is *frozen* here for reproducibility. `scripts/regex_corpus.py`
-regenerates it from whatever Python packages are installed (so its output is
-environment-dependent — provenance, not a reproducible build).
+- **`regex_pygments.json`** (300 regexes, higher-structure, *recommended*) — token
+  regexes harvested from ~480 pygments lexers. These heavily share sub-structure
+  (keyword char-chains, identifier classes, number/string formats) within and
+  across languages, which gives the live-vs-at-start abstraction the largest edge.
+  Generator: `scripts/regex_corpus_pygments.py`.
+- **`regex.json`** (250 regexes) — regexes mined from arbitrary `re.*` calls in the
+  installed Python libraries; more of a grab-bag, smaller edge. Generator:
+  `scripts/regex_corpus.py`.
+
+Both are *frozen* for reproducibility; the generators regenerate from the local
+Python/pygments install (environment-dependent — provenance, not a reproducible
+build).
+
+### Edge by corpus (best-first, 15 abstractions, `regex.rewrites`)
+
+| corpus | baseline | at-start | live | live gap vs at-start |
+|---|---|---|---|---|
+| `regex` (lib mine) | 3653 | 3653 | 3554 | ~100 (~2.8%) |
+| `regex_pygments`    | 4401 | **4532** (worse than baseline) | **4307** | **~225 (~5%)** |
+
+On the higher-structure pygments corpus the gap roughly doubles **and** applying
+the rules up front becomes strictly *worse* than using no rules, while keeping
+them live is best — the cleanest form of the result.
 
 ## Rewrite rules — `regex.rewrites`
 
@@ -38,7 +56,8 @@ edge because those laws rarely fire in that corpus — kept for completeness.
 
 ```bash
 cargo build --release
-python3 scripts/regex_live_vs_atstart.py
+python3 scripts/regex_live_vs_atstart.py                 # default: regex_pygments
+python3 scripts/regex_live_vs_atstart.py regex           # the Python-lib corpus
 ```
 
 Prints the per-step side-by-side and the content-bearing idiom comparison.

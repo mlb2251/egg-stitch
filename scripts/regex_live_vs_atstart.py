@@ -22,9 +22,11 @@ import json, os, re, subprocess, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN = os.path.join(ROOT, "target", "release", "egg-stitch")
 D = os.path.join(ROOT, "data", "domains", "regex")
-INPUT = os.path.join(D, "regex.json")
+# corpus: "regex_pygments" (higher-structure, default, bigger edge) or "regex" (Python-lib mine)
+STEM = sys.argv[1] if len(sys.argv) > 1 else "regex_pygments"
+INPUT = os.path.join(D, f"{STEM}.json")
 RULES = os.path.join(D, "regex.rewrites")
-LEG = json.load(open(os.path.join(D, "regex_legend.json")))   # Ln -> token
+LEG = json.load(open(os.path.join(D, f"{STEM}_legend.json")))   # Ln -> token
 
 NABST, NSTEPS, ARITY, ITERLIM = "15", "3000", "4", "3"
 
