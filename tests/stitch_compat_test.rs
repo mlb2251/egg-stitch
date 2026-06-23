@@ -1119,13 +1119,16 @@ fn loop_rolling_overhead_live_beats_at_start() {
 /// count-3 loop: overhead amortized, so live and at-start *agree*. The control
 /// for the test above — each program is `(C B (C B B))`, and at count 3 the
 /// rolled `(repeat B 3 step)` genuinely wins, so both modes find the loop
-/// abstraction `(repeat ?#0 3 step)` and both fixtures match. This pins that the
+/// abstraction `(repeat ?#0 3 step)`. Both runs check against a *single* shared
+/// fixture, so agreement is asserted literally (both must equal the one frozen
+/// output) rather than by storing the same JSON twice. This pins that the
 /// divergence above is the cost model correctly rejecting an unworthwhile loop,
 /// not a blanket aversion to loops: when a loop pays for its overhead, both
 /// modes roll it.
 #[test]
 fn loop_rolling_worthwhile_both_agree() {
     let input = "data/test/loop_rolling_n3.json";
-    bless_bf_run(input, LOOP_RULES, "data/expected_outputs/test/loop_rolling_n3.live.out.json", "loop_rolling_n3 (live)");
-    bless_bf_run(input, LOOP_RULES_AT_START, "data/expected_outputs/test/loop_rolling_n3.at_start.out.json", "loop_rolling_n3 (at-start)");
+    let fixture = "data/expected_outputs/test/loop_rolling_n3.out.json";
+    bless_bf_run(input, LOOP_RULES, fixture, "loop_rolling_n3 (live)");
+    bless_bf_run(input, LOOP_RULES_AT_START, fixture, "loop_rolling_n3 (at-start)");
 }
