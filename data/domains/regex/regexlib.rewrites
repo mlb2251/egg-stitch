@@ -1,0 +1,20 @@
+// regex algebra (Alt commutativity now also unifies char-class member order)
+alt_comm:  (Alt ?a ?b) <=> (Alt ?b ?a)
+alt_assoc: (Alt (Alt ?a ?b) ?c) <=> (Alt ?a (Alt ?b ?c))
+cat_assoc: (Cat (Cat ?a ?b) ?c) <=> (Cat ?a (Cat ?b ?c))
+distrib_l: (Cat ?a (Alt ?b ?c)) <=> (Alt (Cat ?a ?b) (Cat ?a ?c))
+distrib_r: (Cat (Alt ?a ?b) ?c) <=> (Alt (Cat ?a ?c) (Cat ?b ?c))
+star_range: (Star ?x) <=> (Range ?x 0 INF)
+plus_range: (Plus ?x) <=> (Range ?x 1 INF)
+opt_range:  (Opt ?x)  <=> (Range ?x 0 1)
+opt_def:    (Opt ?x)  <=> (Alt ?x Eps)
+rep1: (Range ?x 1 1) <=> ?x
+rep2: (Range ?x 2 2) <=> (Cat ?x ?x)
+rep3: (Range ?x 3 3) <=> (Cat ?x (Cat ?x ?x))
+rep4: (Range ?x 4 4) <=> (Cat ?x (Cat ?x (Cat ?x ?x)))
+range_add:  (Cat (Range ?x ?a ?a) (Range ?x ?b ?b)) <=> (Range ?x (+ ?a ?b) (+ ?a ?b))
+range_open: (Range ?x ?a INF) <=> (Cat (Range ?x ?a ?a) (Star ?x))
+// shorthand <-> decomposed class (one rule each, not per-spelling)
+sh_digit: \d <=> [0-9]
+sh_word:  \w <=> (Alt [a-z] (Alt [A-Z] (Alt [0-9] _)))
+constant_folding: !integers

@@ -1,100 +1,88 @@
 # Regex live-vs-at-start abstraction experiment
 
-A classical-programming domain where applying rewrite rules **live** during
-abstraction search beats applying them **once up front**
-(`--only-use-dsrs-at-start`) — qualitatively, by surfacing shared, named idioms
-that at-start can only bake as one-off constants.
+A classical-programming domain where keeping rewrite rules **live** during
+abstraction search finds the meaningful, shared idioms — and finds them earlier
+and with more reuse — than applying the rules once up front
+(`--only-use-dsrs-at-start`).
 
-## Corpora
+## Corpus
 
-Two frozen corpora, both encoded as egg-stitch op-children trees over
-`Cat / Alt / Star / Plus / Opt / Rep` with **interned leaf tokens** (`L0, L1, …`);
-the matching `*_legend.json` maps each `Ln` back to the original regex fragment
-(a literal char, escape, or `[...]` class).
+`regexlib.json` — 400 real regexes from **RegExLib**, taken from the ReDoSHunter
+artifact (`github.com/yetingli/ReDoSHunter`, `data/paper_dataset/regexlib.txt`):
 
-- **`regex_pygments.json`** (300 regexes, higher-structure, *recommended*) — token
-  regexes harvested from ~480 pygments lexers. These heavily share sub-structure
-  (keyword char-chains, identifier classes, number/string formats) within and
-  across languages, which gives the live-vs-at-start abstraction the largest edge.
-  Generator: `scripts/regex_corpus_pygments.py`.
-- **`regex.json`** (250 regexes) — regexes mined from arbitrary `re.*` calls in the
-  installed Python libraries; more of a grab-bag, smaller edge. Generator:
-  `scripts/regex_corpus.py`.
+> Li et al., *ReDoSHunter: A Combined Static and Dynamic Approach for Regular
+> Expression DoS Detection*, USENIX Security 2021.
 
-Both are *frozen* for reproducibility; the generators regenerate from the local
-Python/pygments install (environment-dependent — provenance, not a reproducible
-build).
+RegExLib is a community archive where independent authors submit regexes keyed by
+task (email / date / phone / URL / …). So within a task there are **many
+independent spellings of the same matcher** — the shared structure is *latent*
+(nobody factored it), which is exactly what distinguishes live from at-start.
 
-### The edge is an early-abstraction effect, not an aggregate-compression win
+Encoding (`scripts/regexlib_corpus.py`, regenerates from the source dump; the
+frozen JSON here is what the experiment uses):
 
-Final corpus+library cost, best-first:
+- leaf tokens are the **raw regex fragment**, percent-encoding only parser-unsafe
+  chars (space → `%20`, `(` → `%28`, …) — abstractions read as regexes, no legend;
+- a positive character class **decomposes into an `Alt` of its members**
+  (`[a-zA-Z]` → `(Alt [a-z] [A-Z])`), so the *existing* `Alt` commutativity unifies
+  all member reorderings (`[a-zA-Z]` ≡ `[A-Za-z]`, etc.) generically — no
+  per-spelling rules. Negated/POSIX classes stay opaque (complement ≠ union);
+- bounded quantifiers `x{n}` / `x{n,m}` → `(Range x lo hi)`; `Star`/`Plus`/`Opt`
+  are kept (their relation to `Range` is a rewrite rule, not the encoding).
 
-| corpus | size | abstractions | baseline | at-start | live |
-|---|---|---|---|---|---|
-| `regex` (lib mine) | 250 | 15 | 3653 | 3653 | 3554 |
-| `regex_pygments` | 300 | 15 | 4401 | 4532 | 4307 |
-| `regex_pygments` | 957 | 40 | 13133 | 12983 | 12996 |
+## Rewrite rules — `regexlib.rewrites`
 
-The *aggregate* final-cost gap is ratio/density-dependent and **dilutes at scale**:
-on the 300-regex subset at 15 abstractions live leads at-start by ~225 (and at-start
-is even worse than no rules at all), but on the full 957-regex corpus with a
-corpus-proportional 40-abstraction budget the final costs essentially tie
-(live −13). Both runs converge (drained heaps), so this is not a budget artifact.
+Regex algebra, **size-tied / expansive and non-confluent** (the kind a min-size
+min-term cannot exploit, so they create latent alignment rather than a canonical
+form): commutativity + associativity of `Alt`, associativity of `Cat`,
+distribution of `Cat` over `Alt`; the `Range`↔`Star`/`Plus`/`Opt` bridges and
+bounded-repeat expansion (`(Range x 2 2) <=> (Cat x x)`, …); `range_add` /
+`range_open`; and the shorthand↔class rules `\d <=> [0-9]`,
+`\w <=> (Alt [a-z] (Alt [A-Z] (Alt [0-9] _)))`. Deliberately **no contractive
+simplifications** (`a**→a*`, etc.): those help at-start normalize and shrink the
+live advantage.
 
-The robust signal is **per-step ordering — live finds the meaningful, shared
-abstractions first.** On 957/40 the per-step gap (at-start − live) rises to ~75 by
-step ~8, then at-start recovers the same structure in later rounds and the totals
-tie out:
+## Configuration: `--max-arity 2 --no-zero-arity`
 
-```
-step:  1   2   3   4   5   6   7   8   9  10  ...  36  37  38  39  40
-gap:  29  12  32  22  22  72  73  75  75  75  ... -14 -13 -13 -13 -13
-```
-
-So the claim is **"live surfaces meaningful/shared abstractions earlier,"** not
-"live compresses more in aggregate." The durable evidence is (a) the first-K
-abstractions' match counts and content, and (b) the live-only content idioms below.
-
-## Rewrite rules — `regex.rewrites`
-
-Regex algebra, all **size-tied or expansive, non-confluent** (the kind that the
-min-size min-term of `--only-use-dsrs-at-start` cannot exploit):
-commutativity + associativity of `Alt`, associativity of `Cat`, distribution of
-`Cat` over `Alt` (both sides), and the `Plus`/`Opt` definitions.
-
-Deliberately **excludes** contractive simplifications (`a**→a*`, `a*a*→a*`,
-`(a|a)→a`, ε-elimination): those *help* at-start (it normalizes toward a smaller
-min-term and catches up), so they shrink the live advantage. See the ablation in
-the experiment notes.
-
-`list_naturality.rewrites` is the functional-domain control (binder-free
-map/cons/cdr naturality laws over `data/domains/list/`); it produced ~no live
-edge because those laws rarely fire in that corpus — kept for completeness.
+Abstractions must have **1–2 parameters**. The arity cap acts as a
+*meaningfulness filter*: the high-arity abstractions are overwhelmingly syntactic
+glue (4-way concatenations, 4-way alternations), while the recognizable idioms
+have arity 1–2. Capping arity removes the shared syntactic skeletons (which both
+modes find, masking the gap) and exposes live's advantage on the meaningful ones.
 
 ## Reproduce
 
 ```bash
 cargo build --release
-python3 scripts/regex_live_vs_atstart.py                 # default: regex_pygments
-python3 scripts/regex_live_vs_atstart.py regex           # the Python-lib corpus
+python3 scripts/regex_live_vs_atstart.py
 ```
 
-Prints the per-step side-by-side and the content-bearing idiom comparison.
+Prints the per-step side-by-side (each abstraction expanded to a real regex,
+flagged meaningful/syntactic), the cumulative cost gap, and the meaningful counts.
 
-## What it shows
+## Results
 
-- Total compression: live ≈ at-start within a few percent — the bulk is generic
-  `Cat`/`Alt` skeletons that *both* find.
-- **Per step, live extracts a more-shared abstraction**; e.g. it matches the
-  `Cat`-of-3 skeleton ~3× more sites than at-start because the rule-saturated
-  e-graph exposes more aligned occurrences.
-- **Live surfaces shared content idioms at-start misses**: an anchored-start
-  `^…` idiom (matches ~30), a quoted-string-with-escapes matcher, and a
-  delimiter-parameterized **genomic-locus matcher**
-  `fn(S) = (X|Y|M|\d+) S \d+ S [ACGTN]* S [ACGTN]*` (arity 1, the field
-  delimiter reused 3×), which unifies three real genomic-variant regexes that
-  differ only in their delimiter and share *no literal substructure*. At-start
-  commits each regex to one min-size factorization; with the non-confluent rules
-  those factorizations diverge (the `_`-delimited one factors differently from
-  the `-`/`:` ones), so the shared abstraction is absent from the rule-free
-  e-graph it searches — confirmed with `--follow` reachability.
+| config | baseline | at-start | live | live gap |
+|---|---|---|---|---|
+| `--max-arity 4` (zero-arity ok) | 7139 | 6751 | 6685 | 66 |
+| `--max-arity 4 --no-zero-arity` | 7194 | 6901 | 6778 | 123 |
+| **`--max-arity 2 --no-zero-arity`** | 7879 | 7436 | **6923** | **513** |
+
+Under the arity cap the live gap is ~8× the default and **grows monotonically**
+across the 20 abstractions (the per-step gap rises to ~520). Meaningful
+abstractions: **live 12/20, at-start 11/20** (vs 7/6 without the cap).
+
+What live finds (fully expanded, `#k` = parameter):
+
+- **digit fields** — `\d{#0}`, `\d{1,#0}`, `#0\d{#1}`
+- **character classes** (via the class-as-`Alt` decomposition) — `([A-Z]|#0)`,
+  `([a-z]|[A-Z]|#0)` (alphanumeric)
+- **day-of-month** — `(3[01] | [12]\d | #0[1-9])`, where `#0 ∈ {0?, 0}` unifies
+  the optional-vs-required-leading-zero spellings independent authors used
+- plus optional-`-`, optional-fractional `(\.#0)?`, etc.
+
+The day-of-month and the parameterized classes are the cleanest illustration:
+live abstracts the part that varies across independent authors into a parameter,
+so one arity-1 template covers several differently-spelled matchers, while
+at-start commits each regex to one min-size spelling and either misses them or
+bakes in a single concrete variant.
