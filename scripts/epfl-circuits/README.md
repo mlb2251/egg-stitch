@@ -29,6 +29,4 @@ the median on **both** axes, writing their corpora and dropping the rest:
 Diverse *and* redundant is where live DSRs pay off; either alone misses (diverse-
 but-unique control logic and redundant-but-canonical adders both fall flat).
 
-`survey_circuits.py` is the cheaper structural-only survey (distinct shapes, no
-egg-stitch runs). The abstraction experiment over the corpora is `table7` in
-`expts/tables.py`.
+The abstraction experiment over the corpora is `table7` in `expts/tables.py`.
