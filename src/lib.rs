@@ -228,7 +228,7 @@ pub struct Args {
     /// prunes factors above its row count, so every prunable factor must first
     /// have had the chance to decompose, else a benign independent product just
     /// under this threshold is pruned as if it were an entangled blowup.
-    #[arg(long = "decompose-min-rows", default_value_t = crate::factor::DEFAULT_DECOMPOSE_MIN_ROWS)]
+    #[arg(long = "decompose-min-rows", default_value_t = 48)]
     pub decompose_min_rows: usize,
 
     /// Path to write JSON output.
