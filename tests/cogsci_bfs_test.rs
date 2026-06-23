@@ -100,6 +100,7 @@ fn expected_path(domain: &str, tag: &str) -> String {
 /// Runs best-first on a cogsci domain (optionally with DSR rules), writes its
 /// `--output` JSON to a unique temp file, reads it back, and strips the
 /// non-deterministic / bookkeeping fields so the result is a stable snapshot.
+#[allow(clippy::too_many_arguments)]
 fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, mms: Option<&str>, dmr: Option<&str>, il: Option<&str>, steps: &str, tag: &str) -> Value {
     let input = format!("data/domains/cogsci/{domain}.json");
     let out = std::env::temp_dir().join(format!("egg-stitch-cogsci-{}-{}-{}.json", std::process::id(), domain, tag));

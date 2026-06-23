@@ -670,12 +670,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// min-term size of the bindings, so a pattern matching a few large concrete
     /// subterms isn't penalised for size it didn't entangle.
     pub fn max_factor_rows(&self) -> usize {
-        self.matches
-            .iter()
-            .flat_map(|m| m.factors.iter())
-            .map(|f| f.rows.len())
-            .max()
-            .unwrap_or(0)
+        self.matches.iter().flat_map(|m| m.factors.iter()).map(|f| f.rows.len()).max().unwrap_or(0)
     }
 
     /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
