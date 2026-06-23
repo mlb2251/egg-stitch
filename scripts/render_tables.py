@@ -613,17 +613,65 @@ TABLE5_COL_LABELS = {
 }
 
 
-def render_table5_tex(saved: dict) -> str:
-    """Return a LaTeX ``tabular`` for table5: molecule families × methods, with
-    Compression Ratio and Time (s) groups and a geomean row.
+# Unit names for the two sweep methods, used only in the kick-down notices.
+TABLE5_SWEEP_UNIT = {"enum": "steps", "smc": "particles"}
+
+
+def _kicked_data_keys(saved: dict) -> tuple[dict[str, str], list[str]]:
+    """Pick the representative table key for each method, kicking series methods
+    down their sweep when the configured point DNFs at the geomean.
+
+    A series method (Enum/SMC) normally shows its configured operating point
+    (``TABLE5_SWEEP_POINT``). If that point DNFs on any family — so its geomean
+    is blank — we step down the sweep to the highest point that finishes *every*
+    family, and show that instead. Returns ``(data_keys, notices)`` where
+    ``data_keys`` overrides ``TABLE5_DATA_KEYS`` for any kicked-down method and
+    ``notices`` is a human-readable line per kick-down (empty if none)."""
+    domains = [d for d in TABLE5_DOMAINS if d in saved["domains"]]
+    cr_by_domain = {
+        d: aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains
+    }
+
+    def finishes_every_family(key: str) -> bool:
+        return bool(domains) and all(cr_by_domain[d].get(key) is not None for d in domains)
+
+    data_keys = dict(TABLE5_DATA_KEYS)
+    notices: list[str] = []
+    for method, sweep in TABLE5_SWEEP_FOR_METHOD.items():
+        point = TABLE5_SWEEP_POINT[method]
+        if finishes_every_family(f"{method}-{point}"):
+            continue
+        # Highest sweep point at or below the configured one that finishes.
+        chosen = next(
+            (v for v in sorted((s for s in sweep if s <= point), reverse=True)
+             if finishes_every_family(f"{method}-{v}")),
+            None,
+        )
+        if chosen is None:
+            continue  # nothing finishes; leave the configured point to render DNF
+        data_keys[method] = f"{method}-{chosen}"
+        notices.append(
+            f"table5 {TABLE5_COL_LABELS[method]}: kicked down "
+            f"{point} -> {chosen} {TABLE5_SWEEP_UNIT[method]} (geomean DNF at {point})"
+        )
+    return data_keys, notices
+
+
+def render_table5_tex(saved: dict) -> tuple[str, list[str]]:
+    """Return ``(latex_tabular, notices)`` for table5: molecule families ×
+    methods, with Compression Ratio and Time (s) groups and a geomean row.
+    ``notices`` lists any series-method sweep-point kick-downs (see below).
 
     No e-graph-min or Stitch columns (table5 has neither). A method that timed
-    out / OOM'd on a family has ``compression_ratio: null`` for that cell; it's
-    rendered ``DNF`` and excluded from that row's bolding and the geomean.
+    out / OOM'd on any run of a family has no comparable number, so it's rendered
+    ``DNF`` and excluded from that row's bolding and the geomean. A series method
+    (Enum/SMC) whose representative sweep point DNFs is first kicked down the
+    sweep to the highest point that finishes every family (see ``_kicked_data_keys``).
     """
     domains = saved["domains"]
     methods = TABLE5_TABLE_METHODS
     n = len(methods)
+    data_keys, notices = _kicked_data_keys(saved)
 
     def cells(values: list[float | None], spec: str, higher_is_better: bool) -> list[str]:
         """bold_best, but render None as DNF (not N/A)."""
@@ -654,8 +702,8 @@ def render_table5_tex(saved: dict) -> str:
         runs = domains[domain].get("runs", {})
         cr_map = aggregate_methods_cr(runs)
         t_map = aggregate_methods_time(runs)
-        crs = [cr_map.get(TABLE5_DATA_KEYS[m]) for m in methods]
-        ts = [t_map.get(TABLE5_DATA_KEYS[m]) for m in methods]
+        crs = [cr_map.get(data_keys[m]) for m in methods]
+        ts = [t_map.get(data_keys[m]) for m in methods]
         # A DNF records the timeout as elapsed; drop that time so it isn't
         # mistaken for a real measurement (keep cr/time over the same set).
         ts = [t if c is not None else None for c, t in zip(crs, ts)]
@@ -680,7 +728,7 @@ def render_table5_tex(saved: dict) -> str:
     lines.append(" & ".join(["Geo. mean", "", *cr_strs, *t_strs]) + " \\\\")
 
     lines += ["\\bottomrule", "\\end{tabular}"]
-    return "\n".join(lines)
+    return "\n".join(lines), notices
 
 
 def _plot_table5(cr_map: dict, t_map: dict, title: str, out_path: Path) -> None:
@@ -744,6 +792,7 @@ def main() -> None:
     argparse.ArgumentParser(description=__doc__).parse_args()
 
     FIGURES_DIR.mkdir(exist_ok=True)
+    notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
     for table in (1, 2, 3, 4):
         path = RESULTS_DIR / f"table{table}.json"
         if not path.exists():
@@ -785,13 +834,24 @@ def main() -> None:
         with open(table5_path) as f:
             saved = json.load(f)
         tex_path = FIGURES_DIR / "table5.tex"
-        tex_path.write_text(f"% source: {table5_path}\n" + render_table5_tex(saved) + "\n")
+        tex, table5_notices = render_table5_tex(saved)
+        notices += table5_notices
+        tex_path.write_text(f"% source: {table5_path}\n" + tex + "\n")
         print(f"wrote {tex_path}", file=sys.stderr)
         render_table5(saved)
         # Per-family molecule scramble trajectory figures (figures/molecules/).
         render_molecules(saved, FIGURES_DIR / "molecules")
     else:
         print(f"skipping table5: {table5_path} not present", file=sys.stderr)
+
+    # Loudly surface every sweep-point kick-down so a reduced operating point in
+    # a table is never silently mistaken for the configured one.
+    if notices:
+        bar = "!" * 78
+        print(f"\n{bar}\n!! SWEEP-POINT KICK-DOWNS ({len(notices)}):", file=sys.stderr)
+        for notice in notices:
+            print(f"!!   {notice}", file=sys.stderr)
+        print(f"{bar}", file=sys.stderr)
 
 
 if __name__ == "__main__":
