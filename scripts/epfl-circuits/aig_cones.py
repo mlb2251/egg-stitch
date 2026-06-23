@@ -4,7 +4,8 @@ cone for every AND gate: grow each cone until taking the next gate would exceed
 K distinct input signals (a k-feasible cut), rather than cutting at a fixed
 depth. Because the AIG is a DAG, forcing a cut to a tree re-expands reconvergent
 subgates, so a node-size CAP guards against blow-up. Leaves are named signal ids
-(`sN`) so abstraction can introduce metavars over inputs. Usage:
+(`sN`) so abstraction can introduce metavars over inputs. Imported as a library
+by `aig_to_egg.py` and `build_benchmarks.py`. Usage:
     aig_cones.py <file.aig> [K]            # print cone-size stats for cut width K
 """
 import sys
