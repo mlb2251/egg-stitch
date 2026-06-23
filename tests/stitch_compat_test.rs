@@ -1069,3 +1069,61 @@ fn molecules_scramble_ester_dsr() {
 fn molecules_scramble_glycol_dsr() {
     check_fixture_bf_only_steps("data/domains/molecules/scramble/glycol.scram.json", "2000", SYMMETRIES, true);
 }
+
+// === loop rolling: live DSRs vs --only-use-dsrs-at-start ===
+//
+// A minimal domain demonstrating a *qualitative* divergence between applying
+// rewrite rules live (during abstraction search) and applying them once
+// up-front (`--only-use-dsrs-at-start`, which normalizes the egraph, extracts a
+// single min-term per program, and searches a fresh rule-free egraph built from
+// it). `(repeat body count step)` is a loop; the generic rolling rules in
+// `data/test/loop_rolling.rewrites` (`(C ?x ?x) => (repeat ?x 2 step)`, the
+// count-3 variant, and `(repeat ?x 1 ?n) => ?x`) let the *cost model* — not the
+// rule set — decide whether a loop is worth it. The loop carries overhead (the
+// `repeat` node + count + `step` arg) over a bare composition, so it only lowers
+// cost once the count amortizes that overhead.
+
+/// Both corpora share the generic counted-loop rolling rules.
+const LOOP_RULES: &[&str] = &["--rules", "data/test/loop_rolling.rewrites"];
+const LOOP_RULES_AT_START: &[&str] = &["--rules", "data/test/loop_rolling.rewrites", "--only-use-dsrs-at-start"];
+
+/// count-2 loop: pure overhead, so live and at-start *diverge*. Each program is
+/// `(C B B)` for a distinct body `B`. At count 2 the rolled `(repeat B 2 step)`
+/// is one node *more* expensive than the duplication it replaces, so the bare
+/// reuse abstraction `(C ?#0 ?#0)` is the cost optimum. Live keeps both the
+/// unrolled and rolled forms in the egraph and finds it (cost 32). But at-start's
+/// min-term extraction eagerly rolls each program to `(repeat B 2 step)` — the
+/// rolled form *is* the local min-term once a roll fires — and then searches a
+/// fresh egraph from which the unrolled form is gone, so it can only reach the
+/// strictly worse `(repeat ?#0 2 step)` (cost 33). The loop overhead is exactly
+/// what makes eager rolling a trap and live rule usage strictly better.
+#[test]
+fn loop_rolling_overhead_live_beats_at_start() {
+    let input = "data/test/loop_rolling_n2.json";
+    let live = run_backend("best-first", input, LOOP_RULES);
+    let at_start = run_backend("best-first", input, LOOP_RULES_AT_START);
+
+    let live_body = abstraction_bodies(&live).into_iter().next().expect("live: one abstraction");
+    let at_start_body = abstraction_bodies(&at_start).into_iter().next().expect("at-start: one abstraction");
+    assert_eq!(live_body, "(C #0 #0)", "live should decline the unamortized loop for the bare reuse abstraction");
+    assert!(at_start_body.contains("repeat"), "at-start is trapped in the eagerly-rolled loop, got {at_start_body}");
+
+    let live_cost = live["final_cost"].as_u64().expect("live final_cost");
+    let at_start_cost = at_start["final_cost"].as_u64().expect("at-start final_cost");
+    assert!(live_cost < at_start_cost, "live ({live_cost}) must strictly beat at-start ({at_start_cost}) — eager rolling cost it the reuse abstraction");
+}
+
+/// count-3 loop: overhead amortized, so live and at-start *agree*. The control
+/// for the test above — each program is `(C B (C B B))`, and at count 3 the
+/// rolled `(repeat B 3 step)` genuinely wins, so both modes find the loop
+/// abstraction `(repeat ?#0 3 step)`. This pins that the divergence above is the
+/// cost model correctly rejecting an unworthwhile loop, not a blanket aversion
+/// to loops: when a loop pays for its overhead, both modes roll it.
+#[test]
+fn loop_rolling_worthwhile_both_agree() {
+    let input = "data/test/loop_rolling_n3.json";
+    let live = abstraction_bodies(&run_backend("best-first", input, LOOP_RULES)).into_iter().next().expect("live: one abstraction");
+    let at_start = abstraction_bodies(&run_backend("best-first", input, LOOP_RULES_AT_START)).into_iter().next().expect("at-start: one abstraction");
+    assert_eq!(live, "(repeat #0 3 step)", "count-3 loop is worthwhile; live should roll it");
+    assert_eq!(at_start, "(repeat #0 3 step)", "count-3 loop is worthwhile; at-start should roll it too");
+}

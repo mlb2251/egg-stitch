@@ -1,0 +1,10 @@
+// Generic counted-loop rolling rules. `(repeat body count step)` is a loop:
+// run `body` `count` times, composing the `step` transform each iteration. The
+// loop carries representational overhead (the `repeat` node, the count, and the
+// `step` arg `m`) over a bare composition, so rolling only lowers cost once the
+// count is large enough to amortize it — at count 2 the rolled form is *more*
+// expensive than the duplication it replaces. These rules let the cost model
+// (not the rule set) decide whether a loop is worth it.
+roll2: (C ?x ?x) => (repeat ?x 2 step)
+roll3: (C ?x (C ?x ?x)) => (repeat ?x 3 step)
+rep_1: (repeat ?x 1 ?n) => ?x
