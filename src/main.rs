@@ -23,10 +23,10 @@ fn main() {
     let args = Args::parse();
     let start = std::time::Instant::now();
 
-    // Pick the language family AND its leaf-Op at the boundary. LambdaCalc
-    // gets `OpDB<Op>` so `$n` parses as a real De Bruijn variable (the fv
-    // analysis and depth-aware extraction need that). OpChildren has no
-    // binders, so DB vars are meaningless there — keeps plain `Op`.
+    // Pick the language family AND its leaf-Op at the boundary. LambdaCalc and
+    // OpChildrenDb get `OpDB<Op>` so `$n` parses as a real De Bruijn variable
+    // (the fv analysis and the body-ban need that). Plain OpChildren keeps `Op`:
+    // without DB-var leaves there are no free variables to track.
     let RunOutput {
         library,
         original_size,
@@ -39,6 +39,7 @@ fn main() {
         iteration_times,
     } = match args.language {
         LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
+        LanguageChoice::OpChildrenDb => run::<OpChildren, OpDB<Op>>(&args),
         LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
     };
 

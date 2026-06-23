@@ -245,6 +245,14 @@ pub enum LanguageChoice {
     /// Flat n-ary nodes (`(f a b c)` is a single enode). Default.
     #[value(name = "op-children")]
     OpChildren,
+    /// Flat n-ary nodes, but with `OpDB` leaves so `$n` parses as a real De
+    /// Bruijn variable. There are still no binders, so every `$n` is free
+    /// (`var_depth = 0`) and `invalid_literal_expansion` keeps it out of
+    /// abstraction bodies — it can only ever be an argument. Gives the
+    /// free-variable body-ban without `lambda-calc`'s curried partial-application
+    /// fragmentation.
+    #[value(name = "op-children-db")]
+    OpChildrenDb,
     /// Lambda-calculus shape: curried binary `App`, unary `Lam`, multi-child
     /// `Programs` root.
     #[value(name = "lambda-calc")]
