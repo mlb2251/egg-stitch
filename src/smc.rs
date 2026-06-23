@@ -83,9 +83,8 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
-    // Per-factor match-set cap (same as best-first's `--max-match-set`): drop any
-    // expanded particle whose heaviest factor's row count exceeds the cap, so the
-    // commutativity-bloated successors don't cascade and OOM the search.
+    // Per-factor match-set cap (best-first's `--max-match-set`): drop expanded
+    // particles over the cap before the commutativity blowup cascades.
     let max_match_set = args.max_match_set;
 
     for step in 0..num_steps {

@@ -258,10 +258,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
         }
 
-        // Drop successors with an over-cap factor (per-factor row count).
-        // Per-factor (not summed) so high-usage patterns — many matches, tiny
-        // 1-row factors — survive; only entangled commutativity-blowup factors
-        // are pruned. See `SearchState::max_factor_rows`.
+        // Drop successors over the per-factor row cap (commutativity blowup);
+        // per-factor so high-usage patterns survive. See `max_factor_rows`.
         successors.retain(|c| c.within_match_set_cap(args.max_match_set));
 
         for child_state in successors {

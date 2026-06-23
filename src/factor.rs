@@ -44,11 +44,9 @@ impl Factor {
     /// cartesian product equals `self.rows` (as a set), returning `[self]` when
     /// the relation doesn't decompose (the common small-factor case).
     ///
-    /// Factors with fewer than `min_rows` rows are kept whole without scanning:
-    /// the `O(slots² · rows)` independence detection doesn't repay itself below
-    /// that size (correctness is independent of factoring granularity, and the
-    /// factors whose `∏` blow-up actually hurts are well above it). The
-    /// `--decompose-min-rows` flag sets it; default in [`crate::Args`].
+    /// Factors with fewer than `min_rows` rows are kept whole unscanned: the
+    /// `O(slots² · rows)` detection doesn't repay itself that small (correctness
+    /// is independent of granularity). Set by `--decompose-min-rows`.
     ///
     /// Two slot-positions are "entangled" when their joint projection has fewer
     /// rows than the product of their individual projections (i.e. not every

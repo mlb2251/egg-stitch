@@ -209,25 +209,17 @@ pub struct Args {
     #[arg(long = "max-forced-expansion", default_value = "none")]
     pub max_forced_expansion: MaxForcedExpansion,
 
-    /// Prune best-first successors with an over-cap factor, measured by
-    /// *per-factor row count* (see `SearchState::max_factor_rows`).
-    /// Excludes patterns that descend into commutativity-bloated arithmetic
-    /// e-classes (one coordinate constant with exponentially many entangled
-    /// parse trees, stored as that many rows of a single factor) — which
-    /// `--max-forced-expansion` can't catch (those have ~zero forced expansion)
-    /// — while sparing high-usage patterns. The cap is a row count, not a
-    /// size-weighted mass, so it doesn't penalise patterns binding a few large
-    /// concrete subterms. Omit to disable.
+    /// Prune best-first/SMC successors whose heaviest factor exceeds this many
+    /// rows (`SearchState::max_factor_rows`): catches commutativity blowup that
+    /// `--max-forced-expansion` misses, while sparing high-usage patterns. Omit
+    /// to disable.
     #[arg(long = "max-match-set")]
     pub max_match_set: Option<usize>,
 
-    /// Minimum factor row count before a match factor is offered decomposition
-    /// into independent sub-factors (see `Factor::decompose`). Below this a
-    /// factor is kept whole — the `O(slots²·rows)` independence scan doesn't
-    /// repay itself. Must be `<= --max-match-set` (asserted at startup): the cap
-    /// prunes factors above its row count, so every prunable factor must first
-    /// have had the chance to decompose, else a benign independent product just
-    /// under this threshold is pruned as if it were an entangled blowup.
+    /// Minimum factor rows before `Factor::decompose` attempts a split; below
+    /// this the `O(slots²·rows)` scan doesn't repay itself. Must be `<=
+    /// --max-match-set` (asserted at startup) so the cap only prunes factors
+    /// that already had a chance to decompose.
     #[arg(long = "decompose-min-rows", default_value_t = 48)]
     pub decompose_min_rows: usize,
 
