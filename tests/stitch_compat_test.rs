@@ -180,6 +180,16 @@ fn check_fixture_bf_only_steps(input: &str, bf_steps: &str, extra_args: &[&str],
     bless_or_check(&expected_path(input), &bf, input);
 }
 
+/// Blesses/checks a single best-first run against an *explicit* fixture path,
+/// keeping the abstraction pattern. Use when several configs (varying only CLI
+/// flags) run on one input and so can't share the input-derived fixture path —
+/// the differing patterns are the point of the comparison.
+fn bless_bf_run(input: &str, extra_args: &[&str], fixture: &str, label: &str) {
+    let mut bf = run_backend("best-first", input, extra_args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check(fixture, &bf, label);
+}
+
 /// Shared blessing/checking step for the two `check_fixture*` helpers.
 fn bless_or_check(path: &str, value: &Value, input: &str) {
     let value = common::sorted(value);
@@ -1108,4 +1118,51 @@ fn molecules_scramble_ester_dsr() {
 #[test]
 fn molecules_scramble_glycol_dsr() {
     check_fixture_bf_only_steps("data/domains/molecules/scramble/glycol.scram.json", "2000", SYMMETRIES, true);
+}
+
+// === loop rolling: live DSRs roll a loop --only-use-dsrs-at-start can't ===
+//
+// A minimal domain showing the qualitative win of applying rewrite rules live
+// (during abstraction search) over applying them once up-front
+// (`--only-use-dsrs-at-start`, which normalizes the egraph, extracts a single
+// min-term per program, and searches a fresh rule-free egraph built from it).
+// `(repeat body count step)` is a counted loop; the only rule,
+// `(repeat ?x 1 ?n) => ?x` in `data/test/loop_rolling.rewrites`, says a count-1
+// loop is just its body. The corpus shares one body across loops of *different*
+// counts, so a single count-parameterized abstraction `(repeat (f a b c) ?#0
+// step)` rolls them all — but only while the count-1 loop still looks like a
+// loop, which min-term extraction destroys.
+
+/// The shared count-1-flatten rule, applied live vs only at start.
+const LOOP_RULES: &[&str] = &["--rules", "data/test/loop_rolling.rewrites"];
+const LOOP_RULES_AT_START: &[&str] = &["--rules", "data/test/loop_rolling.rewrites", "--only-use-dsrs-at-start"];
+
+/// Corpus mixes a count-1 loop with counts 2-4, so live and at-start *diverge*.
+/// Live keeps the count-1 program's `(repeat (f a b c) 1 step)` form in the
+/// e-class and rolls every program into the count-parameterized loop abstraction
+/// `(repeat (f a b c) ?#0 step)` (cost 16, the `.live` fixture). But at-start's
+/// min-term extraction fires `rep_1` on the count-1 program, flattening it to
+/// the bare body `(f a b c)` *before* search — the loop skeleton is gone — so
+/// the only thing left to share across all four programs is the body itself, and
+/// at-start abstracts `(f a b c)` (cost 18, the `.at_start` fixture). The loop is
+/// "otherwise not rollable": only live abstractions can roll it.
+#[test]
+fn loop_count1_flattens_so_only_live_rolls() {
+    let input = "data/test/loop_rolling_with_count1.json";
+    bless_bf_run(input, LOOP_RULES, "data/expected_outputs/test/loop_rolling_with_count1.live.out.json", "loop_rolling_with_count1 (live)");
+    bless_bf_run(input, LOOP_RULES_AT_START, "data/expected_outputs/test/loop_rolling_with_count1.at_start.out.json", "loop_rolling_with_count1 (at-start)");
+}
+
+/// Control: drop the count-1 loop (counts 2-5), so `rep_1` never fires during
+/// min-term extraction and the loop skeleton survives for both modes. Now both
+/// roll the same count-parameterized abstraction `(repeat (f a b c) ?#0 step)`,
+/// checked against a *single* shared fixture. This pins that the divergence
+/// above is specifically the count-1 min-term flattening, not a general
+/// inability of at-start to roll loops.
+#[test]
+fn loop_no_count1_both_roll() {
+    let input = "data/test/loop_rolling_no_count1.json";
+    let fixture = "data/expected_outputs/test/loop_rolling_no_count1.out.json";
+    bless_bf_run(input, LOOP_RULES, fixture, "loop_rolling_no_count1 (live)");
+    bless_bf_run(input, LOOP_RULES_AT_START, fixture, "loop_rolling_no_count1 (at-start)");
 }
