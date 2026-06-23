@@ -83,6 +83,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
+    // Per-factor match-set cap (best-first's `--max-match-set`): drop expanded
+    // particles over the cap before the commutativity blowup cascades.
+    let max_match_set = args.max_match_set;
 
     for step in 0..num_steps {
         // For each (state, mult) group, enumerate successor *actions* (no child
@@ -98,7 +101,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
-                    dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                    if child.within_match_set_cap(max_match_set) {
+                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                    }
                     continue;
                 }
                 // SMC keeps creation order (`freeze_rule = false`), so the freeze
@@ -118,7 +123,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
                     let child = state.apply_action(&action, &shared, true, None);
-                    dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                    if child.within_match_set_cap(max_match_set) {
+                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                    }
                 }
             }
         }

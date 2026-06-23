@@ -61,6 +61,12 @@ RULES_BY_REL = {
     "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
     "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",
     "test/if_unify.out.json": "data/test/if.rewrites",
+    # loop rolling: at-start flattens a count-1 loop to its bare body via
+    # `(repeat ?x 1 ?n) => ?x`, so only that DSR bridges orig and rewritten.
+    # Blessed by the `loop_*` cases in `tests/stitch_compat_test.rs`.
+    "test/loop_rolling_with_count1.live.out.json": "data/test/loop_rolling.rewrites",
+    "test/loop_rolling_with_count1.at_start.out.json": "data/test/loop_rolling.rewrites",
+    "test/loop_rolling_no_count1.out.json": "data/test/loop_rolling.rewrites",
     # molecule domain (op-children): re-rooting / commutativity DSRs are what
     # make the rewritten trees equivalent, so β alone can't bridge them. Blessed
     # by the `molecules_*` cases in `tests/stitch_compat_test.rs`.
