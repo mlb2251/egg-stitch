@@ -297,12 +297,11 @@ TABLE7_ITER_LIMIT = 30
 # library (a misleading 1.0); above it, the rule-saturated e-graph never
 # converges and it times out. Sweep up to 10k so the representative point is
 # past the warmup and lands on a real result (here: DNF). SMC caps at 2000.
+# Both representative table/marker points are the renderer's canonical ones
+# (TABLE_BFS_STEPS=10000, TABLE_SMC_PARTICLES=1000) -- table7 needs no custom
+# point, unlike table5's extended enum sweep (TABLE5_ENUM_POINT=100k).
 TABLE7_BFS_SWEEP = tuple(n for n in BFS_STEP_SWEEP if n <= 10000)
 TABLE7_SMC_SWEEP = tuple(p for p in SMC_PARTICLE_SWEEP if p <= 2000)
-# Representative operating points for the table cells / filled plot markers.
-# Enum matches table3's TABLE_BFS_STEPS (10000) for cross-table consistency.
-TABLE7_ENUM_POINT = 10000
-TABLE7_SMC_POINT = 2000
 
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:

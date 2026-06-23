@@ -32,7 +32,6 @@ from expts.tables import (  # noqa: E402
     TABLE5_ENUM_POINT,
     TABLE7_BFS_SWEEP,
     TABLE7_DOMAINS,
-    TABLE7_ENUM_POINT,
 )
 from dataclasses import dataclass  # noqa: E402
 
@@ -644,7 +643,7 @@ TABLE5_SPEC = FamilySpec(
 # table7: EPFL circuits with the factoring DSRs. Same as table5 but babble (no
 # boolean theory) is swapped for a no-rules Enum baseline ("enum-baseline") -- so
 # the three-way baseline/live/at-start contrast shows. Enum DNFs here (best-first
-# can't search the rule-saturated e-graph; see TABLE7_ENUM_POINT).
+# can't search the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
 TABLE7_SPEC = FamilySpec(
     title="EPFL Circuit Compression (Factoring DSRs)",
     fig_subdir="table7",
@@ -659,7 +658,7 @@ TABLE7_SPEC = FamilySpec(
     plot_methods=["enum", "smc", "enum-dsrs-at-start", "enum-baseline"],
     table_methods=["enum", "smc", "enum-dsrs-at-start", "enum-baseline"],
     data_keys={
-        "enum": f"enum-{TABLE7_ENUM_POINT}",
+        "enum": f"enum-{TABLE_BFS_STEPS}",
         "smc": f"smc-{TABLE_SMC_PARTICLES}",
         "enum-dsrs-at-start": "enum-dsrs-at-start",
         "enum-baseline": "enum-baseline",
@@ -671,7 +670,7 @@ TABLE7_SPEC = FamilySpec(
         "enum-baseline": "BFS/NR",
     },
     sweep_for_method={"enum": TABLE7_BFS_SWEEP, "smc": SMC_PARTICLE_SWEEP},
-    sweep_point={"enum": TABLE7_ENUM_POINT, "smc": TABLE_SMC_PARTICLES},
+    sweep_point={"enum": TABLE_BFS_STEPS, "smc": TABLE_SMC_PARTICLES},
     method_colors={
         "enum": line_color(0),
         "smc": line_color(1),
