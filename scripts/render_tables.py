@@ -700,9 +700,9 @@ def render_family_tex(saved: dict, spec: "FamilySpec") -> str:
     methods = spec.table_methods
     n = len(methods)
 
-    def cells(values: list[float | None], spec: str, higher_is_better: bool) -> list[str]:
+    def cells(values: list[float | None], fmt_spec: str, higher_is_better: bool) -> list[str]:
         """bold_best, but render None as DNF (not N/A)."""
-        out = bold_best(values, spec, higher_is_better)
+        out = bold_best(values, fmt_spec, higher_is_better)
         return [("DNF" if v is None else s) for v, s in zip(values, out)]
 
     col_spec = "l r " + ("r" * n) + " " + ("r" * n)
