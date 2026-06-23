@@ -24,7 +24,7 @@ from ._subproc import available_memory_bytes
 from .bench import MAX_ARITY, MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
-from .runner import EPFL_CIRCUITS, MOLECULE_FAMILIES
+from .runner import EPFL_CIRCUITS, MOLECULES
 
 NUM_RUNS = 10
 
@@ -235,7 +235,7 @@ def table4() -> Path:
 # Table 3 (Enum/SMC sweeps + babble) plus a "dsrs-only-at-start" baseline
 # (best-first that canonicalises with the DSRs once instead of keeping them
 # live). Every algorithm gets a hard wall-clock cap.
-TABLE5_DOMAINS = [f"molecules:{fam}" for fam in MOLECULE_FAMILIES]
+TABLE5_DOMAINS = MOLECULES.domains
 TABLE5_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE5_NUM_ABSTRACTIONS = 4
 # Live DSRs inflate the e-graph with every symmetry-equivalent orientation, so
@@ -265,18 +265,23 @@ def _table5_runners() -> tuple[tuple[str, object], ...]:
     )
 
 
-def table5() -> Path:
-    """Run the molecule scramble subset with DSRs, Table 3 roster + the
-    dsrs-only-at-start baseline, each algorithm capped at 300s and 20 GiB."""
-    # Preflight: the per-tool memory cap is only a consistent control if the
-    # machine actually has that much free, so refuse to start otherwise.
+def _require_free_memory(name: str) -> None:
+    """Refuse to start table run `name` unless the machine has MEM_LIMIT_BYTES
+    free: the per-tool memory cap is only a consistent control if that much is
+    actually available."""
     free = available_memory_bytes()
     if free < MEM_LIMIT_BYTES:
         raise SystemExit(
-            f"table5: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
+            f"{name}: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
             f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
             f"available. Free up memory or lower MEM_LIMIT_BYTES."
         )
+
+
+def table5() -> Path:
+    """Run the molecule scramble subset with DSRs, Table 3 roster + the
+    dsrs-only-at-start baseline, each algorithm capped at 300s and 20 GiB."""
+    _require_free_memory("table5")
     return _run_table(
         domains=TABLE5_DOMAINS,
         runners=_table5_runners(),
@@ -291,7 +296,7 @@ def table5() -> Path:
 # sweeps + dsrs-only-at-start) at max-arity 4, plus a no-rules Enum baseline so the
 # three-way baseline/live/at-start shows. babble/Stitch have no theory for these
 # boolean circuits, so they're dropped.
-TABLE7_DOMAINS = [f"epfl-circuits:{c}" for c in EPFL_CIRCUITS]
+TABLE7_DOMAINS = EPFL_CIRCUITS.domains
 TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE7_NUM_ABSTRACTIONS = 4
 TABLE7_MAX_ARITY = 4
@@ -326,13 +331,7 @@ def _table7_runners() -> tuple[tuple[str, object], ...]:
 def table7() -> Path:
     """Run the EPFL circuits with the factoring DSRs: table5 roster + a no-rules
     Enum baseline, max-arity 4, 4 abstractions, each capped at 300s and 20 GiB."""
-    free = available_memory_bytes()
-    if free < MEM_LIMIT_BYTES:
-        raise SystemExit(
-            f"table7: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
-            f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
-            f"available. Free up memory or lower MEM_LIMIT_BYTES."
-        )
+    _require_free_memory("table7")
     return _run_table(
         domains=TABLE7_DOMAINS,
         runners=_table7_runners(),
