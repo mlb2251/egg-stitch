@@ -1,14 +1,11 @@
-#!/usr/bin/env python3
-"""Parse a binary-AIGER (.aig) circuit and extract an **input-bounded** fan-in
-cone for every AND gate: grow each cone until taking the next gate would exceed
-K distinct input signals (a k-feasible cut), rather than cutting at a fixed
-depth. Because the AIG is a DAG, forcing a cut to a tree re-expands reconvergent
-subgates, so a node-size CAP guards against blow-up. Leaves are named signal ids
-(`sN`) so abstraction can introduce metavars over inputs. Imported as a library
-by `aig_to_egg.py` and `build_benchmarks.py`. Usage:
-    aig_cones.py <file.aig> [K]            # print cone-size stats for cut width K
+"""Library for parsing a binary-AIGER (.aig) circuit and extracting an
+**input-bounded** fan-in cone for every AND gate: grow each cone until taking the
+next gate would exceed K distinct input signals (a k-feasible cut), rather than
+cutting at a fixed depth. Because the AIG is a DAG, forcing a cut to a tree
+re-expands reconvergent subgates, so a node-size CAP guards against blow-up.
+Leaves are named signal ids (`sN`) so abstraction can introduce metavars over
+inputs. Imported by `aig_to_egg.py` and `build_benchmarks.py`.
 """
-import sys
 
 CAP = 400  # max tree nodes before we stop growing a cone (reconvergence guard)
 
@@ -93,23 +90,3 @@ def to_tup(node, named):
 def size(t):
     """Node count of a tuple tree."""
     return 1 if len(t) == 1 else 1 + sum(size(c) for c in t[1:])
-
-
-def main():
-    path = sys.argv[1]
-    K = int(sys.argv[2]) if len(sys.argv) > 2 else 6
-    M, I, L, O, A, outs, ands = read_aig(path)
-    print(f"{path}: M={M} I={I} O={O} ANDs={A}; k-feasible cut K={K} (cap={CAP})\n")
-    trees, capped = [], 0
-    for j in range(A):
-        tr = kcone(2 * (I + 1 + j), ands, I, K)
-        trees.append(to_tup(tr, named=False))
-        if size(trees[-1]) > CAP:
-            capped += 1
-    sizes = sorted(size(t) for t in trees if size(t) >= 6)
-    print(f"AND gates={A}  non-trivial cones(>=6 nodes)={len(sizes)}  "
-          f"size[min/med/max]={sizes[0]}/{sizes[len(sizes)//2]}/{sizes[-1]}  capped={capped}")
-
-
-if __name__ == "__main__":
-    main()
