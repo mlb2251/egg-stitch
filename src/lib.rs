@@ -209,26 +209,15 @@ pub struct Args {
     #[arg(long = "max-forced-expansion", default_value = "none")]
     pub max_forced_expansion: MaxForcedExpansion,
 
-    /// Prune best-first successors with an over-cap factor, measured by
-    /// *per-factor row count* (see `SearchState::max_factor_rows`).
-    /// Excludes patterns that descend into commutativity-bloated arithmetic
-    /// e-classes (one coordinate constant with exponentially many entangled
-    /// parse trees, stored as that many rows of a single factor) — which
-    /// `--max-forced-expansion` can't catch (those have ~zero forced expansion)
-    /// — while sparing high-usage patterns. The cap is a row count, not a
-    /// size-weighted mass, so it doesn't penalise patterns binding a few large
-    /// concrete subterms. Omit to disable.
+    /// Prune best-first/SMC successors whose largest factor exceeds
+    /// this many rows. Must be >= `--decompose-min-rows`.
     #[arg(long = "max-match-set")]
     pub max_match_set: Option<usize>,
 
-    /// Minimum factor row count before a match factor is offered decomposition
-    /// into independent sub-factors (see `Factor::decompose`). Below this a
-    /// factor is kept whole — the `O(slots²·rows)` independence scan doesn't
-    /// repay itself. Must be `<= --max-match-set` (asserted at startup): the cap
-    /// prunes factors above its row count, so every prunable factor must first
-    /// have had the chance to decompose, else a benign independent product just
-    /// under this threshold is pruned as if it were an entangled blowup.
-    #[arg(long = "decompose-min-rows", default_value_t = crate::factor::DEFAULT_DECOMPOSE_MIN_ROWS)]
+    /// Minimum factor rows before `Factor::decompose` attempts a split
+    /// Set higher to avoid unnecessary scans, set lower to reduce memory
+    /// pressure.
+    #[arg(long = "decompose-min-rows", default_value_t = 48)]
     pub decompose_min_rows: usize,
 
     /// Path to write JSON output.

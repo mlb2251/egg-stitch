@@ -154,11 +154,8 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// precomputed once (the e-graph is static during search). Indexed by
     /// canonical eclass id — sound because no unions happen during search.
     pub eclass_shapes: Vec<EclassShapeHist<F, O>>,
-    /// Minimum factor row count before [`Factor::decompose`] attempts a split
-    /// (`--decompose-min-rows`). Held here so every decompose site on the search
-    /// hot path reads the same runtime value. `setup_search` asserts it stays
-    /// `≤` the `--max-match-set` row cap so the cap only ever prunes factors
-    /// that were already offered decomposition.
+    /// `--decompose-min-rows`: min factor rows before [`Factor::decompose`]
+    /// splits. Held here so every decompose site reads one runtime value.
     pub decompose_min_rows: usize,
 }
 
@@ -657,20 +654,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.matches.iter().any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
     }
 
-    /// The heaviest single factor's row count: over every factor (of every
-    /// match), the number of stored rows; we return the max over factors.
-    ///
-    /// Isolates the commutativity-blowup signature — one entangled factor (can't
-    /// `decompose`) holding the exponentially many equivalent parse trees of a
-    /// single coordinate as distinct rows. A high-*usage* pattern instead has
-    /// many matches each with tiny 1-row factors, so its per-factor row count
-    /// stays small and it survives the `--max-match-set` prune; taking the max
-    /// over factors (not the sum, nor the `num_substs` product) keeps the two
-    /// from conflating. Unlike a size-weighted mass, this is blind to the
-    /// min-term size of the bindings, so a pattern matching a few large concrete
-    /// subterms isn't penalised for size it didn't entangle.
-    pub fn max_factor_rows(&self) -> usize {
-        self.matches.iter().flat_map(|m| m.factors.iter()).map(|f| f.rows.len()).max().unwrap_or(0)
+    /// Whether this state is within the `--max-match-set` row cap (`true` when
+    /// unset). The blowup guard both drivers apply when admitting a successor.
+    pub fn within_match_set_cap(&self, max_match_set: Option<usize>) -> bool {
+        let max_factor_rows = self.matches.iter().flat_map(|m| m.factors.iter()).map(|f| f.rows.len()).max().unwrap_or(0);
+        max_match_set.is_none_or(|cap| max_factor_rows <= cap)
     }
 
     /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
@@ -952,13 +940,10 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let crate::shared::SharedData { egraph, root } = data;
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let eclass_shapes = compute_eclass_shapes::<F, O>(&egraph);
-    // The `--max-match-set` cap prunes factors with more than `cap` rows; a
-    // factor is only offered decomposition once it reaches `decompose_min_rows`.
-    // If the decompose threshold were above the cap, a benign independent
-    // product in `(cap, decompose_min_rows)` rows would be pruned as if it were
-    // an entangled blowup, never having had the chance to split. Require the
-    // decompose threshold at or below the cap so every prunable factor was
-    // already decomposed.
+    // Require decompose_min_rows <= cap: the cap prunes factors over `cap` rows,
+    // so each must first have had a chance to decompose — else a benign
+    // independent product in `(cap, decompose_min_rows)` rows is pruned as a
+    // fake blowup.
     if let Some(cap) = args.max_match_set {
         assert!(args.decompose_min_rows <= cap, "--decompose-min-rows ({}) must be <= --max-match-set ({cap}); otherwise the cap prunes un-decomposed factors", args.decompose_min_rows);
     }
