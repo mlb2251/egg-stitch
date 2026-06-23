@@ -171,20 +171,15 @@ pub struct Args {
 
     /// Disable the useless-frozen-variable check (on by default).
     /// When a frozen metavar `?#k` is bound to the same e-class in every
-    /// match and that e-class has no above-pattern free vars, the state
-    /// is pruned — the abstraction adds no compression at that slot.
+    /// subst and that e-class has no above-pattern free db vars, the state
+    /// is pruned.
     /// Stitch analog: "argument capture" / `is_useless_abstract`.
     #[arg(long = "no-opt-useless-frozen", action = clap::ArgAction::SetFalse)]
     pub opt_useless_frozen: bool,
 
     /// Disable the useless-non-frozen inlining short-circuit (on by default).
-    /// When a non-frozen metavar `?#k` is bound to the same e-class in every
-    /// match (and that e-class has no above-pattern free vars), this emits a
-    /// single dominant successor that one-step expands `?#k` (and any other
-    /// such non-frozen vars) to the size-minimal enode shape of its e-class —
-    /// inlining a constant arg specialises the body without giving up matches.
-    /// `frozen_count` is preserved since the move runs "before" any normal
-    /// expand in the canonical order.
+    /// Equivalent of `--no-opt-useless-frozen` but for non-frozen metavars
+    /// and instead of pruning, it just inlines it with the min term.
     #[arg(long = "no-opt-useless-inline", action = clap::ArgAction::SetFalse)]
     pub opt_useless_inline: bool,
 
@@ -272,6 +267,14 @@ pub enum LanguageChoice {
     /// Flat n-ary nodes (`(f a b c)` is a single enode). Default.
     #[value(name = "op-children")]
     OpChildren,
+    /// Flat n-ary nodes, but with `OpDB` leaves so `$n` parses as a real De
+    /// Bruijn variable. There are still no binders, so every `$n` is free
+    /// (`var_depth = 0`) and `invalid_literal_expansion` keeps it out of
+    /// abstraction bodies — it can only ever be an argument. Gives the
+    /// free-variable body-ban without `lambda-calc`'s curried partial-application
+    /// fragmentation.
+    #[value(name = "op-children-db")]
+    OpChildrenDb,
     /// Lambda-calculus shape: curried binary `App`, unary `Lam`, multi-child
     /// `Programs` root.
     #[value(name = "lambda-calc")]

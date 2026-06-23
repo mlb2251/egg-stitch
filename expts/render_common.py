@@ -67,32 +67,28 @@ def aggregate_time(repeats: list[list[dict]]) -> float | None:
     return _geomean([repeat_time(r) for r in repeats])
 
 
-def _assert_all_or_nothing_dnf(method: str, repeats: list[list[dict]]) -> None:
-    """Guard the partial-DNF averaging asymmetry: every per-file record for the
-    method must be a DNF, or none may be. ``repeat_cr``/``aggregate_cr`` drop
-    DNFs (geomean over the finishers) while ``repeat_time``/``aggregate_time``
-    still sum in the timed-out runs' budget, so any mix averages CR and time
-    over inconsistent sets and silently misleads. A record is a DNF when
-    ``compression_ratio is None``."""
-    dnf = [r["compression_ratio"] is None for per_file in repeats for r in per_file]
-    assert len(set(dnf)) <= 1, (
-        f"{method}: partial DNF ({sum(dnf)}/{len(dnf)} runs timed out/OOM'd) — "
-        "CR and time would aggregate over inconsistent sets"
-    )
+def has_dnf(repeats: list[list[dict]]) -> bool:
+    """True if any of a method's per-file records timed out / OOM'd.
+
+    A record is a DNF when ``compression_ratio is None``. Aggregation drops a
+    method with any DNF entirely (returns ``None``) rather than averaging:
+    ``repeat_cr``/``aggregate_cr`` drop DNFs while ``repeat_time``/
+    ``aggregate_time`` still sum the timed-out runs' budget, so a partial set
+    would average CR and time over inconsistent sets and silently mislead, and
+    an all-DNF set has nothing to average."""
+    return any(r["compression_ratio"] is None for per_file in repeats for r in per_file)
 
 
 def aggregate_methods_cr(runs: dict[str, list[list[dict]]]) -> dict[str, float | None]:
-    """{method: aggregated compression ratio} for every method present."""
-    for m, repeats in runs.items():
-        _assert_all_or_nothing_dnf(m, repeats)
-    return {m: aggregate_cr(repeats) for m, repeats in runs.items()}
+    """{method: aggregated compression ratio} for every method present; ``None``
+    for any method with a DNF (see ``has_dnf``)."""
+    return {m: (None if has_dnf(reps) else aggregate_cr(reps)) for m, reps in runs.items()}
 
 
 def aggregate_methods_time(runs: dict[str, list[list[dict]]]) -> dict[str, float | None]:
-    """{method: aggregated elapsed seconds} for every method present."""
-    for m, repeats in runs.items():
-        _assert_all_or_nothing_dnf(m, repeats)
-    return {m: aggregate_time(repeats) for m, repeats in runs.items()}
+    """{method: aggregated elapsed seconds} for every method present; ``None``
+    for any method with a DNF, matching ``aggregate_methods_cr``."""
+    return {m: (None if has_dnf(reps) else aggregate_time(reps)) for m, reps in runs.items()}
 
 
 def initial_size_for_domain(runs: dict[str, list[list[dict]]]) -> float | None:
