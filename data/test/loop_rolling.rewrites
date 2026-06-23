@@ -1,10 +1,10 @@
-// Generic counted-loop rolling rules. `(repeat body count step)` is a loop:
-// run `body` `count` times, composing the `step` transform each iteration. The
-// loop carries representational overhead (the `repeat` node, the count, and the
-// `step` arg `m`) over a bare composition, so rolling only lowers cost once the
-// count is large enough to amortize it — at count 2 the rolled form is *more*
-// expensive than the duplication it replaces. These rules let the cost model
-// (not the rule set) decide whether a loop is worth it.
-roll2: (C ?x ?x) => (repeat ?x 2 step)
-roll3: (C ?x (C ?x ?x)) => (repeat ?x 3 step)
+// Counted-loop flattening rule. `(repeat body count step)` is a loop that runs
+// `body` `count` times. The single rule says a count-1 loop is just its body.
+//
+// It is load-bearing for the live-vs-at-start divergence: with
+// `--only-use-dsrs-at-start`, each program's min-term is extracted up front, and
+// this rule flattens a count-1 loop to its bare body — so the loop skeleton is
+// gone before abstraction search even starts, and a count-parameterized loop
+// abstraction can no longer match that program. Live search keeps both forms in
+// the same e-class, so it can still roll the loop across the count-1 site.
 rep_1: (repeat ?x 1 ?n) => ?x

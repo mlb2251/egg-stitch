@@ -1080,55 +1080,49 @@ fn molecules_scramble_glycol_dsr() {
     check_fixture_bf_only_steps("data/domains/molecules/scramble/glycol.scram.json", "2000", SYMMETRIES, true);
 }
 
-// === loop rolling: live DSRs vs --only-use-dsrs-at-start ===
+// === loop rolling: live DSRs roll a loop --only-use-dsrs-at-start can't ===
 //
-// A minimal domain demonstrating a *qualitative* divergence between applying
-// rewrite rules live (during abstraction search) and applying them once
-// up-front (`--only-use-dsrs-at-start`, which normalizes the egraph, extracts a
-// single min-term per program, and searches a fresh rule-free egraph built from
-// it). `(repeat body count step)` is a loop; the generic rolling rules in
-// `data/test/loop_rolling.rewrites` (`(C ?x ?x) => (repeat ?x 2 step)`, the
-// count-3 variant, and `(repeat ?x 1 ?n) => ?x`) let the *cost model* — not the
-// rule set — decide whether a loop is worth it. The loop carries overhead (the
-// `repeat` node + count + `step` arg) over a bare composition, so it only lowers
-// cost once the count amortizes that overhead.
+// A minimal domain showing the qualitative win of applying rewrite rules live
+// (during abstraction search) over applying them once up-front
+// (`--only-use-dsrs-at-start`, which normalizes the egraph, extracts a single
+// min-term per program, and searches a fresh rule-free egraph built from it).
+// `(repeat body count step)` is a counted loop; the only rule,
+// `(repeat ?x 1 ?n) => ?x` in `data/test/loop_rolling.rewrites`, says a count-1
+// loop is just its body. The corpus shares one body across loops of *different*
+// counts, so a single count-parameterized abstraction `(repeat (f a b c) ?#0
+// step)` rolls them all — but only while the count-1 loop still looks like a
+// loop, which min-term extraction destroys.
 
-/// Both corpora share the generic counted-loop rolling rules.
+/// The shared count-1-flatten rule, applied live vs only at start.
 const LOOP_RULES: &[&str] = &["--rules", "data/test/loop_rolling.rewrites"];
 const LOOP_RULES_AT_START: &[&str] = &["--rules", "data/test/loop_rolling.rewrites", "--only-use-dsrs-at-start"];
 
-/// count-2 loop: pure overhead, so live and at-start *diverge*. Each program is
-/// `(C B B)` for a distinct body `B`. At count 2 the rolled `(repeat B 2 step)`
-/// is one node *more* expensive than the duplication it replaces, so the bare
-/// reuse abstraction `(C ?#0 ?#0)` is the cost optimum. Live keeps both the
-/// unrolled and rolled forms in the egraph and finds it (cost 32, the `.live`
-/// fixture). But at-start's min-term extraction eagerly rolls each program to
-/// `(repeat B 2 step)` — the rolled form *is* the local min-term once a roll
-/// fires — and then searches a fresh egraph from which the unrolled form is
-/// gone, so it can only reach the strictly worse `(repeat ?#0 2 step)` (cost 33,
-/// the `.at_start` fixture). The loop overhead is exactly what makes eager
-/// rolling a trap and live rule usage strictly better; the two fixtures pin the
-/// divergence.
+/// Corpus mixes a count-1 loop with counts 2-4, so live and at-start *diverge*.
+/// Live keeps the count-1 program's `(repeat (f a b c) 1 step)` form in the
+/// e-class and rolls every program into the count-parameterized loop abstraction
+/// `(repeat (f a b c) ?#0 step)` (cost 16, the `.live` fixture). But at-start's
+/// min-term extraction fires `rep_1` on the count-1 program, flattening it to
+/// the bare body `(f a b c)` *before* search — the loop skeleton is gone — so
+/// the only thing left to share across all four programs is the body itself, and
+/// at-start abstracts `(f a b c)` (cost 18, the `.at_start` fixture). The loop is
+/// "otherwise not rollable": only live abstractions can roll it.
 #[test]
-fn loop_rolling_overhead_live_beats_at_start() {
-    let input = "data/test/loop_rolling_n2.json";
-    bless_bf_run(input, LOOP_RULES, "data/expected_outputs/test/loop_rolling_n2.live.out.json", "loop_rolling_n2 (live)");
-    bless_bf_run(input, LOOP_RULES_AT_START, "data/expected_outputs/test/loop_rolling_n2.at_start.out.json", "loop_rolling_n2 (at-start)");
+fn loop_count1_flattens_so_only_live_rolls() {
+    let input = "data/test/loop_rolling_with_count1.json";
+    bless_bf_run(input, LOOP_RULES, "data/expected_outputs/test/loop_rolling_with_count1.live.out.json", "loop_rolling_with_count1 (live)");
+    bless_bf_run(input, LOOP_RULES_AT_START, "data/expected_outputs/test/loop_rolling_with_count1.at_start.out.json", "loop_rolling_with_count1 (at-start)");
 }
 
-/// count-3 loop: overhead amortized, so live and at-start *agree*. The control
-/// for the test above — each program is `(C B (C B B))`, and at count 3 the
-/// rolled `(repeat B 3 step)` genuinely wins, so both modes find the loop
-/// abstraction `(repeat ?#0 3 step)`. Both runs check against a *single* shared
-/// fixture, so agreement is asserted literally (both must equal the one frozen
-/// output) rather than by storing the same JSON twice. This pins that the
-/// divergence above is the cost model correctly rejecting an unworthwhile loop,
-/// not a blanket aversion to loops: when a loop pays for its overhead, both
-/// modes roll it.
+/// Control: drop the count-1 loop (counts 2-5), so `rep_1` never fires during
+/// min-term extraction and the loop skeleton survives for both modes. Now both
+/// roll the same count-parameterized abstraction `(repeat (f a b c) ?#0 step)`,
+/// checked against a *single* shared fixture. This pins that the divergence
+/// above is specifically the count-1 min-term flattening, not a general
+/// inability of at-start to roll loops.
 #[test]
-fn loop_rolling_worthwhile_both_agree() {
-    let input = "data/test/loop_rolling_n3.json";
-    let fixture = "data/expected_outputs/test/loop_rolling_n3.out.json";
-    bless_bf_run(input, LOOP_RULES, fixture, "loop_rolling_n3 (live)");
-    bless_bf_run(input, LOOP_RULES_AT_START, fixture, "loop_rolling_n3 (at-start)");
+fn loop_no_count1_both_roll() {
+    let input = "data/test/loop_rolling_no_count1.json";
+    let fixture = "data/expected_outputs/test/loop_rolling_no_count1.out.json";
+    bless_bf_run(input, LOOP_RULES, fixture, "loop_rolling_no_count1 (live)");
+    bless_bf_run(input, LOOP_RULES_AT_START, fixture, "loop_rolling_no_count1 (at-start)");
 }
