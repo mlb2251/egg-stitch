@@ -20,7 +20,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from render_molecules import render_all as render_molecules  # noqa: E402
 from expts.render_common import (  # noqa: E402
     aggregate_methods_cr,
-    aggregate_methods_dnf,
     aggregate_methods_time,
     egraph_min_for_domain,
     initial_size_for_domain,
@@ -688,29 +687,70 @@ TABLE7_SPEC = FamilySpec(
 )
 
 
-def render_family_tex(saved: dict, spec: "FamilySpec") -> str:
-    """Return a LaTeX ``tabular`` for a family table (table5/table7): one row per
-    family × method, with Compression Ratio and Time (s) groups and a geomean
-    row.
+# Unit names for the two sweep methods, used only in the kick-down notices.
+SWEEP_UNIT = {"enum": "steps", "smc": "particles"}
+
+
+def _kicked_data_keys(saved: dict, spec: "FamilySpec") -> tuple[dict[str, str], list[str]]:
+    """Pick the representative table key for each method, kicking series methods
+    down their sweep when the configured point DNFs at the geomean.
+
+    A series method (Enum/SMC) normally shows its configured operating point
+    (``spec.sweep_point``). If that point DNFs on any family — so its geomean is
+    blank — step down the sweep to the highest point that finishes *every*
+    family and show that instead. Returns ``(data_keys, notices)`` where
+    ``data_keys`` overrides ``spec.data_keys`` for any kicked-down method and
+    ``notices`` is a human-readable line per kick-down (empty if none)."""
+    domains = [d for d in spec.domains if d in saved["domains"]]
+    cr_by_domain = {
+        d: aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains
+    }
+
+    def finishes_every_family(key: str) -> bool:
+        return bool(domains) and all(cr_by_domain[d].get(key) is not None for d in domains)
+
+    data_keys = dict(spec.data_keys)
+    notices: list[str] = []
+    for method, sweep in spec.sweep_for_method.items():
+        point = spec.sweep_point[method]
+        if finishes_every_family(f"{method}-{point}"):
+            continue
+        # Highest sweep point at or below the configured one that finishes.
+        chosen = next(
+            (v for v in sorted((s for s in sweep if s <= point), reverse=True)
+             if finishes_every_family(f"{method}-{v}")),
+            None,
+        )
+        if chosen is None:
+            continue  # nothing finishes; leave the configured point to render DNF
+        data_keys[method] = f"{method}-{chosen}"
+        notices.append(
+            f"{spec.fig_subdir} {spec.col_labels[method]}: kicked down "
+            f"{point} -> {chosen} {SWEEP_UNIT[method]} (geomean DNF at {point})"
+        )
+    return data_keys, notices
+
+
+def render_family_tex(saved: dict, spec: "FamilySpec") -> tuple[str, list[str]]:
+    """Return ``(latex_tabular, notices)`` for a family table (table5/table7):
+    one row per family × method, with Compression Ratio and Time (s) groups and
+    a geomean row. ``notices`` lists any series-method sweep-point kick-downs.
 
     No e-graph-min or Stitch columns (these tables have neither). A method that
-    timed out / OOM'd on every run of a family is rendered ``DNF`` and excluded
-    from that row's bolding and the geomean; one that timed out on only some
-    runs is rendered ``DNF*`` (its CR/time would average over inconsistent sets,
-    so no number is shown) and likewise excluded.
-    """
+    timed out / OOM'd on any run of a family has no comparable number, so it's
+    rendered ``DNF`` and excluded from that row's bolding and the geomean. A
+    series method (Enum/SMC) whose representative sweep point DNFs at the geomean
+    is first kicked down to the highest point that finishes every family (see
+    ``_kicked_data_keys``)."""
     domains = saved["domains"]
     methods = spec.table_methods
     n = len(methods)
+    data_keys, notices = _kicked_data_keys(saved, spec)
 
-    def cells(values: list[float | None], statuses: list[str],
-              fmt_spec: str, higher_is_better: bool) -> list[str]:
-        """bold_best, but render a DNF as ``DNF`` (all runs) or ``DNF*`` (some)."""
+    def cells(values: list[float | None], fmt_spec: str, higher_is_better: bool) -> list[str]:
+        """bold_best, but render a missing value (DNF) as ``DNF``."""
         out = bold_best(values, fmt_spec, higher_is_better)
-        return [
-            (("DNF*" if st == "partial" else "DNF") if v is None else s)
-            for v, s, st in zip(values, out, statuses)
-        ]
+        return [("DNF" if v is None else s) for v, s in zip(values, out)]
 
     col_spec = "l r " + ("r" * n) + " " + ("r" * n)
     lines = [
@@ -736,10 +776,8 @@ def render_family_tex(saved: dict, spec: "FamilySpec") -> str:
         runs = domains[domain].get("runs", {})
         cr_map = aggregate_methods_cr(runs)
         t_map = aggregate_methods_time(runs)
-        dnf_map = aggregate_methods_dnf(runs)
-        crs = [cr_map.get(spec.data_keys[m]) for m in methods]
-        ts = [t_map.get(spec.data_keys[m]) for m in methods]
-        statuses = [dnf_map.get(spec.data_keys[m], "none") for m in methods]
+        crs = [cr_map.get(data_keys[m]) for m in methods]
+        ts = [t_map.get(data_keys[m]) for m in methods]
         # A DNF records the timeout as elapsed; drop that time so it isn't
         # mistaken for a real measurement (keep cr/time over the same set).
         ts = [t if c is not None else None for c, t in zip(crs, ts)]
@@ -748,8 +786,8 @@ def render_family_tex(saved: dict, spec: "FamilySpec") -> str:
             t_cols[i].append(ts[i])
         label = spec.domain_labels.get(domain, domain)
         original = fmt(initial_size_for_domain(runs), ".0f")
-        cr_strs = cells(crs, statuses, ".2f", higher_is_better=True)
-        t_strs = cells(ts, statuses, ".2f", higher_is_better=False)
+        cr_strs = cells(crs, ".2f", higher_is_better=True)
+        t_strs = cells(ts, ".2f", higher_is_better=False)
         lines.append(" & ".join([label, original, *cr_strs, *t_strs]) + " \\\\")
 
     # Geomean row across families. Only computed for a method that finished
@@ -764,7 +802,7 @@ def render_family_tex(saved: dict, spec: "FamilySpec") -> str:
     lines.append(" & ".join(["Geo. mean", "", *cr_strs, *t_strs]) + " \\\\")
 
     lines += ["\\bottomrule", "\\end{tabular}"]
-    return "\n".join(lines)
+    return "\n".join(lines), notices
 
 
 def _plot_family(cr_map: dict, t_map: dict, title: str, out_path: Path,
@@ -867,6 +905,7 @@ def main() -> None:
     # shape distinct from tables 1-4 (family rows, DSR baselines, no Stitch), so
     # they go through the FamilySpec renderers: a LaTeX table plus per-family and
     # geomean PNGs.
+    notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
     for spec in (TABLE5_SPEC, TABLE7_SPEC):
         path = RESULTS_DIR / f"{spec.fig_subdir}.json"
         if not path.exists():
@@ -875,12 +914,23 @@ def main() -> None:
         with open(path) as f:
             saved = json.load(f)
         tex_path = FIGURES_DIR / f"{spec.fig_subdir}.tex"
-        tex_path.write_text(f"% source: {path}\n" + render_family_tex(saved, spec) + "\n")
+        tex, spec_notices = render_family_tex(saved, spec)
+        notices += spec_notices
+        tex_path.write_text(f"% source: {path}\n" + tex + "\n")
         print(f"wrote {tex_path}", file=sys.stderr)
         render_family(saved, spec)
         # table5 also gets per-family molecule scramble trajectory figures.
         if spec is TABLE5_SPEC:
             render_molecules(saved, FIGURES_DIR / "molecules")
+
+    # Loudly surface every sweep-point kick-down so a reduced operating point in
+    # a table is never silently mistaken for the configured one.
+    if notices:
+        bar = "!" * 78
+        print(f"\n{bar}\n!! SWEEP-POINT KICK-DOWNS ({len(notices)}):", file=sys.stderr)
+        for notice in notices:
+            print(f"!!   {notice}", file=sys.stderr)
+        print(f"{bar}", file=sys.stderr)
 
 
 if __name__ == "__main__":

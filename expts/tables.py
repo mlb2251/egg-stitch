@@ -122,8 +122,15 @@ def _run_method_for_table(
                 rounds=num_abstractions,
                 use_dsrs=use_dsrs,
             )
-            runs.append([r.to_dict() for r in per_file])
+            run = [r.to_dict() for r in per_file]
+            runs.append(run)
             bar.update()
+            # A single timed-out/OOM'd replicate makes the method a DNF for this
+            # domain (the renderer drops a method with any DNF), so the remaining
+            # replicates can only repeat an expensive timeout — skip them.
+            if any(r["compression_ratio"] is None for r in run):
+                bar.update(NUM_RUNS - (i + 1))
+                break
         out[domain] = runs
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
