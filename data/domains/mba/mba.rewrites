@@ -1,0 +1,43 @@
+// Mixed Boolean-Arithmetic (MBA) algebra over op-children trees with leaves
+// = variables / integer constants and ops + - * & | ^ ~ neg.
+//
+// commutativity / associativity (size-tied, non-confluent)
+add_comm:   (+ ?a ?b) <=> (+ ?b ?a)
+add_assoc:  (+ (+ ?a ?b) ?c) <=> (+ ?a (+ ?b ?c))
+mul_comm:   (* ?a ?b) <=> (* ?b ?a)
+and_comm:   (& ?a ?b) <=> (& ?b ?a)
+and_assoc:  (& (& ?a ?b) ?c) <=> (& ?a (& ?b ?c))
+or_comm:    (| ?a ?b) <=> (| ?b ?a)
+or_assoc:   (| (| ?a ?b) ?c) <=> (| ?a (| ?b ?c))
+xor_comm:   (^ ?a ?b) <=> (^ ?b ?a)
+xor_assoc:  (^ (^ ?a ?b) ?c) <=> (^ ?a (^ ?b ?c))
+// boolean identities
+demorgan_a: (~ (& ?a ?b)) <=> (| (~ ?a) (~ ?b))
+demorgan_o: (~ (| ?a ?b)) <=> (& (~ ?a) (~ ?b))
+notnot:     (~ (~ ?a)) <=> ?a
+negneg:     (neg (neg ?a)) <=> ?a
+idem_and:   (& ?a ?a) => ?a
+idem_or:    (| ?a ?a) => ?a
+xor_self:   (^ ?a ?a) => 0
+compl_and:  (& ?a (~ ?a)) => 0
+compl_or:   (| ?a (~ ?a)) => -1
+compl_xor:  (^ ?a (~ ?a)) => -1
+absorb_and: (& ?a (| ?a ?b)) => ?a
+absorb_or:  (| ?a (& ?a ?b)) => ?a
+xnor:       (~ (^ ?a ?b)) <=> (^ ?a (~ ?b))
+// boolean distribution (expansive: live-only lever, bounded by --node-limit/--iter-limit)
+dist_and_or: (& ?a (| ?b ?c)) <=> (| (& ?a ?b) (& ?a ?c))
+dist_or_and: (| ?a (& ?b ?c)) <=> (& (| ?a ?b) (| ?a ?c))
+// arithmetic <-> boolean bridges (the deobfuscation gadgets)
+neg_tc:     (neg ?a) <=> (+ (~ ?a) 1)
+not_tc:     (~ ?a) <=> (- (neg ?a) 1)
+mba_sum:    (+ (& ?x ?y) (| ?x ?y)) <=> (+ ?x ?y)
+mba_xor2:   (+ (^ ?x ?y) (* 2 (& ?x ?y))) <=> (+ ?x ?y)
+mba_xor:    (- (| ?x ?y) (& ?x ?y)) <=> (^ ?x ?y)
+incl_excl:  (| ?a ?b) <=> (- (+ ?a ?b) (& ?a ?b))
+xor_arith:  (^ ?a ?b) <=> (- (+ ?a ?b) (* 2 (& ?a ?b)))
+sum_oa:     (+ ?a ?b) <=> (+ (| ?a ?b) (& ?a ?b))
+sub_andnot: (- ?a (& ?a ?b)) <=> (& ?a (~ ?b))
+mul_distrib:(* ?a (+ ?b ?c)) <=> (+ (* ?a ?b) (* ?a ?c))
+two_a:      (* 2 ?a) <=> (+ ?a ?a)
+constant_folding: !integers
