@@ -209,6 +209,17 @@ pub struct Args {
     #[arg(long = "max-forced-expansion", default_value = "none")]
     pub max_forced_expansion: MaxForcedExpansion,
 
+    /// Prune best-first/SMC successors whose largest factor exceeds
+    /// this many rows. Must be >= `--decompose-min-rows`.
+    #[arg(long = "max-match-set")]
+    pub max_match_set: Option<usize>,
+
+    /// Minimum factor rows before `Factor::decompose` attempts a split
+    /// Set higher to avoid unnecessary scans, set lower to reduce memory
+    /// pressure.
+    #[arg(long = "decompose-min-rows", default_value_t = 48)]
+    pub decompose_min_rows: usize,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
