@@ -986,6 +986,46 @@ fn self_loop_if_unify() {
     check_self_loop("if_unify", "if");
 }
 
+// === op-children-db (flat n-ary nodes with De Bruijn `$n` leaves) ===
+//
+// `--language op-children-db` keeps OpChildren's flat n-ary shape but parses
+// `$n` as a real free De Bruijn variable (the leaf-Op becomes `OpDB<Op>`).
+// There are no binders, so every `$n` is free and `invalid_literal_expansion`
+// bans it from any abstraction body — it can only ever be captured as an
+// argument. The corpus below shares the skeleton `(f (g (h _)) $0)` across four
+// programs, so the body-ban is the only thing that distinguishes the two
+// languages' output.
+
+const OP_CHILDREN_DB_INPUT: &str = "data/test/op_children_db_free_var.json";
+
+/// op-children-db: the free `$0` is illegal in an abstraction body, so it is
+/// lifted to a second parameter — the arity-2 `(f (g (h ?#0)) ?#1)`, with no
+/// `$` anywhere in the body. The inline assertion is the feature invariant; the
+/// fixture pins the exact (deterministic best-first) result.
+#[test]
+fn op_children_db_bans_free_var_from_body() {
+    let mut bf = run_backend("best-first", OP_CHILDREN_DB_INPUT, &["--language", "op-children-db"]);
+    strip_library_field(&mut bf, "best_history");
+    for body in abstraction_bodies(&bf) {
+        assert!(!body.contains('$'), "op-children-db must keep free DB vars out of the abstraction body, got `{body}`");
+    }
+    bless_or_check(&expected_path(OP_CHILDREN_DB_INPUT), &bf, OP_CHILDREN_DB_INPUT);
+}
+
+/// Contrast: the same corpus under plain `op-children` parses `$0` as an
+/// ordinary symbol leaf (leaf-Op `Op`, no DB awareness), so it stays baked into
+/// the arity-1 body `(f (g (h ?#0)) $0)`. Pins that the body-ban is the
+/// leaf-op's doing, not the corpus's. Blessed to a separate `.plain` fixture to
+/// avoid the shared-input path collision with the test above.
+#[test]
+fn op_children_plain_keeps_free_var_in_body() {
+    let mut bf = run_backend("best-first", OP_CHILDREN_DB_INPUT, &[]);
+    strip_library_field(&mut bf, "best_history");
+    let bodies = abstraction_bodies(&bf);
+    assert!(bodies.iter().any(|b| b.contains("$0")), "plain op-children should keep `$0` baked into the body, got {bodies:?}");
+    bless_or_check("data/expected_outputs/test/op_children_db_free_var.plain.out.json", &bf, "op_children_db_free_var (plain)");
+}
+
 // === molecule domain (op-children) ===
 //
 // Molecules are rooted trees over `(<bond><degree> E n1 n2 ...)` atom nodes
