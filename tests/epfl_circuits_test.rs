@@ -46,7 +46,7 @@ fn run_smc(circuit: &str, rules: Option<&str>, at_start: bool, tag: &str) -> Val
         "--search",
         "smc",
         "--language",
-        "op-children",
+        "op-children-db",
         "--max-arity",
         "4",
         "--num-abstractions",
