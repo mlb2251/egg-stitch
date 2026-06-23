@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from render_molecules import render_all as render_molecules  # noqa: E402
 from expts.render_common import (  # noqa: E402
     aggregate_methods_cr,
+    aggregate_methods_dnf,
     aggregate_methods_time,
     egraph_min_for_domain,
     initial_size_for_domain,
@@ -618,17 +619,23 @@ def render_table5_tex(saved: dict) -> str:
     Compression Ratio and Time (s) groups and a geomean row.
 
     No e-graph-min or Stitch columns (table5 has neither). A method that timed
-    out / OOM'd on a family has ``compression_ratio: null`` for that cell; it's
-    rendered ``DNF`` and excluded from that row's bolding and the geomean.
+    out / OOM'd on every run of a family is rendered ``DNF`` and excluded from
+    that row's bolding and the geomean; one that timed out on only some runs is
+    rendered ``DNF*`` (its CR/time would average over inconsistent sets, so no
+    number is shown) and likewise excluded.
     """
     domains = saved["domains"]
     methods = TABLE5_TABLE_METHODS
     n = len(methods)
 
-    def cells(values: list[float | None], spec: str, higher_is_better: bool) -> list[str]:
-        """bold_best, but render None as DNF (not N/A)."""
+    def cells(values: list[float | None], statuses: list[str],
+              spec: str, higher_is_better: bool) -> list[str]:
+        """bold_best, but render a DNF as ``DNF`` (all runs) or ``DNF*`` (some)."""
         out = bold_best(values, spec, higher_is_better)
-        return [("DNF" if v is None else s) for v, s in zip(values, out)]
+        return [
+            (("DNF*" if st == "partial" else "DNF") if v is None else s)
+            for v, s, st in zip(values, out, statuses)
+        ]
 
     col_spec = "l r " + ("r" * n) + " " + ("r" * n)
     lines = [
@@ -654,8 +661,10 @@ def render_table5_tex(saved: dict) -> str:
         runs = domains[domain].get("runs", {})
         cr_map = aggregate_methods_cr(runs)
         t_map = aggregate_methods_time(runs)
+        dnf_map = aggregate_methods_dnf(runs)
         crs = [cr_map.get(TABLE5_DATA_KEYS[m]) for m in methods]
         ts = [t_map.get(TABLE5_DATA_KEYS[m]) for m in methods]
+        statuses = [dnf_map.get(TABLE5_DATA_KEYS[m], "none") for m in methods]
         # A DNF records the timeout as elapsed; drop that time so it isn't
         # mistaken for a real measurement (keep cr/time over the same set).
         ts = [t if c is not None else None for c, t in zip(crs, ts)]
@@ -664,8 +673,8 @@ def render_table5_tex(saved: dict) -> str:
             t_cols[i].append(ts[i])
         label = TABLE5_DOMAIN_LABELS.get(domain, domain)
         original = fmt(initial_size_for_domain(runs), ".0f")
-        cr_strs = cells(crs, ".2f", higher_is_better=True)
-        t_strs = cells(ts, ".2f", higher_is_better=False)
+        cr_strs = cells(crs, statuses, ".2f", higher_is_better=True)
+        t_strs = cells(ts, statuses, ".2f", higher_is_better=False)
         lines.append(" & ".join([label, original, *cr_strs, *t_strs]) + " \\\\")
 
     # Geomean row across families. Only computed for a method that finished
