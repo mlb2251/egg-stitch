@@ -673,6 +673,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.matches.iter().flat_map(|m| m.factors.iter()).map(|f| f.rows.len()).max().unwrap_or(0)
     }
 
+    /// Whether this state is within the `--max-match-set` per-factor row cap
+    /// (`max_match_set`), always `true` when the cap is unset. The blowup guard
+    /// both search drivers apply when admitting a successor — see
+    /// [`Self::max_factor_rows`].
+    pub fn within_match_set_cap(&self, max_match_set: Option<usize>) -> bool {
+        max_match_set.is_none_or(|cap| self.max_factor_rows() <= cap)
+    }
+
     /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
     /// Verbose-diagnostics only.
     pub fn min_term(&self, shared: &SharedSearchData<F, O>, eclass: Id) -> String {

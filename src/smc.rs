@@ -102,7 +102,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
-                    if max_match_set.is_none_or(|cap| child.max_factor_rows() <= cap) {
+                    if child.within_match_set_cap(max_match_set) {
                         dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
                     }
                     continue;
@@ -124,7 +124,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
                     let child = state.apply_action(&action, &shared, true, None);
-                    if max_match_set.is_none_or(|cap| child.max_factor_rows() <= cap) {
+                    if child.within_match_set_cap(max_match_set) {
                         dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
                     }
                 }
