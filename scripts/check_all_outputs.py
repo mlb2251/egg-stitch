@@ -71,21 +71,14 @@ RULES_BY_REL = {
     "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
 }
 
-# epfl-circuits fixtures are verified by `check_circuit_equiv.py` (exhaustive
-# boolean truth-table equivalence), not the rule-rewriting `check_equiv.py`: the
-# De Morgan + directional-distributivity DSRs can't always re-derive an
-# aggressively-factored cone back to its original (the checker egraph hits a
-# fixpoint without unifying -- a completeness gap, not a budget one). Since each
-# cone is a boolean function of <=K inputs, the truth table settles it
-# definitively. Routed in `main` and excluded from the check_equiv batches.
-SKIP_REL = set()
 # The plain-`op-children` half of the op-children-db contrast deliberately bakes
 # the symbol `$0` into the body (`(f (g (h ?#0)) $0)`). check_equiv reads `$0` as
 # a De Bruijn variable, so it sees an unsound rewrite — which is exactly the
 # unsoundness `op-children-db` fixes by banning free DB vars from the body. The
 # fixture only exists to pin that contrast, so skip it in the equivalence sweep;
-# the snapshot test keeps it regression-locked.
-SKIP_REL.add("test/op_children_db_free_var.plain.out.json")
+# the snapshot test keeps it regression-locked. (epfl-circuits fixtures aren't
+# skipped here -- `main` routes them to check_circuit_equiv.py instead.)
+SKIP_REL = {"test/op_children_db_free_var.plain.out.json"}
 
 
 def is_circuit(rel):
