@@ -189,18 +189,31 @@ class OursSmc:
     num_particles: int = 1000
     temperature: float = 1000.0
     max_arity: int = MAX_ARITY
+    # Bounds e-saturation iterations and the per-factor abstraction match-set mass
+    # (the non-confluent algebra DSRs need both to run live; table6 sets them).
+    # Excluded from repr so the method label is unchanged.
+    iter_limit: int | None = field(default=None, repr=False)
+    max_match_set: int | None = field(default=None, repr=False)
+    # Overrides the domain's default rewrites file (table6 pins drawings.rewrites).
+    rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
+        search_flags: dict[str, object] = {
+            "num_steps": self.num_steps,
+            "num_particles": self.num_particles,
+            "temperature": self.temperature,
+        }
+        if self.max_match_set is not None:
+            search_flags["max_match_set"] = self.max_match_set
+        if self.iter_limit is not None:
+            search_flags["iter_limit"] = self.iter_limit
         return _run(
-            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
+            rounds=rounds, input_path=input_path,
+            rewrites_path=self.rewrites_override or rewrites_path,
             weighting=weighting, search="smc",
             max_arity=self.max_arity,
-            search_flags={
-                "num_steps": self.num_steps,
-                "num_particles": self.num_particles,
-                "temperature": self.temperature,
-            },
+            search_flags=search_flags,
             timeout=self.timeout, mem_limit=self.mem_limit,
         )

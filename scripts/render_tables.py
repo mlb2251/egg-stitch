@@ -60,7 +60,7 @@ def methods_for_table(table: int) -> list[str]:
     expts/tables.py — just our live search vs the at-start baseline.
     """
     if table == 6:
-        return ["enum-live", "enum-at-start"]
+        return ["enum-live", "enum-at-start", "smc-live"]
     if table in TABLES_WITH_EGRAPH_MIN:
         return ["enum", "smc", BASELINE_METHOD, "babble"]
     return ["enum", "smc", "babble", "stitch"]
@@ -89,7 +89,8 @@ BASELINE_METHOD = "enum-dsrs-at-start"
 # E-Stitch prefix so each series is unambiguous standalone.
 METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble",
                  "stitch": "Stitch", BASELINE_METHOD: "BFS/MT",
-                 "enum-live": "BFS (live)", "enum-at-start": "BFS (at start)"}
+                 "enum-live": "BFS (live)", "enum-at-start": "BFS (at start)",
+                 "smc-live": "SMC (live)"}
 METHOD_PLOT_LABELS = {
     "enum": "E-Stitch: BFS",
     "smc": "E-Stitch: SMC",

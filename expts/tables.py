@@ -291,14 +291,17 @@ TABLE6_NUM_ABSTRACTIONS = 4
 TABLE6_NUM_STEPS = 50_000
 TABLE6_ITER_LIMIT = 6
 TABLE6_MATCH_SET_CAP = 2000
+TABLE6_SMC_PARTICLES = 1000
+TABLE6_SMC_STEPS = 1000
+TABLE6_SMC_TEMPERATURE = 1000.0
 TABLE6_TIMEOUT = 300.0  # seconds, per tool invocation
 
 
 def _table6_runners() -> tuple[tuple[str, object], ...]:
-    """``enum-live`` vs ``enum-at-start``: the same best-first config and algebra
-    DSRs, differing only in whether the rules stay live during search."""
+    """``enum-live`` vs ``enum-at-start`` (same best-first config, differing only
+    in whether the DSRs stay live), plus ``smc-live`` — SMC with the rules live —
+    all carrying the per-factor cap + iter-limit the non-confluent algebra needs."""
     common = dict(
-        num_steps=TABLE6_NUM_STEPS,
         iter_limit=TABLE6_ITER_LIMIT,
         max_match_set=TABLE6_MATCH_SET_CAP,
         rewrites_override=TABLE6_REWRITES,
@@ -306,8 +309,9 @@ def _table6_runners() -> tuple[tuple[str, object], ...]:
         mem_limit=MEM_LIMIT_BYTES,
     )
     return (
-        ("enum-live", OursBf(only_use_dsrs_at_start=False, **common)),
-        ("enum-at-start", OursBf(only_use_dsrs_at_start=True, **common)),
+        ("enum-live", OursBf(num_steps=TABLE6_NUM_STEPS, only_use_dsrs_at_start=False, **common)),
+        ("enum-at-start", OursBf(num_steps=TABLE6_NUM_STEPS, only_use_dsrs_at_start=True, **common)),
+        ("smc-live", OursSmc(num_particles=TABLE6_SMC_PARTICLES, num_steps=TABLE6_SMC_STEPS, temperature=TABLE6_SMC_TEMPERATURE, **common)),
     )
 
 
