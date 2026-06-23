@@ -3,11 +3,32 @@
 next gate would exceed K distinct input signals (a k-feasible cut), rather than
 cutting at a fixed depth. Because the AIG is a DAG, forcing a cut to a tree
 re-expands reconvergent subgates, so a node-size CAP guards against blow-up.
-Leaves are named signal ids (`sN`) so abstraction can introduce metavars over
-inputs. Imported by `aig_to_egg.py` and `build_benchmarks.py`.
+Leaves are named signal ids (`sN`); `free_vars` then rewrites them to per-cone
+free De Bruijn variables (`$0..$k`). Imported by `aig_to_egg.py` and
+`build_benchmarks.py`.
 """
 
+import re
+
 CAP = 400  # max tree nodes before we stop growing a cone (reconvergence guard)
+
+_SIG = re.compile(r"s\d+")
+
+
+def free_vars(prog):
+    """Rename a cone's global signal leaves (`sN`) to per-cone free De Bruijn
+    variables (`$0..$k`) by first-occurrence order, leaving `C0` alone. Two
+    structurally identical cones over different signals collapse to one term, so
+    `$n` is a free variable the abstraction search treats as an argument."""
+    seen = {}
+
+    def sub(m):
+        s = m.group(0)
+        if s not in seen:
+            seen[s] = "$%d" % len(seen)
+        return seen[s]
+
+    return _SIG.sub(sub, prog)
 
 
 def read_aig(path):

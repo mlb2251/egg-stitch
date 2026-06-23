@@ -84,6 +84,13 @@ SKIP_REL = {
     str(p.relative_to(ROOT))
     for p in (ROOT / "epfl-circuits").glob("*.factoring.at-start.out.json")
 }
+# The plain-`op-children` half of the op-children-db contrast deliberately bakes
+# the symbol `$0` into the body (`(f (g (h ?#0)) $0)`). check_equiv reads `$0` as
+# a De Bruijn variable, so it sees an unsound rewrite — which is exactly the
+# unsoundness `op-children-db` fixes by banning free DB vars from the body. The
+# fixture only exists to pin that contrast, so skip it in the equivalence sweep;
+# the snapshot test keeps it regression-locked.
+SKIP_REL.add("test/op_children_db_free_var.plain.out.json")
 
 
 def main():

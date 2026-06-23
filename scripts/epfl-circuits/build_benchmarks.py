@@ -26,7 +26,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
-from aig_cones import read_aig, kcone, to_tup, size
+from aig_cones import read_aig, kcone, to_tup, size, free_vars
 
 REF = "52b26f0e2cf1e88298a8b76c5e68e75013ba3977"
 K, N = 6, 800
@@ -39,7 +39,7 @@ CIRCUITS = {
     "random_control": ["arbiter", "cavlc", "ctrl", "dec", "i2c", "int2float", "mem_ctrl", "priority", "router", "voter"],
 }
 
-_LEAF = re.compile(r"s\d+|C0")  # signal / constant leaf tokens
+_LEAF = re.compile(r"s\d+|\$\d+|C0")  # signal / free-var / constant leaf tokens
 
 
 def sexpr(t):
@@ -54,11 +54,11 @@ def fetch(sub, name, dst):
 
 
 def build_corpus(aig):
-    """The K=6 input-bounded cone corpus, identical to aig_to_egg.py (named cones
-    >=6 nodes, stride-sampled to N)."""
+    """The K=6 input-bounded cone corpus, identical to aig_to_egg.py (cones
+    >=6 nodes, free-var leaves, stride-sampled to N)."""
     M, I, L, O, A, outs, ands = read_aig(aig)
     cones = (to_tup(kcone(2 * (I + 1 + j), ands, I, K), named=True) for j in range(A))
-    progs = [sexpr(t) for t in cones if size(t) >= 6]
+    progs = [free_vars(sexpr(t)) for t in cones if size(t) >= 6]
     if len(progs) > N:
         step = len(progs) / N
         progs = [progs[int(i * step)] for i in range(N)]
@@ -66,10 +66,12 @@ def build_corpus(aig):
 
 
 def no_rules_compression(corpus_path):
-    """initial/final cost from a no-DSR egg-stitch SMC run (seed 1, deterministic)."""
+    """initial/final cost from a no-DSR egg-stitch SMC run (seed 1, deterministic).
+    Uses `op-children-db` so `$n` is a real free variable (banned from abstraction
+    bodies); sym=1 keeps the cost scale matched to the default temperature."""
     out = corpus_path + ".out"
     subprocess.run(
-        [BIN, "-i", corpus_path, "--output", out, "--search", "smc", "--language", "op-children",
+        [BIN, "-i", corpus_path, "--output", out, "--search", "smc", "--language", "op-children-db",
          "--max-arity", "4", "--num-abstractions", "4", "--num-particles", "500", "--num-steps", "100",
          "--temperature", "1000", "--seed", "1", "--iter-limit", "30"],
         check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
