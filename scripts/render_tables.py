@@ -595,10 +595,70 @@ class FamilySpec:
     method_colors: dict[str, object]
     method_plot_labels: dict[str, str]
 
+    @classmethod
+    def estitch_roster(
+        cls,
+        *,
+        title: str,
+        fig_subdir: str,
+        domains: list[str],
+        domain_labels: dict[str, str],
+        enum_point: int,
+        enum_sweep: tuple[int, ...],
+        smc_sweep: tuple[int, ...],
+        extra_method: str,
+        extra_col_label: str,
+        extra_plot_label: str,
+    ) -> "FamilySpec":
+        """Build a spec for the standard E-Stitch roster: the enum (BFS) and smc
+        (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), with one
+        family-specific fourth method (babble on the molecule table). The shared
+        three methods -- their order, labels, colors, and the smc representative
+        point -- live here so per-family specs can't drift on them; only the bits
+        that genuinely differ are args.
+        """
+        methods = ["enum", "smc", "enum-dsrs-at-start", extra_method]
+        return cls(
+            title=title,
+            fig_subdir=fig_subdir,
+            domains=domains,
+            domain_labels=domain_labels,
+            # The two sweeps, then the two single-point methods. Each single-point
+            # method keys on its own data label so plot_cr_vs_time finds it directly.
+            plot_methods=methods,
+            table_methods=methods,
+            data_keys={
+                "enum": f"enum-{enum_point}",
+                "smc": f"smc-{TABLE_SMC_PARTICLES}",
+                "enum-dsrs-at-start": "enum-dsrs-at-start",
+                extra_method: extra_method,
+            },
+            col_labels={
+                "enum": "BFS",
+                "smc": "SMC",
+                "enum-dsrs-at-start": "BFS/MT",
+                extra_method: extra_col_label,
+            },
+            sweep_for_method={"enum": enum_sweep, "smc": smc_sweep},
+            sweep_point={"enum": enum_point, "smc": TABLE_SMC_PARTICLES},
+            method_colors={
+                "enum": line_color(0),
+                "smc": line_color(1),
+                extra_method: line_color(2),
+                "enum-dsrs-at-start": line_color(3),
+            },
+            method_plot_labels={
+                "enum": "E-Stitch: BFS",
+                "smc": "E-Stitch: SMC",
+                "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
+                extra_method: extra_plot_label,
+            },
+        )
+
 
 # table5: molecule scramble subset. The two ours sweeps (enum extended to 100k),
 # the dsrs-only-at-start baseline (a single best-first point), and babble.
-TABLE5_SPEC = FamilySpec(
+TABLE5_SPEC = FamilySpec.estitch_roster(
     title="Molecule Scramble Compression (DSRs)",
     fig_subdir="table5",
     domains=TABLE5_DOMAINS,
@@ -607,37 +667,12 @@ TABLE5_SPEC = FamilySpec(
         "molecules:ester": "Ester",
         "molecules:glycol": "Glycol",
     },
-    # Method order: the two sweeps, then the two single-point methods. Each
-    # single-point method keys on its own data label so the single-point branch
-    # of plot_cr_vs_time finds it directly.
-    plot_methods=["enum", "smc", "enum-dsrs-at-start", "babble"],
-    table_methods=["enum", "smc", "enum-dsrs-at-start", "babble"],
-    data_keys={
-        "enum": f"enum-{TABLE5_ENUM_POINT}",
-        "smc": f"smc-{TABLE_SMC_PARTICLES}",
-        "enum-dsrs-at-start": "enum-dsrs-at-start",
-        "babble": "babble",
-    },
-    col_labels={
-        "enum": "BFS",
-        "smc": "SMC",
-        "enum-dsrs-at-start": "BFS/MT",
-        "babble": "babble",
-    },
-    sweep_for_method={"enum": TABLE5_BFS_SWEEP, "smc": SMC_PARTICLE_SWEEP},
-    sweep_point={"enum": TABLE5_ENUM_POINT, "smc": TABLE_SMC_PARTICLES},
-    method_colors={
-        "enum": line_color(0),
-        "smc": line_color(1),
-        "babble": line_color(2),
-        "enum-dsrs-at-start": line_color(3),
-    },
-    method_plot_labels={
-        "enum": "E-Stitch: BFS",
-        "smc": "E-Stitch: SMC",
-        "babble": "babble",
-        "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
-    },
+    enum_point=TABLE5_ENUM_POINT,
+    enum_sweep=TABLE5_BFS_SWEEP,
+    smc_sweep=SMC_PARTICLE_SWEEP,
+    extra_method="babble",
+    extra_col_label="babble",
+    extra_plot_label="babble",
 )
 
 # Unit names for the two sweep methods, used only in the kick-down notices.
