@@ -32,6 +32,7 @@ from expts.tables import (  # noqa: E402
     TABLE5_ENUM_POINT,
     TABLE7_BFS_SWEEP,
     TABLE7_DOMAINS,
+    TABLE7_SMC_SWEEP,
 )
 from dataclasses import dataclass  # noqa: E402
 
@@ -669,7 +670,7 @@ TABLE7_SPEC = FamilySpec(
         "enum-dsrs-at-start": "BFS/MT",
         "enum-baseline": "BFS/NR",
     },
-    sweep_for_method={"enum": TABLE7_BFS_SWEEP, "smc": SMC_PARTICLE_SWEEP},
+    sweep_for_method={"enum": TABLE7_BFS_SWEEP, "smc": TABLE7_SMC_SWEEP},
     sweep_point={"enum": TABLE_BFS_STEPS, "smc": TABLE_SMC_PARTICLES},
     method_colors={
         "enum": line_color(0),
