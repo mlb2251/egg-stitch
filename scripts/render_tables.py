@@ -31,6 +31,7 @@ from expts.tables import (  # noqa: E402
     TABLE5_DOMAINS,
     TABLE5_ENUM_POINT,
 )
+from dataclasses import dataclass  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results"
@@ -566,68 +567,94 @@ def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
                     methods=methods_for_table(table))
 
 
-# ─── table5: molecule scramble subset ────────────────────────────────────────
-# Different roster from tables 1-4: the two ours sweeps (enum extended to 100k),
-# the dsrs-only-at-start baseline (a single best-first point), and babble. No
-# Stitch (it can't take DSRs) and no e-graph-min table column.
-TABLE5_TITLE = "Molecule Scramble Compression (DSRs)"
-TABLE5_DOMAIN_LABELS = {
-    "molecules:hexyl": "Hexyl",
-    "molecules:ester": "Ester",
-    "molecules:glycol": "Glycol",
-}
-# Method order: the two sweeps, then the two single-point methods. The baseline
-# keys on its data label ("enum-dsrs-at-start") so the single-point branch of
-# plot_cr_vs_time finds it directly.
-TABLE5_PLOT_METHODS = ["enum", "smc", "enum-dsrs-at-start", "babble"]
-TABLE5_SWEEP_FOR_METHOD = {"enum": TABLE5_BFS_SWEEP, "smc": SMC_PARTICLE_SWEEP}
-TABLE5_SWEEP_POINT = {"enum": TABLE5_ENUM_POINT, "smc": TABLE_SMC_PARTICLES}
-TABLE5_METHOD_COLORS = {
-    "enum": line_color(0),
-    "smc": line_color(1),
-    "babble": line_color(2),
-    "enum-dsrs-at-start": line_color(3),
-}
-TABLE5_METHOD_PLOT_LABELS = {
-    "enum": "E-Stitch: BFS",
-    "smc": "E-Stitch: SMC",
-    "babble": "babble",
-    "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
-}
+# ─── family tables: same shape, different rosters ────────────────────────────
+# A family table uses table5's layout — the two ours sweeps + single-point
+# baselines, no Stitch (can't take DSRs) and no e-graph-min table column — but a
+# given table differs in its domains and which non-sweep methods it carries, so
+# each is described by a FamilySpec consumed by render_family_tex / render_family
+# below. Currently just table5; the machinery is generic, so a new family table
+# is one more spec.
+@dataclass(frozen=True)
+class FamilySpec:
+    """Everything render_family_tex / render_family need for one family table.
 
-# LaTeX-table columns: the same four methods, each at the single representative
-# operating point the plot marks with a filled dot. ``enum``/``smc`` map to
-# their sweep point; the baseline and babble key on their own labels.
-TABLE5_TABLE_METHODS = ["enum", "smc", "enum-dsrs-at-start", "babble"]
-TABLE5_DATA_KEYS = {
-    "enum": f"enum-{TABLE5_ENUM_POINT}",
-    "smc": f"smc-{TABLE_SMC_PARTICLES}",
-    "enum-dsrs-at-start": "enum-dsrs-at-start",
-    "babble": "babble",
-}
-TABLE5_COL_LABELS = {
-    "enum": "BFS",
-    "smc": "SMC",
-    "enum-dsrs-at-start": "BFS/MT",
-    "babble": "babble",
-}
+    ``plot_methods``/``table_methods`` order the columns/series; ``data_keys``
+    maps each to the single representative run key (the sweep methods' filled
+    plot marker); ``sweep_*`` drive the swept lines.
+    """
+    title: str
+    fig_subdir: str
+    domains: list[str]
+    domain_labels: dict[str, str]
+    plot_methods: list[str]
+    table_methods: list[str]
+    data_keys: dict[str, str]
+    col_labels: dict[str, str]
+    sweep_for_method: dict[str, tuple[int, ...]]
+    sweep_point: dict[str, int]
+    method_colors: dict[str, object]
+    method_plot_labels: dict[str, str]
 
+
+# table5: molecule scramble subset. The two ours sweeps (enum extended to 100k),
+# the dsrs-only-at-start baseline (a single best-first point), and babble.
+TABLE5_SPEC = FamilySpec(
+    title="Molecule Scramble Compression (DSRs)",
+    fig_subdir="table5",
+    domains=TABLE5_DOMAINS,
+    domain_labels={
+        "molecules:hexyl": "Hexyl",
+        "molecules:ester": "Ester",
+        "molecules:glycol": "Glycol",
+    },
+    # Method order: the two sweeps, then the two single-point methods. Each
+    # single-point method keys on its own data label so the single-point branch
+    # of plot_cr_vs_time finds it directly.
+    plot_methods=["enum", "smc", "enum-dsrs-at-start", "babble"],
+    table_methods=["enum", "smc", "enum-dsrs-at-start", "babble"],
+    data_keys={
+        "enum": f"enum-{TABLE5_ENUM_POINT}",
+        "smc": f"smc-{TABLE_SMC_PARTICLES}",
+        "enum-dsrs-at-start": "enum-dsrs-at-start",
+        "babble": "babble",
+    },
+    col_labels={
+        "enum": "BFS",
+        "smc": "SMC",
+        "enum-dsrs-at-start": "BFS/MT",
+        "babble": "babble",
+    },
+    sweep_for_method={"enum": TABLE5_BFS_SWEEP, "smc": SMC_PARTICLE_SWEEP},
+    sweep_point={"enum": TABLE5_ENUM_POINT, "smc": TABLE_SMC_PARTICLES},
+    method_colors={
+        "enum": line_color(0),
+        "smc": line_color(1),
+        "babble": line_color(2),
+        "enum-dsrs-at-start": line_color(3),
+    },
+    method_plot_labels={
+        "enum": "E-Stitch: BFS",
+        "smc": "E-Stitch: SMC",
+        "babble": "babble",
+        "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
+    },
+)
 
 # Unit names for the two sweep methods, used only in the kick-down notices.
-TABLE5_SWEEP_UNIT = {"enum": "steps", "smc": "particles"}
+SWEEP_UNIT = {"enum": "steps", "smc": "particles"}
 
 
-def _kicked_data_keys(saved: dict) -> tuple[dict[str, str], list[str]]:
+def _kicked_data_keys(saved: dict, spec: "FamilySpec") -> tuple[dict[str, str], list[str]]:
     """Pick the representative table key for each method, kicking series methods
     down their sweep when the configured point DNFs at the geomean.
 
     A series method (Enum/SMC) normally shows its configured operating point
-    (``TABLE5_SWEEP_POINT``). If that point DNFs on any family — so its geomean
-    is blank — we step down the sweep to the highest point that finishes *every*
-    family, and show that instead. Returns ``(data_keys, notices)`` where
-    ``data_keys`` overrides ``TABLE5_DATA_KEYS`` for any kicked-down method and
+    (``spec.sweep_point``). If that point DNFs on any family — so its geomean is
+    blank — step down the sweep to the highest point that finishes *every*
+    family and show that instead. Returns ``(data_keys, notices)`` where
+    ``data_keys`` overrides ``spec.data_keys`` for any kicked-down method and
     ``notices`` is a human-readable line per kick-down (empty if none)."""
-    domains = [d for d in TABLE5_DOMAINS if d in saved["domains"]]
+    domains = [d for d in spec.domains if d in saved["domains"]]
     cr_by_domain = {
         d: aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains
     }
@@ -635,10 +662,10 @@ def _kicked_data_keys(saved: dict) -> tuple[dict[str, str], list[str]]:
     def finishes_every_family(key: str) -> bool:
         return bool(domains) and all(cr_by_domain[d].get(key) is not None for d in domains)
 
-    data_keys = dict(TABLE5_DATA_KEYS)
+    data_keys = dict(spec.data_keys)
     notices: list[str] = []
-    for method, sweep in TABLE5_SWEEP_FOR_METHOD.items():
-        point = TABLE5_SWEEP_POINT[method]
+    for method, sweep in spec.sweep_for_method.items():
+        point = spec.sweep_point[method]
         if finishes_every_family(f"{method}-{point}"):
             continue
         # Highest sweep point at or below the configured one that finishes.
@@ -651,36 +678,36 @@ def _kicked_data_keys(saved: dict) -> tuple[dict[str, str], list[str]]:
             continue  # nothing finishes; leave the configured point to render DNF
         data_keys[method] = f"{method}-{chosen}"
         notices.append(
-            f"table5 {TABLE5_COL_LABELS[method]}: kicked down "
-            f"{point} -> {chosen} {TABLE5_SWEEP_UNIT[method]} (geomean DNF at {point})"
+            f"{spec.fig_subdir} {spec.col_labels[method]}: kicked down "
+            f"{point} -> {chosen} {SWEEP_UNIT[method]} (geomean DNF at {point})"
         )
     return data_keys, notices
 
 
-def render_table5_tex(saved: dict) -> tuple[str, list[str]]:
-    """Return ``(latex_tabular, notices)`` for table5: molecule families ×
-    methods, with Compression Ratio and Time (s) groups and a geomean row.
-    ``notices`` lists any series-method sweep-point kick-downs (see below).
+def render_family_tex(saved: dict, spec: "FamilySpec") -> tuple[str, list[str]]:
+    """Return ``(latex_tabular, notices)`` for a family table (e.g. table5):
+    one row per family × method, with Compression Ratio and Time (s) groups and
+    a geomean row. ``notices`` lists any series-method sweep-point kick-downs.
 
-    No e-graph-min or Stitch columns (table5 has neither). A method that timed
-    out / OOM'd on any run of a family has no comparable number, so it's rendered
-    ``DNF`` and excluded from that row's bolding and the geomean. A series method
-    (Enum/SMC) whose representative sweep point DNFs is first kicked down the
-    sweep to the highest point that finishes every family (see ``_kicked_data_keys``).
-    """
+    No e-graph-min or Stitch columns (these tables have neither). A method that
+    timed out / OOM'd on any run of a family has no comparable number, so it's
+    rendered ``DNF`` and excluded from that row's bolding and the geomean. A
+    series method (Enum/SMC) whose representative sweep point DNFs at the geomean
+    is first kicked down to the highest point that finishes every family (see
+    ``_kicked_data_keys``)."""
     domains = saved["domains"]
-    methods = TABLE5_TABLE_METHODS
+    methods = spec.table_methods
     n = len(methods)
-    data_keys, notices = _kicked_data_keys(saved)
+    data_keys, notices = _kicked_data_keys(saved, spec)
 
-    def cells(values: list[float | None], spec: str, higher_is_better: bool) -> list[str]:
-        """bold_best, but render None as DNF (not N/A)."""
-        out = bold_best(values, spec, higher_is_better)
+    def cells(values: list[float | None], fmt_spec: str, higher_is_better: bool) -> list[str]:
+        """bold_best, but render a missing value (DNF) as ``DNF``."""
+        out = bold_best(values, fmt_spec, higher_is_better)
         return [("DNF" if v is None else s) for v, s in zip(values, out)]
 
     col_spec = "l r " + ("r" * n) + " " + ("r" * n)
     lines = [
-        f"% {TABLE5_TITLE}: generated from results JSON",
+        f"% {spec.title}: generated from results JSON",
         "\\begin{tabular}{" + col_spec + "}",
         "\\toprule",
         "& \\multicolumn{1}{c}{Size} "
@@ -689,14 +716,14 @@ def render_table5_tex(saved: dict) -> tuple[str, list[str]]:
         f"\\cmidrule(lr){{2-2}} \\cmidrule(lr){{3-{2 + n}}} "
         f"\\cmidrule(lr){{{3 + n}-{2 + 2 * n}}}",
     ]
-    method_hdr = " & ".join(TABLE5_COL_LABELS[m] for m in methods)
+    method_hdr = " & ".join(spec.col_labels[m] for m in methods)
     lines.append(f"Family & Original & {method_hdr} & {method_hdr} \\\\")
     lines.append("\\midrule")
 
     # Per-family rows, plus columns of values for the geomean row.
     cr_cols: list[list[float | None]] = [[] for _ in methods]
     t_cols: list[list[float | None]] = [[] for _ in methods]
-    for domain in TABLE5_DOMAINS:
+    for domain in spec.domains:
         if domain not in domains:
             continue
         runs = domains[domain].get("runs", {})
@@ -710,7 +737,7 @@ def render_table5_tex(saved: dict) -> tuple[str, list[str]]:
         for i in range(n):
             cr_cols[i].append(crs[i])
             t_cols[i].append(ts[i])
-        label = TABLE5_DOMAIN_LABELS.get(domain, domain)
+        label = spec.domain_labels.get(domain, domain)
         original = fmt(initial_size_for_domain(runs), ".0f")
         cr_strs = cells(crs, ".2f", higher_is_better=True)
         t_strs = cells(ts, ".2f", higher_is_better=False)
@@ -731,59 +758,60 @@ def render_table5_tex(saved: dict) -> tuple[str, list[str]]:
     return "\n".join(lines), notices
 
 
-def _plot_table5(cr_map: dict, t_map: dict, title: str, out_path: Path) -> None:
-    """``plot_cr_vs_time`` with table5's method roster wired in."""
+def _plot_family(cr_map: dict, t_map: dict, title: str, out_path: Path,
+                 spec: "FamilySpec") -> None:
+    """``plot_cr_vs_time`` with a family table's method roster wired in."""
     plot_cr_vs_time(
         cr_map, t_map, title, out_path,
-        methods=TABLE5_PLOT_METHODS,
-        sweep_for_method=TABLE5_SWEEP_FOR_METHOD,
-        sweep_point=TABLE5_SWEEP_POINT,
-        method_colors=TABLE5_METHOD_COLORS,
-        method_plot_labels=TABLE5_METHOD_PLOT_LABELS,
+        methods=spec.plot_methods,
+        sweep_for_method=spec.sweep_for_method,
+        sweep_point=spec.sweep_point,
+        method_colors=spec.method_colors,
+        method_plot_labels=spec.method_plot_labels,
     )
 
 
-def plot_table5_domain(saved: dict, domain: str, out_path: Path) -> None:
-    """CR-vs-time plot for one molecule family."""
+def plot_family_domain(saved: dict, spec: "FamilySpec", domain: str, out_path: Path) -> None:
+    """CR-vs-time plot for one family member."""
     runs = saved["domains"][domain].get("runs", {})
-    title = f"{TABLE5_TITLE}\n{TABLE5_DOMAIN_LABELS.get(domain, domain)}"
-    _plot_table5(aggregate_methods_cr(runs), aggregate_methods_time(runs), title, out_path)
+    title = f"{spec.title}\n{spec.domain_labels.get(domain, domain)}"
+    _plot_family(aggregate_methods_cr(runs), aggregate_methods_time(runs), title, out_path, spec)
 
 
-def plot_table5_geomean(saved: dict, out_path: Path) -> None:
-    """CR-vs-time plot using geomeans across the molecule families per key.
+def plot_family_geomean(saved: dict, spec: "FamilySpec", out_path: Path) -> None:
+    """CR-vs-time plot using geomeans across the families per key.
 
-    A method that DNFs on any family (e.g. babble, which DNFs on hexyl) is
-    dropped from the geomean plot entirely — a geomean over a subset of
-    families isn't comparable to one over all of them. This matches the LaTeX
-    table, which blanks the geomean cell for any method with a DNF."""
-    domains = [d for d in TABLE5_DOMAINS if d in saved["domains"]]
+    A method that DNFs on any family (e.g. babble on table5's hexyl) is dropped
+    from the geomean plot entirely — a geomean over a subset of families isn't
+    comparable to one over all of them. This matches the LaTeX table, which
+    blanks the geomean cell for any method with a DNF."""
+    domains = [d for d in spec.domains if d in saved["domains"]]
     per_cr = [aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains]
     per_t = [aggregate_methods_time(saved["domains"][d].get("runs", {})) for d in domains]
     keys = {k for m in per_cr for k in m} | {k for m in per_t for k in m}
     # Only plot a method's geomean point if it finished *every* family — a
-    # geomean over a subset isn't comparable, so a method with any DNF (e.g.
-    # babble on hexyl) is dropped from the geomean plot entirely.
+    # geomean over a subset isn't comparable, so a method with any DNF is
+    # dropped from the geomean plot entirely.
     def _complete_geomean(vals: list) -> float | None:
         return geomean_col(vals) if all(v is not None for v in vals) else None
 
     cr_map = {k: _complete_geomean([m.get(k) for m in per_cr]) for k in keys}
     t_map = {k: _complete_geomean([m.get(k) for m in per_t]) for k in keys}
-    _plot_table5(cr_map, t_map, f"{TABLE5_TITLE}\nGeo. mean across families", out_path)
+    _plot_family(cr_map, t_map, f"{spec.title}\nGeo. mean across families", out_path, spec)
 
 
-def render_table5(saved: dict) -> None:
-    """Write per-family + geomean CR-vs-time PNGs for table5 under figures/table5/."""
-    domain_dir = FIGURES_DIR / "table5"
+def render_family(saved: dict, spec: "FamilySpec") -> None:
+    """Write per-family + geomean CR-vs-time PNGs under figures/<fig_subdir>/."""
+    domain_dir = FIGURES_DIR / spec.fig_subdir
     domain_dir.mkdir(parents=True, exist_ok=True)
-    for domain in TABLE5_DOMAINS:
+    for domain in spec.domains:
         if domain not in saved["domains"]:
             continue
         plot_path = domain_dir / f"{domain.split(':', 1)[1]}.png"
-        plot_table5_domain(saved, domain, plot_path)
+        plot_family_domain(saved, spec, domain, plot_path)
         print(f"wrote {plot_path}", file=sys.stderr)
-    geomean_path = FIGURES_DIR / "table5_geomean.png"
-    plot_table5_geomean(saved, geomean_path)
+    geomean_path = FIGURES_DIR / f"{spec.fig_subdir}_geomean.png"
+    plot_family_geomean(saved, spec, geomean_path)
     print(f"wrote {geomean_path}", file=sys.stderr)
 
 
@@ -792,7 +820,6 @@ def main() -> None:
     argparse.ArgumentParser(description=__doc__).parse_args()
 
     FIGURES_DIR.mkdir(exist_ok=True)
-    notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
     for table in (1, 2, 3, 4):
         path = RESULTS_DIR / f"table{table}.json"
         if not path.exists():
@@ -827,22 +854,27 @@ def main() -> None:
         plot_geomean(saved, table, geomean_path)
         print(f"wrote {geomean_path}", file=sys.stderr)
 
-    # Table 5 (molecule scramble subset) has a different roster/shape, so it
-    # gets its own plot path — PNGs only, no LaTeX table.
-    table5_path = RESULTS_DIR / "table5.json"
-    if table5_path.exists():
-        with open(table5_path) as f:
+    # Table 5 (molecule scramble) has a roster shape distinct from tables 1-4
+    # (family rows, DSR baselines, no Stitch), so it goes through the FamilySpec
+    # renderers: a LaTeX table plus per-family and geomean PNGs. The FamilySpec
+    # machinery is generic — additional family tables just add another spec.
+    notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
+    for spec in (TABLE5_SPEC,):
+        path = RESULTS_DIR / f"{spec.fig_subdir}.json"
+        if not path.exists():
+            print(f"skipping {spec.fig_subdir}: {path} not present", file=sys.stderr)
+            continue
+        with open(path) as f:
             saved = json.load(f)
-        tex_path = FIGURES_DIR / "table5.tex"
-        tex, table5_notices = render_table5_tex(saved)
-        notices += table5_notices
-        tex_path.write_text(f"% source: {table5_path}\n" + tex + "\n")
+        tex_path = FIGURES_DIR / f"{spec.fig_subdir}.tex"
+        tex, spec_notices = render_family_tex(saved, spec)
+        notices += spec_notices
+        tex_path.write_text(f"% source: {path}\n" + tex + "\n")
         print(f"wrote {tex_path}", file=sys.stderr)
-        render_table5(saved)
-        # Per-family molecule scramble trajectory figures (figures/molecules/).
-        render_molecules(saved, FIGURES_DIR / "molecules")
-    else:
-        print(f"skipping table5: {table5_path} not present", file=sys.stderr)
+        render_family(saved, spec)
+        # table5 also gets per-family molecule scramble trajectory figures.
+        if spec is TABLE5_SPEC:
+            render_molecules(saved, FIGURES_DIR / "molecules")
 
     # Loudly surface every sweep-point kick-down so a reduced operating point in
     # a table is never silently mistaken for the configured one.
