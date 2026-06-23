@@ -151,6 +151,12 @@ class OursBf:
     # non-confluent algebraic DSRs cause (table6 sets it). Excluded from repr so
     # the method label is unchanged.
     max_match_set: int | None = field(default=None, repr=False)
+    # Caps e-saturation iterations (the non-confluent algebra rules can't OOM
+    # live with it bounded; table6 sets it). Excluded from repr.
+    iter_limit: int | None = field(default=None, repr=False)
+    # Overrides the domain's default rewrites file with a specific ruleset
+    # (table6 points at drawings.algebra-choice2.rewrites). Excluded from repr.
+    rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
 
@@ -162,8 +168,11 @@ class OursBf:
             search_flags["max_forced_expansion"] = self.max_forced_expansion
         if self.max_match_set is not None:
             search_flags["max_match_set"] = self.max_match_set
+        if self.iter_limit is not None:
+            search_flags["iter_limit"] = self.iter_limit
         return _run(
-            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
+            rounds=rounds, input_path=input_path,
+            rewrites_path=self.rewrites_override or rewrites_path,
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
             search_flags=search_flags,

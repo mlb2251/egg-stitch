@@ -274,40 +274,47 @@ def table5() -> Path:
     )
 
 
-# Table 6: the cogsci drawing domains run with OUR algebraic drawing
-# DSRs (data/domains/cogsci/drawings.rewrites) instead of babble's per-domain
-# rewrites. Holds the rule set fixed (ours) and varies only how the rules are
-# used — Enum/SMC live vs the dsrs-only-at-start baseline — so the table
-# isolates the live-vs-at-start effect. No babble column: it can't parse our
-# DSL, and giving it its own rewrites would confound the rules with the search
-# (its external baseline already appears in tables 1/3).
+# Table 6: the cogsci drawing domains with a custom affine-transform-algebra DSR
+# set (data/domains/cogsci/drawings.algebra-choice2.rewrites), comparing DSRs
+# kept LIVE during search against applied only AT START. The algebra rules are
+# deliberately *non-confluent* (transform factoring, repeat<->unroll, overlay
+# assoc/comm, scale/translate interchange) — they expose multiple equivalent
+# normal forms whose best choice depends on the library being built. Live keeps
+# all forms so each abstraction can align to the matching one; at-start commits
+# to a single greedy min-term up front, so live wins (and the gap widens with
+# expressiveness). The commutative rules would explode the abstraction match set
+# if left unchecked, so each run carries the per-factor ``--max-match-set`` cap
+# and an ``--iter-limit`` that bounds the e-saturation. Fixed 4 abstractions.
 TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "furniture")]
-TABLE6_TIMEOUT = 300.0  # seconds, per tool invocation
+TABLE6_REWRITES = "data/domains/cogsci/drawings.algebra-choice2.rewrites"
 TABLE6_NUM_ABSTRACTIONS = 4
-# Per-factor match-set cap: bounds the abstraction-search blowup the
-# non-confluent algebraic choice rules cause (iter-limit can't catch it).
-TABLE6_MAX_MATCH_SET = 2000
+TABLE6_NUM_STEPS = 50_000
+TABLE6_ITER_LIMIT = 6
+TABLE6_MATCH_SET_CAP = 2000
+TABLE6_TIMEOUT = 300.0  # seconds, per tool invocation
 
 
 def _table6_runners() -> tuple[tuple[str, object], ...]:
-    """Enum/SMC sweeps + the dsrs-only-at-start baseline, every runner capped at
-    :data:`TABLE6_TIMEOUT` and :data:`MEM_LIMIT_BYTES`; the best-first runners
-    also carry the :data:`TABLE6_MAX_MATCH_SET` per-factor cap."""
+    """``enum-live`` vs ``enum-at-start``: the same best-first config and algebra
+    DSRs, differing only in whether the rules stay live during search."""
+    common = dict(
+        num_steps=TABLE6_NUM_STEPS,
+        iter_limit=TABLE6_ITER_LIMIT,
+        max_match_set=TABLE6_MATCH_SET_CAP,
+        rewrites_override=TABLE6_REWRITES,
+        timeout=TABLE6_TIMEOUT,
+        mem_limit=MEM_LIMIT_BYTES,
+    )
     return (
-        _sweep_runners(timeout=TABLE6_TIMEOUT, mem_limit=MEM_LIMIT_BYTES, max_match_set=TABLE6_MAX_MATCH_SET)
-        + (("enum-dsrs-at-start", OursBf(
-            num_steps=BASELINE_BFS_STEPS,
-            only_use_dsrs_at_start=True,
-            timeout=TABLE6_TIMEOUT,
-            mem_limit=MEM_LIMIT_BYTES,
-        )),)
+        ("enum-live", OursBf(only_use_dsrs_at_start=False, **common)),
+        ("enum-at-start", OursBf(only_use_dsrs_at_start=True, **common)),
     )
 
 
 def table6() -> Path:
-    """Run the cogsci drawing domains with our algebraic drawing DSRs, Enum/SMC
-    sweeps + the dsrs-only-at-start baseline, each algorithm capped at 300s and
-    20 GiB. Fixed 4 abstractions; no babble (see TABLE6 note above)."""
+    """Run the cogsci drawing domains with the non-confluent affine-algebra DSRs,
+    live vs dsrs-only-at-start, at a fixed 4 abstractions with the per-factor
+    match-set cap. Demonstrates live > at-start on a non-confluent rule set."""
     free = available_memory_bytes()
     if free < MEM_LIMIT_BYTES:
         raise SystemExit(
