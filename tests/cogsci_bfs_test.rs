@@ -63,10 +63,16 @@ const MFE_CAP: &str = "3";
 /// the `dsr` variant uses. Pins the table6 ruleset's behaviour.
 const ALGEBRA_RULES: &str = "data/domains/cogsci/drawings.rewrites";
 
-/// `--max-match-set` per-factor cap for the algebra variant. The
-/// non-confluent choice rules blow the abstraction match set up without it
-/// (and `--max-forced-expansion` can't catch that); 2000 is the table6 value.
-const MMS_CAP: &str = "2000";
+/// `--max-match-set` per-factor cap for the algebra variant, in factor *rows*.
+/// The non-confluent choice rules blow the abstraction match set up without it
+/// (and `--max-forced-expansion` can't catch that); 24 is the table6 value.
+const MMS_CAP: &str = "24";
+
+/// `--decompose-min-rows` for the algebra variant. Must be `<= MMS_CAP` (the
+/// binary asserts this), so factors are decomposed before the row cap can prune
+/// them — a benign independent product just under the cap isn't mistaken for an
+/// entangled blowup. Pinned equal to the cap (the table6 value).
+const DMR_CAP: &str = "24";
 
 /// `--iter-limit` for the algebra variant. REQUIRED for these rules:
 /// without it the matmul/choice rules saturate the DSR e-graph without bound
@@ -94,7 +100,7 @@ fn expected_path(domain: &str, tag: &str) -> String {
 /// Runs best-first on a cogsci domain (optionally with DSR rules), writes its
 /// `--output` JSON to a unique temp file, reads it back, and strips the
 /// non-deterministic / bookkeeping fields so the result is a stable snapshot.
-fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, mms: Option<&str>, il: Option<&str>, steps: &str, tag: &str) -> Value {
+fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, mms: Option<&str>, dmr: Option<&str>, il: Option<&str>, steps: &str, tag: &str) -> Value {
     let input = format!("data/domains/cogsci/{domain}.json");
     let out = std::env::temp_dir().join(format!("egg-stitch-cogsci-{}-{}-{}.json", std::process::id(), domain, tag));
     let out_str = out.to_str().expect("utf-8 temp path");
@@ -108,6 +114,9 @@ fn run_bfs(domain: &str, rules: Option<&str>, mfe: Option<&str>, mms: Option<&st
     }
     if let Some(cap) = mms {
         cmd.args(["--max-match-set", cap]);
+    }
+    if let Some(d) = dmr {
+        cmd.args(["--decompose-min-rows", d]);
     }
     if let Some(cap) = il {
         cmd.args(["--iter-limit", cap]);
@@ -152,14 +161,14 @@ fn bless_or_check(path: &str, value: &Value) {
 
 /// No-DSR variant: the input lives in-repo, so this always runs.
 fn check_nodsr(domain: &str) {
-    let v = run_bfs(domain, None, None, None, None, STEPS, "nodsr");
+    let v = run_bfs(domain, None, None, None, None, None, STEPS, "nodsr");
     bless_or_check(&expected_path(domain, "nodsr"), &v);
 }
 
 /// DSR variant: runs best-first with the in-repo per-domain rewrite rules.
 fn check_dsr(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
-    let v = run_bfs(domain, Some(&rules), None, None, None, STEPS, "dsr");
+    let v = run_bfs(domain, Some(&rules), None, None, None, None, STEPS, "dsr");
     bless_or_check(&expected_path(domain, "dsr"), &v);
 }
 
@@ -168,7 +177,7 @@ fn check_dsr(domain: &str) {
 fn check_dsr_mfe(domain: &str) {
     let rules = format!("{DSR_DIR}/{domain}.rewrites");
     let tag = format!("dsr-mfe{MFE_CAP}");
-    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), None, None, STEPS, &tag);
+    let v = run_bfs(domain, Some(&rules), Some(MFE_CAP), None, None, None, STEPS, &tag);
     bless_or_check(&expected_path(domain, &tag), &v);
 }
 
@@ -176,7 +185,7 @@ fn check_dsr_mfe(domain: &str) {
 /// default) and the `--max-match-set` cap. Regression guard for that ruleset and
 /// the match-set prune across the stacked rounds.
 fn check_algebra(domain: &str) {
-    let v = run_bfs(domain, Some(ALGEBRA_RULES), None, Some(MMS_CAP), Some(ALGEBRA_ITER_LIMIT), ALGEBRA_STEPS, "algebra");
+    let v = run_bfs(domain, Some(ALGEBRA_RULES), None, Some(MMS_CAP), Some(DMR_CAP), Some(ALGEBRA_ITER_LIMIT), ALGEBRA_STEPS, "algebra");
     bless_or_check(&expected_path(domain, "algebra"), &v);
 }
 

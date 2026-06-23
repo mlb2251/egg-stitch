@@ -290,7 +290,15 @@ TABLE6_REWRITES = "data/domains/cogsci/drawings.rewrites"
 TABLE6_NUM_ABSTRACTIONS = 4
 TABLE6_NUM_STEPS = 50_000
 TABLE6_ITER_LIMIT = 6
-TABLE6_MATCH_SET_CAP = 2000
+# Per-factor row cap (the `--max-match-set` metric is a factor's row count): the
+# commutativity blowup is one entangled factor whose equivalent parse trees pile
+# up as rows. 24 bounds dials/furniture memory while sparing the high-usage
+# patterns; above ~64 furniture's blowup escapes the cap.
+TABLE6_MATCH_SET_CAP = 24
+# Decompose factors before the row cap can prune them: must be <= the cap (the
+# binary asserts it) so a benign independent product just under the cap isn't
+# mistaken for an entangled blowup. Pinned equal to the cap.
+TABLE6_DECOMPOSE_MIN_ROWS = 24
 # Arity 4 (vs the other tables' 2): the drawing domains have deeper repeated
 # part-hierarchies, and higher arity both raises absolute compression and widens
 # the live-vs-at-start gap (more holes => more normal-form alignment that live can
@@ -309,6 +317,7 @@ def _table6_runners() -> tuple[tuple[str, object], ...]:
     common = dict(
         iter_limit=TABLE6_ITER_LIMIT,
         max_match_set=TABLE6_MATCH_SET_CAP,
+        decompose_min_rows=TABLE6_DECOMPOSE_MIN_ROWS,
         max_arity=TABLE6_MAX_ARITY,
         rewrites_override=TABLE6_REWRITES,
         timeout=TABLE6_TIMEOUT,

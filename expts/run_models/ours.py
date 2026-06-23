@@ -151,6 +151,10 @@ class OursBf:
     # non-confluent algebraic DSRs cause (table6 sets it). Excluded from repr so
     # the method label is unchanged.
     max_match_set: int | None = field(default=None, repr=False)
+    # Minimum factor rows before decomposition is attempted; must be <=
+    # max_match_set (the binary asserts it) so the row cap only prunes
+    # already-decomposed factors (table6 pins it equal to the cap). Excluded from repr.
+    decompose_min_rows: int | None = field(default=None, repr=False)
     # Caps e-saturation iterations (the non-confluent algebra rules can't OOM
     # live with it bounded; table6 sets it). Excluded from repr.
     iter_limit: int | None = field(default=None, repr=False)
@@ -168,6 +172,8 @@ class OursBf:
             search_flags["max_forced_expansion"] = self.max_forced_expansion
         if self.max_match_set is not None:
             search_flags["max_match_set"] = self.max_match_set
+        if self.decompose_min_rows is not None:
+            search_flags["decompose_min_rows"] = self.decompose_min_rows
         if self.iter_limit is not None:
             search_flags["iter_limit"] = self.iter_limit
         return _run(
@@ -194,6 +200,9 @@ class OursSmc:
     # Excluded from repr so the method label is unchanged.
     iter_limit: int | None = field(default=None, repr=False)
     max_match_set: int | None = field(default=None, repr=False)
+    # Minimum factor rows before decomposition; must be <= max_match_set (the
+    # binary asserts it). Table6 pins it equal to the cap. Excluded from repr.
+    decompose_min_rows: int | None = field(default=None, repr=False)
     # Overrides the domain's default rewrites file (table6 pins drawings.rewrites).
     rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
@@ -207,6 +216,8 @@ class OursSmc:
         }
         if self.max_match_set is not None:
             search_flags["max_match_set"] = self.max_match_set
+        if self.decompose_min_rows is not None:
+            search_flags["decompose_min_rows"] = self.decompose_min_rows
         if self.iter_limit is not None:
             search_flags["iter_limit"] = self.iter_limit
         return _run(

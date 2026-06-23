@@ -143,6 +143,12 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// precomputed once (the e-graph is static during search). Indexed by
     /// canonical eclass id — sound because no unions happen during search.
     pub eclass_shapes: Vec<EclassShapeHist<F, O>>,
+    /// Minimum factor row count before [`Factor::decompose`] attempts a split
+    /// (`--decompose-min-rows`). Held here so every decompose site on the search
+    /// hot path reads the same runtime value. `setup_search` asserts it stays
+    /// `≤` the `--max-match-set` row cap so the cap only ever prunes factors
+    /// that were already offered decomposition.
+    pub decompose_min_rows: usize,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -208,7 +214,7 @@ fn renumber_factor(f: &Factor, threshold: usize, delta: isize) -> Factor {
 /// `slots`): sets the kept slot's value to the shallow slot's value, drops the
 /// `drop_idx` column, shifts higher slots down by 1, then re-decomposes.
 /// Returns `None` when no rows survive.
-fn collapse_reuse(slots: &[usize], mut rows: Vec<Vec<Id>>, shallow_idx: usize, keep_idx: usize, drop_idx: usize) -> Option<Vec<Factor>> {
+fn collapse_reuse(slots: &[usize], mut rows: Vec<Vec<Id>>, shallow_idx: usize, keep_idx: usize, drop_idx: usize, min_rows: usize) -> Option<Vec<Factor>> {
     let pos = |s: usize| slots.iter().position(|&x| x == s).expect("reuse slot present in joint factor");
     let (pk, ps, pd) = (pos(keep_idx), pos(shallow_idx), pos(drop_idx));
     for r in &mut rows {
@@ -216,7 +222,7 @@ fn collapse_reuse(slots: &[usize], mut rows: Vec<Vec<Id>>, shallow_idx: usize, k
         r.remove(pd);
     }
     let new_slots: Vec<usize> = slots.iter().filter(|&&s| s != drop_idx).map(|&s| if s > drop_idx { s - 1 } else { s }).collect();
-    Factor::new(new_slots, rows).map(Factor::decompose)
+    Factor::new(new_slots, rows).map(|f| f.decompose(min_rows))
 }
 
 /// Shared scaffold for the per-action match builders. For each parent match,
@@ -289,7 +295,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         new_slots.push(s);
                     }
                 }
-                let built = rebuild_factor(new_slots, &f.rows, |row, rows| {
+                let built = rebuild_factor(new_slots, &f.rows, shared.decompose_min_rows, |row, rows| {
                     for node in &shared.egraph[row[pos]].nodes {
                         if !node.matches(target) {
                             continue;
@@ -365,7 +371,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     }
                     (slots, rows)
                 };
-                let merged_factors = collapse_reuse(&joint_slots, joint_rows, shallow_idx, keep_idx, drop_idx)?;
+                let merged_factors = collapse_reuse(&joint_slots, joint_rows, shallow_idx, keep_idx, drop_idx, shared.decompose_min_rows)?;
                 // sf and df are the touched factors (deduped when equal).
                 let touched = if sf == df { vec![sf] } else { vec![sf, df] };
                 Some((touched, merged_factors))
@@ -481,7 +487,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if !new_slots.is_empty() {
                 let new_rows: Vec<Vec<Id>> = old.rows.iter().map(|r| r.iter().enumerate().filter(|&(i, _)| i != pos).map(|(_, &v)| v).collect()).collect();
                 if let Some(f) = Factor::new(new_slots, new_rows) {
-                    m.factors.extend(f.decompose());
+                    m.factors.extend(f.decompose(shared.decompose_min_rows));
                 }
             }
             for f in &mut m.factors {
@@ -640,21 +646,23 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         self.matches.iter().any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
     }
 
-    /// The heaviest single factor's size-weighted mass: over every factor (of
-    /// every match), the sum across its stored rows of the cost-analysis e-class
-    /// sizes of the variables' bindings; we return the max over factors.
+    /// The heaviest single factor's row count: over every factor (of every
+    /// match), the number of stored rows; we return the max over factors.
     ///
     /// Isolates the commutativity-blowup signature — one entangled factor (can't
     /// `decompose`) holding the exponentially many equivalent parse trees of a
-    /// single coordinate. A high-*usage* pattern instead has many matches each
-    /// with tiny 1-row factors, so its per-factor mass stays small and it
-    /// survives the `--max-match-set` prune; capping the *sum* over all rows
-    /// would conflate the two.
-    pub fn max_factor_weight(&self, shared: &SharedSearchData<F, O>) -> usize {
+    /// single coordinate as distinct rows. A high-*usage* pattern instead has
+    /// many matches each with tiny 1-row factors, so its per-factor row count
+    /// stays small and it survives the `--max-match-set` prune; taking the max
+    /// over factors (not the sum, nor the `num_substs` product) keeps the two
+    /// from conflating. Unlike a size-weighted mass, this is blind to the
+    /// min-term size of the bindings, so a pattern matching a few large concrete
+    /// subterms isn't penalised for size it didn't entangle.
+    pub fn max_factor_rows(&self) -> usize {
         self.matches
             .iter()
             .flat_map(|m| m.factors.iter())
-            .map(|f| f.rows.iter().map(|row| row.iter().map(|&id| shared.egraph[id].data.size as usize).sum::<usize>()).sum::<usize>())
+            .map(|f| f.rows.len())
             .max()
             .unwrap_or(0)
     }
@@ -930,6 +938,16 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     let crate::shared::SharedData { egraph, root } = data;
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let eclass_shapes = compute_eclass_shapes::<F, O>(&egraph);
+    // The `--max-match-set` cap prunes factors with more than `cap` rows; a
+    // factor is only offered decomposition once it reaches `decompose_min_rows`.
+    // If the decompose threshold were above the cap, a benign independent
+    // product in `(cap, decompose_min_rows)` rows would be pruned as if it were
+    // an entangled blowup, never having had the chance to split. Require the
+    // decompose threshold at or below the cap so every prunable factor was
+    // already decomposed.
+    if let Some(cap) = args.max_match_set {
+        assert!(args.decompose_min_rows <= cap, "--decompose-min-rows ({}) must be <= --max-match-set ({cap}); otherwise the cap prunes un-decomposed factors", args.decompose_min_rows);
+    }
     let shared = SharedSearchData {
         egraph,
         root,
@@ -938,6 +956,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         check_slow: args.check_slow,
         shift_clamp,
         eclass_shapes,
+        decompose_min_rows: args.decompose_min_rows,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, false);
