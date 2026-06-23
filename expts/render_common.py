@@ -67,48 +67,28 @@ def aggregate_time(repeats: list[list[dict]]) -> float | None:
     return _geomean([repeat_time(r) for r in repeats])
 
 
-def dnf_status(repeats: list[list[dict]]) -> str:
-    """Classify a method's DNF state over all its per-file records.
+def has_dnf(repeats: list[list[dict]]) -> bool:
+    """True if any of a method's per-file records timed out / OOM'd.
 
-    Returns ``"none"`` (every run finished), ``"all"`` (every run timed
-    out/OOM'd), or ``"partial"`` (a mix). The partial case matters because of
-    an averaging asymmetry: ``repeat_cr``/``aggregate_cr`` drop DNFs (geomean
-    over the finishers) while ``repeat_time``/``aggregate_time`` still sum in
-    the timed-out runs' budget, so a partial set averages CR and time over
-    inconsistent sets and silently misleads. Callers therefore report no number
-    for a partial method and annotate it ``DNF*`` (vs ``DNF`` for an all-DNF
-    method). A record is a DNF when ``compression_ratio is None``."""
-    dnf = [r["compression_ratio"] is None for per_file in repeats for r in per_file]
-    if not dnf or not any(dnf):
-        return "none"
-    return "all" if all(dnf) else "partial"
+    A record is a DNF when ``compression_ratio is None``. Aggregation drops a
+    method with any DNF entirely (returns ``None``) rather than averaging:
+    ``repeat_cr``/``aggregate_cr`` drop DNFs while ``repeat_time``/
+    ``aggregate_time`` still sum the timed-out runs' budget, so a partial set
+    would average CR and time over inconsistent sets and silently mislead, and
+    an all-DNF set has nothing to average."""
+    return any(r["compression_ratio"] is None for per_file in repeats for r in per_file)
 
 
 def aggregate_methods_cr(runs: dict[str, list[list[dict]]]) -> dict[str, float | None]:
-    """{method: aggregated compression ratio} for every method present.
-
-    Any method with a DNF (partial or all) gets ``None`` — a partial set has no
-    comparable number (see ``dnf_status``), and an all-DNF set has nothing to
-    average. ``aggregate_methods_dnf`` distinguishes the two for rendering."""
-    return {
-        m: (aggregate_cr(reps) if dnf_status(reps) == "none" else None)
-        for m, reps in runs.items()
-    }
+    """{method: aggregated compression ratio} for every method present; ``None``
+    for any method with a DNF (see ``has_dnf``)."""
+    return {m: (None if has_dnf(reps) else aggregate_cr(reps)) for m, reps in runs.items()}
 
 
 def aggregate_methods_time(runs: dict[str, list[list[dict]]]) -> dict[str, float | None]:
-    """{method: aggregated elapsed seconds} for every method present.
-
-    ``None`` for any method with a DNF, matching ``aggregate_methods_cr``."""
-    return {
-        m: (aggregate_time(reps) if dnf_status(reps) == "none" else None)
-        for m, reps in runs.items()
-    }
-
-
-def aggregate_methods_dnf(runs: dict[str, list[list[dict]]]) -> dict[str, str]:
-    """{method: dnf_status} (``none``/``all``/``partial``) for every method present."""
-    return {m: dnf_status(reps) for m, reps in runs.items()}
+    """{method: aggregated elapsed seconds} for every method present; ``None``
+    for any method with a DNF, matching ``aggregate_methods_cr``."""
+    return {m: (None if has_dnf(reps) else aggregate_time(reps)) for m, reps in runs.items()}
 
 
 def initial_size_for_domain(runs: dict[str, list[list[dict]]]) -> float | None:
