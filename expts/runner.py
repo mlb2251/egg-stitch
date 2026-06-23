@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import signal
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -49,22 +50,59 @@ class Runner(Protocol):
 
 # ─── domain helpers ────────────────────────────────────────────────────────
 
-# Molecule scramble families live under data/domains/molecules/scramble/ as
-# pseudo-domains named ``molecules:<family>`` (real PubChem substructure
-# corpora; op-children grammar, symmetry DSRs). See data/.../scramble/README.md.
-MOLECULE_FAMILIES = ["hexyl", "ester", "glycol"]
+
+@dataclass(frozen=True)
+class FamilyDomain:
+    """A ``<name>:<member>`` pseudo-domain family with shipped DSRs.
+
+    Molecule-scramble domains are single-file op-children corpora addressed as
+    ``<name>:<member>``; this holds the only bits that vary between such families
+    so the dispatch functions below stay family-agnostic. ``name`` doubles as the
+    :func:`domain_type` label and the prefix before ``:``; ``file_template`` is
+    formatted with ``member=`` relative to :data:`EGG_STITCH_DIR`.
+    """
+    name: str
+    members: tuple[str, ...]
+    file_template: str
+    rewrites: str
+
+    def member(self, domain: str) -> str | None:
+        """The ``<member>`` for one of this family's domains, else None."""
+        prefix = f"{self.name}:"
+        return domain[len(prefix):] if domain.startswith(prefix) else None
+
+    @property
+    def domains(self) -> list[str]:
+        """Every ``<name>:<member>`` domain string in this family."""
+        return [f"{self.name}:{m}" for m in self.members]
+
+    def input_file(self, member: str) -> Path:
+        """Absolute path of the corpus file for one ``member``."""
+        return EGG_STITCH_DIR / self.file_template.format(member=member)
 
 
-def molecule_family(domain: str) -> str | None:
-    """Return the family for a ``molecules:<family>`` domain, else None."""
-    prefix = "molecules:"
-    return domain[len(prefix):] if domain.startswith(prefix) else None
+# Molecule scramble families live under data/domains/molecules/scramble/ (real
+# PubChem substructure corpora; op-children grammar, symmetry DSRs; see
+# data/.../scramble/README.md).
+MOLECULES = FamilyDomain(
+    name="molecules",
+    members=("hexyl", "ester", "glycol"),
+    file_template="data/domains/molecules/scramble/{member}.scram.json",
+    rewrites="data/domains/molecules/molecules.rewrites",
+)
+FAMILY_DOMAINS = (MOLECULES,)
+
+
+def family_for(domain: str) -> FamilyDomain | None:
+    """The :class:`FamilyDomain` owning ``domain``, else None."""
+    return next((f for f in FAMILY_DOMAINS if f.member(domain) is not None), None)
 
 
 def domain_type(domain: str) -> str:
     """Return ``"cogsci"``, ``"dreamcoder"``, or ``"molecules"`` for a known domain."""
-    if molecule_family(domain) is not None:
-        return "molecules"
+    fam = family_for(domain)
+    if fam is not None:
+        return fam.name
     if domain in DREAMCODER_DOMAINS:
         return "dreamcoder"
     if domain in COGSCI_DOMAINS:
@@ -84,9 +122,9 @@ def input_files(domain: str) -> list[Path]:
     Cogsci/molecule domains have a single file; dreamcoder domains have one
     file per benchmark iteration. Order is sorted so re-runs are deterministic.
     """
-    fam = molecule_family(domain)
+    fam = family_for(domain)
     if fam is not None:
-        return [EGG_STITCH_DIR / "data" / "domains" / "molecules" / "scramble" / f"{fam}.scram.json"]
+        return [fam.input_file(fam.member(domain))]
     if domain_type(domain) == "cogsci":
         return [EGG_STITCH_DIR / "data" / "domains" / "cogsci" / f"{domain}.json"]
     d = EGG_STITCH_DIR / "data" / "domains" / domain
@@ -101,10 +139,10 @@ def rewrites_path(domain: str) -> str | None:
     ``<domain>.rewrites``; molecules share one symmetry file. ``text``/``logo``/
     ``towers`` have no DSRs.
     """
-    dt = domain_type(domain)
-    if dt == "molecules":
-        return "data/domains/molecules/molecules.rewrites"
-    if dt == "dreamcoder":
+    fam = family_for(domain)
+    if fam is not None:
+        return fam.rewrites
+    if domain_type(domain) == "dreamcoder":
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
         return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None
     return f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites"
