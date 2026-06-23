@@ -8,6 +8,10 @@ without them, β alone can't bridge cases like `(* 0 ?x) ≡ 0`.
 Fixtures whose library has no `lambda` field are skipped internally by
 `check_equiv.py` (lambda-free OpChildren runs).
 
+The epfl-circuits domain is verified by `check_circuit_equiv.py` instead
+(exhaustive boolean truth-table equivalence), which is definitive for its
+<=K-input cones where rule-saturation can't always re-derive the equivalence.
+
 Exit 0 iff every applicable file checks out.
 """
 
@@ -18,6 +22,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 CHECKER = HERE / "check_equiv.py"
+CIRCUIT_CHECKER = HERE / "check_circuit_equiv.py"
 ROOT = REPO / "data" / "expected_outputs"
 
 # Fixtures where the search was run with `-r <rules>` and β alone is not
@@ -66,24 +71,14 @@ RULES_BY_REL = {
     "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
 }
 
-# epfl-circuits (op-children AIG cones): the factoring DSRs (De Morgan +
-# distributivity) are what make the rewritten cones equivalent, so β alone can't
-# bridge them -- the `<circuit>.factoring.live` fixtures are checked against that
-# rule file (the no-rules `<circuit>.baseline` ones stay β-only). Blessed by
-# `tests/epfl_circuits_test.rs`.
-RULES_BY_REL.update({
-    f"epfl-circuits/{p.name}": "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
-    for p in sorted((ROOT / "epfl-circuits").glob("*.factoring.live.out.json"))
-})
-
-# The dsrs-only-at-start fixtures canonicalise the corpus deeply before
-# abstracting, so re-deriving the equivalence needs far more saturation than is
-# practical here (30 iters isn't close, and raising it is too slow for CI). Skip
-# them in the equivalence sweep; they stay regression-locked by the snapshot test.
-SKIP_REL = {
-    str(p.relative_to(ROOT))
-    for p in (ROOT / "epfl-circuits").glob("*.factoring.at-start.out.json")
-}
+# epfl-circuits fixtures are verified by `check_circuit_equiv.py` (exhaustive
+# boolean truth-table equivalence), not the rule-rewriting `check_equiv.py`: the
+# De Morgan + directional-distributivity DSRs can't always re-derive an
+# aggressively-factored cone back to its original (the checker egraph hits a
+# fixpoint without unifying -- a completeness gap, not a budget one). Since each
+# cone is a boolean function of <=K inputs, the truth table settles it
+# definitively. Routed in `main` and excluded from the check_equiv batches.
+SKIP_REL = set()
 # The plain-`op-children` half of the op-children-db contrast deliberately bakes
 # the symbol `$0` into the body (`(f (g (h ?#0)) $0)`). check_equiv reads `$0` as
 # a De Bruijn variable, so it sees an unsound rewrite — which is exactly the
@@ -93,21 +88,32 @@ SKIP_REL = {
 SKIP_REL.add("test/op_children_db_free_var.plain.out.json")
 
 
+def is_circuit(rel):
+    return rel.startswith("epfl-circuits/")
+
+
 def main():
     paths = sorted(ROOT.rglob("*.out.json"))
     if not paths:
         print(f"no *.out.json under {ROOT}", file=sys.stderr)
         sys.exit(1)
-    # Group by rewrites file (None for β-only) so each batch becomes one
-    # check_equiv invocation.
+    overall = 0
+    # epfl-circuits: exhaustive boolean-equivalence check (see check_circuit_equiv.py).
+    circuits = [p for p in paths if is_circuit(str(p.relative_to(ROOT)))]
+    if circuits:
+        print(f"$ check_circuit_equiv.py <{len(circuits)} files>")
+        res = subprocess.run([sys.executable, str(CIRCUIT_CHECKER), *map(str, circuits)], cwd=REPO)
+        if res.returncode != 0:
+            overall = res.returncode
+    # Everything else: β-only or rule-mediated equivalence via check_equiv.
+    # Group by rewrites file (None for β-only) so each batch becomes one call.
     batches = {}
     for p in paths:
         rel = str(p.relative_to(ROOT))
-        if rel in SKIP_REL:
+        if rel in SKIP_REL or is_circuit(rel):
             continue
         rules = RULES_BY_REL.get(rel)
         batches.setdefault(rules, []).append(p)
-    overall = 0
     for rules, group in batches.items():
         cmd = [sys.executable, str(CHECKER), *[str(p) for p in group]]
         if rules:
