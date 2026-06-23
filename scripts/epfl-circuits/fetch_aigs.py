@@ -1,56 +1,50 @@
 #!/usr/bin/env python3
-"""Fetch the vendored EPFL `.aig` circuits, so the committed blobs have a
-reproducible provenance rather than being trusted blindly.
+"""Fetch the vendored EPFL `.aig` circuits for the current benchmark set.
 
-Source: the EPFL Combinational Benchmark Suite, github.com/lsils/benchmarks.
-The raw URLs are pinned to a fixed commit (not a branch) so re-running always
-retrieves the exact same bytes as the vendored `scripts/epfl-circuits/*.aig`.
-Each circuit is vendored under its short key (e.g. the EPFL `multiplier` is
-`mult.aig`) so the key matches the corpus filename
-`data/domains/epfl-circuits/<key>.json`.
+Downloads from the EPFL Combinational Benchmark Suite (github.com/lsils/benchmarks)
+at a pinned commit, so the gitignored `scripts/epfl-circuits/<circuit>.aig` blobs
+reproduce byte-for-byte. With no args, fetches the aig for every committed corpus
+in data/domains/epfl-circuits/; pass circuit names to fetch a subset.
 
 Usage:
-    python3 scripts/epfl-circuits/fetch_aigs.py            # all circuits
-    python3 scripts/epfl-circuits/fetch_aigs.py mult bar   # only these
+    python3 scripts/epfl-circuits/fetch_aigs.py            # the committed set
+    python3 scripts/epfl-circuits/fetch_aigs.py voter log2
 """
 import os
 import sys
 import urllib.request
 
 # Pinned commit (2018-07-25 "Benchmark files."), so the download is immutable.
-# Bump this ref to intentionally re-vendor.
 REF = "52b26f0e2cf1e88298a8b76c5e68e75013ba3977"
 
-# circuit key -> upstream EPFL `arithmetic/<name>.aig` basename.
-CIRCUITS = {
-    "mult": "multiplier",
-    "square": "square",
-    "bar": "bar",
-}
-
 HERE = os.path.dirname(os.path.abspath(__file__))
+DOMAIN = os.path.join(os.path.dirname(os.path.dirname(HERE)), "data", "domains", "epfl-circuits")
+
+# Every EPFL circuit -> its suite subdirectory.
+SUBDIR = {c: "arithmetic" for c in
+          ["adder", "bar", "div", "hyp", "log2", "max", "multiplier", "sin", "sqrt", "square"]}
+SUBDIR.update({c: "random_control" for c in
+               ["arbiter", "cavlc", "ctrl", "dec", "i2c", "int2float", "mem_ctrl", "priority", "router", "voter"]})
 
 
-def fetch(key: str) -> None:
-    """Download circuit `key` to scripts/epfl-circuits/<key>.aig."""
-    url = f"https://raw.githubusercontent.com/lsils/benchmarks/{REF}/arithmetic/{CIRCUITS[key]}.aig"
+def fetch(name: str) -> None:
+    """Download circuit `name` to scripts/epfl-circuits/<name>.aig."""
+    url = f"https://raw.githubusercontent.com/lsils/benchmarks/{REF}/{SUBDIR[name]}/{name}.aig"
     req = urllib.request.Request(url, headers={"User-Agent": "egg-stitch"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=120) as resp:
         data = resp.read()
-    header = data.split(b"\n", 1)[0].decode("ascii", "replace")
-    assert header.startswith("aig "), f"{key}: not an AIGER file (header: {header!r})"
-    out = os.path.join(HERE, f"{key}.aig")
-    with open(out, "wb") as f:
+    assert data.startswith(b"aig "), f"{name}: not an AIGER file"
+    with open(os.path.join(HERE, f"{name}.aig"), "wb") as f:
         f.write(data)
-    print(f"{key}: wrote {len(data)} bytes -> {out}  ({header})")
+    print(f"{name}: wrote {len(data)} bytes")
 
 
 def main():
-    keys = sys.argv[1:] or list(CIRCUITS)
-    for key in keys:
-        if key not in CIRCUITS:
-            raise SystemExit(f"unknown circuit {key!r}; known: {', '.join(CIRCUITS)}")
-        fetch(key)
+    names = sys.argv[1:] or sorted(f[:-5] for f in os.listdir(DOMAIN) if f.endswith(".json"))
+    for name in names:
+        if name not in SUBDIR:
+            raise SystemExit(f"unknown circuit {name!r}")
+        fetch(name)
 
 
 if __name__ == "__main__":

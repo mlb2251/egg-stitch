@@ -13,7 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Repo root is three levels up: scripts/epfl-circuits/aig_to_egg.py.
 ROOT = os.path.dirname(os.path.dirname(HERE))
 DOMAIN = os.path.join(ROOT, "data", "domains", "epfl-circuits")
-CIRCUIT = sys.argv[1] if len(sys.argv) > 1 else "mult"
+CIRCUIT = sys.argv[1] if len(sys.argv) > 1 else "multiplier"
 K = int(sys.argv[2]) if len(sys.argv) > 2 else 6
 # Optional explicit output path (argv[3]); defaults to
 # data/domains/epfl-circuits/<circuit>.json. The byte-identity regression test

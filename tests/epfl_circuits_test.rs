@@ -169,6 +169,8 @@ macro_rules! circuit_suite {
     };
 }
 
-circuit_suite!("mult", mult);
+circuit_suite!("hyp", hyp);
+circuit_suite!("log2", log2);
+circuit_suite!("multiplier", multiplier);
 circuit_suite!("square", square);
-circuit_suite!("bar", bar);
+circuit_suite!("voter", voter);

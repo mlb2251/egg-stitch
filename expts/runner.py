@@ -57,7 +57,7 @@ MOLECULE_FAMILIES = ["hexyl", "ester", "glycol"]
 # EPFL benchmark circuits as op-children corpora under data/domains/epfl-circuits/,
 # named ``epfl-circuits:<circuit>`` (k-feasible-cut gate cones, AND/OR DSRs). The
 # source .aig files and generators live in scripts/epfl-circuits/.
-EPFL_CIRCUITS = ["mult", "square", "bar"]
+EPFL_CIRCUITS = ["hyp", "log2", "multiplier", "square", "voter"]
 
 
 def molecule_family(domain: str) -> str | None:
