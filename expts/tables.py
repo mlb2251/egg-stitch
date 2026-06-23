@@ -292,12 +292,16 @@ TABLE7_MAX_ARITY = 4
 # DSRs blow the e-graph up on these cones, and 100 iterations runs ~4-5x slower
 # for no better result -- past the timeout at the high sweep points.
 TABLE7_ITER_LIMIT = 30
-# Best-first and high particle counts both grind on these blown-up cones, so cap
-# the sweep low -- enum to 2000 steps, SMC to 2000 particles (well below table5's).
-TABLE7_BFS_SWEEP = tuple(n for n in BFS_STEP_SWEEP if n <= 2000)
+# Enum needs ~2300 expansions of leaf-enumeration warmup before it forms any
+# abstraction on these wide corpora, so below that it finishes with an empty
+# library (a misleading 1.0); above it, the rule-saturated e-graph never
+# converges and it times out. Sweep up to 10k so the representative point is
+# past the warmup and lands on a real result (here: DNF). SMC caps at 2000.
+TABLE7_BFS_SWEEP = tuple(n for n in BFS_STEP_SWEEP if n <= 10000)
 TABLE7_SMC_SWEEP = tuple(p for p in SMC_PARTICLE_SWEEP if p <= 2000)
 # Representative operating points for the table cells / filled plot markers.
-TABLE7_ENUM_POINT = 2000
+# Enum matches table3's TABLE_BFS_STEPS (10000) for cross-table consistency.
+TABLE7_ENUM_POINT = 10000
 TABLE7_SMC_POINT = 2000
 
 

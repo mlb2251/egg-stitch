@@ -641,18 +641,20 @@ TABLE5_SPEC = FamilySpec(
     },
 )
 
-# table7: EPFL circuits with the factoring DSRs. Same as table5 but the enum
-# sweep is capped at 20k, and babble (no boolean theory) is swapped for a
-# no-rules Enum baseline ("enum-baseline") -- so the three-way
-# baseline/live/at-start contrast shows.
+# table7: EPFL circuits with the factoring DSRs. Same as table5 but babble (no
+# boolean theory) is swapped for a no-rules Enum baseline ("enum-baseline") -- so
+# the three-way baseline/live/at-start contrast shows. Enum DNFs here (best-first
+# can't search the rule-saturated e-graph; see TABLE7_ENUM_POINT).
 TABLE7_SPEC = FamilySpec(
     title="EPFL Circuit Compression (Factoring DSRs)",
     fig_subdir="table7",
     domains=TABLE7_DOMAINS,
     domain_labels={
-        "epfl-circuits:mult": "Multiplier",
+        "epfl-circuits:multiplier": "Multiplier",
         "epfl-circuits:square": "Square",
-        "epfl-circuits:bar": "Barrel Shifter",
+        "epfl-circuits:log2": "Log2",
+        "epfl-circuits:hyp": "Hypotenuse",
+        "epfl-circuits:voter": "Voter",
     },
     plot_methods=["enum", "smc", "enum-dsrs-at-start", "enum-baseline"],
     table_methods=["enum", "smc", "enum-dsrs-at-start", "enum-baseline"],
