@@ -1,0 +1,137 @@
+{
+  "epfl-circuits:hyp": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=200, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 9041,
+        "compression_ratio": 2.48368543302732,
+        "elapsed_secs": 8.119268417358398,
+        "library": [
+          "fn_0: (and (not (and ?#0 (not (not ?#1)))) (or ?#0 ?#1))",
+          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
+          "fn_2: (and (or (and ?#0 ?#1) ?#2) (or ?#1 ?#0))",
+          "fn_3: (not (or ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 15855.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10569,
+          9705,
+          9308,
+          9042
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:log2": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=200, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 9913,
+        "compression_ratio": 3.000907898718854,
+        "elapsed_secs": 11.18155288696289,
+        "library": [
+          "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
+          "fn_1: (and (or (not ?#0) ?#1) ?#2)",
+          "fn_2: (and (not ?#0) ?#1)",
+          "fn_3: (or (or ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 17838.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          10555,
+          10154,
+          9914
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:multiplier": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=200, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 9951,
+        "compression_ratio": 3.64797507788162,
+        "elapsed_secs": 9.875828504562378,
+        "library": [
+          "fn_0: (or (and (not ?#0) ?#1) (and (not (not ?#0)) (not ?#1)))",
+          "fn_1: (and (not ?#0) ?#1)",
+          "fn_2: (and (or ?#0 ?#1) ?#2)",
+          "fn_3: (fn_1 (fn_0 ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 21206.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11523,
+          10554,
+          10225,
+          9952
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:square": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=200, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 9849,
+        "compression_ratio": 3.145598537922632,
+        "elapsed_secs": 13.185147523880005,
+        "library": [
+          "fn_0: (and (not (and ?#0 (not ?#1))) (or (not (not (not ?#1))) ?#0))",
+          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
+          "fn_2: (and (or ?#0 ?#1) ?#2)",
+          "fn_3: (not (or ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 18474.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11549,
+          10521,
+          10148,
+          9850
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:voter": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=200, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:voter",
+        "file": "voter",
+        "initial_cost": 25998,
+        "final_cost": 9504,
+        "compression_ratio": 2.735479797979798,
+        "elapsed_secs": 9.795787572860718,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (not (and (not ?#0) ?#1)))",
+          "fn_1: (and (or ?#0 (not ?#1)) ?#2)",
+          "fn_2: (and (or ?#0 ?#1) (not ?#2))",
+          "fn_3: (not (or ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 17372.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11508,
+          10342,
+          9839,
+          9505
+        ]
+      }
+    ]
+  ]
+}

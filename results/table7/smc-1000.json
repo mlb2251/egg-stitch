@@ -1,0 +1,137 @@
+{
+  "epfl-circuits:hyp": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 9039,
+        "compression_ratio": 2.4842349817457685,
+        "elapsed_secs": 31.955503463745117,
+        "library": [
+          "fn_0: (and (or ?#0 ?#1) (not (and ?#1 ?#0)))",
+          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
+          "fn_2: (and (or (and ?#0 ?#1) ?#2) (or ?#1 ?#0))",
+          "fn_3: (not (or ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 15855.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10567,
+          9703,
+          9306,
+          9040
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:log2": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 9846,
+        "compression_ratio": 3.0213284582571602,
+        "elapsed_secs": 40.02524542808533,
+        "library": [
+          "fn_0: (or (and (not ?#0) ?#1) (and (not ?#1) ?#0))",
+          "fn_1: (and (or (not ?#0) ?#1) ?#2)",
+          "fn_2: (and (not (or ?#0 ?#1)) ?#2)",
+          "fn_3: (and (not ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 17838.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11444,
+          10556,
+          10115,
+          9847
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:multiplier": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 9824,
+        "compression_ratio": 3.695134364820847,
+        "elapsed_secs": 37.53450036048889,
+        "library": [
+          "fn_0: (or (not (or (not (not ?#0)) (not ?#1))) (and (not (not ?#0)) (not ?#1)))",
+          "fn_1: (and (not ?#0) ?#1)",
+          "fn_2: (and (or ?#0 (or ?#1 (not ?#2))) (or (fn_1 ?#0 (fn_1 ?#1 ?#2)) (not ?#3)))",
+          "fn_3: (and (or ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 21206.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11506,
+          10538,
+          10121,
+          9825
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:square": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 9828,
+        "compression_ratio": 3.1523199023199022,
+        "elapsed_secs": 48.26869320869446,
+        "library": [
+          "fn_0: (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1))",
+          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
+          "fn_2: (and (or ?#0 ?#1) ?#2)",
+          "fn_3: (not (or ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 18474.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11538,
+          10463,
+          10138,
+          9829
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:voter": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=1000, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:voter",
+        "file": "voter",
+        "initial_cost": 25998,
+        "final_cost": 9512,
+        "compression_ratio": 2.733179142136249,
+        "elapsed_secs": 50.35456418991089,
+        "library": [
+          "fn_0: (and (or (not (not (not ?#0))) (not (not ?#1))) (not (and (not (not ?#1)) (not (not (not ?#0))))))",
+          "fn_1: (and (or ?#0 (not ?#1)) ?#2)",
+          "fn_2: (and (or ?#0 ?#1) (not ?#2))",
+          "fn_3: (not (or ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 17372.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11516,
+          10350,
+          9847,
+          9513
+        ]
+      }
+    ]
+  ]
+}

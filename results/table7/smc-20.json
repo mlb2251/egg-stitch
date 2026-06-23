@@ -1,0 +1,137 @@
+{
+  "epfl-circuits:hyp": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=20, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 9063,
+        "compression_ratio": 2.477656405163853,
+        "elapsed_secs": 2.054748773574829,
+        "library": [
+          "fn_0: (not (or (and (not (not ?#0)) (not (not (not (not ?#1))))) (and (not ?#1) (not (not (not ?#0))))))",
+          "fn_1: (and (or ?#0 (and ?#1 ?#2)) ?#3)",
+          "fn_2: (not (or ?#0 ?#1))",
+          "fn_3: (and (or ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 15855.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10577,
+          9714,
+          9261,
+          9064
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:log2": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=20, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 10054,
+        "compression_ratio": 2.958822359259996,
+        "elapsed_secs": 2.8774914741516113,
+        "library": [
+          "fn_0: (or (and (not (not (not ?#0))) ?#1) (and (not ?#1) (not (not ?#0))))",
+          "fn_1: (and ?#0 (not ?#1))",
+          "fn_2: (or (or ?#0 ?#1) ?#2)",
+          "fn_3: (and (and ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 17838.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11448,
+          10573,
+          10206,
+          10055
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:multiplier": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=20, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 9983,
+        "compression_ratio": 3.636281678854052,
+        "elapsed_secs": 2.093933343887329,
+        "library": [
+          "fn_0: (or (and (not ?#0) ?#1) (and ?#0 (not ?#1)))",
+          "fn_1: (and ?#0 (not ?#1))",
+          "fn_2: (or ?#0 (and ?#1 ?#2))",
+          "fn_3: (fn_0 ?#0 (not ?#1))"
+        ],
+        "egraph_min_term_size": 21206.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11521,
+          10552,
+          10182,
+          9984
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:square": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=20, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 11847,
+        "compression_ratio": 2.615092428462902,
+        "elapsed_secs": 2.9314966201782227,
+        "library": [
+          "fn_0: (not (or (and (not (not (not ?#0))) (not (not (not (or (not (not ?#1)) ?#2))))) (and ?#2 (or (not (not ?#1)) (not (not ?#0))))))",
+          "fn_1: (and (or (not ?#0) ?#1) ?#2)",
+          "fn_2: (and (or ?#0 ?#1) ?#2)",
+          "fn_3: (not (or ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 18474.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          13874,
+          12907,
+          12210,
+          11848
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:voter": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=20, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:voter",
+        "file": "voter",
+        "initial_cost": 25998,
+        "final_cost": 9672,
+        "compression_ratio": 2.687965260545906,
+        "elapsed_secs": 2.5023903846740723,
+        "library": [
+          "fn_0: (or (and (not (not (not (not (not ?#0))))) ?#1) (and (not ?#1) (not (not ?#0))))",
+          "fn_1: (and ?#0 (or ?#1 ?#2))",
+          "fn_2: (not (or ?#0 ?#1))",
+          "fn_3: (not (fn_0 ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 17372.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11595,
+          10466,
+          9897,
+          9673
+        ]
+      }
+    ]
+  ]
+}

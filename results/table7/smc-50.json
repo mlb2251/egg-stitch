@@ -1,0 +1,137 @@
+{
+  "epfl-circuits:hyp": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 9122,
+        "compression_ratio": 2.4616312212234157,
+        "elapsed_secs": 3.659637928009033,
+        "library": [
+          "fn_0: (and (not (and (not ?#0) (not ?#1))) (not (and (not (not (not (not (not (not ?#1)))))) (not (not ?#0)))))",
+          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
+          "fn_2: (not (or ?#0 ?#1))",
+          "fn_3: (and ?#0 (or (and ?#1 ?#2) ?#3))"
+        ],
+        "egraph_min_term_size": 15855.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10578,
+          9763,
+          9476,
+          9123
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:log2": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 10011,
+        "compression_ratio": 2.971531315552892,
+        "elapsed_secs": 4.338565349578857,
+        "library": [
+          "fn_0: (and (not (and (not ?#0) ?#1)) (or ?#1 (not ?#0)))",
+          "fn_1: (and (or (not ?#0) ?#1) ?#2)",
+          "fn_2: (and (not ?#0) ?#1)",
+          "fn_3: (or (or ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 17838.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11674,
+          10688,
+          10262,
+          10012
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:multiplier": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 10217,
+        "compression_ratio": 3.552999902123911,
+        "elapsed_secs": 3.660532236099243,
+        "library": [
+          "fn_0: (or (and (not ?#0) (not (not ?#1))) (and ?#0 (not ?#1)))",
+          "fn_1: (and (not ?#0) ?#1)",
+          "fn_2: (and (or ?#0 ?#1) ?#2)",
+          "fn_3: (fn_1 (fn_0 ?#0 ?#1) ?#2)"
+        ],
+        "egraph_min_term_size": 21206.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11901,
+          10883,
+          10504,
+          10218
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:square": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 9753,
+        "compression_ratio": 3.1765610581359582,
+        "elapsed_secs": 3.9862756729125977,
+        "library": [
+          "fn_0: (and (not (and (not ?#0) ?#1)) (or ?#1 (not ?#0)))",
+          "fn_1: (and (or ?#0 ?#1) ?#2)",
+          "fn_2: (not (or ?#0 ?#1))",
+          "fn_3: (fn_1 ?#0 ?#1 (not ?#2))"
+        ],
+        "egraph_min_term_size": 18474.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11545,
+          10529,
+          10079,
+          9754
+        ]
+      }
+    ]
+  ],
+  "epfl-circuits:voter": [
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "domain": "epfl-circuits:voter",
+        "file": "voter",
+        "initial_cost": 25998,
+        "final_cost": 9517,
+        "compression_ratio": 2.7317431963854157,
+        "elapsed_secs": 3.8811323642730713,
+        "library": [
+          "fn_0: (and (not (and (not ?#0) (not (not ?#1)))) (or (not ?#0) (not (not ?#1))))",
+          "fn_1: (and (or (not ?#0) ?#1) ?#2)",
+          "fn_2: (and (or ?#0 ?#1) (not ?#2))",
+          "fn_3: (not (or ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 17372.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11522,
+          10367,
+          9872,
+          9518
+        ]
+      }
+    ]
+  ]
+}
