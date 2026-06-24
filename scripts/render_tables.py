@@ -53,12 +53,12 @@ def domains_for_table(table: int) -> list[str]:
 def methods_for_table(table: int) -> list[str]:
     """Ordered method columns for the table.
 
-    DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add the
-    dsrs-only-at-start "BFS@start" baseline; no-DSR tables (2 & 4) keep Stitch
-    and have no baseline.
+    DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add two baselines:
+    the dsrs-only-at-start "BFS/MT" and the no-rules Enum "BFS/NR"; no-DSR
+    tables (2 & 4) keep Stitch and have no baseline.
     """
     if table in TABLES_WITH_EGRAPH_MIN:
-        return ["enum", "smc", BASELINE_METHOD, "babble"]
+        return ["enum", "smc", BASELINE_METHOD, "babble", NO_RULES_METHOD]
     return ["enum", "smc", "babble", "stitch"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
@@ -76,16 +76,21 @@ METHODS = ["enum", "smc", "babble", "stitch"]
 # "dsrs-only-at-start" baseline: best-first that canonicalises with the DSRs
 # once instead of keeping them live (the "BFS@start" column, same as table5).
 BASELINE_METHOD = "enum-dsrs-at-start"
+# No-rules Enum baseline ("BFS/NR"): best-first with the DSRs dropped entirely
+# (table 3 / table 5).
+NO_RULES_METHOD = "enum-baseline"
 # Table cells use the bare search-strategy name; plot legends spell out the
 # E-Stitch prefix so each series is unambiguous standalone.
 METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble",
-                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT"}
+                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT",
+                 NO_RULES_METHOD: "BFS/NR"}
 METHOD_PLOT_LABELS = {
     "enum": "E-Stitch: BFS",
     "smc": "E-Stitch: SMC",
     "babble": "babble",
     "stitch": "Stitch",
     BASELINE_METHOD: "E-Stitch: BFS (DSRs at start)",
+    NO_RULES_METHOD: "E-Stitch: BFS (no rules)",
 }
 # The single sweep point each base method contributes to the table cells.
 # Plots use the full sweep regardless.
@@ -97,6 +102,7 @@ TABLE_DATA_KEYS = {
     "babble": "babble",
     "stitch": "stitch",
     BASELINE_METHOD: BASELINE_METHOD,
+    NO_RULES_METHOD: NO_RULES_METHOD,
 }
 TABLE_TITLES = {
     1: "Compression Using Rewrites",
@@ -148,6 +154,7 @@ def line_color(i: int):
 # gets its own color past the four base series.
 METHOD_COLORS = {m: line_color(i) for i, m in enumerate(METHODS)}
 METHOD_COLORS[BASELINE_METHOD] = line_color(4)
+METHOD_COLORS[NO_RULES_METHOD] = line_color(5)
 DOMAIN_PLOT_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -271,6 +278,8 @@ PRESENTATION_COLORS = {
     "stitch": "ecblue",
     # The dsrs-only-at-start baseline is an E-Stitch search variant too.
     BASELINE_METHOD: "estitchHighlight",
+    # ...as is the no-rules Enum baseline.
+    NO_RULES_METHOD: "estitchHighlight",
 }
 
 
@@ -607,24 +616,26 @@ class FamilySpec:
         enum_point: int,
         enum_sweep: tuple[int, ...],
         smc_sweep: tuple[int, ...],
-        extra_method: str,
-        extra_col_label: str,
-        extra_plot_label: str,
+        extras: list[tuple[str, str, str]],
     ) -> "FamilySpec":
         """Build a spec for the standard E-Stitch roster: the enum (BFS) and smc
-        (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), with one
-        family-specific fourth method (babble for table5, the no-rules Enum
-        baseline for table7). The shared three methods -- their order, labels,
-        colors, and the smc representative point -- live here so the per-family
-        specs can't drift on them; only the bits that genuinely differ are args.
+        (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), followed by
+        the family-specific ``extras`` -- each a ``(method_key, col_label,
+        plot_label)`` triple (babble and/or the no-rules Enum baseline BFS/NR).
+        The shared three methods -- their order, labels, colors, and the smc
+        representative point -- live here so the per-family specs can't drift on
+        them; only the bits that genuinely differ are args.
         """
-        methods = ["enum", "smc", "enum-dsrs-at-start", extra_method]
+        methods = ["enum", "smc", "enum-dsrs-at-start", *(e[0] for e in extras)]
+        # Base methods take color slots 0/1/3; extras fill 2 then 4, 5, ... so a
+        # single-extra roster (table7) keeps its original slot-2 color.
+        extra_slots = [2, 4, 5][: len(extras)]
         return cls(
             title=title,
             fig_subdir=fig_subdir,
             domains=domains,
             domain_labels=domain_labels,
-            # The two sweeps, then the two single-point methods. Each single-point
+            # The two sweeps, then the single-point methods. Each single-point
             # method keys on its own data label so plot_cr_vs_time finds it directly.
             plot_methods=methods,
             table_methods=methods,
@@ -632,33 +643,34 @@ class FamilySpec:
                 "enum": f"enum-{enum_point}",
                 "smc": f"smc-{TABLE_SMC_PARTICLES}",
                 "enum-dsrs-at-start": "enum-dsrs-at-start",
-                extra_method: extra_method,
+                **{e[0]: e[0] for e in extras},
             },
             col_labels={
                 "enum": "BFS",
                 "smc": "SMC",
                 "enum-dsrs-at-start": "BFS/MT",
-                extra_method: extra_col_label,
+                **{e[0]: e[1] for e in extras},
             },
             sweep_for_method={"enum": enum_sweep, "smc": smc_sweep},
             sweep_point={"enum": enum_point, "smc": TABLE_SMC_PARTICLES},
             method_colors={
                 "enum": line_color(0),
                 "smc": line_color(1),
-                extra_method: line_color(2),
                 "enum-dsrs-at-start": line_color(3),
+                **{e[0]: line_color(slot) for e, slot in zip(extras, extra_slots)},
             },
             method_plot_labels={
                 "enum": "E-Stitch: BFS",
                 "smc": "E-Stitch: SMC",
                 "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
-                extra_method: extra_plot_label,
+                **{e[0]: e[2] for e in extras},
             },
         )
 
 
 # table5: molecule scramble subset. The two ours sweeps (enum extended to 100k),
-# the dsrs-only-at-start baseline (a single best-first point), and babble.
+# the dsrs-only-at-start baseline (a single best-first point), babble, and the
+# no-rules Enum baseline (BFS/NR).
 TABLE5_SPEC = FamilySpec.estitch_roster(
     title="Molecule Scramble Compression (DSRs)",
     fig_subdir="table5",
@@ -671,9 +683,10 @@ TABLE5_SPEC = FamilySpec.estitch_roster(
     enum_point=TABLE5_ENUM_POINT,
     enum_sweep=TABLE5_BFS_SWEEP,
     smc_sweep=SMC_PARTICLE_SWEEP,
-    extra_method="babble",
-    extra_col_label="babble",
-    extra_plot_label="babble",
+    extras=[
+        ("babble", "babble", "babble"),
+        ("enum-baseline", "BFS/NR", "E-Stitch: BFS (no rules)"),
+    ],
 )
 
 # table7: EPFL circuits with the factoring DSRs. Same as table5 but babble (no
@@ -694,9 +707,7 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     enum_point=TABLE_BFS_STEPS,
     enum_sweep=TABLE7_BFS_SWEEP,
     smc_sweep=TABLE7_SMC_SWEEP,
-    extra_method="enum-baseline",
-    extra_col_label="BFS/NR",
-    extra_plot_label="E-Stitch: BFS (no rules)",
+    extras=[("enum-baseline", "BFS/NR", "E-Stitch: BFS (no rules)")],
 )
 
 
