@@ -47,11 +47,17 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// `full_dom_hits - hits` is the extra dedup that never forgetting a mask
     /// would buy over the single-slot `map`.
     dom_map: FxHashMap<Pattern<F, O>, Vec<Vec<bool>>>,
-    /// Experimental second seen-set: a pure hash-cons egraph (no analysis, no
-    /// unions) over the frozen-var language. Each pattern is converted into a
-    /// `RecExpr<F::Apply<OpWithFrozenVar<O>>>` and looked up / inserted here, so
-    /// the freeze mask is part of the *term* rather than a side value. Shadow-run
-    /// alongside `map` to validate the encoding — `map` still drives the search.
+    /// Experimental second seen-set: an egraph over the frozen-var language.
+    /// Each pattern is converted into a `RecExpr<F::Apply<OpWithFrozenVar<O>>>`
+    /// and looked up / inserted here, so the freeze mask is part of the *term*
+    /// rather than a side value. Shadow-run alongside `map` to validate the
+    /// encoding — `map` still drives the search.
+    ///
+    /// With `saturate_each` on (the default) the lifted DSRs are run to
+    /// saturation and the egraph rebuilt after every genuine insert, so an
+    /// `egraph_hits` records a *DSR-equivalent* repeat, not just a syntactic
+    /// one. With it off the egraph is a pure hash-cons that only dedups
+    /// syntactically identical terms.
     ///
     /// Each inserted term is wrapped in a `Root` sentinel
     /// ([`pattern_to_frozen_recexpr`]). Without it, `add_expr` interns every
@@ -79,6 +85,19 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// of *distinct* `(syntax, frozen)` terms, which the end-of-run audit checks
     /// against the count of `Root`-headed terms the egraph actually represents.
     pub inserted: usize,
+    /// Program-language DSRs lifted to the frozen-var language, run on
+    /// `seen_egraph` (per insert when `saturate_each`, and by the end-of-run
+    /// audit). Empty when no rule file was given or lifting failed.
+    rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>,
+    /// Saturation limits for the seen-egraph runner (high so saturation, not a
+    /// cap, stops it where the rules permit).
+    iter_limit: usize,
+    node_limit: usize,
+    /// Whether to saturate + rebuild `seen_egraph` after each genuine insert.
+    saturate_each: bool,
+    /// Wall-clock spent in per-insert seen-egraph saturation (separate from
+    /// `time`, which is the map/lookup bookkeeping).
+    pub egraph_time: Duration,
 }
 
 /// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
@@ -130,13 +149,28 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
             egraph_hits: 0,
             full_dom_hits: 0,
             inserted: 0,
+            rules: Vec::new(),
+            iter_limit: 0,
+            node_limit: 0,
+            saturate_each: false,
+            egraph_time: Duration::ZERO,
         }
     }
 }
 
 impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
-    pub fn new() -> Self {
-        Self::default()
+    /// Build a seen-tracker. `rules` are the lifted seen-egraph DSRs (see
+    /// [`crate::best_first`]); when `saturate_each` is set, they're run to
+    /// saturation after each genuine insert under the given limits so the egraph
+    /// side dedups modulo DSR-equivalence.
+    pub fn new(rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>, iter_limit: usize, node_limit: usize, saturate_each: bool) -> Self {
+        Self {
+            rules,
+            iter_limit,
+            node_limit,
+            saturate_each,
+            ..Default::default()
+        }
     }
     /// Number of distinct patterns recorded.
     pub fn len(&self) -> usize {
@@ -149,6 +183,10 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     /// `(syntax, frozen)` term inserted, modulo congruence).
     pub fn egraph_len(&self) -> usize {
         self.seen_egraph.number_of_classes()
+    }
+    /// Whether per-insert saturation of the seen-egraph is enabled.
+    pub fn saturate_each_on(&self) -> bool {
+        self.saturate_each
     }
     /// Records `pattern` at `frozen` if this is the first visit or a
     /// not-dominated one; returns `true` (skip) if a recorded visit's frozen
@@ -169,7 +207,17 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         self.seen_egraph.add_expr(&recexpr);
         self.inserted += 1;
         if egraph_skip {
+            // The wrapped term was already present (modulo the current
+            // equivalences), so the add was a no-op and the egraph is still
+            // saturated — no need to re-run the rules.
             self.egraph_hits += 1;
+        } else if self.saturate_each {
+            // A genuinely new top-level term: its fresh nodes may unlock new
+            // rewrite matches, so re-saturate so the next lookup dedups modulo
+            // DSR-equivalence. Timed separately from the map bookkeeping.
+            let st = Instant::now();
+            self.saturate();
+            self.egraph_time += st.elapsed();
         }
 
         // Map side (source of truth): subset-domination, overwrite on miss. The
@@ -218,44 +266,47 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         map_skip
     }
 
-    /// End-of-run audit of the shadow seen-egraph (pure stats — nothing the
-    /// search reads). Records enodes, eclasses, and the number of distinct
-    /// e-classes the inserted top-level terms occupy (see
-    /// [`Self::distinct_root_classes`]), then runs `rules` to saturation,
-    /// rebuilds, and re-records. `iter_limit`/`node_limit` should be high so
-    /// saturation (not a limit) is what stops the run; the returned
-    /// `stop_reason`/`applications` report whether that happened and how many
-    /// firings occurred.
-    ///
-    /// `rules` are the program-language DSRs lifted to the frozen-var language
-    /// (see [`crate::best_first`]); `SimpleScheduler` fires every match each
-    /// iteration (true saturation semantics, no backoff throttling).
-    ///
-    /// Before rewriting, `root_classes_before` equals the number of distinct
-    /// `(syntax, frozen)` patterns inserted (`inserted - egraph_hits`): the
-    /// egraph is a pure hash-cons, so each distinct insert is its own class. The
-    /// rewrites merge classes the DSRs prove equivalent, so `root_classes_after`
-    /// drops by exactly the number of inserted terms that collapse together.
-    pub fn audit_seen_egraph(&mut self, rules: &[egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>], iter_limit: usize, node_limit: usize) -> SeenEgraphAudit {
-        let unique_inserted = self.inserted - self.egraph_hits;
-        let nodes_before = self.seen_egraph.total_number_of_nodes();
-        let classes_before = self.seen_egraph.number_of_classes();
-        let root_classes_before = self.distinct_root_classes();
-
+    /// Run the stored DSRs to saturation on `seen_egraph` and rebuild it in
+    /// place. Returns `(iterations, total firings, stop-reason)`.
+    /// `SimpleScheduler` fires every match each iteration (true saturation, no
+    /// backoff); the high limits keep a cap from stopping it before the fixpoint.
+    fn saturate(&mut self) -> (usize, usize, String) {
         let egraph = std::mem::replace(&mut self.seen_egraph, egg::EGraph::new(()));
         let runner = egg::Runner::default()
             .with_egraph(egraph)
-            .with_node_limit(node_limit)
-            .with_iter_limit(iter_limit)
+            .with_node_limit(self.node_limit)
+            .with_iter_limit(self.iter_limit)
             .with_time_limit(Duration::from_secs(60 * 60 * 24))
             .with_scheduler(egg::SimpleScheduler)
-            .run(rules);
+            .run(&self.rules);
         let iterations = runner.iterations.len();
         // `applied` is keyed per rule per iteration, so sum it for total firings.
         let applications: usize = runner.iterations.iter().map(|it| it.applied.values().sum::<usize>()).sum();
         let stop_reason = format!("{:?}", runner.stop_reason);
         self.seen_egraph = runner.egraph;
         self.seen_egraph.rebuild();
+        (iterations, applications, stop_reason)
+    }
+
+    /// End-of-run audit of the shadow seen-egraph (pure stats — nothing the
+    /// search reads). Records enodes, eclasses, and the number of distinct
+    /// e-classes the inserted top-level terms occupy (see
+    /// [`Self::distinct_root_classes`]), then runs the stored DSRs to saturation,
+    /// rebuilds, and re-records. The returned `stop_reason`/`applications` report
+    /// whether it saturated and how many firings occurred.
+    ///
+    /// `root_classes_before` always equals the number of distinct DSR-classes
+    /// among the inserts (`inserted - egraph_hits`): without per-insert
+    /// saturation that's one class per syntactic insert and this pass collapses
+    /// them, so `root_classes_after` drops; with `saturate_each` the egraph is
+    /// already saturated, so before == after and this pass is a no-op re-check.
+    pub fn audit_seen_egraph(&mut self) -> SeenEgraphAudit {
+        let unique_inserted = self.inserted - self.egraph_hits;
+        let nodes_before = self.seen_egraph.total_number_of_nodes();
+        let classes_before = self.seen_egraph.number_of_classes();
+        let root_classes_before = self.distinct_root_classes();
+
+        let (iterations, applications, stop_reason) = self.saturate();
 
         let nodes_after = self.seen_egraph.total_number_of_nodes();
         let classes_after = self.seen_egraph.number_of_classes();
@@ -264,7 +315,7 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         SeenEgraphAudit {
             unique_inserted,
             total_inserted: self.inserted,
-            num_rules: rules.len(),
+            num_rules: self.rules.len(),
             iterations,
             applications,
             stop_reason,

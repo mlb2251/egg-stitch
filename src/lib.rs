@@ -163,6 +163,16 @@ pub struct Args {
     #[arg(long = "opt-seen", default_value_t = false)]
     pub opt_seen: bool,
 
+    /// Saturate the shadow seen-egraph after each insertion (on by default).
+    /// When on, the egraph-backed seen set runs the lifted DSRs to saturation
+    /// and rebuilds after every genuine insert, so its duplicate detection is
+    /// modulo DSR-equivalence (not just syntactic) and the egraph stays
+    /// collapsed. Only has effect alongside `--opt-seen`. Passing
+    /// `--no-seen-egraph-saturate` restores the cheap pure hash-cons that only
+    /// dedups syntactically identical patterns.
+    #[arg(long = "no-seen-egraph-saturate", action = clap::ArgAction::SetFalse)]
+    pub seen_egraph_saturate: bool,
+
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
     /// reuse as a singleton successor (no cost check — sound by construction).
