@@ -384,15 +384,15 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
     println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
     println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
-    let (seen_len, seen_hits, seen_secs, egraph_hits, exact_hits) = seen
+    let (seen_len, seen_hits, seen_secs, egraph_hits, exact_hits, full_dom_hits) = seen
         .as_ref()
-        .map_or((0, 0, 0.0, 0, 0), |s| (s.len(), s.hits, s.time.as_secs_f64(), s.egraph_hits, s.exact_hits));
+        .map_or((0, 0, 0.0, 0, 0, 0), |s| (s.len(), s.hits, s.time.as_secs_f64(), s.egraph_hits, s.exact_hits, s.full_dom_hits));
     println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
     println!(
         "{} {} {} {}",
         "seen-set hits:".dimmed(),
         seen_hits.to_string().bold(),
-        format!("(egraph hits: {egraph_hits}, exact hits: {exact_hits})"),
+        format!("(egraph hits: {egraph_hits}, exact hits: {exact_hits}, full-dom hits: {full_dom_hits})"),
         format!("(time: {:.3}s)", seen_secs).dimmed(),
     );
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());

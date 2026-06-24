@@ -41,6 +41,12 @@ type VarShapes<F, O> = Vec<VarShape<F, O>>;
 /// the prior one had forbidden.
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     map: FxHashMap<Pattern<F, O>, Vec<bool>>,
+    /// Shadow domination map we *never* evict from: per pattern it retains every
+    /// distinct mask ever seen, where `map` keeps only the latest non-dominated
+    /// one. A repeat is a hit when any retained mask is a subset of the new one.
+    /// `full_dom_hits - hits` is the extra dedup that never forgetting a mask
+    /// would buy over the single-slot `map`.
+    dom_map: FxHashMap<Pattern<F, O>, Vec<Vec<bool>>>,
     /// Experimental second seen-set: a pure hash-cons egraph (no analysis, no
     /// unions) over the frozen-var language. Each pattern is converted into a
     /// `RecExpr<F::Apply<OpWithFrozenVar<O>>>` and looked up / inserted here, so
@@ -64,6 +70,10 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// Total calls the shadow seen-egraph deduped (exact `(syntax, frozen)`
     /// membership, modulo congruence). The `map`-side total is `hits`.
     pub egraph_hits: usize,
+    /// Calls the never-evicted [`Self::dom_map`] would skip: some retained mask
+    /// dominates `frozen`. This is what `map`'s subset domination would catch if
+    /// it never overwrote, so `full_dom_hits >= hits`.
+    pub full_dom_hits: usize,
 }
 
 /// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
@@ -114,11 +124,13 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
     fn default() -> Self {
         Self {
             map: FxHashMap::default(),
+            dom_map: FxHashMap::default(),
             seen_egraph: egg::EGraph::new(()),
             hits: 0,
             exact_hits: 0,
             time: Duration::ZERO,
             egraph_hits: 0,
+            full_dom_hits: 0,
         }
     }
 }
@@ -173,6 +185,28 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
             }
             None => false,
         };
+
+        // Full-domination shadow: retain every distinct mask per pattern (never
+        // evicted) and count a hit whenever any retained mask dominates `frozen`.
+        // Skips storing dominated/duplicate masks since they add no domination
+        // power the retained ones don't already have.
+        let dom_hit = match self.dom_map.get_mut(&pattern) {
+            Some(masks) => {
+                let hit = masks.iter().any(|m| frozen_subset(m, &frozen));
+                if !masks.contains(&frozen) {
+                    masks.push(frozen.clone());
+                }
+                hit
+            }
+            None => {
+                self.dom_map.insert(pattern.clone(), vec![frozen.clone()]);
+                false
+            }
+        };
+        if dom_hit {
+            self.full_dom_hits += 1;
+        }
+
         if !map_skip {
             self.map.insert(pattern, frozen);
         }
