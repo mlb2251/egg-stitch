@@ -85,12 +85,6 @@ RUNNERS_WITH_STITCH: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
 DSR_RUNNERS: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
     ("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True)),
 )
-# Tables 1 & 3 also carry a no-rules Enum baseline ("BFS/NR"): best-first with
-# the DSRs dropped entirely (same exhaustive step budget as the at-start
-# baseline, since it too collapses to a small rule-free e-graph).
-DSR_RUNNERS_WITH_NR: tuple[tuple[str, object], ...] = DSR_RUNNERS + (
-    ("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True)),
-)
 
 
 def _run_method_for_table(
@@ -189,11 +183,11 @@ def _run_table(
 
 
 def table1() -> Path:
-    """Run Enum, SMC, babble, the dsrs-only-at-start baseline, and the no-rules
-    Enum baseline (BFS/NR) on the Table 1 domains with DSRs."""
+    """Run Enum, SMC, babble, and the dsrs-only-at-start baseline on the
+    Table 1 domains with DSRs."""
     return _run_table(
         domains=TABLE1_DOMAINS,
-        runners=DSR_RUNNERS_WITH_NR,
+        runners=DSR_RUNNERS,
         num_abstractions=1,
         use_dsrs=True,
         folder_prefix="table1",
@@ -214,11 +208,10 @@ def table2() -> Path:
 
 
 def table3() -> Path:
-    """Run the Table 1 setup with 20 stacked abstractions, plus the no-rules
-    Enum baseline (BFS/NR)."""
+    """Run the Table 1 setup with 20 stacked abstractions."""
     return _run_table(
         domains=TABLE1_DOMAINS,
-        runners=DSR_RUNNERS_WITH_NR,
+        runners=DSR_RUNNERS,
         num_abstractions=20,
         use_dsrs=True,
         folder_prefix="table3",
