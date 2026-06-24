@@ -82,11 +82,7 @@ impl<O: StitchOp> StitchOp for OpWithFrozenVar<O> {
         {
             return Self::FrozenVar(v);
         }
-        if let Ok(v) = s.parse::<egg::Var>() {
-            Self::Var(v)
-        } else {
-            Self::Node(O::from_name(s))
-        }
+        if let Ok(v) = s.parse::<egg::Var>() { Self::Var(v) } else { Self::Node(O::from_name(s)) }
     }
 
     fn make_db_var(n: i32) -> Option<Self> {

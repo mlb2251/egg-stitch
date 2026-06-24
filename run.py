@@ -161,7 +161,7 @@ def nuts_bolts_enum():
         language="op-children",
         max_arity=2,
         num_abstractions=1,
-        max_forced_expansion=40,
+        max_forced_expansion=50,
         opt_seen=True,
         no_opt_useless_inline=True,
         # verbose=True,
