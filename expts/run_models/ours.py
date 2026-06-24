@@ -62,6 +62,7 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
          weighting: Weighting, search: str, max_arity: int,
          search_flags: dict[str, object],
          only_use_dsrs_at_start: bool = False,
+         iter_limit: int | None = None,
          timeout: float | None = None,
          mem_limit: int | None = None) -> BenchResult:
     """Shared subprocess body for the SMC/best-first runners.
@@ -69,7 +70,8 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     ``search_flags`` carries only the runner-specific dials (num_steps,
     particles, temperature, …); the rest is identical between the two
     search modes. ``only_use_dsrs_at_start`` switches DSRs from live-during-
-    search to a one-shot canonicalisation pass; ``timeout`` caps wall-clock;
+    search to a one-shot canonicalisation pass; ``iter_limit`` caps e-saturation
+    iterations (None = the binary default, 100); ``timeout`` caps wall-clock;
     ``mem_limit`` caps address space.
     """
     output_path = unique_path(
@@ -85,6 +87,8 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         "--max-arity", str(max_arity),
         "--num-abstractions", str(rounds),
     ]
+    if iter_limit is not None:
+        cmd += ["--iter-limit", str(iter_limit)]
     # 0-arity (constant) abstractions are allowed: stitch finds them by
     # default, babble's dreamcoder ``benchmark`` binary hardcodes
     # ``learn_constants=true``, and our cogsci ``Babble`` wrapper passes
@@ -143,10 +147,12 @@ class OursBf:
     num_steps: int | None = 500
     max_forced_expansion: int | None = None
     max_arity: int = MAX_ARITY
-    # When True, DSRs canonicalise the initial egraph once instead of staying
-    # live during search (the "dsrs-only-at-start" baseline). ``timeout`` caps
-    # wall-clock seconds. Excluded from repr so the method label is unchanged.
+    # only_use_dsrs_at_start = canonicalise once up front (dsrs-only-at-start
+    # baseline); no_dsrs = drop DSRs entirely (no-rules baseline). repr=False keeps
+    # the method label unchanged.
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
+    no_dsrs: bool = field(default=False, repr=False)
+    iter_limit: int | None = field(default=None, repr=False)
     # Caps the per-factor abstraction match-set mass; bounds the blowup the
     # non-confluent algebraic DSRs cause (table6 sets it). Excluded from repr so
     # the method label is unchanged.
@@ -155,9 +161,6 @@ class OursBf:
     # max_match_set (the binary asserts it) so the row cap only prunes
     # already-decomposed factors (table6 pins it equal to the cap). Excluded from repr.
     decompose_min_rows: int | None = field(default=None, repr=False)
-    # Caps e-saturation iterations (the non-confluent algebra rules can't OOM
-    # live with it bounded; table6 sets it). Excluded from repr.
-    iter_limit: int | None = field(default=None, repr=False)
     # Overrides the domain's default rewrites file with a specific ruleset
     # (table6 pins drawings.rewrites). Excluded from repr.
     rewrites_override: str | None = field(default=None, repr=False)
@@ -174,15 +177,14 @@ class OursBf:
             search_flags["max_match_set"] = self.max_match_set
         if self.decompose_min_rows is not None:
             search_flags["decompose_min_rows"] = self.decompose_min_rows
-        if self.iter_limit is not None:
-            search_flags["iter_limit"] = self.iter_limit
         return _run(
             rounds=rounds, input_path=input_path,
-            rewrites_path=self.rewrites_override or rewrites_path,
+            rewrites_path=None if self.no_dsrs else (self.rewrites_override or rewrites_path),
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
             search_flags=search_flags,
             only_use_dsrs_at_start=self.only_use_dsrs_at_start,
+            iter_limit=self.iter_limit,
             timeout=self.timeout, mem_limit=self.mem_limit,
         )
 
@@ -195,13 +197,11 @@ class OursSmc:
     num_particles: int = 1000
     temperature: float = 1000.0
     max_arity: int = MAX_ARITY
-    # Bounds e-saturation iterations and the per-factor abstraction match-set mass
-    # (the non-confluent algebra DSRs need both to run live; table6 sets them).
-    # Excluded from repr so the method label is unchanged.
     iter_limit: int | None = field(default=None, repr=False)
+    # Per-factor abstraction match-set cap + its decompose floor (table6 sets
+    # both; the non-confluent algebra DSRs need them to run live). Excluded from
+    # repr so the method label is unchanged.
     max_match_set: int | None = field(default=None, repr=False)
-    # Minimum factor rows before decomposition; must be <= max_match_set (the
-    # binary asserts it). Table6 pins it equal to the cap. Excluded from repr.
     decompose_min_rows: int | None = field(default=None, repr=False)
     # Overrides the domain's default rewrites file (table6 pins drawings.rewrites).
     rewrites_override: str | None = field(default=None, repr=False)
@@ -218,13 +218,12 @@ class OursSmc:
             search_flags["max_match_set"] = self.max_match_set
         if self.decompose_min_rows is not None:
             search_flags["decompose_min_rows"] = self.decompose_min_rows
-        if self.iter_limit is not None:
-            search_flags["iter_limit"] = self.iter_limit
         return _run(
             rounds=rounds, input_path=input_path,
             rewrites_path=self.rewrites_override or rewrites_path,
             weighting=weighting, search="smc",
             max_arity=self.max_arity,
             search_flags=search_flags,
+            iter_limit=self.iter_limit,
             timeout=self.timeout, mem_limit=self.mem_limit,
         )

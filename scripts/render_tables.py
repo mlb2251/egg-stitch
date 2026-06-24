@@ -30,6 +30,9 @@ from expts.tables import (  # noqa: E402
     TABLE5_BFS_SWEEP,
     TABLE5_DOMAINS,
     TABLE5_ENUM_POINT,
+    TABLE7_BFS_SWEEP,
+    TABLE7_DOMAINS,
+    TABLE7_SMC_SWEEP,
 )
 from dataclasses import dataclass  # noqa: E402
 
@@ -587,13 +590,11 @@ def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
                     methods=methods_for_table(table))
 
 
-# ─── family tables: same shape, different rosters ────────────────────────────
-# A family table uses table5's layout — the two ours sweeps + single-point
-# baselines, no Stitch (can't take DSRs) and no e-graph-min table column — but a
-# given table differs in its domains and which non-sweep methods it carries, so
-# each is described by a FamilySpec consumed by render_family_tex / render_family
-# below. Currently just table5; the machinery is generic, so a new family table
-# is one more spec.
+# ─── family tables (table5/table7): same shape, different rosters ─────────────
+# Both share table5's layout — the two ours sweeps + single-point baselines, no
+# Stitch (can't take DSRs) and no e-graph-min table column — but differ in their
+# domains and which non-sweep methods they carry, so each is described by a
+# FamilySpec consumed by render_family_tex / render_family below.
 @dataclass(frozen=True)
 class FamilySpec:
     """Everything render_family_tex / render_family need for one family table.
@@ -615,10 +616,70 @@ class FamilySpec:
     method_colors: dict[str, object]
     method_plot_labels: dict[str, str]
 
+    @classmethod
+    def estitch_roster(
+        cls,
+        *,
+        title: str,
+        fig_subdir: str,
+        domains: list[str],
+        domain_labels: dict[str, str],
+        enum_point: int,
+        enum_sweep: tuple[int, ...],
+        smc_sweep: tuple[int, ...],
+        extra_method: str,
+        extra_col_label: str,
+        extra_plot_label: str,
+    ) -> "FamilySpec":
+        """Build a spec for the standard E-Stitch roster: the enum (BFS) and smc
+        (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), with one
+        family-specific fourth method (babble for table5, the no-rules Enum
+        baseline for table7). The shared three methods -- their order, labels,
+        colors, and the smc representative point -- live here so the per-family
+        specs can't drift on them; only the bits that genuinely differ are args.
+        """
+        methods = ["enum", "smc", "enum-dsrs-at-start", extra_method]
+        return cls(
+            title=title,
+            fig_subdir=fig_subdir,
+            domains=domains,
+            domain_labels=domain_labels,
+            # The two sweeps, then the two single-point methods. Each single-point
+            # method keys on its own data label so plot_cr_vs_time finds it directly.
+            plot_methods=methods,
+            table_methods=methods,
+            data_keys={
+                "enum": f"enum-{enum_point}",
+                "smc": f"smc-{TABLE_SMC_PARTICLES}",
+                "enum-dsrs-at-start": "enum-dsrs-at-start",
+                extra_method: extra_method,
+            },
+            col_labels={
+                "enum": "BFS",
+                "smc": "SMC",
+                "enum-dsrs-at-start": "BFS/MT",
+                extra_method: extra_col_label,
+            },
+            sweep_for_method={"enum": enum_sweep, "smc": smc_sweep},
+            sweep_point={"enum": enum_point, "smc": TABLE_SMC_PARTICLES},
+            method_colors={
+                "enum": line_color(0),
+                "smc": line_color(1),
+                extra_method: line_color(2),
+                "enum-dsrs-at-start": line_color(3),
+            },
+            method_plot_labels={
+                "enum": "E-Stitch: BFS",
+                "smc": "E-Stitch: SMC",
+                "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
+                extra_method: extra_plot_label,
+            },
+        )
+
 
 # table5: molecule scramble subset. The two ours sweeps (enum extended to 100k),
 # the dsrs-only-at-start baseline (a single best-first point), and babble.
-TABLE5_SPEC = FamilySpec(
+TABLE5_SPEC = FamilySpec.estitch_roster(
     title="Molecule Scramble Compression (DSRs)",
     fig_subdir="table5",
     domains=TABLE5_DOMAINS,
@@ -627,38 +688,37 @@ TABLE5_SPEC = FamilySpec(
         "molecules:ester": "Ester",
         "molecules:glycol": "Glycol",
     },
-    # Method order: the two sweeps, then the two single-point methods. Each
-    # single-point method keys on its own data label so the single-point branch
-    # of plot_cr_vs_time finds it directly.
-    plot_methods=["enum", "smc", "enum-dsrs-at-start", "babble"],
-    table_methods=["enum", "smc", "enum-dsrs-at-start", "babble"],
-    data_keys={
-        "enum": f"enum-{TABLE5_ENUM_POINT}",
-        "smc": f"smc-{TABLE_SMC_PARTICLES}",
-        "enum-dsrs-at-start": "enum-dsrs-at-start",
-        "babble": "babble",
-    },
-    col_labels={
-        "enum": "BFS",
-        "smc": "SMC",
-        "enum-dsrs-at-start": "BFS/MT",
-        "babble": "babble",
-    },
-    sweep_for_method={"enum": TABLE5_BFS_SWEEP, "smc": SMC_PARTICLE_SWEEP},
-    sweep_point={"enum": TABLE5_ENUM_POINT, "smc": TABLE_SMC_PARTICLES},
-    method_colors={
-        "enum": line_color(0),
-        "smc": line_color(1),
-        "babble": line_color(2),
-        "enum-dsrs-at-start": line_color(3),
-    },
-    method_plot_labels={
-        "enum": "E-Stitch: BFS",
-        "smc": "E-Stitch: SMC",
-        "babble": "babble",
-        "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
-    },
+    enum_point=TABLE5_ENUM_POINT,
+    enum_sweep=TABLE5_BFS_SWEEP,
+    smc_sweep=SMC_PARTICLE_SWEEP,
+    extra_method="babble",
+    extra_col_label="babble",
+    extra_plot_label="babble",
 )
+
+# table7: EPFL circuits with the factoring DSRs. Same as table5 but babble (no
+# boolean theory) is swapped for a no-rules Enum baseline ("enum-baseline") -- so
+# the three-way baseline/live/at-start contrast shows. Enum DNFs here (best-first
+# can't search the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
+TABLE7_SPEC = FamilySpec.estitch_roster(
+    title="EPFL Circuit Compression (Factoring DSRs)",
+    fig_subdir="table7",
+    domains=TABLE7_DOMAINS,
+    domain_labels={
+        "epfl-circuits:multiplier": "Multiplier",
+        "epfl-circuits:square": "Square",
+        "epfl-circuits:log2": "Log2",
+        "epfl-circuits:hyp": "Hypotenuse",
+        "epfl-circuits:voter": "Voter",
+    },
+    enum_point=TABLE_BFS_STEPS,
+    enum_sweep=TABLE7_BFS_SWEEP,
+    smc_sweep=TABLE7_SMC_SWEEP,
+    extra_method="enum-baseline",
+    extra_col_label="BFS/NR",
+    extra_plot_label="E-Stitch: BFS (no rules)",
+)
+
 
 # Unit names for the two sweep methods, used only in the kick-down notices.
 SWEEP_UNIT = {"enum": "steps", "smc": "particles"}
@@ -705,7 +765,7 @@ def _kicked_data_keys(saved: dict, spec: "FamilySpec") -> tuple[dict[str, str], 
 
 
 def render_family_tex(saved: dict, spec: "FamilySpec") -> tuple[str, list[str]]:
-    """Return ``(latex_tabular, notices)`` for a family table (e.g. table5):
+    """Return ``(latex_tabular, notices)`` for a family table (table5/table7):
     one row per family × method, with Compression Ratio and Time (s) groups and
     a geomean row. ``notices`` lists any series-method sweep-point kick-downs.
 
@@ -874,12 +934,12 @@ def main() -> None:
         plot_geomean(saved, table, geomean_path)
         print(f"wrote {geomean_path}", file=sys.stderr)
 
-    # Table 5 (molecule scramble) has a roster shape distinct from tables 1-4
-    # (family rows, DSR baselines, no Stitch), so it goes through the FamilySpec
-    # renderers: a LaTeX table plus per-family and geomean PNGs. The FamilySpec
-    # machinery is generic — additional family tables just add another spec.
+    # Tables 5 & 7 (molecule scramble / EPFL circuit subsets) share a roster
+    # shape distinct from tables 1-4 (family rows, DSR baselines, no Stitch), so
+    # they go through the FamilySpec renderers: a LaTeX table plus per-family and
+    # geomean PNGs.
     notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
-    for spec in (TABLE5_SPEC,):
+    for spec in (TABLE5_SPEC, TABLE7_SPEC):
         path = RESULTS_DIR / f"{spec.fig_subdir}.json"
         if not path.exists():
             print(f"skipping {spec.fig_subdir}: {path} not present", file=sys.stderr)
