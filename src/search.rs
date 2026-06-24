@@ -46,6 +46,14 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// `RecExpr<F::Apply<OpWithFrozenVar<O>>>` and looked up / inserted here, so
     /// the freeze mask is part of the *term* rather than a side value. Shadow-run
     /// alongside `map` to validate the encoding — `map` still drives the search.
+    ///
+    /// Each inserted term is wrapped in a `Root` sentinel
+    /// ([`pattern_to_frozen_recexpr`]). Without it, `add_expr` interns every
+    /// subterm, so `lookup_expr` would hit on a pattern that merely appears
+    /// inside a larger inserted one — far more than true top-level repeats. With
+    /// the wrapper a hit means the whole `(syntax, frozen)` term was inserted as
+    /// a top-level pattern (modulo congruence), matching `map`'s notion of a
+    /// visited state.
     seen_egraph: egg::EGraph<F::Apply<OpWithFrozenVar<O>>, ()>,
     pub hits: usize,
     /// Calls that would skip under *exact*-mask matching rather than subset
@@ -83,7 +91,7 @@ fn pattern_to_frozen_recexpr<F: LanguageFamily, O: StitchOp>(
         .collect();
     let src: RecExpr<F::Apply<OpWithVar<O>>> = pattern.pattern.clone().into();
     let src_nodes: Vec<F::Apply<OpWithVar<O>>> = src.into();
-    let nodes: Vec<F::Apply<OpWithFrozenVar<O>>> = src_nodes
+    let mut nodes: Vec<F::Apply<OpWithFrozenVar<O>>> = src_nodes
         .into_iter()
         .map(|node| {
             let kids = node.children().to_vec();
@@ -95,6 +103,10 @@ fn pattern_to_frozen_recexpr<F: LanguageFamily, O: StitchOp>(
             F::make(disc, kids)
         })
         .collect();
+    // Wrap the whole term in a `Root` sentinel so lookups match only against
+    // top-level inserts, not subterms `add_expr` interned from larger patterns.
+    let root = Id::from(nodes.len() - 1);
+    F::wrap_seen_root::<O>(&mut nodes, root);
     RecExpr::from(nodes)
 }
 

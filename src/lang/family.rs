@@ -1,7 +1,7 @@
 use egg::{Id, Language, RecExpr};
 use rustc_hash::FxHashMap;
 
-use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithFrozenVar, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
 /// A type-level type constructor `L<_>` for a language family.
 ///
@@ -37,6 +37,18 @@ pub trait LanguageFamily: Clone + 'static {
     /// Lifting a program-side discriminant into the pattern-side one is just
     /// `map_discriminant(op, OpWithVar::Node)`.
     fn map_discriminant<A: StitchOp, B: StitchOp>(op: Self::Discriminant<A>, f: impl FnMut(A) -> B) -> Self::Discriminant<B>;
+
+    /// Append a [`OpWithFrozenVar::Root`] sentinel wrapping the node at `child`
+    /// to a seen-egraph term under construction, returning the wrapper's id (the
+    /// new root). `child` must be the current last node. Used only by
+    /// [`crate::search::SeenTracker`]'s shadow egraph: it inserts/looks up the
+    /// *wrapped* form so a match means the whole term was inserted as a
+    /// top-level pattern, not merely interned as a subterm of a larger one.
+    ///
+    /// Arity-1 wrapping is family-specific: a flat 1-child node for
+    /// [`OpChildren`], but `App(Leaf(Root), child)` for [`LambdaCalc`] (its
+    /// leaves are arity-0, so the only single-argument shape is an application).
+    fn wrap_seen_root<O: StitchOp>(nodes: &mut Vec<Self::Apply<OpWithFrozenVar<O>>>, child: Id) -> Id;
 
     /// Add a `name(children...)` application to the egraph and return its Id.
     /// For families with binary `App` this builds a curried application chain.
@@ -129,6 +141,11 @@ impl LanguageFamily for OpChildren {
 
     fn map_discriminant<A: StitchOp, B: StitchOp>(op: A, mut f: impl FnMut(A) -> B) -> B {
         f(op)
+    }
+
+    fn wrap_seen_root<O: StitchOp>(nodes: &mut Vec<OpChildrenLanguage<OpWithFrozenVar<O>>>, child: Id) -> Id {
+        nodes.push(OpChildrenLanguage { op: OpWithFrozenVar::Root, children: vec![child] });
+        Id::from(nodes.len() - 1)
     }
 
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
@@ -227,6 +244,15 @@ impl LanguageFamily for LambdaCalc {
             LambdaCalcDisc::Lam => LambdaCalcDisc::Lam,
             LambdaCalcDisc::Programs => LambdaCalcDisc::Programs,
         }
+    }
+
+    fn wrap_seen_root<O: StitchOp>(nodes: &mut Vec<LambdaCalcLanguage<OpWithFrozenVar<O>>>, child: Id) -> Id {
+        // Leaves are arity-0, so wrap with `App(Leaf(Root), child)`. The
+        // reserved `Root` head makes this shape impossible in a real term.
+        nodes.push(LambdaCalcLanguage::Leaf(OpWithFrozenVar::Root));
+        let head = Id::from(nodes.len() - 1);
+        nodes.push(LambdaCalcLanguage::App([head, child]));
+        Id::from(nodes.len() - 1)
     }
 
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<LambdaCalcLanguage<O>>) -> Id {
