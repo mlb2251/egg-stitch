@@ -55,11 +55,12 @@ class Runner(Protocol):
 class FamilyDomain:
     """A ``<name>:<member>`` pseudo-domain family with shipped DSRs.
 
-    Molecule-scramble domains are single-file op-children corpora addressed as
-    ``<name>:<member>``; this holds the only bits that vary between such families
-    so the dispatch functions below stay family-agnostic. ``name`` doubles as the
-    :func:`domain_type` label and the prefix before ``:``; ``file_template`` is
-    formatted with ``member=`` relative to :data:`EGG_STITCH_DIR`.
+    Both molecule-scramble and EPFL-circuit domains are single-file op-children
+    corpora addressed as ``<name>:<member>``; this holds the only bits that vary
+    between them so the dispatch functions below stay family-agnostic. ``name``
+    doubles as the :func:`domain_type` label and the prefix before ``:``;
+    ``file_template`` is formatted with ``member=`` relative to
+    :data:`EGG_STITCH_DIR`.
     """
     name: str
     members: tuple[str, ...]
@@ -83,14 +84,22 @@ class FamilyDomain:
 
 # Molecule scramble families live under data/domains/molecules/scramble/ (real
 # PubChem substructure corpora; op-children grammar, symmetry DSRs; see
-# data/.../scramble/README.md).
+# data/.../scramble/README.md). EPFL benchmark circuits live under
+# data/domains/epfl-circuits/ (k-feasible-cut gate cones, AND/OR DSRs; source
+# .aig files and generators in scripts/epfl-circuits/).
 MOLECULES = FamilyDomain(
     name="molecules",
     members=("hexyl", "ester", "glycol"),
     file_template="data/domains/molecules/scramble/{member}.scram.json",
     rewrites="data/domains/molecules/molecules.rewrites",
 )
-FAMILY_DOMAINS = (MOLECULES,)
+EPFL_CIRCUITS = FamilyDomain(
+    name="epfl-circuits",
+    members=("hyp", "log2", "multiplier", "square", "voter"),
+    file_template="data/domains/epfl-circuits/{member}.json",
+    rewrites="data/domains/epfl-circuits/and_or_demorgan_factor.rewrites",
+)
+FAMILY_DOMAINS = (MOLECULES, EPFL_CIRCUITS)
 
 
 def family_for(domain: str) -> FamilyDomain | None:
@@ -99,7 +108,8 @@ def family_for(domain: str) -> FamilyDomain | None:
 
 
 def domain_type(domain: str) -> str:
-    """Return ``"cogsci"``, ``"dreamcoder"``, or ``"molecules"`` for a known domain."""
+    """Return ``"cogsci"``, ``"dreamcoder"``, ``"molecules"``, or
+    ``"epfl-circuits"`` for a known domain."""
     fam = family_for(domain)
     if fam is not None:
         return fam.name
@@ -119,8 +129,8 @@ def weighting_for(domain: str) -> Weighting:
 def input_files(domain: str) -> list[Path]:
     """Absolute paths of the corpus files for a domain.
 
-    Cogsci/molecule domains have a single file; dreamcoder domains have one
-    file per benchmark iteration. Order is sorted so re-runs are deterministic.
+    Cogsci/molecule/circuit domains have a single file; dreamcoder domains have
+    one file per benchmark iteration. Order is sorted so re-runs are deterministic.
     """
     fam = family_for(domain)
     if fam is not None:
@@ -136,8 +146,8 @@ def rewrites_path(domain: str) -> str | None:
     or ``None`` when no DSRs ship for it.
 
     Cogsci files live under ``drawings.<domain>.rewrites``; dreamcoder ones at
-    ``<domain>.rewrites``; molecules share one symmetry file. ``text``/``logo``/
-    ``towers`` have no DSRs.
+    ``<domain>.rewrites``; molecules/circuits each ship one family-wide file.
+    ``text``/``logo``/``towers`` have no DSRs.
     """
     fam = family_for(domain)
     if fam is not None:
