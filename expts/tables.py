@@ -52,6 +52,8 @@ def _sweep_runners(
     mem_limit: int | None = None,
     max_arity: int = MAX_ARITY,
     iter_limit: int | None = None,
+    max_match_set: int | None = None,
+    decompose_min_rows: int | None = None,
 ) -> tuple[tuple[str, object], ...]:
     """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value.
 
@@ -60,8 +62,11 @@ def _sweep_runners(
     ``smc_particles`` override the sweeps (table5 extends them, table7 truncates).
     ``max_arity`` raises the abstraction arity cap (table7 uses 4). ``iter_limit``
     caps e-saturation iterations (table7 uses 30; None keeps the binary default).
+    ``max_match_set`` / ``decompose_min_rows`` cap the per-factor match-set on
+    every swept runner (table6 sets them for the non-confluent algebra DSRs;
+    None elsewhere).
     """
-    common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit)
+    common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit, max_match_set=max_match_set, decompose_min_rows=decompose_min_rows)
     bfs = tuple((f"enum-{n}", OursBf(num_steps=n, **common)) for n in bfs_steps)
     smc = tuple((f"smc-{p}", OursSmc(num_particles=p, **common)) for p in smc_particles)
     return bfs + smc
@@ -299,14 +304,13 @@ def table5() -> Path:
 # interchange) — they expose multiple equivalent normal forms whose best choice
 # depends on the library being built. Live keeps all forms so each abstraction can
 # align to the matching one; at-start commits to a single greedy min-term up front,
-# so live wins (and the gap widens with expressiveness). The commutative rules
-# would explode the abstraction match set if left unchecked, so each run carries the
-# per-factor ``--max-match-set`` cap and an ``--iter-limit`` that bounds the
-# e-saturation. Fixed 4 abstractions.
+# so live wins (and the gap widens with expressiveness). Same roster shape as
+# table5/7: the Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start baseline,
+# no babble (it can't parse the constant_folding/matmul directives). The
+# commutative rules would explode the abstraction match set if left unchecked, so
+# every run carries the per-factor ``--max-match-set`` cap and an ``--iter-limit``.
 TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "furniture")]
-TABLE6_REWRITES = "data/domains/cogsci/drawings.rewrites"
 TABLE6_NUM_ABSTRACTIONS = 4
-TABLE6_NUM_STEPS = 50_000
 TABLE6_ITER_LIMIT = 6
 # Per-factor row cap (the `--max-match-set` metric is a factor's row count): the
 # commutativity blowup is one entangled factor whose equivalent parse trees pile
@@ -322,43 +326,33 @@ TABLE6_DECOMPOSE_MIN_ROWS = 24
 # the live-vs-at-start gap (more holes => more normal-form alignment that live can
 # exploit but at-start commits away). May revert to 2 for cross-table parity.
 TABLE6_MAX_ARITY = 4
-TABLE6_SMC_PARTICLES = 1000
-TABLE6_SMC_STEPS = 1000
-TABLE6_SMC_TEMPERATURE = 1000.0
 TABLE6_TIMEOUT = 300.0  # seconds, per tool invocation
 
 
 def _table6_runners() -> tuple[tuple[str, object], ...]:
-    """``enum-live`` vs ``enum-at-start`` (same best-first config, differing only
-    in whether the DSRs stay live), plus ``smc-live`` — SMC with the rules live —
-    all carrying the per-factor cap + iter-limit the non-confluent algebra needs."""
+    """Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start baseline, every
+    runner at arity 4 with the per-factor match-set cap + iter-limit the
+    non-confluent algebra needs (no babble — it can't parse the rules)."""
     common = dict(
+        max_arity=TABLE6_MAX_ARITY,
         iter_limit=TABLE6_ITER_LIMIT,
         max_match_set=TABLE6_MATCH_SET_CAP,
         decompose_min_rows=TABLE6_DECOMPOSE_MIN_ROWS,
-        max_arity=TABLE6_MAX_ARITY,
-        rewrites_override=TABLE6_REWRITES,
         timeout=TABLE6_TIMEOUT,
         mem_limit=MEM_LIMIT_BYTES,
     )
     return (
-        ("enum-live", OursBf(num_steps=TABLE6_NUM_STEPS, only_use_dsrs_at_start=False, **common)),
-        ("enum-at-start", OursBf(num_steps=TABLE6_NUM_STEPS, only_use_dsrs_at_start=True, **common)),
-        ("smc-live", OursSmc(num_particles=TABLE6_SMC_PARTICLES, num_steps=TABLE6_SMC_STEPS, temperature=TABLE6_SMC_TEMPERATURE, **common)),
+        _sweep_runners(**common)
+        + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
     )
 
 
 def table6() -> Path:
-    """Run the cogsci drawing domains with the non-confluent affine-algebra DSRs,
-    live vs dsrs-only-at-start, at a fixed 4 abstractions with the per-factor
-    match-set cap. Demonstrates live > at-start on a non-confluent rule set."""
-    free = available_memory_bytes()
-    if free < MEM_LIMIT_BYTES:
-        raise SystemExit(
-            f"table6: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
-            f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
-            f"available. Free up memory or lower MEM_LIMIT_BYTES."
-        )
+    """Run the cogsci drawing domains with the non-confluent affine-algebra DSRs:
+    the table5/7 roster (Enum/SMC sweeps + dsrs-only-at-start baseline, no babble)
+    at arity 4 with the per-factor match-set cap. Demonstrates live > at-start on
+    a non-confluent rule set."""
+    _require_free_memory("table6")
     return _run_table(
         domains=TABLE6_DOMAINS,
         runners=_table6_runners(),

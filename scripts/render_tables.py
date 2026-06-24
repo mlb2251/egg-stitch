@@ -50,8 +50,6 @@ TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "fu
 
 
 def domains_for_table(table: int) -> list[str]:
-    if table == 6:
-        return TABLE6_DOMAINS
     return TABLE_DOMAINS_DSR if table in TABLES_WITH_EGRAPH_MIN else TABLE_DOMAINS_NO_DSR
 
 
@@ -60,11 +58,8 @@ def methods_for_table(table: int) -> list[str]:
 
     DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add the
     dsrs-only-at-start "BFS@start" baseline; no-DSR tables (2 & 4) keep Stitch
-    and have no baseline. Table 6 (our algebraic DSRs) has no babble column — see
-    expts/tables.py — just our live search vs the at-start baseline.
+    and have no baseline. (Tables 5-7 render via FamilySpec, not this path.)
     """
-    if table == 6:
-        return ["enum-live", "enum-at-start", "smc-live"]
     if table in TABLES_WITH_EGRAPH_MIN:
         return ["enum", "smc", BASELINE_METHOD, "babble"]
     return ["enum", "smc", "babble", "stitch"]
@@ -78,11 +73,6 @@ DOMAIN_LABELS = {
     "text": "Text",
     "logo": "Logo",
     "towers": "Towers",
-    # table6 drawing domains (algebraic drawing DSRs)
-    "drawings:nuts-bolts": "Nuts \\& Bolts",
-    "drawings:dials": "Dials",
-    "drawings:wheels": "Wheels",
-    "drawings:furniture": "Furniture",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
 # DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add a
@@ -92,9 +82,7 @@ BASELINE_METHOD = "enum-dsrs-at-start"
 # Table cells use the bare search-strategy name; plot legends spell out the
 # E-Stitch prefix so each series is unambiguous standalone.
 METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble",
-                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT",
-                 "enum-live": "BFS (live)", "enum-at-start": "BFS (at start)",
-                 "smc-live": "SMC (live)"}
+                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT"}
 METHOD_PLOT_LABELS = {
     "enum": "E-Stitch: BFS",
     "smc": "E-Stitch: SMC",
@@ -627,53 +615,52 @@ class FamilySpec:
         enum_point: int,
         enum_sweep: tuple[int, ...],
         smc_sweep: tuple[int, ...],
-        extra_method: str,
-        extra_col_label: str,
-        extra_plot_label: str,
+        extra_method: str | None = None,
+        extra_col_label: str | None = None,
+        extra_plot_label: str | None = None,
     ) -> "FamilySpec":
         """Build a spec for the standard E-Stitch roster: the enum (BFS) and smc
-        (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), with one
-        family-specific fourth method (babble for table5, the no-rules Enum
-        baseline for table7). The shared three methods -- their order, labels,
-        colors, and the smc representative point -- live here so the per-family
-        specs can't drift on them; only the bits that genuinely differ are args.
+        (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), optionally with
+        one family-specific fourth method (babble for table5, the no-rules Enum
+        baseline for table7, none for table6). The shared three methods -- their
+        order, labels, colors, and the smc representative point -- live here so the
+        per-family specs can't drift on them; only the bits that genuinely differ
+        are args.
         """
-        methods = ["enum", "smc", "enum-dsrs-at-start", extra_method]
+        methods = ["enum", "smc", "enum-dsrs-at-start"]
+        data_keys = {
+            "enum": f"enum-{enum_point}",
+            "smc": f"smc-{TABLE_SMC_PARTICLES}",
+            "enum-dsrs-at-start": "enum-dsrs-at-start",
+        }
+        col_labels = {"enum": "BFS", "smc": "SMC", "enum-dsrs-at-start": "BFS/MT"}
+        method_colors = {"enum": line_color(0), "smc": line_color(1), "enum-dsrs-at-start": line_color(3)}
+        method_plot_labels = {
+            "enum": "E-Stitch: BFS",
+            "smc": "E-Stitch: SMC",
+            "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
+        }
+        if extra_method is not None:
+            methods = methods + [extra_method]
+            data_keys[extra_method] = extra_method
+            col_labels[extra_method] = extra_col_label
+            method_colors[extra_method] = line_color(2)
+            method_plot_labels[extra_method] = extra_plot_label
         return cls(
             title=title,
             fig_subdir=fig_subdir,
             domains=domains,
             domain_labels=domain_labels,
-            # The two sweeps, then the two single-point methods. Each single-point
+            # The two sweeps, then the single-point method(s). Each single-point
             # method keys on its own data label so plot_cr_vs_time finds it directly.
             plot_methods=methods,
             table_methods=methods,
-            data_keys={
-                "enum": f"enum-{enum_point}",
-                "smc": f"smc-{TABLE_SMC_PARTICLES}",
-                "enum-dsrs-at-start": "enum-dsrs-at-start",
-                extra_method: extra_method,
-            },
-            col_labels={
-                "enum": "BFS",
-                "smc": "SMC",
-                "enum-dsrs-at-start": "BFS/MT",
-                extra_method: extra_col_label,
-            },
+            data_keys=data_keys,
+            col_labels=col_labels,
             sweep_for_method={"enum": enum_sweep, "smc": smc_sweep},
             sweep_point={"enum": enum_point, "smc": TABLE_SMC_PARTICLES},
-            method_colors={
-                "enum": line_color(0),
-                "smc": line_color(1),
-                extra_method: line_color(2),
-                "enum-dsrs-at-start": line_color(3),
-            },
-            method_plot_labels={
-                "enum": "E-Stitch: BFS",
-                "smc": "E-Stitch: SMC",
-                "enum-dsrs-at-start": "E-Stitch: BFS (DSRs at start)",
-                extra_method: extra_plot_label,
-            },
+            method_colors=method_colors,
+            method_plot_labels=method_plot_labels,
         )
 
 
@@ -717,6 +704,25 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     extra_method="enum-baseline",
     extra_col_label="BFS/NR",
     extra_plot_label="E-Stitch: BFS (no rules)",
+)
+
+# table6: cogsci drawing domains with our algebraic drawing DSRs. Same shape as
+# table5/7 -- the two ours sweeps (live DSRs) and the dsrs-only-at-start baseline
+# -- but no fourth method: babble can't parse the constant_folding/matmul rules,
+# so it has no column here. The live-vs-at-start contrast is BFS vs BFS/MT.
+TABLE6_SPEC = FamilySpec.estitch_roster(
+    title="Drawing-Domain Compression (Algebraic DSRs)",
+    fig_subdir="table6",
+    domains=TABLE6_DOMAINS,
+    domain_labels={
+        "drawings:nuts-bolts": "Nuts \\& Bolts",
+        "drawings:dials": "Dials",
+        "drawings:wheels": "Wheels",
+        "drawings:furniture": "Furniture",
+    },
+    enum_point=TABLE_BFS_STEPS,
+    enum_sweep=BFS_STEP_SWEEP,
+    smc_sweep=SMC_PARTICLE_SWEEP,
 )
 
 
@@ -854,7 +860,9 @@ def _plot_family(cr_map: dict, t_map: dict, title: str, out_path: Path,
 def plot_family_domain(saved: dict, spec: "FamilySpec", domain: str, out_path: Path) -> None:
     """CR-vs-time plot for one family member."""
     runs = saved["domains"][domain].get("runs", {})
-    title = f"{spec.title}\n{spec.domain_labels.get(domain, domain)}"
+    # domain_labels are LaTeX (for the .tex table); de-escape `\&` for the PNG title.
+    label = spec.domain_labels.get(domain, domain).replace("\\&", "&")
+    title = f"{spec.title}\n{label}"
     _plot_family(aggregate_methods_cr(runs), aggregate_methods_time(runs), title, out_path, spec)
 
 
@@ -934,12 +942,12 @@ def main() -> None:
         plot_geomean(saved, table, geomean_path)
         print(f"wrote {geomean_path}", file=sys.stderr)
 
-    # Tables 5 & 7 (molecule scramble / EPFL circuit subsets) share a roster
-    # shape distinct from tables 1-4 (family rows, DSR baselines, no Stitch), so
-    # they go through the FamilySpec renderers: a LaTeX table plus per-family and
+    # Tables 5, 6 & 7 (molecule scramble / drawing / EPFL circuit subsets) share a
+    # roster shape distinct from tables 1-4 (family rows, DSR baselines, no Stitch),
+    # so they go through the FamilySpec renderers: a LaTeX table plus per-family and
     # geomean PNGs.
     notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
-    for spec in (TABLE5_SPEC, TABLE7_SPEC):
+    for spec in (TABLE5_SPEC, TABLE6_SPEC, TABLE7_SPEC):
         path = RESULTS_DIR / f"{spec.fig_subdir}.json"
         if not path.exists():
             print(f"skipping {spec.fig_subdir}: {path} not present", file=sys.stderr)
@@ -955,30 +963,6 @@ def main() -> None:
         # table5 also gets per-family molecule scramble trajectory figures.
         if spec is TABLE5_SPEC:
             render_molecules(saved, FIGURES_DIR / "molecules")
-
-    # Table 6 (drawing domains, our algebraic drawing DSRs) uses the generic
-    # render() shape but has drawings:-prefixed domain keys, so it gets its own
-    # main() block rather than joining the tables 1-4 loop.
-    table6_path = RESULTS_DIR / "table6.json"
-    if table6_path.exists():
-        with open(table6_path) as f:
-            saved = json.load(f)
-        tex_path = FIGURES_DIR / "table6.tex"
-        tex_path.write_text(f"% source: {table6_path}\n" + render(saved, 6) + "\n")
-        print(f"wrote {tex_path}", file=sys.stderr)
-        domain_dir = FIGURES_DIR / "table6"
-        domain_dir.mkdir(exist_ok=True)
-        for domain in domains_for_table(6):
-            if domain not in saved["domains"]:
-                continue
-            plot_path = domain_dir / f"{domain.split(':', 1)[1]}.png"
-            plot_domain(saved, 6, domain, plot_path)
-            print(f"wrote {plot_path}", file=sys.stderr)
-        geomean_path = FIGURES_DIR / "table6_geomean.png"
-        plot_geomean(saved, 6, geomean_path)
-        print(f"wrote {geomean_path}", file=sys.stderr)
-    else:
-        print(f"skipping table6: {table6_path} not present", file=sys.stderr)
 
     # Loudly surface every sweep-point kick-down so a reduced operating point in
     # a table is never silently mistaken for the configured one.
