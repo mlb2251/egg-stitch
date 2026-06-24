@@ -416,16 +416,20 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         let saturate_each = s.saturate_each_on();
         let decider = if s.egraph_decides_on() { "egraph" } else { "map" };
         let per_insert_secs = s.egraph_time.as_secs_f64();
+        let sat_calls = s.saturate_calls;
+        let avg_ms = if sat_calls > 0 { per_insert_secs * 1000.0 / sat_calls as f64 } else { 0.0 };
+        let recexpr_secs = s.recexpr_time.as_secs_f64();
         let audit = s.audit_seen_egraph();
         println!("{}", "── seen-egraph audit ──".dimmed());
         println!(
-            "{} {} {} {} {}",
+            "{} {} {} {}",
             "  rewrites:".dimmed(),
             format!("{} rules, saturate-each={saturate_each}, decider={decider}", audit.num_rules).bold(),
             format!("(audit pass: {} firings over {} iters,", audit.applications, audit.iterations).dimmed(),
             format!("stop {})", audit.stop_reason).dimmed(),
-            format!("(per-insert saturation: {per_insert_secs:.3}s)").dimmed(),
         );
+        println!("{} {}", "  per-insert saturation:".dimmed(), format!("{per_insert_secs:.3}s over {sat_calls} runs ({avg_ms:.3}ms avg)").bold(),);
+        println!("{} {}", "  frozen-recexpr build:".dimmed(), format!("{recexpr_secs:.3}s").bold());
         println!(
             "{} {} {}",
             "  before saturation:".dimmed(),
