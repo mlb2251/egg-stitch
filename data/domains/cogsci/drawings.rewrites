@@ -1,27 +1,19 @@
-// DEFAULT algebraic rewrites for the cogsci drawing domain.
+// Algebraic rewrites for the cogsci drawing domain.
 // Composition is routed through `matmul` NODES that are then reduced by conventional
-// rewrite rules (no Rust fold): a nested transform becomes `(T x (matmul m1 m2))`;
-// `matmul` of two matrices reduces in a few cases (identity, no-rotation,
-// general-with-rotation), arithmetic folded via `!integersarefloats` and the exact
-// trig rules below (no precision noise). Includes the non-confluent "choice" rules
-// (overlay assoc/comm, transform factoring, repeat-unroll, scale/translate
-// interchange): keeping them LIVE beats applying the rules only at-start on all four
-// domains. They are what creates the gap where the confluent core alone ties (dials);
-// on some domains (nuts-bolts) live already beats at-start without them — see
-// the ablate-choice ablation.
+// rewrite rules: a nested transform becomes `(T x (matmul m1 m2))`.
 //
-// Ablations of this file live in scripts/drawings_ablation/ (run them via
-// cogsci_rules_compare.py there); each changes ONE axis:
-//   drawings.ablate-matmul         — compose eagerly via t_compose, no matmul nodes
-//   drawings.ablate-choice         — drop the non-confluent choice rules (confluent core)
-//   drawings.forward-arith-commute — + commute coordinate arithmetic (add_comm/mul_comm)
-//   drawings.forward-matmul-fold   — reduce matmul symbolically, then fold its
-//                                    coordinate arithmetic (incl. sin/cos/pi) via the
-//                                    general constant_folding op list + !round
+// `matmul` of two matrices reduces in many cases (identity, no-rotation,
+// general-with-rotation).
+// 
+// Arithmetic is folded via `!integersarefloats` and the exact trig rules below
+// (no precision noise).
+//
+// Includes the non-confluent "choice" rules that blow up search but also allow
+// for E-Stitch to shine by chosing on main.
 
 constant_folding: !integersarefloats
 
-// ── contract core ──
+// basic contractions
 t_id: (T ?p (M 1 0 0 0)) => ?p
 rep_1: (repeat ?x 1 ?m) => ?x
 add_id_r: (+ ?x 0) => ?x
@@ -33,23 +25,18 @@ mul_zero_r: (* ?x 0) => 0
 mul_zero_l: (* 0 ?x) => 0
 div_id:   (/ ?x 1) => ?x
 
-// ── introduce matmul for a nested transform ──
+// this introduces matmul, which does not exist in the cogsci domains
 mm_compose: (T (T ?x ?m1) ?m2) => (T ?x (matmul ?m1 ?m2))
 
-// ── reduce matmul, a few cases (conventional rewrites; chains reduce bottom-up) ──
-// identity
+// matmul reductions
 mm_id_l: (matmul (M 1 0 0 0) ?m) => ?m
 mm_id_r: (matmul ?m (M 1 0 0 0)) => ?m
-// outer rotation zero: scale multiplies, inner translation carried through scale (no trig).
-// SPEED OPTIMIZATION ONLY — logically redundant (mm_full at ?r2=0 reduces to the same matrix
-// via cos_0/sin_0 + the identity rules), but it avoids emitting then cancelling that trig junk.
-// No-rotation compose is the common case, so this is a real saturation win under the bounded
-// iter-limit; dropping it is ~30-60% slower and notably regresses the wheels abstractions.
+// basic mutiplicaion case: no need for rotations. only here for speed
 mm_norot: (matmul (M ?s1 ?r1 ?x1 ?y1) (M ?s2 0 ?x2 ?y2)) => (M (* ?s1 ?s2) ?r1 (+ ?x2 (* ?s2 ?x1)) (+ ?y2 (* ?s2 ?y1)))
 // general: rotation adds, inner translation carried through outer scale+rotation
 mm_full: (matmul (M ?s1 ?r1 ?x1 ?y1) (M ?s2 ?r2 ?x2 ?y2)) => (M (* ?s1 ?s2) (+ ?r1 ?r2) (+ ?x2 (* ?s2 (- (* (cos ?r2) ?x1) (* (sin ?r2) ?y1)))) (+ ?y2 (* ?s2 (+ (* (sin ?r2) ?x1) (* (cos ?r2) ?y1)))))
 
-// ── trig at the angles that occur (exact — so rotational matmul folds cleanly) ──
+// basic trigonometric evaluation
 cos_0: (cos 0) => 1
 sin_0: (sin 0) => 0
 cos_halfpi: (cos (/ pi 2)) => 0
@@ -59,18 +46,15 @@ sin_pi: (sin pi) => 0
 cos_qpi: (cos (/ pi 4)) => 0.7071067811865476
 sin_qpi: (sin (/ pi 4)) => 0.7071067811865476
 
-// ── angle normalisation ──
+// angle normalization arithmetic
 ang_q: (/ (* 2 pi) 4) <=> (/ pi 2)
 ang_e: (/ (* 2 pi) 8) <=> (/ pi 4)
 ang_h: (/ (* 2 pi) 2) <=> pi
-// Lift decimal angle literals (wheels/furniture encode rotations numerically, e.g.
-// 1.5708, rather than symbolically) back to symbolic `pi` forms, so they hit the
-// trig table above and share the `pi` subterm across rotated parts instead of being
-// opaque floats. The reverse of folding angles to concrete values.
+// Lift decimal angle literals
 ang_lift_q: 1.5708 <=> (/ pi 2)
 ang_lift_e: 0.785398 <=> (/ pi 4)
 
-// ── choice2's non-confluent "choice" rules ──
+// Non confluent rules
 t_factor: (C (T ?a ?m) (T ?b ?m)) <=> (T (C ?a ?b) ?m)
 c_assoc: (C (C ?a ?b) ?c) <=> (C ?a (C ?b ?c))
 c_comm: (C ?a ?b) <=> (C ?b ?a)
