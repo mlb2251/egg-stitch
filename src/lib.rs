@@ -184,6 +184,16 @@ pub struct Args {
     #[arg(long = "no-seen-egraph-saturate", action = clap::ArgAction::SetFalse)]
     pub seen_egraph_saturate: bool,
 
+    /// Use seen-egraph membership as the skip decision in the best-first seen
+    /// set (on by default), instead of the old `map`'s subset-domination rule.
+    /// A successor is skipped iff its `Root`-wrapped term is already in the
+    /// seen-egraph — i.e. an earlier visit's term, modulo DSR-equivalence when
+    /// `--seen-egraph-saturate` is on. Only has effect alongside `--opt-seen`.
+    /// Passing `--no-seen-egraph-decides` restores the `map` as the decider
+    /// (the egraph then only runs as a shadow for comparison).
+    #[arg(long = "no-seen-egraph-decides", action = clap::ArgAction::SetFalse)]
+    pub seen_egraph_decides: bool,
+
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
     /// reuse as a singleton successor (no cost check — sound by construction).

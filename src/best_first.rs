@@ -176,7 +176,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             None => vec![],
         };
         // High limits so saturation, not a cap, stops the run where the rules permit.
-        SeenTracker::new(rules, args.iter_limit.max(1000), args.node_limit, args.seen_egraph_saturate)
+        SeenTracker::new(rules, args.iter_limit.max(1000), args.node_limit, args.seen_egraph_saturate, args.seen_egraph_decides)
     });
     let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
 
@@ -413,13 +413,14 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     );
     if let Some(s) = seen.as_mut() {
         let saturate_each = s.saturate_each_on();
+        let decider = if s.egraph_decides_on() { "egraph" } else { "map" };
         let per_insert_secs = s.egraph_time.as_secs_f64();
         let audit = s.audit_seen_egraph();
         println!("{}", "── seen-egraph audit ──".dimmed());
         println!(
             "{} {} {} {} {}",
             "  rewrites:".dimmed(),
-            format!("{} rules, saturate-each={saturate_each}", audit.num_rules).bold(),
+            format!("{} rules, saturate-each={saturate_each}, decider={decider}", audit.num_rules).bold(),
             format!("(audit pass: {} firings over {} iters,", audit.applications, audit.iterations).dimmed(),
             format!("stop {})", audit.stop_reason).dimmed(),
             format!("(per-insert saturation: {per_insert_secs:.3}s)").dimmed(),
