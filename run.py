@@ -139,6 +139,34 @@ def dev():
     #     max_arity=2,
     # )
 
+def nuts_bolts_enum():
+    """Run nuts-bolts in best-first ("enum") mode via the low-level egg_stitch()
+    escape hatch, replicating exactly the command bench_pr.py builds for that
+    cell (OursBf(max_forced_expansion=12) on the with-DSRs condition).
+
+    The flags below mirror expts.run_models.ours._run for this cell:
+      - op-children language  (nuts-bolts is cogsci → "no-apps" weighting)
+      - max_arity 2           (expts.bench.MAX_ARITY)
+      - num_abstractions 1    (rounds=1)
+      - max_forced_expansion 12, no num_steps  (BF_RUNNERS["nuts-bolts"])
+      - DSRs live via the drawings.nuts-bolts rewrites
+    ``opt_seen`` is passed False for now so timing matches the benchmark (which
+    doesn't enable the seen set); flip to True to turn on canonical-pattern dedup.
+    """
+    egg_stitch(
+        "data/domains/cogsci/nuts-bolts-abbv.json",
+        rewrites="data/domains/cogsci/nuts-bolts.rewrites",
+        output="nuts_bolts_enum.json",
+        search="best-first",
+        language="op-children",
+        max_arity=2,
+        num_abstractions=1,
+        max_forced_expansion=40,
+        opt_seen=True,
+        no_opt_useless_inline=True,
+        verbose=True,
+        # no_freeze_rule=True,
+    )
 
 
 if __name__ == "__main__":
