@@ -384,9 +384,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
     println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
     println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
-    let (seen_len, seen_hits, seen_secs, egraph_hits, exact_hits, full_dom_hits) = seen
-        .as_ref()
-        .map_or((0, 0, 0.0, 0, 0, 0), |s| (s.len(), s.hits, s.time.as_secs_f64(), s.egraph_hits, s.exact_hits, s.full_dom_hits));
+    let (seen_len, seen_hits, seen_secs, egraph_hits, exact_hits, full_dom_hits) = seen.as_ref().map_or((0, 0, 0.0, 0, 0, 0), |s| (s.len(), s.hits, s.time.as_secs_f64(), s.egraph_hits, s.exact_hits, s.full_dom_hits));
     println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
     println!(
         "{} {} {} {}",
@@ -395,6 +393,55 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         format!("(egraph hits: {egraph_hits}, exact hits: {exact_hits}, full-dom hits: {full_dom_hits})"),
         format!("(time: {:.3}s)", seen_secs).dimmed(),
     );
+    if let Some(s) = seen.as_mut() {
+        // Lift the program-language DSRs onto the frozen-var seen language by
+        // re-parsing the rule file at `F::Apply<OpWithFrozenVar<O>>` with `()`
+        // analysis: op names route to `Node(..)`, `?x` metavars stay metavars,
+        // so the rules match the inserted patterns directly. Plain `lhs => rhs`
+        // rules lift cleanly; a parse failure (e.g. an analysis-only applier)
+        // degrades to an empty set with a warning rather than aborting stats.
+        let weights = shared.egraph.analysis.weights;
+        let rules: Vec<egg::Rewrite<F::Apply<crate::lang::OpWithFrozenVar<O>>, ()>> = match args.rules.as_deref() {
+            Some(path) => crate::io::from_file(path, &weights).unwrap_or_else(|e| {
+                println!("{} {}", "seen-egraph audit: failed to lift rules:".red(), e);
+                vec![]
+            }),
+            None => vec![],
+        };
+        // High limits so saturation, not a cap, stops the run where it can;
+        // expansion DSRs can't saturate, so the stop reason is reported below.
+        let audit = s.audit_seen_egraph(&rules, args.iter_limit.max(1000), args.node_limit);
+        println!("{}", "── seen-egraph audit ──".dimmed());
+        println!(
+            "{} {} {} {}",
+            "  rewrites:".dimmed(),
+            format!("{} rules, {} firings over {} iters", audit.num_rules, audit.applications, audit.iterations).bold(),
+            "stop:".dimmed(),
+            audit.stop_reason.yellow(),
+        );
+        println!(
+            "{} {} {}",
+            "  before saturation:".dimmed(),
+            format!("{} enodes, {} eclasses", audit.nodes_before, audit.classes_before).bold(),
+            format!("({} distinct Root classes)", audit.root_classes_before).dimmed(),
+        );
+        println!(
+            "{} {} {}",
+            "  after saturation: ".dimmed(),
+            format!("{} enodes, {} eclasses", audit.nodes_after, audit.classes_after).bold(),
+            format!("({} distinct Root classes)", audit.root_classes_after).dimmed(),
+        );
+        // The pre-saturation distinct-Root-class count must equal the number of
+        // distinct patterns inserted; flag loudly if they disagree.
+        let agree = audit.root_classes_before == audit.unique_inserted;
+        println!(
+            "{} {} vs {} Root classes {}",
+            "  inserted vs Root classes:".dimmed(),
+            format!("{} unique inserts (of {} total)", audit.unique_inserted, audit.total_inserted).bold(),
+            audit.root_classes_before,
+            if agree { "✓ match".green().to_string() } else { "✗ MISMATCH".red().bold().to_string() },
+        );
+    }
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());

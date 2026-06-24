@@ -74,6 +74,11 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// dominates `frozen`. This is what `map`'s subset domination would catch if
     /// it never overwrote, so `full_dom_hits >= hits`.
     pub full_dom_hits: usize,
+    /// Total top-level terms inserted into `seen_egraph` (one `add_expr` per
+    /// [`Self::check_and_insert`] call). `inserted - egraph_hits` is the number
+    /// of *distinct* `(syntax, frozen)` terms, which the end-of-run audit checks
+    /// against the count of `Root`-headed terms the egraph actually represents.
+    pub inserted: usize,
 }
 
 /// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
@@ -88,17 +93,10 @@ fn frozen_subset(a: &[bool], b: &[bool]) -> bool {
 /// conversion, then functor-maps each node's leaf-op slot via
 /// `LanguageFamily::map_discriminant` (structural variants pass through; only
 /// the leaf op is rewritten), preserving children and node order.
-fn pattern_to_frozen_recexpr<F: LanguageFamily, O: StitchOp>(
-    pattern: &Pattern<F, O>,
-    frozen: &[bool],
-) -> RecExpr<F::Apply<OpWithFrozenVar<O>>> {
+fn pattern_to_frozen_recexpr<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, frozen: &[bool]) -> RecExpr<F::Apply<OpWithFrozenVar<O>>> {
     // The canonical invariant numbers `?#k` as `egg::Var::from(k)`, so build the
     // frozen set keyed by that same `Var` rather than recovering `k` per leaf.
-    let frozen_vars: FxHashSet<egg::Var> = frozen
-        .iter()
-        .enumerate()
-        .filter_map(|(k, &f)| f.then(|| egg::Var::from(k as u32)))
-        .collect();
+    let frozen_vars: FxHashSet<egg::Var> = frozen.iter().enumerate().filter_map(|(k, &f)| f.then(|| egg::Var::from(k as u32))).collect();
     let src: RecExpr<F::Apply<OpWithVar<O>>> = pattern.pattern.clone().into();
     let src_nodes: Vec<F::Apply<OpWithVar<O>>> = src.into();
     let mut nodes: Vec<F::Apply<OpWithFrozenVar<O>>> = src_nodes
@@ -131,6 +129,7 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
             time: Duration::ZERO,
             egraph_hits: 0,
             full_dom_hits: 0,
+            inserted: 0,
         }
     }
 }
@@ -168,6 +167,7 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         let recexpr = pattern_to_frozen_recexpr(&pattern, &frozen);
         let egraph_skip = self.seen_egraph.lookup_expr(&recexpr).is_some();
         self.seen_egraph.add_expr(&recexpr);
+        self.inserted += 1;
         if egraph_skip {
             self.egraph_hits += 1;
         }
@@ -217,6 +217,103 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         }
         map_skip
     }
+
+    /// End-of-run audit of the shadow seen-egraph (pure stats — nothing the
+    /// search reads). Records enodes, eclasses, and the number of distinct
+    /// e-classes the inserted top-level terms occupy (see
+    /// [`Self::distinct_root_classes`]), then runs `rules` to saturation,
+    /// rebuilds, and re-records. `iter_limit`/`node_limit` should be high so
+    /// saturation (not a limit) is what stops the run; the returned
+    /// `stop_reason`/`applications` report whether that happened and how many
+    /// firings occurred.
+    ///
+    /// `rules` are the program-language DSRs lifted to the frozen-var language
+    /// (see [`crate::best_first`]); `SimpleScheduler` fires every match each
+    /// iteration (true saturation semantics, no backoff throttling).
+    ///
+    /// Before rewriting, `root_classes_before` equals the number of distinct
+    /// `(syntax, frozen)` patterns inserted (`inserted - egraph_hits`): the
+    /// egraph is a pure hash-cons, so each distinct insert is its own class. The
+    /// rewrites merge classes the DSRs prove equivalent, so `root_classes_after`
+    /// drops by exactly the number of inserted terms that collapse together.
+    pub fn audit_seen_egraph(&mut self, rules: &[egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>], iter_limit: usize, node_limit: usize) -> SeenEgraphAudit {
+        let unique_inserted = self.inserted - self.egraph_hits;
+        let nodes_before = self.seen_egraph.total_number_of_nodes();
+        let classes_before = self.seen_egraph.number_of_classes();
+        let root_classes_before = self.distinct_root_classes();
+
+        let egraph = std::mem::replace(&mut self.seen_egraph, egg::EGraph::new(()));
+        let runner = egg::Runner::default()
+            .with_egraph(egraph)
+            .with_node_limit(node_limit)
+            .with_iter_limit(iter_limit)
+            .with_time_limit(Duration::from_secs(60 * 60 * 24))
+            .with_scheduler(egg::SimpleScheduler)
+            .run(rules);
+        let iterations = runner.iterations.len();
+        // `applied` is keyed per rule per iteration, so sum it for total firings.
+        let applications: usize = runner.iterations.iter().map(|it| it.applied.values().sum::<usize>()).sum();
+        let stop_reason = format!("{:?}", runner.stop_reason);
+        self.seen_egraph = runner.egraph;
+        self.seen_egraph.rebuild();
+
+        let nodes_after = self.seen_egraph.total_number_of_nodes();
+        let classes_after = self.seen_egraph.number_of_classes();
+        let root_classes_after = self.distinct_root_classes();
+
+        SeenEgraphAudit {
+            unique_inserted,
+            total_inserted: self.inserted,
+            num_rules: rules.len(),
+            iterations,
+            applications,
+            stop_reason,
+            nodes_before,
+            classes_before,
+            root_classes_before,
+            nodes_after,
+            classes_after,
+            root_classes_after,
+        }
+    }
+
+    /// Number of distinct e-classes the inserted top-level terms currently
+    /// occupy. `dom_map` retains every distinct `(pattern, frozen)` ever
+    /// inserted, so re-derive each one's `Root`-wrapped frozen-var term, look up
+    /// its canonical e-class id (asserting it's present — it *was* inserted),
+    /// and count the distinct ids. Before rewriting this equals `unique_inserted`
+    /// (pure hash-cons); after, it drops by however many inserted terms the
+    /// rewrites proved equivalent.
+    fn distinct_root_classes(&self) -> usize {
+        let mut classes: FxHashSet<Id> = FxHashSet::default();
+        for (pattern, masks) in &self.dom_map {
+            for mask in masks {
+                let recexpr = pattern_to_frozen_recexpr(pattern, mask);
+                let id = self.seen_egraph.lookup_expr(&recexpr).expect("every inserted root term must be present in the seen-egraph");
+                classes.insert(id);
+            }
+        }
+        classes.len()
+    }
+}
+
+/// Stats produced by [`SeenTracker::audit_seen_egraph`], split before/after the
+/// saturation+rebuild pass. `root_classes_*` is the number of distinct e-classes
+/// the inserted top-level terms occupy — finite even when the rewrites make each
+/// class represent infinitely many terms.
+pub struct SeenEgraphAudit {
+    pub unique_inserted: usize,
+    pub total_inserted: usize,
+    pub num_rules: usize,
+    pub iterations: usize,
+    pub applications: usize,
+    pub stop_reason: String,
+    pub nodes_before: usize,
+    pub classes_before: usize,
+    pub root_classes_before: usize,
+    pub nodes_after: usize,
+    pub classes_after: usize,
+    pub root_classes_after: usize,
 }
 
 /// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
