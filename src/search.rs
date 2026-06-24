@@ -95,6 +95,11 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     node_limit: usize,
     /// Whether to saturate + rebuild `seen_egraph` after each genuine insert.
     saturate_each: bool,
+    /// Whether [`Self::check_and_insert`] returns the egraph-membership verdict
+    /// (skip iff the `Root`-wrapped term is already present) instead of the
+    /// `map`'s subset-domination verdict. Both are always computed; this only
+    /// selects which one drives the search's dedup.
+    egraph_decides: bool,
     /// Wall-clock spent in per-insert seen-egraph saturation (separate from
     /// `time`, which is the map/lookup bookkeeping).
     pub egraph_time: Duration,
@@ -153,6 +158,7 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
             iter_limit: 0,
             node_limit: 0,
             saturate_each: false,
+            egraph_decides: false,
             egraph_time: Duration::ZERO,
         }
     }
@@ -162,13 +168,15 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     /// Build a seen-tracker. `rules` are the lifted seen-egraph DSRs (see
     /// [`crate::best_first`]); when `saturate_each` is set, they're run to
     /// saturation after each genuine insert under the given limits so the egraph
-    /// side dedups modulo DSR-equivalence.
-    pub fn new(rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>, iter_limit: usize, node_limit: usize, saturate_each: bool) -> Self {
+    /// side dedups modulo DSR-equivalence. `egraph_decides` makes that egraph
+    /// membership the skip verdict the search acts on (vs the `map`).
+    pub fn new(rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>, iter_limit: usize, node_limit: usize, saturate_each: bool, egraph_decides: bool) -> Self {
         Self {
             rules,
             iter_limit,
             node_limit,
             saturate_each,
+            egraph_decides,
             ..Default::default()
         }
     }
@@ -188,15 +196,20 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     pub fn saturate_each_on(&self) -> bool {
         self.saturate_each
     }
-    /// Records `pattern` at `frozen` if this is the first visit or a
-    /// not-dominated one; returns `true` (skip) if a recorded visit's frozen
-    /// set is a subset of `frozen` — the prior visit was at least as flexible,
-    /// so all of this visit's reachable successors are already reachable from
-    /// it.
-    ///
-    /// The `map` result drives the search and is unchanged. In parallel we run
-    /// the egraph-backed and exact-match seen-sets, tallying each side's total
-    /// hits so a POC run can compare their dedup power against `map`.
+    /// Whether egraph membership (vs the `map`) is the skip verdict the search
+    /// acts on.
+    pub fn egraph_decides_on(&self) -> bool {
+        self.egraph_decides
+    }
+    /// Decides whether this `(pattern, frozen)` visit is a repeat to skip, and
+    /// records it. Both seen-sets below are always maintained and tallied for
+    /// comparison; `egraph_decides` selects which verdict the caller acts on:
+    /// - egraph side (default): skip iff the `Root`-wrapped frozen-var term is
+    ///   already in `seen_egraph` — an earlier visit's term, modulo
+    ///   DSR-equivalence when `saturate_each` is on.
+    /// - map side: skip iff a recorded visit's frozen set is a subset of
+    ///   `frozen` (subset domination — the prior visit was at least as flexible,
+    ///   so all this visit's reachable successors are already reachable).
     pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen: Vec<bool>) -> bool {
         let t = Instant::now();
 
@@ -263,7 +276,11 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         if map_skip {
             self.hits += 1;
         }
-        map_skip
+        // Select the verdict the search acts on. Both sides are tallied above as
+        // shadows; this just picks which one drives dedup. `egraph_decides`
+        // (default) skips on egraph membership (modulo DSR-equivalence when
+        // `saturate_each`); otherwise the `map`'s subset-domination decides.
+        if self.egraph_decides { egraph_skip } else { map_skip }
     }
 
     /// Run the stored DSRs to saturation on `seen_egraph` and rebuild it in
