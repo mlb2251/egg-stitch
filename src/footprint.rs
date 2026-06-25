@@ -77,6 +77,8 @@ pub struct FootprintScratch {
     /// Scratch for canonical column ordering.
     order: Vec<usize>,
     col_colors: Vec<u64>,
+    /// Packed row keys for the canonical-matrix hash (see [`factor_hash`]).
+    keys: Vec<u128>,
 }
 
 /// The permutation-invariant footprint of a candidate's match set.
@@ -132,7 +134,7 @@ fn compute(matches: &[MatchAtEClass], arity: usize, s: &mut FootprintScratch) ->
     for m in matches {
         s.fh.clear();
         for f in &m.factors {
-            s.fh.push(factor_hash(f, &s.colors, &mut s.order, &mut s.col_colors, &mut capped));
+            s.fh.push(factor_hash(f, &s.colors, &mut s.order, &mut s.col_colors, &mut s.keys, &mut capped));
         }
         s.fh.sort_unstable();
         s.root_sigs.push(h64(0x2007, &(id_u32(m.root_eclass), &s.fh)));
@@ -169,11 +171,16 @@ fn column_hash(f: &Factor, ci: usize, root: u32, col: &mut Vec<u32>) -> u64 {
 
 /// Canonical 64-bit hash of one factor (pass 2): invariant to permuting columns
 /// within equal-colour groups. Columns are ordered by colour; equal colours form
-/// tie-groups whose within-group permutations are brute-forced to the
-/// lexicographically-smallest sorted-row matrix. Sets `*capped` and falls back to
-/// the plain colour order if a tie-group exceeds [`TIE_PERM_CAP`]. All paths hash
-/// the same `u32` cell encoding so they agree on identical canonical matrices.
-fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &mut Vec<u64>, capped: &mut bool) -> u64 {
+/// tie-groups whose within-group permutations are brute-forced to the canonical
+/// (smallest) sorted row-hash list. Sets `*capped` and falls back to the plain
+/// colour order if a tie-group exceeds [`TIE_PERM_CAP`].
+///
+/// The canonical matrix is encoded by hashing each reordered row to a `u128`,
+/// sorting those, and hashing the list — order-invariant over rows and far
+/// cheaper than allocating and lex-sorting a `Vec<Vec<u32>>` (the sort is over
+/// scalars). 128-bit row hashes make a row-level collision (which would merge two
+/// distinct matrices) negligible. Works for any column count.
+fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &mut Vec<u64>, keys: &mut Vec<u128>, capped: &mut bool) -> u64 {
     let n = f.slots.len();
     order.clear();
     order.extend(0..n);
@@ -185,58 +192,47 @@ fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &
     0xFAC2u64.hash(&mut h);
     col_colors.hash(&mut h);
 
-    let identity = order.iter().enumerate().all(|(i, &p)| i == p);
     let has_tie = col_colors.windows(2).any(|w| w[0] == w[1]);
-
     if !has_tie {
-        // Single canonical column order (`order`); rows are pre-sorted only when
-        // that order is the identity.
-        if identity {
-            hash_rows_id(&mut h, &f.rows);
-        } else {
-            hash_rows_u32(&mut h, &reorder_sorted(f, order));
-        }
-        return h.finish();
-    }
-    // Tie-group(s): pick the within-group permutation giving the lexicographically
-    // smallest sorted matrix.
-    match group_orderings(order, col_colors) {
-        Some(perms) => {
-            let best = perms.iter().map(|p| reorder_sorted(f, p)).min().expect("≥1 ordering");
-            hash_rows_u32(&mut h, &best);
-        }
-        None => {
+        // Single canonical column order; hash + sort its rows.
+        row_hashes(keys, f, order);
+        keys.hash(&mut h);
+    } else {
+        // Tie-group(s): pick the permutation with the smallest sorted row-hash list.
+        let orderings = group_orderings(order, col_colors).unwrap_or_else(|| {
             *capped = true;
-            hash_rows_u32(&mut h, &reorder_sorted(f, order));
+            vec![order.to_vec()]
+        });
+        let mut best: Option<Vec<u128>> = None;
+        for p in orderings {
+            row_hashes(keys, f, &p);
+            if best.as_ref().is_none_or(|b| keys.as_slice() < b.as_slice()) {
+                best = Some(keys.clone());
+            }
         }
+        best.expect("≥1 ordering").hash(&mut h);
     }
     h.finish()
 }
 
-/// Streams `Id` rows into `h` as `u32` cells (rows must already be canonical).
-fn hash_rows_id(h: &mut FxHasher, rows: &[Vec<egg::Id>]) {
-    for r in rows {
-        for &v in r {
-            id_u32(v).hash(h);
+/// Hashes each row of `f` (columns projected through `perm`) to a `u128` into
+/// `keys`, then sorts — an order-invariant fingerprint of the canonical matrix.
+/// The two independently-salted `FxHasher`s mirror [`h128`].
+fn row_hashes(keys: &mut Vec<u128>, f: &Factor, perm: &[usize]) {
+    keys.clear();
+    keys.extend(f.rows.iter().map(|r| {
+        let mut h1 = FxHasher::default();
+        let mut h2 = FxHasher::default();
+        0x9E37_79B9_7F4A_7C15u64.hash(&mut h1);
+        0x85EB_CA6B_C2B2_AE35u64.hash(&mut h2);
+        for &p in perm {
+            let v = id_u32(r[p]);
+            v.hash(&mut h1);
+            v.hash(&mut h2);
         }
-    }
-}
-
-/// Streams `u32` rows into `h` (same encoding as [`hash_rows_id`]).
-fn hash_rows_u32(h: &mut FxHasher, rows: &[Vec<u32>]) {
-    for r in rows {
-        for &v in r {
-            v.hash(h);
-        }
-    }
-}
-
-/// Rows of `f` projected through column order `perm`, then sorted — the canonical
-/// matrix for that column order.
-fn reorder_sorted(f: &Factor, perm: &[usize]) -> Vec<Vec<u32>> {
-    let mut rows: Vec<Vec<u32>> = f.rows.iter().map(|r| perm.iter().map(|&p| id_u32(r[p])).collect()).collect();
-    rows.sort_unstable();
-    rows
+        ((h1.finish() as u128) << 64) | h2.finish() as u128
+    }));
+    keys.sort_unstable();
 }
 
 /// All column orderings reachable by permuting within each equal-colour run of
