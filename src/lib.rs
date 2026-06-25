@@ -6,6 +6,7 @@ pub mod debug_log;
 pub mod egraph_util;
 pub mod factor;
 pub mod follow;
+pub mod footprint;
 pub mod io;
 pub mod lang;
 pub mod logging;
@@ -162,6 +163,15 @@ pub struct Args {
     /// expansions but cheaper per-expansion overall).
     #[arg(long = "opt-seen", default_value_t = false)]
     pub opt_seen: bool,
+
+    /// Match-footprint dedup: prune a successor when another candidate with the
+    /// same *permutation-invariant match footprint* was already seen at an
+    /// equal-or-more-flexible frozen set. Treats patterns that match the same
+    /// e-classes binding the same argument multisets — e.g. `(+ ?#0 (* ?#1 2))`
+    /// and `(+ (* ?#0 2) ?#1)` over a commutative e-graph — as one. Computed
+    /// straight off the factored match set (see `footprint`). Off by default.
+    #[arg(long = "opt-match-footprint", default_value_t = false)]
+    pub opt_match_footprint: bool,
 
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
