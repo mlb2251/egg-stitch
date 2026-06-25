@@ -258,7 +258,7 @@ impl FootprintTracker {
         if fp.capped {
             self.capped += 1;
         }
-        let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, &b)| b).map(|(v, _)| fp.colors[v]).collect();
+        let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| fp.colors[v]).collect();
         fc.sort_unstable();
         let skip = match self.map.get(&fp.sig) {
             Some(existing) if submultiset(existing, &fc) => true,

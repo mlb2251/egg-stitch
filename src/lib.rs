@@ -164,13 +164,14 @@ pub struct Args {
     #[arg(long = "opt-seen", default_value_t = false)]
     pub opt_seen: bool,
 
-    /// Match-footprint dedup: prune a successor when another candidate with the
-    /// same *permutation-invariant match footprint* was already seen at an
+    /// Disable match-footprint dedup (on by default).
+    /// Footprint dedup prunes a successor when another candidate with the same
+    /// *permutation-invariant match footprint* was already seen at an
     /// equal-or-more-flexible frozen set. Treats patterns that match the same
     /// e-classes binding the same argument multisets — e.g. `(+ ?#0 (* ?#1 2))`
     /// and `(+ (* ?#0 2) ?#1)` over a commutative e-graph — as one. Computed
-    /// straight off the factored match set (see `footprint`). Off by default.
-    #[arg(long = "opt-match-footprint", default_value_t = false)]
+    /// straight off the factored match set (see `footprint`).
+    #[arg(long = "no-opt-match-footprint", action = clap::ArgAction::SetFalse)]
     pub opt_match_footprint: bool,
 
     /// Disable dominance pruning for the reuse branch (on by default).
