@@ -141,35 +141,35 @@ def dev():
     #     max_arity=2,
     # )
 
-def nuts_bolts_enum():
-    """Run nuts-bolts in best-first ("enum") mode via the low-level egg_stitch()
-    escape hatch, replicating exactly the command bench_pr.py builds for that
-    cell (OursBf(max_forced_expansion=12) on the with-DSRs condition).
+# def nuts_bolts_enum():
+#     """Run nuts-bolts in best-first ("enum") mode via the low-level egg_stitch()
+#     escape hatch, replicating exactly the command bench_pr.py builds for that
+#     cell (OursBf(max_forced_expansion=12) on the with-DSRs condition).
 
-    The flags below mirror expts.run_models.ours._run for this cell:
-      - op-children language  (nuts-bolts is cogsci → "no-apps" weighting)
-      - max_arity 2           (expts.bench.MAX_ARITY)
-      - num_abstractions 1    (rounds=1)
-      - max_forced_expansion 12, no num_steps  (BF_RUNNERS["nuts-bolts"])
-      - DSRs live via the drawings.nuts-bolts rewrites
-    The seen set (canonical-pattern dedup) is on by default; pass
-    ``no_opt_seen=True`` to disable it (the benchmark runs without it).
-    """
-    egg_stitch(
-        "data/domains/cogsci/nuts-bolts.json",
-        rewrites="data/domains/cogsci/nuts-bolts.rewrites",
-        output="nuts_bolts_enum.json",
-        search="best-first",
-        language="op-children",
-        max_arity=2,
-        num_abstractions=1,
-        max_forced_expansion=1000,
-        no_opt_useless_inline=True,
-        no_seen_egraph_saturate_dynamic=False,
-        seen_egraph_saturate_every=100,
-        # verbose=True,
-        # no_freeze_rule=True,
-    )
+#     The flags below mirror expts.run_models.ours._run for this cell:
+#       - op-children language  (nuts-bolts is cogsci → "no-apps" weighting)
+#       - max_arity 2           (expts.bench.MAX_ARITY)
+#       - num_abstractions 1    (rounds=1)
+#       - max_forced_expansion 12, no num_steps  (BF_RUNNERS["nuts-bolts"])
+#       - DSRs live via the drawings.nuts-bolts rewrites
+#     The seen set (canonical-pattern dedup) is on by default; pass
+#     ``no_opt_seen=True`` to disable it (the benchmark runs without it).
+#     """
+#     egg_stitch(
+#         "data/domains/cogsci/nuts-bolts.json",
+#         rewrites="data/domains/cogsci/nuts-bolts.rewrites",
+#         output="nuts_bolts_enum.json",
+#         search="best-first",
+#         language="op-children",
+#         max_arity=2,
+#         num_abstractions=1,
+#         max_forced_expansion=1000,
+#         no_opt_useless_inline=True,
+#         no_seen_egraph_saturate_dynamic=False,
+#         seen_egraph_saturate_every=100,
+#         # verbose=True,
+#         # no_freeze_rule=True,
+#     )
 
 
 # ── Table 1 & 2 BFS ("enum") column reproduced via the egg_stitch() escape hatch ──
