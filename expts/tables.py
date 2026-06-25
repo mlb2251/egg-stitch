@@ -256,17 +256,16 @@ TABLE5_SMC_POINT = 1_000
 
 def _table5_runners() -> tuple[tuple[str, object], ...]:
     """Table 3's roster (Enum/SMC sweeps + babble) plus the dsrs-only-at-start
-    baseline, every runner capped at :data:`TABLE5_TIMEOUT` and
-    :data:`MEM_LIMIT_BYTES`."""
+    and no-rules Enum (BFS/NR) baselines, every runner capped at
+    :data:`TABLE5_TIMEOUT` and :data:`MEM_LIMIT_BYTES`."""
+    capped = dict(timeout=TABLE5_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
     return (
         _sweep_runners(timeout=TABLE5_TIMEOUT, bfs_steps=TABLE5_BFS_SWEEP, mem_limit=MEM_LIMIT_BYTES)
-        + (("babble", Babble(timeout=TABLE5_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)),)
+        + (("babble", Babble(**capped)),)
         + (("enum-dsrs-at-start", OursBf(
-            num_steps=BASELINE_BFS_STEPS,
-            only_use_dsrs_at_start=True,
-            timeout=TABLE5_TIMEOUT,
-            mem_limit=MEM_LIMIT_BYTES,
-        )),)
+            num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **capped)),)
+        + (("enum-baseline", OursBf(
+            num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **capped)),)
     )
 
 
