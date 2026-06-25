@@ -176,7 +176,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             None => vec![],
         };
         // High limits so saturation, not a cap, stops the run where the rules permit.
-        SeenTracker::new(rules, args.iter_limit.max(1000), args.node_limit, args.seen_egraph_saturate, args.seen_egraph_saturate_every, args.seen_egraph_decides)
+        SeenTracker::new(rules, args.iter_limit.max(1000), args.node_limit, args.seen_egraph_saturate, args.seen_egraph_saturate_every, args.seen_egraph_decides, args.seen_egraph_saturate_dynamic)
     });
     let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
 
@@ -413,7 +413,11 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     );
     if let Some(s) = seen.as_mut() {
         let saturate_each = s.saturate_each_on();
-        let every = args.seen_egraph_saturate_every.max(1);
+        let every = if s.saturate_dynamic_on() {
+            format!("dynamic (now {}, {} effect / {} no-effect flushes)", s.saturate_every(), s.dynamic_effects, s.dynamic_noeffects)
+        } else {
+            args.seen_egraph_saturate_every.max(1).to_string()
+        };
         let decider = if s.egraph_decides_on() { "egraph" } else { "map" };
         let per_insert_secs = s.egraph_time.as_secs_f64();
         let sat_calls = s.saturate_calls;

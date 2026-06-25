@@ -193,6 +193,19 @@ pub struct Args {
     #[arg(long = "seen-egraph-saturate-every", default_value_t = 1)]
     pub seen_egraph_saturate_every: usize,
 
+    /// Dynamically tune the saturate-every batch instead of fixing it (on by
+    /// default). Start at every=1 and after each flush adjust: halve (min 1) if
+    /// the saturation had an *effect* — a freshly inserted `Root` term merged
+    /// with another, i.e. its single-enode class became multinode, the very
+    /// pruning the seen-egraph buys — else double it. So while saturation keeps
+    /// deduping states we saturate often, and once it stops paying off we back
+    /// off geometrically. Overrides `--seen-egraph-saturate-every` (used only as
+    /// the starting value). Only has effect with `--opt-seen` and
+    /// `--seen-egraph-saturate`. Passing `--no-seen-egraph-saturate-dynamic`
+    /// restores the fixed batch size from `--seen-egraph-saturate-every`.
+    #[arg(long = "no-seen-egraph-saturate-dynamic", action = clap::ArgAction::SetFalse)]
+    pub seen_egraph_saturate_dynamic: bool,
+
     /// Use seen-egraph membership as the skip decision in the best-first seen
     /// set (on by default), instead of the old `map`'s subset-domination rule.
     /// A successor is skipped iff its `Root`-wrapped term is already in the

@@ -154,16 +154,18 @@ def nuts_bolts_enum():
     doesn't enable the seen set); flip to True to turn on canonical-pattern dedup.
     """
     egg_stitch(
-        "data/domains/cogsci/nuts-bolts-abbv.json",
+        "data/domains/cogsci/nuts-bolts.json",
         rewrites="data/domains/cogsci/nuts-bolts.rewrites",
         output="nuts_bolts_enum.json",
         search="best-first",
         language="op-children",
         max_arity=2,
         num_abstractions=1,
-        max_forced_expansion=40,
+        max_forced_expansion=1000,
         opt_seen=True,
         no_opt_useless_inline=True,
+        no_seen_egraph_saturate_dynamic=False,
+        seen_egraph_saturate_every=100,
         # verbose=True,
         # no_freeze_rule=True,
     )
