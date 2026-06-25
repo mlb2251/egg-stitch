@@ -40,7 +40,7 @@ def current_folder() -> str:
     if _current_folder is None:
         _current_folder = _make_timestamp()
         (RESULTS_DIR / _current_folder).mkdir(parents=True, exist_ok=True)
-        print(f"[expts] results folder: {_current_folder}", flush=True)
+        print(f"[expts] results folder: {RESULTS_DIR / _current_folder}", flush=True)
     return _current_folder
 
 
@@ -63,7 +63,7 @@ def set_folder(name: str) -> str:
     global _current_folder
     _current_folder = name
     (RESULTS_DIR / name).mkdir(parents=True, exist_ok=True)
-    print(f"[expts] results folder: {name}", flush=True)
+    print(f"[expts] results folder: {RESULTS_DIR / name}", flush=True)
     return name
 
 
