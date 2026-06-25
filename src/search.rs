@@ -99,10 +99,21 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     saturate_each: bool,
     /// Saturate only once every `saturate_every` genuine inserts (1 = every
     /// insert). Batches saturation to cut its cost at the price of some dedup
-    /// precision between flushes; see `--seen-egraph-saturate-every`.
+    /// precision between flushes; see `--seen-egraph-saturate-every`. In dynamic
+    /// mode this is the *current* batch size, retuned after every flush.
     saturate_every: usize,
     /// Genuine inserts accumulated since the last saturation (the batch counter).
     pending_inserts: usize,
+    /// Auto-tune `saturate_every` after every flush (see
+    /// `--seen-egraph-saturate-dynamic`): halve on effect, double on none.
+    saturate_dynamic: bool,
+    /// Root e-class ids of the genuine inserts since the last flush. Each is a
+    /// single-enode class at insertion; after a flush, any that became multinode
+    /// merged with another `Root` term — the effect signal that drives tuning.
+    pending_root_ids: Vec<Id>,
+    /// Dynamic-tuning tallies: flushes that did vs didn't dedup a fresh Root term.
+    pub dynamic_effects: usize,
+    pub dynamic_noeffects: usize,
     /// Whether [`Self::check_and_insert`] returns the egraph-membership verdict
     /// (skip iff the `Root`-wrapped term is already present) instead of the
     /// `map`'s subset-domination verdict. Both are always computed; this only
@@ -193,6 +204,10 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
             saturate_each: false,
             saturate_every: 1,
             pending_inserts: 0,
+            saturate_dynamic: false,
+            pending_root_ids: Vec::new(),
+            dynamic_effects: 0,
+            dynamic_noeffects: 0,
             egraph_decides: false,
             egraph_time: Duration::ZERO,
             saturate_calls: 0,
@@ -210,7 +225,10 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     /// saturation every `saturate_every` genuine inserts under the given limits so
     /// the egraph side dedups modulo DSR-equivalence. `egraph_decides` makes that
     /// egraph membership the skip verdict the search acts on (vs the `map`).
-    pub fn new(rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>, iter_limit: usize, node_limit: usize, saturate_each: bool, saturate_every: usize, egraph_decides: bool) -> Self {
+    /// `saturate_dynamic` retunes `saturate_every` after each flush (which then
+    /// acts only as the starting batch size); see
+    /// [`Self::adjust_saturate_every`].
+    pub fn new(rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>, iter_limit: usize, node_limit: usize, saturate_each: bool, saturate_every: usize, egraph_decides: bool, saturate_dynamic: bool) -> Self {
         Self {
             rules,
             iter_limit,
@@ -218,6 +236,7 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
             saturate_each,
             saturate_every: saturate_every.max(1),
             egraph_decides,
+            saturate_dynamic,
             ..Default::default()
         }
     }
@@ -236,6 +255,14 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     /// Whether per-insert saturation of the seen-egraph is enabled.
     pub fn saturate_each_on(&self) -> bool {
         self.saturate_each
+    }
+    /// Whether the saturate-every batch is being auto-tuned.
+    pub fn saturate_dynamic_on(&self) -> bool {
+        self.saturate_dynamic
+    }
+    /// The current saturate-every batch size (the live value in dynamic mode).
+    pub fn saturate_every(&self) -> usize {
+        self.saturate_every
     }
     /// Whether egraph membership (vs the `map`) is the skip verdict the search
     /// acts on.
@@ -271,9 +298,15 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
             // the insert bookkeeping.
             self.egraph_hits += 1;
         } else {
-            self.seen_egraph.add_expr(&recexpr);
+            let root_id = self.seen_egraph.add_expr(&recexpr);
             self.inserted += 1;
             self.pending_inserts += 1;
+            if self.saturate_dynamic {
+                // The whole term was absent (`egraph_skip` false), so its `Root`
+                // enode is fresh: a single-enode class until saturation merges it.
+                assert_eq!(self.seen_egraph[root_id].len(), 1, "freshly inserted Root term must be a single-enode class");
+                self.pending_root_ids.push(root_id);
+            }
             if self.saturate_each && self.pending_inserts >= self.saturate_every {
                 // Flush the batch: the new terms' fresh nodes may unlock new
                 // rewrite matches, so re-saturate so later lookups dedup modulo
@@ -286,6 +319,9 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
                 self.egraph_apply_time += stats.apply;
                 self.egraph_rebuild_time += stats.rebuild;
                 self.saturate_calls += 1;
+                if self.saturate_dynamic {
+                    self.adjust_saturate_every();
+                }
                 self.pending_inserts = 0;
             }
         }
@@ -376,6 +412,26 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
             apply,
             rebuild,
         }
+    }
+
+    /// Retune `saturate_every` after a flush (dynamic mode). The flush had an
+    /// *effect* iff some Root term inserted this batch became multinode — its
+    /// single-enode class (asserted at insert) merged with another `Root` term,
+    /// which is exactly the cross-state dedup the seen-egraph exists to find.
+    /// Since the rest of the egraph was already saturated, any new merge must
+    /// involve a fresh node, so it suffices to inspect this batch's roots. Halve
+    /// the batch (min 1) on effect to saturate more eagerly while it keeps
+    /// paying; double it on none to back off. Clears the batch's root ids.
+    fn adjust_saturate_every(&mut self) {
+        let effect = self.pending_root_ids.iter().any(|&id| self.seen_egraph[id].len() > 1);
+        if effect {
+            self.saturate_every = (self.saturate_every / 2).max(1);
+            self.dynamic_effects += 1;
+        } else {
+            self.saturate_every = self.saturate_every.saturating_mul(2);
+            self.dynamic_noeffects += 1;
+        }
+        self.pending_root_ids.clear();
     }
 
     /// End-of-run audit of the shadow seen-egraph (pure stats — nothing the
