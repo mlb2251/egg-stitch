@@ -711,9 +711,10 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
 )
 
 # table6: cogsci drawing domains with our algebraic drawing DSRs. Same shape as
-# table5/7 -- the two ours sweeps (live DSRs) and the dsrs-only-at-start baseline
-# -- but no fourth method: babble can't parse the constant_folding/matmul rules,
-# so it has no column here. The live-vs-at-start contrast is BFS vs BFS/MT.
+# table5/7 -- the two ours sweeps (live DSRs), the dsrs-only-at-start baseline,
+# and the no-rules Enum baseline (BFS/NR) -- but no babble: it can't parse the
+# constant_folding/matmul rules, so it has no column here. The live-vs-at-start
+# contrast is BFS vs BFS/MT; BFS/NR isolates the rules' contribution.
 TABLE6_SPEC = FamilySpec.estitch_roster(
     title="Drawing-Domain Compression (Algebraic DSRs)",
     fig_subdir="table6",
@@ -727,6 +728,7 @@ TABLE6_SPEC = FamilySpec.estitch_roster(
     enum_point=TABLE_BFS_STEPS,
     enum_sweep=BFS_STEP_SWEEP,
     smc_sweep=SMC_PARTICLE_SWEEP,
+    extras=[("enum-baseline", "BFS/NR", "E-Stitch: BFS (no rules)")],
 )
 
 

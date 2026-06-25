@@ -329,9 +329,10 @@ TABLE6_TIMEOUT = 300.0  # seconds, per tool invocation
 
 
 def _table6_runners() -> tuple[tuple[str, object], ...]:
-    """Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start baseline, every
-    runner at arity 4 with the per-factor match-set cap + iter-limit the
-    non-confluent algebra needs (no babble — it can't parse the rules)."""
+    """Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start and no-rules Enum
+    baselines, every runner at arity 4 with the per-factor match-set cap +
+    iter-limit the non-confluent algebra needs (no babble — it can't parse the
+    rules)."""
     common = dict(
         max_arity=TABLE6_MAX_ARITY,
         iter_limit=TABLE6_ITER_LIMIT,
@@ -343,14 +344,15 @@ def _table6_runners() -> tuple[tuple[str, object], ...]:
     return (
         _sweep_runners(**common)
         + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
+        + (("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **common)),)
     )
 
 
 def table6() -> Path:
     """Run the cogsci drawing domains with the non-confluent affine-algebra DSRs:
-    the table5/7 roster (Enum/SMC sweeps + dsrs-only-at-start baseline, no babble)
-    at arity 4 with the per-factor match-set cap. Demonstrates live > at-start on
-    a non-confluent rule set."""
+    the table5/7 roster (Enum/SMC sweeps + dsrs-only-at-start and no-rules Enum
+    baselines, no babble) at arity 4 with the per-factor match-set cap.
+    Demonstrates live > at-start on a non-confluent rule set."""
     _require_free_memory("table6")
     return _run_table(
         domains=TABLE6_DOMAINS,
