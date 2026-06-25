@@ -173,6 +173,15 @@ pub struct Args {
     #[arg(long = "no-seen-egraph-saturate", action = clap::ArgAction::SetFalse)]
     pub seen_egraph_saturate: bool,
 
+    /// Saturate the seen-egraph only once every N genuine inserts instead of
+    /// after every one (default 1 = every insert). Batching trades dedup
+    /// precision for speed: between saturations the egraph is under-saturated,
+    /// so a DSR-equivalent repeat can be missed and treated as new — never
+    /// unsound (it only explores a redundant state), but the search may expand
+    /// more. Only has effect with `--opt-seen` and `--seen-egraph-saturate`.
+    #[arg(long = "seen-egraph-saturate-every", default_value_t = 1)]
+    pub seen_egraph_saturate_every: usize,
+
     /// Use seen-egraph membership as the skip decision in the best-first seen
     /// set (on by default), instead of the old `map`'s subset-domination rule.
     /// A successor is skipped iff its `Root`-wrapped term is already in the

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan A — Incremental seen-egraph saturation</title>
+<style>
+  :root { --ink:#1b1b1f; --mut:#6b7280; --line:#e5e7eb; --accent:#3056d3; --good:#0a7a35; --warn:#b25e00; --bad:#b00020; --code-bg:#f6f8fa; }
+  * { box-sizing:border-box; }
+  body { margin:0 auto; max-width:880px; padding:40px 24px 120px; color:var(--ink);
+         font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  h1 { font-size:30px; line-height:1.2; margin:0 0 4px; }
+  h2 { font-size:21px; margin:42px 0 10px; padding-top:14px; border-top:2px solid var(--line); }
+  h3 { font-size:16px; margin:24px 0 6px; }
+  .sub { color:var(--mut); margin:0 0 8px; }
+  code, pre { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { background:var(--code-bg); padding:1px 5px; border-radius:4px; font-size:13.5px; }
+  pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:14px 16px;
+        overflow:auto; font-size:13px; line-height:1.55; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:14px; }
+  th, td { border:1px solid var(--line); padding:7px 10px; text-align:right; }
+  th:first-child, td:first-child { text-align:left; }
+  thead th { background:#fafafe; }
+  tr.hi td { background:#eefaf1; font-weight:600; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:20px; vertical-align:middle; }
+  .t-good { background:#e3f6ea; color:var(--good); }
+  .t-warn { background:#fdf0e1; color:var(--warn); }
+  .t-bad  { background:#fce8ec; color:var(--bad); }
+  .callout { border-left:4px solid var(--accent); background:#f5f7ff; padding:10px 16px; border-radius:0 8px 8px 0; margin:16px 0; }
+  .callout.good { border-color:var(--good); background:#f1faf4; }
+  .callout.warn { border-color:var(--warn); background:#fff8f0; }
+  ul, ol { padding-left:22px; }
+  li { margin:4px 0; }
+  .muted { color:var(--mut); }
+  .small { font-size:13px; }
+  .kbd { font-size:12px; color:var(--mut); }
+  .diagram { font-size:12.5px; line-height:1.35; }
+  hr { border:0; border-top:1px solid var(--line); margin:28px 0; }
+</style>
+</head>
+<body>
+
+<h1>Plan&nbsp;A — Incremental seen-egraph saturation</h1>
+<p class="sub">Design note for making per-insert DSR saturation of the best-first seen-egraph cheap.
+Benchmark throughout: <code>nuts_bolts_enum</code> (op-children, 7 scale DSRs, <code>--opt-seen</code>, egraph decides).</p>
+
+<div class="callout">
+<strong>TL;DR.</strong> The cost is <em>not</em> e-matching and <em>not</em> rebuild — it's <strong>rule application</strong>
+(73%), because each genuine insert re-saturates the whole accumulated egraph from scratch and re-applies every
+old match as a no-op. <strong>Batching (Plan B, already shipped) is a 25–47× free win</strong> with zero precision
+loss up to <code>--seen-egraph-saturate-every 64</code> here. Plan A (incremental) is the asymptotic fix:
+touch only the new term's neighbourhood. The hard part is correctly tracking the <em>upward dirty cascade</em>
+that rebuild + congruence produce. Recommend: run with batching now; build A only if eager (every=1) exactness
+is needed cheaply or larger corpora erode the batching window.
+</div>
+
+<h2>1. What we measured</h2>
+
+<h3>Where the time goes inside one saturation (egg's own iteration timers)</h3>
+<p class="small muted">Summed over all per-insert saturations, <code>every=1</code>, SimpleScheduler. egg reports
+<code>search_time</code> / <code>apply_time</code> / <code>rebuild_time</code> per iteration; we fold them up.</p>
+<table>
+<thead><tr><th>Phase</th><th>Time</th><th>Share</th><th>What it is</th></tr></thead>
+<tbody>
+<tr class="hi"><td>apply</td><td>1.53 s</td><td>73%</td><td>instantiate RHS &amp; <code>add</code>+union for <em>every</em> match — mostly congruence no-ops</td></tr>
+<tr><td>search (e-match)</td><td>0.30 s</td><td>15%</td><td>find all LHS matches over all eclasses</td></tr>
+<tr><td>rebuild (congruence)</td><td>0.15 s</td><td>7%</td><td>canonicalize + upward congruence repair</td></tr>
+<tr><td class="muted">runner setup/other</td><td class="muted">~0.12 s</td><td class="muted">5%</td><td class="muted">per-call <code>Runner</code> construction, mem moves</td></tr>
+</tbody>
+</table>
+<p class="callout warn"><strong>Implication for the user's question.</strong> "Should we rebuild less often?" — <strong>No.</strong>
+Rebuild is only 7%. The lever is <em>not re-applying old matches</em>. That's what Plan A and batching both attack.</p>
+
+<h3>Plan B: saturate every N inserts (the sweep)</h3>
+<table>
+<thead><tr><th>every</th><th>expansions</th><th>sat. runs</th><th>sat. time</th><th>total search</th><th>dedup</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>454</td><td>1363</td><td>2.10 s</td><td>2.14 s</td><td>1363→1363 <span class="tag t-good">full</span></td></tr>
+<tr><td>4</td><td>454</td><td>340</td><td>0.47 s</td><td>0.51 s</td><td>1363→1363 <span class="tag t-good">full</span></td></tr>
+<tr><td>16</td><td>454</td><td>85</td><td>0.12 s</td><td>0.16 s</td><td>1363→1363 <span class="tag t-good">full</span></td></tr>
+<tr class="hi"><td>64</td><td>454</td><td>21</td><td>0.045 s</td><td>0.086 s</td><td>1363→1363 <span class="tag t-good">full</span></td></tr>
+<tr><td>100000</td><td>25397</td><td>0</td><td>0.00 s</td><td>2.19 s</td><td>64897→1363 <span class="tag t-bad">none</span></td></tr>
+</tbody>
+</table>
+<p class="small">Same optimum (cost 171, 3.26×) everywhere. Batching to 64 is <strong>~25× faster end-to-end with
+identical search behaviour</strong>; precision only collapses once the window is large enough to stop catching
+DSR-equivalent repeats before they're expanded (somewhere between 64 and 1e5 here).</p>
+
+<h3>Does the scheduler matter? (the user's "is SimpleScheduler dumb" check)</h3>
+<table>
+<thead><tr><th>scheduler</th><th>sat. time</th><th>apply</th><th>iters/run</th><th>saturates?</th></tr></thead>
+<tbody>
+<tr><td>SimpleScheduler</td><td>2.10 s</td><td>1.53 s</td><td>2</td><td><span class="tag t-good">yes</span></td></tr>
+<tr><td>BackoffScheduler (project default)</td><td>2.22 s</td><td>1.50 s</td><td>3</td><td><span class="tag t-good">yes</span></td></tr>
+</tbody>
+</table>
+<p class="small">Backoff is marginally <em>slower</em> (extra ban-then-confirm iteration) and apply still dominates —
+the waste is structural (re-applying everything from scratch), not scheduler-specific. <strong>Keep
+SimpleScheduler.</strong> If we ever do swap schedulers/limits, assert <code>stop_reason == Saturated</code> on
+each call and error otherwise, since a banned/limited run would silently under-dedup.</p>
+
+<h2>2. Root cause</h2>
+<p>Every genuine insert does <code>Runner::default().with_egraph(take(seen_egraph)).run(&rules)</code>: a fresh,
+from-scratch saturation of the <em>entire</em> accumulated egraph. The egraph grows to ~4600 enodes / 3072
+classes, and the scale rules match essentially every <code>T</code>/<code>C</code>/<code>repeat</code>/leaf node,
+so each call re-finds and re-applies ~O(egraph) matches that were already at fixpoint. Cost per insert grows with
+egraph size ⇒ the run is <strong>~O(inserts × egraph_size) ≈ O(n²)</strong>. The flat 1.5&nbsp;ms average hides
+that late saturations are far more expensive than early ones.</p>
+
+<h2>3. Plan A — the idea</h2>
+<p>Keep <em>one persistent, already-saturated</em> seen-egraph. On insert, don't re-saturate globally — only
+propagate rules through the <strong>region the new term disturbs</strong>. After a fixpoint, the only rule matches
+that can newly fire are those whose match touches a newly-added or newly-merged enode; everything else is
+unchanged and already saturated. So we run a local worklist to a fixpoint instead of a global runner.</p>
+
+<pre>seed = classes/enodes created by add_expr(new term)
+dirty = seed
+while dirty not empty:
+    # 1. find only the NEW matches: rules rooted at dirty classes AND at
+    #    their ancestors up to the rule-LHS height (see §4 — matches can be
+    #    rooted above a changed class).
+    matches = []
+    for c in dirty ∪ ancestors(dirty, up to maxLhsHeight):
+        for rw in rules:
+            matches += rw.searcher.search_eclass(egraph, c)   # local e-match
+    # 2. apply only those; record union targets + RHS-introduced enodes
+    changed = apply(matches)            # unions + new enodes
+    # 3. congruence repair; capture everything it touched (see §4)
+    merged = egraph.rebuild_tracking_changes()
+    # 4. re-seed: new enodes, merged classes, and their parents are dirty
+    dirty = (changed.new_enodes ∪ merged ∪ parents(merged)) not already settled
+# egraph is saturated again; membership lookups are exact modulo DSR-equiv</pre>
+
+<h2>4. The dirty cascade — does it propagate to parents? (yes, two ways)</h2>
+<p>This is the crux the plan lives or dies on. There are <strong>two</strong> upward propagation mechanisms, both
+confirmed in egg's source.</p>
+
+<h3>(a) Congruence cascade during <code>rebuild</code></h3>
+<p>When two classes merge, <code>perform_union</code> does
+<code class="small">self.pending.extend(class2.parents.iter().copied())</code>. <code>process_unions</code> then
+re-canonicalizes each parent enode and looks it up in the memo; if a parent becomes congruent to an existing
+enode, <em>it</em> merges too — pushing <em>its</em> parents, and so on. So a single child-level union can ripple
+arbitrarily far up the DAG. egg handles this internally and correctly; the catch is that <strong>the set of
+classes it merged is not returned</strong> (only a union count), and we need that set to know what became dirty.</p>
+
+<h3>(b) Rule-rematch cascade — matches rooted <em>above</em> a change</h3>
+<p>e-matching is rooted: a match for <code>(T ?x ?m)</code> is anchored at the <code>T</code> enode, with the
+changed class possibly filling <code>?x</code> one level <em>below</em> the root. So when class <code>c</code> gains
+an enode, new matches can appear rooted at <code>c</code> <em>and at any ancestor within the rule's LHS height</em>.
+Searching only "rooted at <code>c</code>" misses them. Therefore the search frontier must include
+<code>ancestors(dirty, up to maxLhsHeight)</code>. For these DSRs LHS height ≤ 2, so the radius is tiny; in general
+it's bounded by the tallest LHS.</p>
+
+<div class="callout">
+<strong>Direction of the cascade.</strong> It only goes <em>up</em>. Merging a parent does not change any child's
+canonical id, and bottom-up e-matching of a child never depends on its parent — so children never become dirty
+from above. The frontier is: new enodes (from <code>add_expr</code> and from applied RHSs) ∪ merged classes ∪
+their parents-within-LHS-height. Apply introduces fresh RHS enodes (e.g. <code>l ⇒ (T l (M 1 0 0 0))</code> adds
+a <code>(T l …)</code> node), which re-seed the loop exactly like normal saturation — so the local loop still
+reaches the <em>global</em> fixpoint, just without revisiting the untouched bulk.</div>
+
+<div class="diagram"><pre>      ?               parents re-canonicalized → may merge (congruence) ↑
+      |                                                                 |
+   (T · m)   ← new match rooted here can fire because child changed ----+
+      |
+   [ l ]  ← add (T l (M 1 0 0 0)); l-class gains an enode  (SEED, dirty)
+            apply introduces (T l (M..)) and (M 1 0 0 0)   (new enodes, dirty)
+</pre></div>
+
+<h2>5. egg API reality &amp; the hard part</h2>
+<ul>
+<li><strong>Local search exists:</strong> <code>Searcher::search_eclass(&amp;egraph, id)</code> returns matches of a
+pattern rooted at one eclass — the primitive we need for step&nbsp;1.</li>
+<li><strong>Apply at a site:</strong> drive <code>rw.applier</code> per match (or build substs and
+<code>union</code> manually) instead of <code>Runner</code>, which only does global passes.</li>
+<li class="t-warn"><strong>The hard part — observing what rebuild merged.</strong> <code>EGraph::rebuild()</code>
+returns only <code>n_unions</code>, and the congruence-cascade merges happen <em>inside</em> it. Options:
+  <ol>
+    <li>Snapshot canonical ids of candidate classes before/after rebuild and diff (simple, O(touched)).</li>
+    <li>Drive unions ourselves and call <code>rebuild</code> in small steps, reading <code>find()</code> deltas.</li>
+    <li>Small egg patch: have rebuild also return/record the set of merged roots (cleanest, but forks egg further —
+        we already run a patched egg, so this is on the table).</li>
+  </ol>
+  We can over-approximate safely using the public <code>EClass::parents</code> field to walk the upward frontier;
+  over-approximation only costs extra (harmless) re-search, never correctness.</li>
+</ul>
+
+<h2>6. Correctness argument</h2>
+<p>Invariant: after each insert the seen-egraph equals what a full <code>run(&amp;rules)</code> would produce
+(same classes, same congruence closure). Proof sketch: assume it held before the insert (egraph saturated).
+<code>add_expr</code> changes only the new term's nodes. A rule instance can newly fire only if its match touches a
+changed enode; all such instances are reachable by searching the dirty set ∪ ancestors-within-LHS-height (§4b).
+Applying them and repairing congruence (§4a) reaches a local fixpoint; because every newly-enabled instance is
+considered and the untouched region was already a fixpoint, the local fixpoint equals the global one. ∎</p>
+<p class="small muted">Cheap guard: in debug builds, every K inserts run a full <code>saturate()</code> into a clone
+and assert identical <code>number_of_classes()</code> / membership — catches an LHS-height or dirty-set bug fast.
+(Note this guard <em>does</em> clone, unlike the hot path, which never does.)</p>
+
+<h2>7. Expected payoff &amp; risks</h2>
+<ul>
+<li><strong>Asymptotics:</strong> per-insert cost O(egraph_size) → O(disturbed region) ≈ O(term size × local
+fan-out). Should turn the 2.1&nbsp;s into low-ms territory and remove the O(n²) back-loading.</li>
+<li><strong>vs batching:</strong> Plan B already buys ~25× for ~10 lines and zero precision loss here. A and B are
+<em>complementary</em> (B = fewer saturations, A = cheaper saturations). A's marginal value: cheap eager
+(<code>every=1</code>) exactness, and corpora big enough that the batching window starts dropping real dedups.</li>
+<li class="t-warn"><strong>Risk — LHS-height radius:</strong> too small ⇒ silent under-saturation. Mitigate with the
+debug full-saturation guard and by computing the radius from the actual parsed rules, not a constant.</li>
+<li class="t-warn"><strong>Risk — rebuild change-set:</strong> the main implementation effort; needs the
+diff/patch from §5. Until then a hybrid (incremental search + occasional full rebuild) is possible.</li>
+<li class="t-warn"><strong>Interaction with batching:</strong> if both are on, the "already saturated" precondition
+is false; seed the dirty set with <em>all</em> pending-batch terms before running the local fixpoint.</li>
+</ul>
+
+<h2>8. Recommendation / sequencing</h2>
+<ol>
+<li><strong>Ship Plan B now</strong> (done): <code>--seen-egraph-saturate-every</code>. Default could move from 1
+to a small N once we confirm the no-precision-loss window on other corpora.</li>
+<li><strong>Keep SimpleScheduler</strong>; add a <code>stop_reason == Saturated</code> assertion if we ever change
+scheduler/limits.</li>
+<li><strong>Prototype Plan A</strong> behind a flag (<code>--seen-egraph-incremental</code>) using
+<code>search_eclass</code> + manual apply + the before/after canonical-id diff for the change-set, validated by the
+debug full-saturation guard. Measure against batching to decide if the extra machinery earns its keep.</li>
+</ol>
+
+<hr>
+<p class="kbd">Generated as a design note. Measurements from <code>EXPTS_VERBOSE=1 ./run.py nuts_bolts_enum</code> with
+varying <code>--seen-egraph-saturate-every</code>, and a scheduler A/B by temporarily dropping
+<code>with_scheduler(SimpleScheduler)</code>. egg internals cited: <code>run_one</code>, <code>perform_union</code>,
+<code>process_unions</code>, <code>rebuild_classes</code> in the patched <code>../egg</code>.</p>
+
+</body>
+</html>
