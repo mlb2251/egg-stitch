@@ -194,7 +194,7 @@ def bfs_args(domain):
     """
     language = "op-children" if weighting_for(domain) == "no-apps" else "lambda-calc"
     return dict(search="best-first", language=language, max_arity=2,
-                num_abstractions=1, num_steps=10000, no_opt_seen=True)
+                num_abstractions=1, num_steps=10000)
 
 def run_bfs_cell(domain, use_dsrs=False, **overrides):
     """Run one BFS cell through egg_stitch(), once per input file, returning Paths.
