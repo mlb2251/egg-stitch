@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, compute_cost_and_select, compute_pattern_size};
 use crate::debug_log::{SearchTreeLog, TreeNodeLog};
-use crate::footprint::{FootprintTracker, footprint};
+use crate::footprint::FootprintTracker;
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::search::{SearchState, SeenTracker, SharedSearchData, SuccessorEnum, setup_search};
@@ -182,7 +182,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.frozen_mask());
     }
     if let Some(fp) = footprints.as_mut() {
-        fp.check_and_insert(&footprint(&initial_state), &initial_state.pattern.frozen_mask());
+        fp.check_state(&initial_state, &initial_state.pattern.frozen_mask());
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -276,13 +276,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             {
                 continue;
             }
-            // Footprint dedup runs after the cheaper structural seen check since
-            // computing the signature walks the match set.
-            if let Some(fp) = footprints.as_mut()
-                && fp.check_and_insert(&footprint(&child_state), &child_state.pattern.frozen_mask())
-            {
-                continue;
-            }
 
             // Useless-frozen pruning: a frozen metavar bound to the same
             // (closed-under-pattern-binders) arg in every match adds no
@@ -301,6 +294,17 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 PruneResult::Keep(lb) => Some(lb),
                 PruneResult::Disabled => None,
             };
+
+            // Footprint dedup last among the prunes: it walks the match set, so
+            // it's the most expensive check — only pay it for successors that
+            // survived the cheaper structural/cost prunes above. (Recording only
+            // survivors is also what keeps it sound: a lower-bound-discarded node
+            // never expands, so its footprint must not pre-empt a later one.)
+            if let Some(fp) = footprints.as_mut()
+                && fp.check_state(&child_state, &child_state.pattern.frozen_mask())
+            {
+                continue;
+            }
 
             let cost_t = Instant::now();
             // Capture the selection here so updates to `best` can stash it
