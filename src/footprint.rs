@@ -124,7 +124,7 @@ fn compute(matches: &[MatchAtEClass], arity: usize, s: &mut FootprintScratch) ->
     s.colors.clear();
     for b in s.buckets.iter_mut() {
         b.sort_unstable();
-        s.colors.push(h64(0xC011_EC7, b));
+        s.colors.push(h64(0x0C01_1EC7, b));
     }
 
     // Pass 2: hash each factor canonically, combine per root then over roots as
