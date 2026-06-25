@@ -97,6 +97,12 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     node_limit: usize,
     /// Whether to saturate + rebuild `seen_egraph` after each genuine insert.
     saturate_each: bool,
+    /// Saturate only once every `saturate_every` genuine inserts (1 = every
+    /// insert). Batches saturation to cut its cost at the price of some dedup
+    /// precision between flushes; see `--seen-egraph-saturate-every`.
+    saturate_every: usize,
+    /// Genuine inserts accumulated since the last saturation (the batch counter).
+    pending_inserts: usize,
     /// Whether [`Self::check_and_insert`] returns the egraph-membership verdict
     /// (skip iff the `Root`-wrapped term is already present) instead of the
     /// `map`'s subset-domination verdict. Both are always computed; this only
@@ -113,6 +119,23 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// lookup (the `pattern_to_frozen_recexpr` conversion). Also excluded from
     /// `time` so the three costs report disjointly.
     pub recexpr_time: Duration,
+    /// Per-insert saturation wall-clock split out by egg's own iteration timers:
+    /// e-matching (search), rule application, and congruence rebuild. Sums may be
+    /// slightly under `egraph_time` (they omit runner setup/teardown).
+    pub egraph_search_time: Duration,
+    pub egraph_apply_time: Duration,
+    pub egraph_rebuild_time: Duration,
+}
+
+/// Internal breakdown returned by [`SeenTracker::saturate`] so callers can fold
+/// it into per-insert stats or report it for the audit pass.
+struct SaturateStats {
+    iterations: usize,
+    applications: usize,
+    stop_reason: String,
+    search: Duration,
+    apply: Duration,
+    rebuild: Duration,
 }
 
 /// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
@@ -168,10 +191,15 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
             iter_limit: 0,
             node_limit: 0,
             saturate_each: false,
+            saturate_every: 1,
+            pending_inserts: 0,
             egraph_decides: false,
             egraph_time: Duration::ZERO,
             saturate_calls: 0,
             recexpr_time: Duration::ZERO,
+            egraph_search_time: Duration::ZERO,
+            egraph_apply_time: Duration::ZERO,
+            egraph_rebuild_time: Duration::ZERO,
         }
     }
 }
@@ -179,15 +207,16 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
 impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     /// Build a seen-tracker. `rules` are the lifted seen-egraph DSRs (see
     /// [`crate::best_first`]); when `saturate_each` is set, they're run to
-    /// saturation after each genuine insert under the given limits so the egraph
-    /// side dedups modulo DSR-equivalence. `egraph_decides` makes that egraph
-    /// membership the skip verdict the search acts on (vs the `map`).
-    pub fn new(rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>, iter_limit: usize, node_limit: usize, saturate_each: bool, egraph_decides: bool) -> Self {
+    /// saturation every `saturate_every` genuine inserts under the given limits so
+    /// the egraph side dedups modulo DSR-equivalence. `egraph_decides` makes that
+    /// egraph membership the skip verdict the search acts on (vs the `map`).
+    pub fn new(rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>, iter_limit: usize, node_limit: usize, saturate_each: bool, saturate_every: usize, egraph_decides: bool) -> Self {
         Self {
             rules,
             iter_limit,
             node_limit,
             saturate_each,
+            saturate_every: saturate_every.max(1),
             egraph_decides,
             ..Default::default()
         }
@@ -244,15 +273,20 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         } else {
             self.seen_egraph.add_expr(&recexpr);
             self.inserted += 1;
-            if self.saturate_each {
-                // A genuinely new top-level term: its fresh nodes may unlock new
-                // rewrite matches, so re-saturate so the next lookup dedups modulo
+            self.pending_inserts += 1;
+            if self.saturate_each && self.pending_inserts >= self.saturate_every {
+                // Flush the batch: the new terms' fresh nodes may unlock new
+                // rewrite matches, so re-saturate so later lookups dedup modulo
                 // DSR-equivalence. Timed separately from the map bookkeeping.
                 let st = Instant::now();
-                self.saturate();
+                let stats = self.saturate();
                 saturate_elapsed = st.elapsed();
                 self.egraph_time += saturate_elapsed;
+                self.egraph_search_time += stats.search;
+                self.egraph_apply_time += stats.apply;
+                self.egraph_rebuild_time += stats.rebuild;
                 self.saturate_calls += 1;
+                self.pending_inserts = 0;
             }
         }
 
@@ -307,10 +341,11 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     }
 
     /// Run the stored DSRs to saturation on `seen_egraph` and rebuild it in
-    /// place. Returns `(iterations, total firings, stop-reason)`.
-    /// `SimpleScheduler` fires every match each iteration (true saturation, no
-    /// backoff); the high limits keep a cap from stopping it before the fixpoint.
-    fn saturate(&mut self) -> (usize, usize, String) {
+    /// place, returning egg's per-iteration counts and search/apply/rebuild time
+    /// split. `SimpleScheduler` fires every match each iteration (true
+    /// saturation, no backoff); the high limits keep a cap from stopping it
+    /// before the fixpoint.
+    fn saturate(&mut self) -> SaturateStats {
         let egraph = std::mem::replace(&mut self.seen_egraph, egg::EGraph::new(()));
         let runner = egg::Runner::default()
             .with_egraph(egraph)
@@ -323,9 +358,24 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         // `applied` is keyed per rule per iteration, so sum it for total firings.
         let applications: usize = runner.iterations.iter().map(|it| it.applied.values().sum::<usize>()).sum();
         let stop_reason = format!("{:?}", runner.stop_reason);
+        // egg records each iteration's search/apply/rebuild seconds; fold them up
+        // to see e-matching vs rebuild cost.
+        let (mut search, mut apply, mut rebuild) = (Duration::ZERO, Duration::ZERO, Duration::ZERO);
+        for it in &runner.iterations {
+            search += Duration::from_secs_f64(it.search_time);
+            apply += Duration::from_secs_f64(it.apply_time);
+            rebuild += Duration::from_secs_f64(it.rebuild_time);
+        }
         self.seen_egraph = runner.egraph;
         self.seen_egraph.rebuild();
-        (iterations, applications, stop_reason)
+        SaturateStats {
+            iterations,
+            applications,
+            stop_reason,
+            search,
+            apply,
+            rebuild,
+        }
     }
 
     /// End-of-run audit of the shadow seen-egraph (pure stats — nothing the
@@ -346,7 +396,7 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         let classes_before = self.seen_egraph.number_of_classes();
         let root_classes_before = self.distinct_root_classes();
 
-        let (iterations, applications, stop_reason) = self.saturate();
+        let stats = self.saturate();
 
         let nodes_after = self.seen_egraph.total_number_of_nodes();
         let classes_after = self.seen_egraph.number_of_classes();
@@ -356,9 +406,9 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
             unique_inserted,
             total_inserted: self.inserted + self.egraph_hits,
             num_rules: self.rules.len(),
-            iterations,
-            applications,
-            stop_reason,
+            iterations: stats.iterations,
+            applications: stats.applications,
+            stop_reason: stats.stop_reason,
             nodes_before,
             classes_before,
             root_classes_before,

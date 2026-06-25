@@ -176,7 +176,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             None => vec![],
         };
         // High limits so saturation, not a cap, stops the run where the rules permit.
-        SeenTracker::new(rules, args.iter_limit.max(1000), args.node_limit, args.seen_egraph_saturate, args.seen_egraph_decides)
+        SeenTracker::new(rules, args.iter_limit.max(1000), args.node_limit, args.seen_egraph_saturate, args.seen_egraph_saturate_every, args.seen_egraph_decides)
     });
     let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
 
@@ -413,21 +413,26 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     );
     if let Some(s) = seen.as_mut() {
         let saturate_each = s.saturate_each_on();
+        let every = args.seen_egraph_saturate_every.max(1);
         let decider = if s.egraph_decides_on() { "egraph" } else { "map" };
         let per_insert_secs = s.egraph_time.as_secs_f64();
         let sat_calls = s.saturate_calls;
         let avg_ms = if sat_calls > 0 { per_insert_secs * 1000.0 / sat_calls as f64 } else { 0.0 };
         let recexpr_secs = s.recexpr_time.as_secs_f64();
+        let search_secs = s.egraph_search_time.as_secs_f64();
+        let apply_secs = s.egraph_apply_time.as_secs_f64();
+        let rebuild_secs = s.egraph_rebuild_time.as_secs_f64();
         let audit = s.audit_seen_egraph();
         println!("{}", "── seen-egraph audit ──".dimmed());
         println!(
             "{} {} {} {}",
             "  rewrites:".dimmed(),
-            format!("{} rules, saturate-each={saturate_each}, decider={decider}", audit.num_rules).bold(),
+            format!("{} rules, saturate-each={saturate_each}, every={every}, decider={decider}", audit.num_rules).bold(),
             format!("(audit pass: {} firings over {} iters,", audit.applications, audit.iterations).dimmed(),
             format!("stop {})", audit.stop_reason).dimmed(),
         );
-        println!("{} {}", "  per-insert saturation:".dimmed(), format!("{per_insert_secs:.3}s over {sat_calls} runs ({avg_ms:.3}ms avg)").bold(),);
+        println!("{} {}", "  per-insert saturation:".dimmed(), format!("{per_insert_secs:.3}s over {sat_calls} runs ({avg_ms:.3}ms avg)").bold());
+        println!("{} {}", "    of which (egg):".dimmed(), format!("search {search_secs:.3}s, apply {apply_secs:.3}s, rebuild {rebuild_secs:.3}s").bold());
         println!("{} {}", "  frozen-recexpr build:".dimmed(), format!("{recexpr_secs:.3}s").bold());
         println!(
             "{} {} {}",
@@ -441,15 +446,18 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             format!("{} enodes, {} eclasses", audit.nodes_after, audit.classes_after).bold(),
             format!("({} distinct Root classes)", audit.root_classes_after).dimmed(),
         );
-        // The pre-saturation distinct-Root-class count must equal the number of
-        // distinct patterns inserted; flag loudly if they disagree.
-        let agree = audit.root_classes_before == audit.unique_inserted;
+        // `distinct_root_classes` already asserts every inserted term is present
+        // (hard correctness). Here we just compare counts: genuine inserts vs the
+        // true distinct DSR-classes after full saturation. Equal under eager
+        // saturation; batching (or saturate-off) defers/forgoes merges, so some
+        // genuine inserts are really DSR-equivalent repeats — pure precision loss,
+        // never unsound.
+        let deferred = audit.unique_inserted - audit.root_classes_after;
         println!(
-            "{} {} vs {} Root classes {}",
-            "  inserted vs Root classes:".dimmed(),
-            format!("{} unique inserts (of {} total)", audit.unique_inserted, audit.total_inserted).bold(),
-            audit.root_classes_before,
-            if agree { "✓ match".green().to_string() } else { "✗ MISMATCH".red().bold().to_string() },
+            "{} {} {}",
+            "  inserts vs DSR-classes:".dimmed(),
+            format!("{} genuine inserts → {} true DSR-classes", audit.unique_inserted, audit.root_classes_after).bold(),
+            if deferred == 0 { "✓ fully deduped".green().to_string() } else { format!("(Δ{deferred} not deduped: batch/off)").yellow().to_string() },
         );
     }
     let (fp_len, fp_hits, fp_skips, fp_capped, fp_secs) = footprints.as_ref().map_or((0, 0, 0, 0, 0.0), |f| (f.len(), f.hits, f.proxy_skips, f.capped, f.time.as_secs_f64()));
