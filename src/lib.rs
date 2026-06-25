@@ -152,22 +152,22 @@ pub struct Args {
     #[arg(long, default_value_t = 1)]
     pub num_abstractions: usize,
 
-    /// Enable the `seen` set in best-first search (canonical-pattern dedup).
-    /// Off by default: the canonical-ordering rule (`frozen_count`) and the
+    /// Disable the `seen` set in best-first search (canonical-pattern dedup).
+    /// On by default: the canonical-ordering rule (`frozen_count`) and the
     /// dominance/useless-inline short-circuits already eliminate most
     /// duplicates, so the seen-set typically catches only a few percent of
     /// states while costing a clone+hash on every successor. Empirically
-    /// disabling it is ~2× faster on cogsci-scale runs and ~15% faster on
-    /// small lambda-calc runs, with the same final cost (a few percent more
-    /// expansions but cheaper per-expansion overall).
-    #[arg(long = "opt-seen", default_value_t = false)]
+    /// passing `--no-opt-seen` is ~2× faster on cogsci-scale runs and ~15%
+    /// faster on small lambda-calc runs, with the same final cost (a few percent
+    /// more expansions but cheaper per-expansion overall).
+    #[arg(long = "no-opt-seen", action = clap::ArgAction::SetFalse)]
     pub opt_seen: bool,
 
     /// Saturate the shadow seen-egraph after each insertion (on by default).
     /// When on, the egraph-backed seen set runs the lifted DSRs to saturation
     /// and rebuilds after every genuine insert, so its duplicate detection is
     /// modulo DSR-equivalence (not just syntactic) and the egraph stays
-    /// collapsed. Only has effect alongside `--opt-seen`. Passing
+    /// collapsed. Only has effect alongside the seen set. Passing
     /// `--no-seen-egraph-saturate` restores the cheap pure hash-cons that only
     /// dedups syntactically identical patterns.
     #[arg(long = "no-seen-egraph-saturate", action = clap::ArgAction::SetFalse)]
@@ -178,7 +178,7 @@ pub struct Args {
     /// precision for speed: between saturations the egraph is under-saturated,
     /// so a DSR-equivalent repeat can be missed and treated as new — never
     /// unsound (it only explores a redundant state), but the search may expand
-    /// more. Only has effect with `--opt-seen` and `--seen-egraph-saturate`.
+    /// more. Only has effect with the seen set and `--seen-egraph-saturate`.
     #[arg(long = "seen-egraph-saturate-every", default_value_t = 1)]
     pub seen_egraph_saturate_every: usize,
 
@@ -189,7 +189,7 @@ pub struct Args {
     /// pruning the seen-egraph buys — else double it. So while saturation keeps
     /// deduping states we saturate often, and once it stops paying off we back
     /// off geometrically. Overrides `--seen-egraph-saturate-every` (used only as
-    /// the starting value). Only has effect with `--opt-seen` and
+    /// the starting value). Only has effect with the seen set and
     /// `--seen-egraph-saturate`. Passing `--no-seen-egraph-saturate-dynamic`
     /// restores the fixed batch size from `--seen-egraph-saturate-every`.
     #[arg(long = "no-seen-egraph-saturate-dynamic", action = clap::ArgAction::SetFalse)]
@@ -199,7 +199,7 @@ pub struct Args {
     /// set (on by default), instead of the old `map`'s subset-domination rule.
     /// A successor is skipped iff its `Root`-wrapped term is already in the
     /// seen-egraph — i.e. an earlier visit's term, modulo DSR-equivalence when
-    /// `--seen-egraph-saturate` is on. Only has effect alongside `--opt-seen`.
+    /// `--seen-egraph-saturate` is on. Only has effect alongside the seen set.
     /// Passing `--no-seen-egraph-decides` restores the `map` as the decider
     /// (the egraph then only runs as a shadow for comparison).
     #[arg(long = "no-seen-egraph-decides", action = clap::ArgAction::SetFalse)]
