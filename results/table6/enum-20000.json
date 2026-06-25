@@ -1,0 +1,1010 @@
+{
+  "drawings:nuts-bolts": [
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.210452318191528,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 14.923226594924927,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.02229928970337,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.011838436126709,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.035144090652466,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.307120323181152,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.154194116592407,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.313315629959106,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.250214576721191,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2429,
+        "compression_ratio": 7.825442568958419,
+        "elapsed_secs": 15.28030776977539,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)",
+          "fn_2: (T ?#0 (M ?#1 0 0 0))",
+          "fn_3: (C (fn_0 6.0 ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5822,
+          3564,
+          2755,
+          2430
+        ]
+      }
+    ]
+  ],
+  "drawings:dials": [
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 60.12337327003479,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 60.26889085769653,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 60.199541330337524,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 59.88964343070984,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 59.16332411766052,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 60.268994092941284,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 60.125473499298096,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 60.372633934020996,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 60.39981722831726,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 7501,
+        "compression_ratio": 4.7609652046393816,
+        "elapsed_secs": 60.11007213592529,
+        "library": [
+          "fn_0: (C (T ?#0 (M ?#1 0 ?#2 ?#3)) (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0))))",
+          "fn_1: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_2: (T ?#0 (M ?#1 ?#2 0 0))",
+          "fn_3: (fn_1 ?#0 (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11443,
+          9090,
+          8107,
+          7502
+        ]
+      }
+    ]
+  ],
+  "drawings:wheels": [
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.963284969329834,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.9447500705719,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.80048370361328,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.966333150863647,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.906085968017578,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 27.011165857315063,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.395758628845215,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.686747074127197,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.41294240951538,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12295,
+        "compression_ratio": 2.88133387555917,
+        "elapsed_secs": 26.959377765655518,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 ?#1 0 0)) ?#2) (T c (M ?#3 0 0 0)))",
+          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          15195,
+          13504,
+          12296
+        ]
+      }
+    ]
+  ],
+  "drawings:furniture": [
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 32.72439932823181,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 32.45895838737488,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 31.815734386444092,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 31.727755069732666,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 31.86652898788452,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 32.27565836906433,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 32.42379426956177,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 32.279056787490845,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 32.400150537490845,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=20000, max_forced_expansion=None, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 9976,
+        "compression_ratio": 4.303829190056135,
+        "elapsed_secs": 32.451027631759644,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
+          "fn_1: (fn_0 ?#0 (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) ?#3 0)",
+          "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          12415,
+          11106,
+          9977
+        ]
+      }
+    ]
+  ]
+}
