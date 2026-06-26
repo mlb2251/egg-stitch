@@ -6,7 +6,10 @@ use egg::Id;
 /// cartesian factoring of the substitution set (see [`Factor`]).
 /// Invariant: `root_eclass` and all ids in every factor row are canonical
 /// (the egraph isn't unioned during search). The factors' `slots` partition
-/// `0..arity` where `arity` is the pattern's variable count.
+/// `0..arity` where `arity` is the pattern's variable count; every factor covers
+/// at least one slot (zero-slot identity factors are dropped at construction), so
+/// a fully-ground pattern has an *empty* factor list — its single empty
+/// substitution is the empty product.
 #[derive(Debug, Clone)]
 pub struct MatchAtEClass {
     pub root_eclass: Id,
@@ -23,8 +26,9 @@ impl MatchAtEClass {
         }
     }
 
-    /// Number of full substitutions = product of the factors' row counts.
-    /// Factors are never empty, so this is `≥ 1`.
+    /// Number of full substitutions = product of the factors' row counts. Each
+    /// factor's rows are non-empty, and the empty product is 1, so this is `≥ 1`
+    /// (a ground match with no factors counts as one empty substitution).
     pub fn num_substs(&self) -> usize {
         self.factors.iter().map(|f| f.rows.len()).product()
     }
