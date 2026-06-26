@@ -296,11 +296,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 PruneResult::Disabled => None,
             };
 
-            // Footprint dedup last among the prunes: it walks the match set, so
-            // it's the most expensive check — only pay it for successors that
-            // survived the cheaper structural/cost prunes above. (Recording only
-            // survivors is also what keeps it sound: a lower-bound-discarded node
-            // never expands, so its footprint must not pre-empt a later one.)
+            // Placed last as it is very expensive
             if let Some(fp) = footprints.as_mut()
                 && fp.check_state(&child_state, &child_state.pattern.frozen_mask(), compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights))
             {
