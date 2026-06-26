@@ -4,8 +4,8 @@ use colored::Colorize;
 
 use crate::cost::compute_pattern_size;
 use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
-use crate::math::logaddexp;
 use crate::matching::MatchAtEClass;
+use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 
 /// Prints a compact view of a match structure under `--verbose`: the number of
@@ -16,7 +16,7 @@ pub fn print_match_structure(matches: &[MatchAtEClass], max_roots: usize) {
     println!("{} {} roots", "match structure:".dimmed(), matches.len());
     let largest = |m: &MatchAtEClass| m.factors.iter().map(|f| f.rows.len()).max().unwrap_or(0);
     let mut order: Vec<&MatchAtEClass> = matches.iter().collect();
-    order.sort_by(|a, b| largest(b).cmp(&largest(a)));
+    order.sort_by_key(|m| std::cmp::Reverse(largest(m)));
     for m in order.iter().take(max_roots) {
         let factors: Vec<String> = m.factors.iter().map(|f| format!("{{{}}}={}", f.slots.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(","), f.rows.len())).collect();
         println!("  root {} {}", m.root_eclass, factors.join(" "));
