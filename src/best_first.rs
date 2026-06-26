@@ -64,11 +64,15 @@ fn priority<F: LanguageFamily, O: StitchOp>(strategy: SearchPriority, cost: usiz
         SearchPriority::DepthFirst => ((usize::MAX - depth, 0), 0),
         SearchPriority::BreadthFirst => ((depth, 0), 0),
         SearchPriority::MostMatches => ((usize::MAX - state.matches.len(), 0), 0),
-        SearchPriority::ForcedThenCost => {
-            let forced = state.forced_expansion_argmin(shared, forced_lower_bound).map_or(0, |(v, _)| v);
+        SearchPriority::ForcedThenCost => match state.forced_expansion_argmin(shared, forced_lower_bound) {
             // clamp to 0 because anything <= 0 means no forced expansion
-            ((forced.max(0) as usize, cost), forced)
-        }
+            Some((forced, _)) => ((forced.max(0) as usize, cost), forced),
+            // No root in the corpus's minimal extraction supports this pattern, so
+            // it can't compress: sink it to the back of the frontier. (A pattern
+            // with no in-extraction root has none among its descendants either —
+            // matches only shrink — so threading i64::MAX as their bound is safe.)
+            None => ((usize::MAX, cost), i64::MAX),
+        },
     }
 }
 
@@ -231,7 +235,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             if args.verbose_forced_expansion {
                 let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared, i64::MIN) {
                     Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
-                    None => "[forced-expansion=- (no matches)]".to_string(),
+                    None => "[forced-expansion=- (no in-extraction root)]".to_string(),
                 };
                 println!("{} {} {}", tag.dimmed(), pat.cyan(), forced_str.yellow());
             }
