@@ -183,7 +183,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     }
     if let Some(fp) = footprints.as_mut() {
         let size = compute_pattern_size(&initial_state.pattern, &shared.egraph.analysis.weights);
-        fp.check_state(&initial_state, &initial_state.pattern.frozen_mask(), size);
+        // The initial state is node 0; a deferred representative re-reads its
+        // match set by index from the (append-only) node array.
+        fp.check_state(&initial_state, &initial_state.pattern.frozen_mask(), size, 0, &|i| &nodes[i].state.matches[..]);
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -296,9 +298,11 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 PruneResult::Disabled => None,
             };
 
-            // Placed last as it is very expensive
+            // Placed last as it is very expensive. `nodes.len()` is the index this
+            // child will occupy (it is pushed unconditionally below if it survives),
+            // letting a deferred representative re-read its match set on a collision.
             if let Some(fp) = footprints.as_mut()
-                && fp.check_state(&child_state, &child_state.pattern.frozen_mask(), compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights))
+                && fp.check_state(&child_state, &child_state.pattern.frozen_mask(), compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights), nodes.len(), &|i| &nodes[i].state.matches[..])
             {
                 continue;
             }

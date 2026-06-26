@@ -34,7 +34,6 @@ use crate::lang::{LanguageFamily, StitchOp};
 use crate::matching::MatchAtEClass;
 use crate::search::SearchState;
 use rustc_hash::{FxHashMap, FxHasher};
-use std::collections::hash_map::Entry;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
@@ -274,42 +273,69 @@ fn factorial(n: usize) -> usize {
 /// ids, per-root subst counts, arity, match count) and never on variable identity
 /// or order, so **footprint-equal ⇒ equal proxy**. One `mix64` per match, no
 /// per-factor/row work — far cheaper than [`compute`].
-fn cheap_proxy<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> u64 {
+fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
     let mut acc: u64 = 0;
-    for m in &state.matches {
+    for m in matches {
         // Commutative combine (wrapping add) keeps it order-invariant.
         acc = acc.wrapping_add(mix64(id_u32(m.root_eclass) as u64 | ((m.num_substs() as u64) << 32)));
     }
-    h64(SALT_PROXY, &(state.pattern.vars.len(), state.matches.len(), acc))
+    h64(SALT_PROXY, &(arity, matches.len(), acc))
 }
 
 /// Tracks already-seen match footprints to dedupe successors, mirroring
 /// [`crate::search::SeenTracker`] but keyed on the permutation-invariant
 /// signature instead of pattern structure.
 ///
-/// Two-level: a cheap invariant [`cheap_proxy`] gates the expensive 128-bit
+/// Two-level: a cheap invariant [`cheap_proxy_of`] gates the expensive 128-bit
 /// [`compute`]. The first candidate to claim a proxy is kept without computing
-/// its signature at all (a fresh proxy *guarantees* it differs from everything
-/// seen). Only on a proxy collision do we compute the real signature and dedup
-/// within that proxy's bucket. Each bucket entry is `(sig, frozen colours)`; the
-/// frozen colours are the most-flexible set seen for that sig (a *colour
-/// multiset*, compared up to the variable permutation the sig quotients out), and
-/// a repeat is a hit when a recorded entry's frozen colours are a sub-multiset of
-/// the new ones — it was at least as flexible, so this visit's successors are
-/// already reachable.
+/// its signature (a fresh proxy *guarantees* it differs from everything seen) —
+/// but it is *not* discarded: we retain a [`RepHandle`] (the candidate's node
+/// index) so its match set, which already lives for the whole search in the node
+/// array, can be re-read on demand. On the first proxy collision we materialise
+/// that deferred representative — computing its signature lazily, only now that a
+/// peer actually needs comparing against it — and then dedup the newcomer.
 ///
-/// Tradeoff: the very first true-duplicate within a colliding bucket isn't
-/// pruned (the representative has no stored sig), a small recall loss; soundness
-/// is unaffected since pruning still requires a full 128-bit sig match.
+/// Each bucket entry is `(sig, frozen colours, min size)`; the frozen colours are
+/// the most-flexible set seen for that sig (a *colour multiset*, compared up to
+/// the variable permutation the sig quotients out), and a repeat is a hit when a
+/// recorded entry's frozen colours are a sub-multiset of the new ones — it was at
+/// least as flexible, so this visit's successors are already reachable.
+///
+/// Cost: signatures are still computed only on genuine proxy collisions (the
+/// common unique-proxy candidate pays only the proxy hash), so the fast path is
+/// preserved; the lazy materialisation adds exactly one extra `compute` per
+/// colliding bucket (the representative's), and no match set is ever cloned —
+/// only its node index is stored. Unlike the older scheme, the representative's
+/// own duplicates are now caught, so dedup is exact up to footprint-equality.
 #[derive(Default)]
 pub struct FootprintTracker {
-    /// Per proxy: `(sig, most-flexible frozen colours, min pattern size)` entries.
-    buckets: FxHashMap<u64, Vec<(u128, Vec<u64>, usize)>>,
+    /// Per proxy: the bucket's deferred representative plus its materialised entries.
+    buckets: FxHashMap<u64, Bucket>,
     pub hits: usize,
     /// Candidates kept via the unique-proxy fast path (full signatures avoided).
     pub proxy_skips: usize,
     pub capped: usize,
     pub time: Duration,
+}
+
+/// One proxy's bucket: a not-yet-materialised representative (kept as a lazy
+/// handle until a collision forces its signature) and the signatures recorded so
+/// far. `rep` is `Some` only between the fresh-proxy claim and the first
+/// collision; after that all members live in `entries`.
+#[derive(Default)]
+struct Bucket {
+    rep: Option<RepHandle>,
+    entries: Vec<(u128, Vec<u64>, usize)>,
+}
+
+/// A deferred representative: enough to materialise its bucket entry on demand
+/// without retaining its match set. The match set is re-read from the search's
+/// (append-only) node array via `id`; `frozen` (whose length is the arity) and
+/// `size` are the small per-candidate facts the signature alone doesn't carry.
+struct RepHandle {
+    id: usize,
+    frozen: Vec<bool>,
+    size: usize,
 }
 
 impl FootprintTracker {
@@ -325,26 +351,49 @@ impl FootprintTracker {
     }
 
     /// Dedupes `state` at `frozen`, with `size = compute_pattern_size(pattern)`.
-    /// Returns `true` (skip) on a dominated repeat.
-    pub fn check_state<F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, frozen: &[bool], size: usize) -> bool {
+    /// `id` is the node index this candidate will occupy (so a deferred
+    /// representative can re-read its match set later), and `resolve` maps a node
+    /// index back to its stored match set. Returns `true` (skip) on a dominated
+    /// repeat.
+    pub fn check_state<'n, F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, frozen: &[bool], size: usize, id: usize, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
         let t = Instant::now();
-        let proxy = cheap_proxy(state);
-        // Fresh proxy: provably unique, so keep without computing a signature.
-        if let Entry::Vacant(e) = self.buckets.entry(proxy) {
-            e.insert(Vec::new());
-            self.proxy_skips += 1;
-            self.time += t.elapsed();
-            return false;
+        let skip = self.check_core(&state.matches, state.pattern.vars.len(), frozen, size, id, resolve);
+        self.time += t.elapsed();
+        skip
+    }
+
+    /// Core dedup over raw match data (split out from [`check_state`] so it can be
+    /// unit-tested with a plain match-set resolver). See the type docs for the
+    /// lazy-representative scheme.
+    fn check_core<'n>(&mut self, matches: &[MatchAtEClass], arity: usize, frozen: &[bool], size: usize, id: usize, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
+        let proxy = cheap_proxy_of(matches, arity);
+        let rep = {
+            let bucket = self.buckets.entry(proxy).or_default();
+            // Fresh proxy: defer the signature, keeping only a handle to the
+            // candidate so its duplicates can still be caught later.
+            if bucket.rep.is_none() && bucket.entries.is_empty() {
+                bucket.rep = Some(RepHandle { id, frozen: frozen.to_vec(), size });
+                self.proxy_skips += 1;
+                return false;
+            }
+            bucket.rep.take()
+        };
+        // First collision in this bucket: materialise the deferred representative
+        // from its retained match set before comparing the newcomer against it.
+        if let Some(rep) = rep {
+            let (rsig, rcolors, rcapped) = compute(resolve(rep.id), rep.frozen.len());
+            if rcapped {
+                self.capped += 1;
+            }
+            let rfc = frozen_colors(&rep.frozen, &rcolors);
+            self.buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size));
         }
-        // Collision: fall back to the real signature.
-        let (sig, colors, capped) = compute(&state.matches, state.pattern.vars.len());
+        let (sig, colors, capped) = compute(matches, arity);
         if capped {
             self.capped += 1;
         }
-        let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| colors[v]).collect();
-        fc.sort_unstable();
-        let skip = dedup_in_bucket(self.buckets.get_mut(&proxy).expect("present"), sig, fc, size);
-        self.time += t.elapsed();
+        let fc = frozen_colors(frozen, &colors);
+        let skip = dedup_in_bucket(&mut self.buckets.get_mut(&proxy).expect("present").entries, sig, fc, size);
         if skip {
             self.hits += 1;
         }
@@ -357,14 +406,21 @@ impl FootprintTracker {
         if fp.capped {
             self.capped += 1;
         }
-        let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| fp.colors[v]).collect();
-        fc.sort_unstable();
-        let skip = dedup_in_bucket(self.buckets.entry(0).or_default(), fp.sig, fc, size);
+        let fc = frozen_colors(frozen, &fp.colors);
+        let skip = dedup_in_bucket(&mut self.buckets.entry(0).or_default().entries, fp.sig, fc, size);
         if skip {
             self.hits += 1;
         }
         skip
     }
+}
+
+/// The frozen variables' colours, sorted — a colour multiset compared up to the
+/// variable permutation the signature quotients out.
+fn frozen_colors(frozen: &[bool], colors: &[u64]) -> Vec<u64> {
+    let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| colors[v]).collect();
+    fc.sort_unstable();
+    fc
 }
 
 /// Subsumption within one proxy bucket. Skip only if a recorded same-`sig` entry
@@ -477,6 +533,34 @@ mod tests {
         let p2 = footprint_of(&[match_at(100, 2, vec![vec![11, 10]])], 2);
         assert!(!t.check_and_insert(&p1, &[true, false], 5));
         assert!(t.check_and_insert(&p2, &[false, true], 5));
+    }
+
+    /// Lazy representative: the *first* duplicate of a bucket's representative is
+    /// caught. The representative claims its proxy as a deferred handle (no sig);
+    /// when its footprint-equal peer arrives the representative is materialised
+    /// from its retained match set and the peer is pruned. Resolver maps node ids
+    /// back to their stored match sets, as the search's node array does.
+    #[test]
+    fn lazy_representative_catches_first_duplicate() {
+        let mut t = FootprintTracker::new();
+        let store = vec![vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![10, 11]])]];
+        let resolve = |i: usize| &store[i][..];
+        // Representative kept (deferred), then its identical-footprint peer pruned.
+        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, &resolve));
+        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, &resolve));
+        assert_eq!(t.proxy_skips, 1);
+        assert_eq!(t.hits, 1);
+    }
+
+    /// A commutative swap (footprint-equal, rows column-permuted) is also caught
+    /// as the representative's first duplicate, not just a literal repeat.
+    #[test]
+    fn lazy_representative_catches_permuted_duplicate() {
+        let mut t = FootprintTracker::new();
+        let store = vec![vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![11, 10]])]];
+        let resolve = |i: usize| &store[i][..];
+        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, &resolve));
+        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, &resolve));
     }
 
     /// Cost guard: a footprint-equal pattern that is *strictly smaller* is never
