@@ -218,9 +218,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             break;
         }
 
-        if verbose {
+        if verbose || args.verbose_match_structure {
             println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-            print_top_particles(&expanded, &weights, &shared, original_size, |i| costs[i]);
+            print_top_particles(&expanded, &weights, &shared, original_size, args.verbose_match_structure, |i| costs[i]);
         }
 
         let weights_acc = normalize_and_accumulate(&mut weights);
@@ -243,10 +243,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             });
         }
 
-        if verbose {
+        if verbose || args.verbose_match_structure {
             println!("{}", format!("Step {}: resampled all particles", step).dimmed());
             let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
-            print_top_particles(&expanded, &resample_weights, &shared, original_size, |i| costs[i]);
+            print_top_particles(&expanded, &resample_weights, &shared, original_size, args.verbose_match_structure, |i| costs[i]);
         }
 
         particles = expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect();

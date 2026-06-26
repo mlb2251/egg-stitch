@@ -250,6 +250,11 @@ pub struct Args {
     #[arg(long = "verbose-forced-expansion", default_value_t = false)]
     pub verbose_forced_expansion: bool,
 
+    /// Print each step's match structure: the number of match roots, then the
+    /// roots with the largest factors and their per-factor row counts.
+    #[arg(long = "verbose-match-structure", default_value_t = false)]
+    pub verbose_match_structure: bool,
+
     /// Selects the language family the pipeline runs over. Patterns/programs/rules
     /// are always written in user-facing flat form; the language layer handles any
     /// conversion (e.g. currying for `lambda-calc`) at the boundary.
