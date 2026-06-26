@@ -25,7 +25,10 @@ convergence via a self-draining ``--max-forced-expansion`` cap where one bounds
 the search (see the config), and falls back to a step limit elsewhere.
 
 Usage:
-    python scripts/bench_pr.py [BASE=main] [PR=<current-branch>]
+    python scripts/bench_pr.py [BASE=main] [PR=<current-branch>] [--method bfs|smc|both]
+
+``--method`` restricts the run to only best-first (``bfs``, named ``enum``
+internally) or only SMC; the default ``both`` times them side by side.
 """
 
 import json
@@ -419,11 +422,12 @@ def compression_section(base: str, pr: str) -> str:
 
 
 def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str,
+              methods: list[str] = ("enum", "smc"),
               domains: list[str] = DOMAINS, unconverged: set = frozenset()) -> str:
     """Return a GitHub-flavored markdown comparison table.
 
     Emits one row per entry in ``domains`` plus a trailing geomean row, for
-    each of the ``enum`` and ``smc`` methods.
+    each method in ``methods`` (a subset of ``enum``/``smc``).
 
     Per-domain rows use a 5% gray band (their per-cell noise is larger); the
     geomean row keeps the tighter 2% band. A ``(domain, method)`` in
@@ -444,7 +448,7 @@ def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str,
     def geomean(rows):
         return np.prod(rows, axis=0) ** (1 / len(rows))
 
-    for m in ("enum", "smc"):
+    for m in methods:
         rows = [cell(base[dom][m], pr[dom][m]) for dom in domains]
         labels = list(domains)
         rows.append(geomean(rows)); labels.append("geomean")
@@ -461,9 +465,18 @@ def fmt_table(base_label: str, pr_label: str, base: dict, pr: dict, title: str,
 
 def main() -> None:
     """CLI entry point; see module docstring for the argument shape."""
-    args = sys.argv[1:]
-    base = args[0] if len(args) >= 1 else "main"
-    pr = args[1] if len(args) >= 2 else subprocess.check_output(["git", "branch", "--show-current"], cwd=ROOT, text=True).strip()
+    import argparse
+    p = argparse.ArgumentParser(description="Benchmark a PR's SMC and best-first searches against a base branch.")
+    p.add_argument("base", nargs="?", default="main", help="baseline ref (default: main)")
+    p.add_argument("pr", nargs="?", default=None, help="PR ref (default: current branch)")
+    # bfs is an alias for our best-first / enumerative method, named "enum"
+    # internally. Restricting to one method skips the other's cells everywhere.
+    p.add_argument("--method", choices=["bfs", "smc", "both"], default="both",
+                   help="run only best-first (bfs) or only SMC, or both (default: both)")
+    a = p.parse_args(sys.argv[1:])
+    base = a.base
+    pr = a.pr if a.pr is not None else subprocess.check_output(["git", "branch", "--show-current"], cwd=ROOT, text=True).strip()
+    methods = {"bfs": ["enum"], "smc": ["smc"], "both": ["enum", "smc"]}[a.method]
     session = time.strftime("%Y-%m-%d_%H-%M-%S")
 
     preflight(base)
@@ -490,7 +503,6 @@ def main() -> None:
         # forced-expansion cap vs step limit — depends on the domain). All knobs
         # live in scripts/bench_config.py.
         smc_runner = bench_config.smc_runner()
-        methods = ["enum", "smc"]
 
         def runner_for(method: str, domain: str):
             """The runner for one (method, domain): per-target best-first, shared SMC."""
@@ -587,16 +599,19 @@ def main() -> None:
                             summarize(session, "base", "with_dsrs", methods, with_reps),
                             summarize(session, "pr", "with_dsrs", methods, with_reps),
                             "with DSRs",
+                            methods=methods,
                             unconverged=unconverged_set("with_dsrs", DOMAINS))
         without_md = fmt_table(base, pr,
                                summarize(session, "base", "without_dsrs", methods, without_reps),
                                summarize(session, "pr", "without_dsrs", methods, without_reps),
                                "without DSRs",
+                               methods=methods,
                                unconverged=unconverged_set("without_dsrs", DOMAINS))
         mol_md = fmt_table(base, pr,
                            summarize(session, "base", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
                            summarize(session, "pr", "with_dsrs", methods, mol_reps, domains=MOL_FAMILIES),
                            "molecules (with DSRs)",
+                           methods=methods,
                            domains=MOL_FAMILIES,
                            unconverged=unconverged_set("with_dsrs", MOL_FAMILIES))
         timing_section = ("## Timing and fixture regressions\n\n"
