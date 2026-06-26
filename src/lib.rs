@@ -6,6 +6,7 @@ pub mod debug_log;
 pub mod egraph_util;
 pub mod factor;
 pub mod follow;
+pub mod footprint;
 pub mod io;
 pub mod lang;
 pub mod logging;
@@ -162,6 +163,16 @@ pub struct Args {
     /// expansions but cheaper per-expansion overall).
     #[arg(long = "opt-seen", default_value_t = false)]
     pub opt_seen: bool,
+
+    /// Disable dedup-by-match (on by default).
+    /// Prunes a successor when another candidate with the same set of matches
+    /// was already seen at an equal-or-more-flexible frozen set and equal-or-smaller
+    /// pattern size.
+    /// Treats patterns that match the same e-classes binding the same argument
+    /// multisets as identical. For example `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)`
+    /// are treated as identical.
+    #[arg(long = "no-opt-dedup-by-match", action = clap::ArgAction::SetFalse)]
+    pub opt_dedup_by_match: bool,
 
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
