@@ -182,7 +182,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.frozen_mask());
     }
     if let Some(fp) = footprints.as_mut() {
-        fp.check_state(&initial_state, &initial_state.pattern.frozen_mask());
+        let size = compute_pattern_size(&initial_state.pattern, &shared.egraph.analysis.weights);
+        fp.check_state(&initial_state, &initial_state.pattern.frozen_mask(), size);
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -301,7 +302,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // survivors is also what keeps it sound: a lower-bound-discarded node
             // never expands, so its footprint must not pre-empt a later one.)
             if let Some(fp) = footprints.as_mut()
-                && fp.check_state(&child_state, &child_state.pattern.frozen_mask())
+                && fp.check_state(&child_state, &child_state.pattern.frozen_mask(), compute_pattern_size(&child_state.pattern, &shared.egraph.analysis.weights))
             {
                 continue;
             }

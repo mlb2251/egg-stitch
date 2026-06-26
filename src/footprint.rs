@@ -316,7 +316,8 @@ fn cheap_proxy<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> u64
 /// is unaffected since pruning still requires a full 128-bit sig match.
 #[derive(Default)]
 pub struct FootprintTracker {
-    buckets: FxHashMap<u64, Vec<(u128, Vec<u64>)>>,
+    /// Per proxy: `(sig, most-flexible frozen colours, min pattern size)` entries.
+    buckets: FxHashMap<u64, Vec<(u128, Vec<u64>, usize)>>,
     pub hits: usize,
     /// Candidates kept via the unique-proxy fast path (full signatures avoided).
     pub proxy_skips: usize,
@@ -336,8 +337,9 @@ impl FootprintTracker {
         self.buckets.is_empty()
     }
 
-    /// Dedupes `state` at `frozen`. Returns `true` (skip) on a dominated repeat.
-    pub fn check_state<F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, frozen: &[bool]) -> bool {
+    /// Dedupes `state` at `frozen`, with `size = compute_pattern_size(pattern)`.
+    /// Returns `true` (skip) on a dominated repeat.
+    pub fn check_state<F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, frozen: &[bool], size: usize) -> bool {
         let t = Instant::now();
         let proxy = cheap_proxy(state);
         // Fresh proxy: provably unique, so keep without computing a signature.
@@ -354,7 +356,7 @@ impl FootprintTracker {
         }
         let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| colors[v]).collect();
         fc.sort_unstable();
-        let skip = dedup_in_bucket(self.buckets.get_mut(&proxy).expect("present"), sig, fc);
+        let skip = dedup_in_bucket(self.buckets.get_mut(&proxy).expect("present"), sig, fc, size);
         self.time += t.elapsed();
         if skip {
             self.hits += 1;
@@ -362,15 +364,15 @@ impl FootprintTracker {
         skip
     }
 
-    /// Records a precomputed footprint (used by tests; always exercises the
-    /// signature path via a single shared bucket).
-    pub fn check_and_insert(&mut self, fp: &Footprint, frozen: &[bool]) -> bool {
+    /// Records a precomputed footprint at pattern `size` (used by tests; always
+    /// exercises the signature path via a single shared bucket).
+    pub fn check_and_insert(&mut self, fp: &Footprint, frozen: &[bool], size: usize) -> bool {
         if fp.capped {
             self.capped += 1;
         }
         let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| fp.colors[v]).collect();
         fc.sort_unstable();
-        let skip = dedup_in_bucket(self.buckets.entry(0).or_default(), fp.sig, fc);
+        let skip = dedup_in_bucket(self.buckets.entry(0).or_default(), fp.sig, fc, size);
         if skip {
             self.hits += 1;
         }
@@ -378,19 +380,23 @@ impl FootprintTracker {
     }
 }
 
-/// Sub-multiset subsumption within one proxy bucket: skip if an entry with this
-/// `sig` has frozen colours that are a sub-multiset of `fc` (was at least as
-/// flexible); otherwise record `fc` (overwriting a non-dominated same-sig entry,
-/// mirroring the seen-set) and keep.
-fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>)>, sig: u128, fc: Vec<u64>) -> bool {
-    match bucket.iter_mut().find(|(s, _)| *s == sig) {
-        Some(entry) if submultiset(&entry.1, &fc) => true,
+/// Subsumption within one proxy bucket. Skip only if a recorded same-`sig` entry
+/// dominates the newcomer on *both* axes: its frozen colours are a sub-multiset
+/// of `fc` (at least as flexible — successors already reachable) **and** its
+/// pattern size is `≤ size` (at least as cheap — `best` not worse). Otherwise
+/// keep, and fold the newcomer's (more-flexible) frozen set and (smaller) size
+/// into the entry. Footprint-equal patterns differ only in definition size, so
+/// the size guard ensures a strictly smaller equivalent is never pruned away.
+fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>, usize)>, sig: u128, fc: Vec<u64>, size: usize) -> bool {
+    match bucket.iter_mut().find(|(s, _, _)| *s == sig) {
+        Some(entry) if submultiset(&entry.1, &fc) && entry.2 <= size => true,
         Some(entry) => {
             entry.1 = fc;
+            entry.2 = entry.2.min(size);
             false
         }
         None => {
-            bucket.push((sig, fc));
+            bucket.push((sig, fc, size));
             false
         }
     }
@@ -482,7 +488,21 @@ mod tests {
         let mut t = FootprintTracker::new();
         let p1 = footprint_of(&[match_at(100, 2, vec![vec![10, 11]])], 2);
         let p2 = footprint_of(&[match_at(100, 2, vec![vec![11, 10]])], 2);
-        assert!(!t.check_and_insert(&p1, &[true, false]));
-        assert!(t.check_and_insert(&p2, &[false, true]));
+        assert!(!t.check_and_insert(&p1, &[true, false], 5));
+        assert!(t.check_and_insert(&p2, &[false, true], 5));
+    }
+
+    /// Cost guard: a footprint-equal pattern that is *strictly smaller* is never
+    /// pruned (it could become a cheaper `best`); a same-or-bigger one still is.
+    #[test]
+    fn smaller_equivalent_not_pruned() {
+        let mut t = FootprintTracker::new();
+        let big = footprint_of(&[match_at(100, 1, vec![vec![10]])], 1);
+        // Record the big one first (size 5).
+        assert!(!t.check_and_insert(&big, &[false], 5));
+        // A footprint-equal but smaller (size 3) pattern must survive.
+        assert!(!t.check_and_insert(&big, &[false], 3));
+        // A footprint-equal bigger (size 7) one is now dominated → pruned.
+        assert!(t.check_and_insert(&big, &[false], 7));
     }
 }
