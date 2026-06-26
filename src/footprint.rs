@@ -166,7 +166,7 @@ pub fn footprint_equivalent(a: &[MatchAtEClass], b: &[MatchAtEClass], arity: usi
     }
     // Bail (can't disprove) when the permutation search is too large.
     let total = groups.iter().try_fold(1usize, |acc, (ga, _)| acc.checked_mul(factorial(ga.len())));
-    if !total.is_some_and(|t| t <= SLOW_PERM_CAP) {
+    if total.is_none_or(|t| t > SLOW_PERM_CAP) {
         return true;
     }
     let canon_b = canonicalize(b, &(0..arity).collect::<Vec<_>>());
@@ -476,6 +476,7 @@ impl FootprintTracker {
     /// validated against the exact [`footprint_equivalent`] relation before being
     /// trusted — catching a hash collision or over-merge rather than silently
     /// pruning a genuinely distinct candidate.
+    #[allow(clippy::too_many_arguments)]
     fn check_core<'n>(&mut self, matches: &[MatchAtEClass], arity: usize, frozen: &[bool], size: usize, id: usize, check_slow: bool, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
         let proxy = cheap_proxy_of(matches, arity);
         let rep = {
@@ -664,7 +665,7 @@ mod tests {
     #[test]
     fn lazy_representative_catches_first_duplicate() {
         let mut t = FootprintTracker::new();
-        let store = vec![vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![10, 11]])]];
+        let store = [vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![10, 11]])]];
         let resolve = |i: usize| &store[i][..];
         // Representative kept (deferred), then its identical-footprint peer pruned.
         assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, true, &resolve));
@@ -678,7 +679,7 @@ mod tests {
     #[test]
     fn lazy_representative_catches_permuted_duplicate() {
         let mut t = FootprintTracker::new();
-        let store = vec![vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![11, 10]])]];
+        let store = [vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![11, 10]])]];
         let resolve = |i: usize| &store[i][..];
         assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, true, &resolve));
         assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, true, &resolve));
