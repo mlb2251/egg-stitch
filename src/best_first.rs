@@ -166,7 +166,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     // insertion order breaks remaining ties to stay deterministic.
     let mut heap: BinaryHeap<Reverse<((usize, usize), usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
-    let mut footprints: Option<FootprintTracker> = args.opt_match_footprint.then(FootprintTracker::new);
+    let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
 
     nodes.push(Node {
         parent: None,
