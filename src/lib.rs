@@ -165,13 +165,12 @@ pub struct Args {
     pub opt_seen: bool,
 
     /// Disable dedup-by-match (on by default).
-    /// Prunes a successor when another candidate with the same
-    /// *permutation-invariant match footprint* was already seen at an
-    /// equal-or-more-flexible frozen set and equal-or-smaller pattern size.
+    /// Prunes a successor when another candidate with the same set of matches
+    /// was already seen at an equal-or-more-flexible frozen set and equal-or-smaller
+    /// pattern size.
     /// Treats patterns that match the same e-classes binding the same argument
-    /// multisets — e.g. `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)` over a
-    /// commutative e-graph — as one. Computed straight off the factored match
-    /// set (see `footprint`).
+    /// multisets as identical. For example `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)`
+    /// are treated as identical.
     #[arg(long = "no-opt-dedup-by-match", action = clap::ArgAction::SetFalse)]
     pub opt_dedup_by_match: bool,
 
