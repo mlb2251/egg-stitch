@@ -29,6 +29,7 @@
 //! the hot path. Buffers are reused across candidates via [`FootprintScratch`].
 
 use crate::factor::Factor;
+use crate::hashing::{h64, h128, mix64};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::matching::MatchAtEClass;
 use crate::search::SearchState;
@@ -44,20 +45,15 @@ use std::time::{Duration, Instant};
 /// that factor — which can over-merge it — and surface the count as `capped`.
 const TIE_PERM_CAP: usize = 720; // 6!
 
-/// Deterministic salted 64-bit hash. FxHasher is stable across runs (unlike the
-/// std default's randomised keys), which the dedup needs to be reproducible.
-fn h64<T: Hash>(salt: u64, val: &T) -> u64 {
-    let mut h = FxHasher::default();
-    salt.hash(&mut h);
-    val.hash(&mut h);
-    h.finish()
-}
-
-/// 128-bit hash: two independently-salted 64-bit hashes concatenated. Negligible
-/// accidental-collision probability over millions of candidates.
-fn h128<T: Hash>(val: &T) -> u128 {
-    ((h64(0x9E37_79B9_7F4A_7C15, val) as u128) << 64) | h64(0x85EB_CA6B_C2B2_AE35, val) as u128
-}
+// Domain-separation salts: a distinct tag at each hash position so structurally
+// different inputs (a column vs a colour vs a factor vs a root vs the proxy)
+// can't alias even if their byte streams coincide.
+const SALT_COLUMN: u64 = 0xC01C;
+const SALT_COLOR: u64 = 0x0C01_1EC7;
+const SALT_FACTOR: u64 = 0xFAC2;
+const SALT_ROOT: u64 = 0x2007;
+const SALT_ROW_LIST: u64 = 0x0072_6F77;
+const SALT_PROXY: u64 = 0x9001_9001;
 
 /// `Id` as a `u32` (egg ids are `u32`-backed), for hashing.
 fn id_u32(id: egg::Id) -> u32 {
@@ -105,7 +101,7 @@ fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
         .iter_mut()
         .map(|b| {
             b.sort_unstable();
-            h64(0x0C01_1EC7, b)
+            h64(SALT_COLOR, b)
         })
         .collect();
 
@@ -120,7 +116,7 @@ fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
             fh.push(factor_hash(f, &colors, &mut order, &mut col_colors, &mut perm, &mut runs, &mut keys, &mut capped));
         }
         fh.sort_unstable();
-        root_sigs.push(h64(0x2007, &(id_u32(m.root_eclass), &fh)));
+        root_sigs.push(h64(SALT_ROOT, &(id_u32(m.root_eclass), &fh)));
     }
     root_sigs.sort_unstable();
     (h128(&root_sigs), colors, capped)
@@ -131,7 +127,7 @@ fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
 /// them directly; otherwise we extract, sort, and run-length-hash the column.
 fn column_hash(f: &Factor, ci: usize, root: u32, col: &mut Vec<u32>) -> u64 {
     if f.slots.len() == 1 {
-        return h64(0xC01C, &(root, &f.rows));
+        return h64(SALT_COLUMN, &(root, &f.rows));
     }
     col.clear();
     col.extend(f.rows.iter().map(|r| id_u32(r[ci])));
@@ -172,7 +168,7 @@ fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &
     col_colors.extend(order.iter().map(|&p| colors[f.slots[p]]));
 
     let mut h = FxHasher::default();
-    0xFAC2u64.hash(&mut h);
+    SALT_FACTOR.hash(&mut h);
     col_colors.hash(&mut h);
 
     // Maximal equal-colour runs of length ≥ 2 are the tie-groups to permute.
@@ -234,9 +230,7 @@ fn permute_runs(perm: &mut Vec<usize>, runs: &[(usize, usize)], ri: usize, f: &F
 
 /// Order-sensitive 64-bit hash of a sorted key list.
 fn hash_list(keys: &[u64]) -> u64 {
-    let mut h = FxHasher::default();
-    keys.hash(&mut h);
-    h.finish()
+    h64(SALT_ROW_LIST, keys)
 }
 
 /// Heap's algorithm over `perm[start..start+len]`, calling `emit` once per
@@ -274,13 +268,6 @@ fn factorial(n: usize) -> usize {
     (1..=n).product::<usize>().max(1)
 }
 
-/// SplitMix64 finaliser — cheap avalanche for the proxy mixing.
-fn mix64(mut x: u64) -> u64 {
-    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    x ^ (x >> 31)
-}
-
 /// A cheap, permutation-invariant *proxy* for a candidate's footprint: a hash of
 /// `(arity, num_matches, ⊕ over matches of mix(root | num_substs<<32))`. It
 /// depends only on quantities the full signature also quotients invariant (root
@@ -293,7 +280,7 @@ fn cheap_proxy<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> u64
         // Commutative combine (wrapping add) keeps it order-invariant.
         acc = acc.wrapping_add(mix64(id_u32(m.root_eclass) as u64 | ((m.num_substs() as u64) << 32)));
     }
-    h64(0x9001_9001, &(state.pattern.vars.len(), state.matches.len(), acc))
+    h64(SALT_PROXY, &(state.pattern.vars.len(), state.matches.len(), acc))
 }
 
 /// Tracks already-seen match footprints to dedupe successors, mirroring
