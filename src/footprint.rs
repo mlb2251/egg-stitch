@@ -33,6 +33,7 @@ use crate::lang::{LanguageFamily, StitchOp};
 use crate::matching::MatchAtEClass;
 use crate::search::SearchState;
 use rustc_hash::{FxHashMap, FxHasher};
+use std::collections::hash_map::Entry;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
@@ -77,8 +78,11 @@ pub struct FootprintScratch {
     /// Scratch for canonical column ordering.
     order: Vec<usize>,
     col_colors: Vec<u64>,
-    /// Packed row keys for the canonical-matrix hash (see [`factor_hash`]).
-    keys: Vec<u128>,
+    /// Working column permutation and tie-run table for the tie path.
+    perm: Vec<usize>,
+    runs: Vec<(usize, usize)>,
+    /// Per-row keys for the canonical-matrix hash (see [`factor_hash`]).
+    keys: Vec<u64>,
 }
 
 /// The permutation-invariant footprint of a candidate's match set.
@@ -134,7 +138,7 @@ fn compute(matches: &[MatchAtEClass], arity: usize, s: &mut FootprintScratch) ->
     for m in matches {
         s.fh.clear();
         for f in &m.factors {
-            s.fh.push(factor_hash(f, &s.colors, &mut s.order, &mut s.col_colors, &mut s.keys, &mut capped));
+            s.fh.push(factor_hash(f, &s.colors, &mut s.order, &mut s.col_colors, &mut s.perm, &mut s.runs, &mut s.keys, &mut capped));
         }
         s.fh.sort_unstable();
         s.root_sigs.push(h64(0x2007, &(id_u32(m.root_eclass), &s.fh)));
@@ -175,12 +179,12 @@ fn column_hash(f: &Factor, ci: usize, root: u32, col: &mut Vec<u32>) -> u64 {
 /// (smallest) sorted row-hash list. Sets `*capped` and falls back to the plain
 /// colour order if a tie-group exceeds [`TIE_PERM_CAP`].
 ///
-/// The canonical matrix is encoded by hashing each reordered row to a `u128`,
+/// The canonical matrix is encoded by hashing each reordered row to a `u64`,
 /// sorting those, and hashing the list — order-invariant over rows and far
 /// cheaper than allocating and lex-sorting a `Vec<Vec<u32>>` (the sort is over
-/// scalars). 128-bit row hashes make a row-level collision (which would merge two
-/// distinct matrices) negligible. Works for any column count.
-fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &mut Vec<u64>, keys: &mut Vec<u128>, capped: &mut bool) -> u64 {
+/// scalars). Works for any column count.
+#[allow(clippy::too_many_arguments)]
+fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &mut Vec<u64>, perm: &mut Vec<usize>, runs: &mut Vec<(usize, usize)>, keys: &mut Vec<u64>, capped: &mut bool) -> u64 {
     let n = f.slots.len();
     order.clear();
     order.extend(0..n);
@@ -192,84 +196,98 @@ fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &
     0xFAC2u64.hash(&mut h);
     col_colors.hash(&mut h);
 
-    let has_tie = col_colors.windows(2).any(|w| w[0] == w[1]);
-    if !has_tie {
-        // Single canonical column order; hash + sort its rows.
+    // Maximal equal-colour runs of length ≥ 2 are the tie-groups to permute.
+    runs.clear();
+    let mut i = 0;
+    while i < col_colors.len() {
+        let mut j = i + 1;
+        while j < col_colors.len() && col_colors[j] == col_colors[i] {
+            j += 1;
+        }
+        if j - i >= 2 {
+            runs.push((i, j - i));
+        }
+        i = j;
+    }
+
+    if runs.is_empty() {
+        // No ties: the colour-sorted order is the single canonical one.
         row_hashes(keys, f, order);
         keys.hash(&mut h);
-    } else {
-        // Tie-group(s): pick the permutation with the smallest sorted row-hash list.
-        let orderings = group_orderings(order, col_colors).unwrap_or_else(|| {
-            *capped = true;
-            vec![order.to_vec()]
-        });
-        let mut best: Option<Vec<u128>> = None;
-        for p in orderings {
-            row_hashes(keys, f, &p);
-            if best.as_ref().is_none_or(|b| keys.as_slice() < b.as_slice()) {
-                best = Some(keys.clone());
-            }
-        }
-        best.expect("≥1 ordering").hash(&mut h);
+        return h.finish();
     }
+
+    // Tie-group(s): canonical = the smallest sorted row-hash list over within-
+    // group permutations. Enumerated in place (Heap's algorithm into `perm`), so
+    // no per-permutation allocation. Bail to the plain order past the cap.
+    let total = runs.iter().try_fold(1usize, |acc, &(_, l)| acc.checked_mul(factorial(l)));
+    let mut best: Option<u64> = None;
+    if total.is_some_and(|t| t <= TIE_PERM_CAP) {
+        perm.clear();
+        perm.extend_from_slice(order);
+        permute_runs(perm, runs, 0, f, keys, &mut best);
+    } else {
+        *capped = true;
+        row_hashes(keys, f, order);
+        best = Some(hash_list(keys));
+    }
+    best.expect("≥1 ordering").hash(&mut h);
     h.finish()
 }
 
-/// Hashes each row of `f` (columns projected through `perm`) to a `u128` into
-/// `keys`, then sorts — an order-invariant fingerprint of the canonical matrix.
-/// The two independently-salted `FxHasher`s mirror [`h128`].
-fn row_hashes(keys: &mut Vec<u128>, f: &Factor, perm: &[usize]) {
-    keys.clear();
-    keys.extend(f.rows.iter().map(|r| {
-        let mut h1 = FxHasher::default();
-        let mut h2 = FxHasher::default();
-        0x9E37_79B9_7F4A_7C15u64.hash(&mut h1);
-        0x85EB_CA6B_C2B2_AE35u64.hash(&mut h2);
-        for &p in perm {
-            let v = id_u32(r[p]);
-            v.hash(&mut h1);
-            v.hash(&mut h2);
+/// Enumerates every column ordering reachable by permuting within each tie-run of
+/// `perm` (Heap's algorithm, in place), tracking the smallest per-ordering
+/// row-list hash in `best`. Fully reuses `keys` — no per-permutation allocation.
+/// (The min over orderings of `hash(sorted row-keys)` is itself permutation-
+/// canonical, so a scalar min suffices — no need to retain the winning list.)
+fn permute_runs(perm: &mut Vec<usize>, runs: &[(usize, usize)], ri: usize, f: &Factor, keys: &mut Vec<u64>, best: &mut Option<u64>) {
+    let Some(&(start, len)) = runs.get(ri) else {
+        // All runs placed: evaluate this full ordering.
+        row_hashes(keys, f, perm);
+        let hk = hash_list(keys);
+        if best.is_none_or(|b| hk < b) {
+            *best = Some(hk);
         }
-        ((h1.finish() as u128) << 64) | h2.finish() as u128
-    }));
-    keys.sort_unstable();
+        return;
+    };
+    heap_permute(perm, start, len, &mut |perm| permute_runs(perm, runs, ri + 1, f, keys, best));
 }
 
-/// All column orderings reachable by permuting within each equal-colour run of
-/// `base` (positions pre-sorted by colour, `col_colors` parallel). Returns `None`
-/// if the total `∏ run_len!` exceeds [`TIE_PERM_CAP`].
-fn group_orderings(base: &[usize], col_colors: &[u64]) -> Option<Vec<Vec<usize>>> {
-    let mut runs: Vec<&[usize]> = Vec::new();
-    let mut i = 0;
-    while i < base.len() {
-        let mut j = i + 1;
-        while j < base.len() && col_colors[j] == col_colors[i] {
-            j += 1;
-        }
-        runs.push(&base[i..j]);
-        i = j;
+/// Order-sensitive 64-bit hash of a sorted key list.
+fn hash_list(keys: &[u64]) -> u64 {
+    let mut h = FxHasher::default();
+    keys.hash(&mut h);
+    h.finish()
+}
+
+/// Heap's algorithm over `perm[start..start+len]`, calling `emit` once per
+/// permutation (the rest of `perm` is left untouched).
+fn heap_permute(perm: &mut Vec<usize>, start: usize, len: usize, emit: &mut dyn FnMut(&mut Vec<usize>)) {
+    if len <= 1 {
+        emit(perm);
+        return;
     }
-    let mut total: usize = 1;
-    for r in &runs {
-        total = total.checked_mul(factorial(r.len()))?;
-        if total > TIE_PERM_CAP {
-            return None;
-        }
+    for i in 0..len {
+        heap_permute(perm, start, len - 1, emit);
+        let swap = if len.is_multiple_of(2) { start + i } else { start };
+        perm.swap(swap, start + len - 1);
     }
-    let mut result: Vec<Vec<usize>> = vec![Vec::with_capacity(base.len())];
-    for r in &runs {
-        let rp = all_perms(r);
-        let mut next = Vec::with_capacity(result.len() * rp.len());
-        for prefix in &result {
-            for p in &rp {
-                let mut v = prefix.clone();
-                v.extend_from_slice(p);
-                next.push(v);
-            }
+}
+
+/// Hashes each row of `f` (columns projected through `perm`) to a `u64` into
+/// `keys`, then sorts — an order-invariant fingerprint of the canonical matrix.
+/// `u64` is ample here: a factor holds at most a few dozen rows, so a row-key
+/// collision is negligible (the cross-candidate signature stays 128-bit).
+fn row_hashes(keys: &mut Vec<u64>, f: &Factor, perm: &[usize]) {
+    keys.clear();
+    keys.extend(f.rows.iter().map(|r| {
+        let mut h = FxHasher::default();
+        for &p in perm {
+            id_u32(r[p]).hash(&mut h);
         }
-        result = next;
-    }
-    Some(result)
+        h.finish()
+    }));
+    keys.sort_unstable();
 }
 
 /// `n!` (callers cap first, so no overflow concern in practice).
@@ -277,35 +295,53 @@ fn factorial(n: usize) -> usize {
     (1..=n).product::<usize>().max(1)
 }
 
-/// Every permutation of `items` (recursive; only ever called on tiny slices).
-fn all_perms(items: &[usize]) -> Vec<Vec<usize>> {
-    if items.len() <= 1 {
-        return vec![items.to_vec()];
+/// SplitMix64 finaliser — cheap avalanche for the proxy mixing.
+fn mix64(mut x: u64) -> u64 {
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
+}
+
+/// A cheap, permutation-invariant *proxy* for a candidate's footprint: a hash of
+/// `(arity, num_matches, ⊕ over matches of mix(root | num_substs<<32))`. It
+/// depends only on quantities the full signature also quotients invariant (root
+/// ids, per-root subst counts, arity, match count) and never on variable identity
+/// or order, so **footprint-equal ⇒ equal proxy**. One `mix64` per match, no
+/// per-factor/row work — far cheaper than [`compute`].
+fn cheap_proxy<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> u64 {
+    let mut acc: u64 = 0;
+    for m in &state.matches {
+        // Commutative combine (wrapping add) keeps it order-invariant.
+        acc = acc.wrapping_add(mix64(id_u32(m.root_eclass) as u64 | ((m.num_substs() as u64) << 32)));
     }
-    let mut out = Vec::new();
-    for i in 0..items.len() {
-        let mut rest = items.to_vec();
-        let x = rest.remove(i);
-        for mut p in all_perms(&rest) {
-            p.insert(0, x);
-            out.push(p);
-        }
-    }
-    out
+    h64(0x9001_9001, &(state.pattern.vars.len(), state.matches.len(), acc))
 }
 
 /// Tracks already-seen match footprints to dedupe successors, mirroring
 /// [`crate::search::SeenTracker`] but keyed on the permutation-invariant
-/// signature instead of pattern structure. The stored value is the most-flexible
-/// frozen set ever seen for a signature, as a *colour multiset* (compared up to
-/// the same variable permutation the signature quotients out); a repeat is a hit
-/// when a recorded visit's frozen colours are a sub-multiset of the new ones — it
-/// was at least as flexible, so this visit's successors are already reachable.
+/// signature instead of pattern structure.
+///
+/// Two-level: a cheap invariant [`cheap_proxy`] gates the expensive 128-bit
+/// [`compute`]. The first candidate to claim a proxy is kept without computing
+/// its signature at all (a fresh proxy *guarantees* it differs from everything
+/// seen). Only on a proxy collision do we compute the real signature and dedup
+/// within that proxy's bucket. Each bucket entry is `(sig, frozen colours)`; the
+/// frozen colours are the most-flexible set seen for that sig (a *colour
+/// multiset*, compared up to the variable permutation the sig quotients out), and
+/// a repeat is a hit when a recorded entry's frozen colours are a sub-multiset of
+/// the new ones — it was at least as flexible, so this visit's successors are
+/// already reachable.
+///
+/// Tradeoff: the very first true-duplicate within a colliding bucket isn't
+/// pruned (the representative has no stored sig), a small recall loss; soundness
+/// is unaffected since pruning still requires a full 128-bit sig match.
 #[derive(Default)]
 pub struct FootprintTracker {
-    map: FxHashMap<u128, Vec<u64>>,
+    buckets: FxHashMap<u64, Vec<(u128, Vec<u64>)>>,
     scratch: FootprintScratch,
     pub hits: usize,
+    /// Candidates kept via the unique-proxy fast path (full signatures avoided).
+    pub proxy_skips: usize,
     pub capped: usize,
     pub time: Duration,
 }
@@ -314,32 +350,34 @@ impl FootprintTracker {
     pub fn new() -> Self {
         Self::default()
     }
+    /// Number of distinct proxy buckets recorded.
     pub fn len(&self) -> usize {
-        self.map.len()
+        self.buckets.len()
     }
     pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
+        self.buckets.is_empty()
     }
 
-    /// Computes `state`'s footprint (reusing scratch) and records/dedupes it at
-    /// `frozen`. Returns `true` (skip) on a dominated repeat.
+    /// Dedupes `state` at `frozen`. Returns `true` (skip) on a dominated repeat.
     pub fn check_state<F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, frozen: &[bool]) -> bool {
         let t = Instant::now();
+        let proxy = cheap_proxy(state);
+        // Fresh proxy: provably unique, so keep without computing a signature.
+        if let Entry::Vacant(e) = self.buckets.entry(proxy) {
+            e.insert(Vec::new());
+            self.proxy_skips += 1;
+            self.time += t.elapsed();
+            return false;
+        }
+        // Collision: fall back to the real signature.
         let (sig, capped) = compute(&state.matches, state.pattern.vars.len(), &mut self.scratch);
         if capped {
             self.capped += 1;
         }
-        // Disjoint field borrows: `scratch.colors` (read) and `map` (mutated).
         let colors = &self.scratch.colors;
         let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| colors[v]).collect();
         fc.sort_unstable();
-        let skip = match self.map.get(&sig) {
-            Some(existing) if submultiset(existing, &fc) => true,
-            _ => {
-                self.map.insert(sig, fc);
-                false
-            }
-        };
+        let skip = dedup_in_bucket(self.buckets.get_mut(&proxy).expect("present"), sig, fc);
         self.time += t.elapsed();
         if skip {
             self.hits += 1;
@@ -347,29 +385,36 @@ impl FootprintTracker {
         skip
     }
 
-    /// Records a precomputed footprint (used by tests).
+    /// Records a precomputed footprint (used by tests; always exercises the
+    /// signature path via a single shared bucket).
     pub fn check_and_insert(&mut self, fp: &Footprint, frozen: &[bool]) -> bool {
-        let skip = self.record(fp.sig, fp.capped, frozen, &fp.colors);
+        if fp.capped {
+            self.capped += 1;
+        }
+        let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| fp.colors[v]).collect();
+        fc.sort_unstable();
+        let skip = dedup_in_bucket(self.buckets.entry(0).or_default(), fp.sig, fc);
         if skip {
             self.hits += 1;
         }
         skip
     }
+}
 
-    /// Shared record/dedup step: builds the frozen-colour multiset and applies
-    /// the sub-multiset subsumption rule.
-    fn record(&mut self, sig: u128, capped: bool, frozen: &[bool], colors: &[u64]) -> bool {
-        if capped {
-            self.capped += 1;
+/// Sub-multiset subsumption within one proxy bucket: skip if an entry with this
+/// `sig` has frozen colours that are a sub-multiset of `fc` (was at least as
+/// flexible); otherwise record `fc` (overwriting a non-dominated same-sig entry,
+/// mirroring the seen-set) and keep.
+fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>)>, sig: u128, fc: Vec<u64>) -> bool {
+    match bucket.iter_mut().find(|(s, _)| *s == sig) {
+        Some(entry) if submultiset(&entry.1, &fc) => true,
+        Some(entry) => {
+            entry.1 = fc;
+            false
         }
-        let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| colors[v]).collect();
-        fc.sort_unstable();
-        match self.map.get(&sig) {
-            Some(existing) if submultiset(existing, &fc) => true,
-            _ => {
-                self.map.insert(sig, fc);
-                false
-            }
+        None => {
+            bucket.push((sig, fc));
+            false
         }
     }
 }
