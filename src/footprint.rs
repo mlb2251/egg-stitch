@@ -29,6 +29,7 @@
 //! the hot path. Buffers are reused across candidates via [`FootprintScratch`].
 
 use crate::factor::Factor;
+use crate::hashing::{h64, h128, mix64};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::matching::MatchAtEClass;
 use crate::search::SearchState;
@@ -43,20 +44,15 @@ use std::time::{Duration, Instant};
 /// that factor — which can over-merge it — and surface the count as `capped`.
 const TIE_PERM_CAP: usize = 720; // 6!
 
-/// Deterministic salted 64-bit hash. FxHasher is stable across runs (unlike the
-/// std default's randomised keys), which the dedup needs to be reproducible.
-fn h64<T: Hash>(salt: u64, val: &T) -> u64 {
-    let mut h = FxHasher::default();
-    salt.hash(&mut h);
-    val.hash(&mut h);
-    h.finish()
-}
-
-/// 128-bit hash: two independently-salted 64-bit hashes concatenated. Negligible
-/// accidental-collision probability over millions of candidates.
-fn h128<T: Hash>(val: &T) -> u128 {
-    ((h64(0x9E37_79B9_7F4A_7C15, val) as u128) << 64) | h64(0x85EB_CA6B_C2B2_AE35, val) as u128
-}
+// Domain-separation salts: a distinct tag at each hash position so structurally
+// different inputs (a column vs a colour vs a factor vs a root vs the proxy)
+// can't alias even if their byte streams coincide.
+const SALT_COLUMN: u64 = 0xC01C;
+const SALT_COLOR: u64 = 0x0C01_1EC7;
+const SALT_FACTOR: u64 = 0xFAC2;
+const SALT_ROOT: u64 = 0x2007;
+const SALT_ROW_LIST: u64 = 0x0072_6F77;
+const SALT_PROXY: u64 = 0x9001_9001;
 
 /// `Id` as a `u32` (egg ids are `u32`-backed), for hashing.
 fn id_u32(id: egg::Id) -> u32 {
@@ -87,26 +83,8 @@ fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint {
 /// Buffers are reused across the inner factor loops but allocated per call —
 /// they're small and same-sized, so the allocator serves them essentially free.
 fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
-    // Pass 1: global per-variable colours. colour(v) fingerprints v's
-    // root-anchored value distribution, read column-by-column off the stored
-    // factors (no cartesian product, no HashMap).
-    let mut buckets: Vec<Vec<u64>> = vec![Vec::new(); arity];
-    let mut col: Vec<u32> = Vec::new();
-    for m in matches {
-        let root = id_u32(m.root_eclass);
-        for f in &m.factors {
-            for (ci, &slot) in f.slots.iter().enumerate() {
-                buckets[slot].push(column_hash(f, ci, root, &mut col));
-            }
-        }
-    }
-    let colors: Vec<u64> = buckets
-        .iter_mut()
-        .map(|b| {
-            b.sort_unstable();
-            h64(0x0C01_1EC7, b)
-        })
-        .collect();
+    // Pass 1: global per-variable colours.
+    let colors = compute_colors(matches, arity);
 
     // Pass 2: hash each factor canonically, combine per root then over roots as
     // sorted multisets.
@@ -119,10 +97,134 @@ fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
             fh.push(factor_hash(f, &colors, &mut order, &mut col_colors, &mut perm, &mut runs, &mut keys, &mut capped));
         }
         fh.sort_unstable();
-        root_sigs.push(h64(0x2007, &(id_u32(m.root_eclass), &fh)));
+        root_sigs.push(h64(SALT_ROOT, &(id_u32(m.root_eclass), &fh)));
     }
     root_sigs.sort_unstable();
     (h128(&root_sigs), colors, capped)
+}
+
+/// Pass 1: global per-variable colours. colour(v) fingerprints v's root-anchored
+/// value distribution, read column-by-column off the stored factors (no
+/// cartesian product, no HashMap). Corresponding variables across a single
+/// global permutation get equal colours.
+fn compute_colors(matches: &[MatchAtEClass], arity: usize) -> Vec<u64> {
+    let mut buckets: Vec<Vec<u64>> = vec![Vec::new(); arity];
+    let mut col: Vec<u32> = Vec::new();
+    for m in matches {
+        let root = id_u32(m.root_eclass);
+        for f in &m.factors {
+            for (ci, &slot) in f.slots.iter().enumerate() {
+                buckets[slot].push(column_hash(f, ci, root, &mut col));
+            }
+        }
+    }
+    buckets
+        .iter_mut()
+        .map(|b| {
+            b.sort_unstable();
+            h64(SALT_COLOR, b)
+        })
+        .collect()
+}
+
+/// Cap on the number of colour-group column permutations brute-forced by the
+/// slow-path equivalence check. Beyond it we cannot disprove equivalence, so we
+/// conservatively report `true` (never a false alarm).
+const SLOW_PERM_CAP: usize = 100_000;
+
+/// Exact, slow-path footprint equivalence of two match sets over `arity` slots.
+/// Returns `false` only when the two are provably NOT related by any single
+/// global colour-preserving column permutation — i.e. a signature equality was a
+/// hash accident (or an over-merge), not a genuine equivalence. Returns `true`
+/// when a witness permutation makes them identical as `{root ↦ multiset of
+/// factors}`, or when the permutation search exceeds [`SLOW_PERM_CAP`] (then we
+/// can't disprove). Used only under `check_slow` to validate signature hits.
+///
+/// Compared at the *factor* level (not the materialised product), matching the
+/// signature's own granularity: differently-factored relations hash differently
+/// and so are reported inequivalent here too.
+pub fn footprint_equivalent(a: &[MatchAtEClass], b: &[MatchAtEClass], arity: usize) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let (ca, cb) = (compute_colors(a, arity), compute_colors(b, arity));
+    // Group columns by colour; a valid π maps each a-column to a b-column of
+    // equal colour. Mismatched colour multisets ⇒ no such π.
+    let mut groups: FxHashMap<u64, (Vec<usize>, Vec<usize>)> = FxHashMap::default();
+    for (v, &c) in ca.iter().enumerate() {
+        groups.entry(c).or_default().0.push(v);
+    }
+    for (v, &c) in cb.iter().enumerate() {
+        match groups.get_mut(&c) {
+            Some(g) => g.1.push(v),
+            None => return false,
+        }
+    }
+    let groups: Vec<(Vec<usize>, Vec<usize>)> = groups.into_values().collect();
+    if groups.iter().any(|(ga, gb)| ga.len() != gb.len()) {
+        return false;
+    }
+    // Bail (can't disprove) when the permutation search is too large.
+    let total = groups.iter().try_fold(1usize, |acc, (ga, _)| acc.checked_mul(factorial(ga.len())));
+    if !total.is_some_and(|t| t <= SLOW_PERM_CAP) {
+        return true;
+    }
+    let canon_b = canonicalize(b, &(0..arity).collect::<Vec<_>>());
+    let mut perm = vec![0usize; arity];
+    enumerate_perms(&groups, 0, &mut perm, &mut |perm| canonicalize(a, perm) == canon_b)
+}
+
+/// Comparable canonical form of a match set under column relabelling `perm`
+/// (`perm[k]` is the new label of variable `k`): `{root ↦ sorted multiset of
+/// factors}`, each factor a `(sorted new-slots, sorted rows aligned to that slot
+/// order)`. Two match sets share a canonical form under some `perm` iff that one
+/// global permutation makes them identical.
+#[allow(clippy::type_complexity)]
+fn canonicalize(matches: &[MatchAtEClass], perm: &[usize]) -> Vec<(u32, Vec<(Vec<usize>, Vec<Vec<u32>>)>)> {
+    let mut out: Vec<(u32, Vec<(Vec<usize>, Vec<Vec<u32>>)>)> = matches
+        .iter()
+        .map(|m| {
+            let mut factors: Vec<(Vec<usize>, Vec<Vec<u32>>)> = m
+                .factors
+                .iter()
+                .map(|f| {
+                    // Relabel slots, then sort columns by new label.
+                    let mut cols: Vec<(usize, usize)> = f.slots.iter().enumerate().map(|(ci, &k)| (perm[k], ci)).collect();
+                    cols.sort_unstable();
+                    let slots: Vec<usize> = cols.iter().map(|&(s, _)| s).collect();
+                    let mut rows: Vec<Vec<u32>> = f.rows.iter().map(|r| cols.iter().map(|&(_, ci)| id_u32(r[ci])).collect()).collect();
+                    rows.sort_unstable();
+                    (slots, rows)
+                })
+                .collect();
+            factors.sort_unstable();
+            (id_u32(m.root_eclass), factors)
+        })
+        .collect();
+    out.sort_unstable();
+    out
+}
+
+/// Enumerates every global colour-preserving permutation `perm[a_col] = b_col`,
+/// one colour group at a time, returning `true` as soon as `test` accepts a
+/// completed `perm` (short-circuits the remaining orderings).
+fn enumerate_perms(groups: &[(Vec<usize>, Vec<usize>)], gi: usize, perm: &mut [usize], test: &mut dyn FnMut(&[usize]) -> bool) -> bool {
+    let Some((ga, gb)) = groups.get(gi) else {
+        return test(perm);
+    };
+    let mut order = gb.clone();
+    let n = order.len();
+    let mut found = false;
+    heap_permute(&mut order, 0, n, &mut |order| {
+        if found {
+            return;
+        }
+        for (i, &av) in ga.iter().enumerate() {
+            perm[av] = order[i];
+        }
+        found = enumerate_perms(groups, gi + 1, perm, test);
+    });
+    found
 }
 
 /// Hash of column `ci` of `f` at `root` as a root-anchored value multiset. For a
@@ -130,7 +232,7 @@ fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
 /// them directly; otherwise we extract, sort, and run-length-hash the column.
 fn column_hash(f: &Factor, ci: usize, root: u32, col: &mut Vec<u32>) -> u64 {
     if f.slots.len() == 1 {
-        return h64(0xC01C, &(root, &f.rows));
+        return h64(SALT_COLUMN, &(root, &f.rows));
     }
     col.clear();
     col.extend(f.rows.iter().map(|r| id_u32(r[ci])));
@@ -171,7 +273,7 @@ fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &
     col_colors.extend(order.iter().map(|&p| colors[f.slots[p]]));
 
     let mut h = FxHasher::default();
-    0xFAC2u64.hash(&mut h);
+    SALT_FACTOR.hash(&mut h);
     col_colors.hash(&mut h);
 
     // Maximal equal-colour runs of length ≥ 2 are the tie-groups to permute.
@@ -233,9 +335,7 @@ fn permute_runs(perm: &mut Vec<usize>, runs: &[(usize, usize)], ri: usize, f: &F
 
 /// Order-sensitive 64-bit hash of a sorted key list.
 fn hash_list(keys: &[u64]) -> u64 {
-    let mut h = FxHasher::default();
-    keys.hash(&mut h);
-    h.finish()
+    h64(SALT_ROW_LIST, keys)
 }
 
 /// Heap's algorithm over `perm[start..start+len]`, calling `emit` once per
@@ -273,13 +373,6 @@ fn factorial(n: usize) -> usize {
     (1..=n).product::<usize>().max(1)
 }
 
-/// SplitMix64 finaliser — cheap avalanche for the proxy mixing.
-fn mix64(mut x: u64) -> u64 {
-    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    x ^ (x >> 31)
-}
-
 /// A cheap, permutation-invariant *proxy* for a candidate's footprint: a hash of
 /// `(arity, num_matches, ⊕ over matches of mix(root | num_substs<<32))`. It
 /// depends only on quantities the full signature also quotients invariant (root
@@ -292,7 +385,7 @@ fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
         // Commutative combine (wrapping add) keeps it order-invariant.
         acc = acc.wrapping_add(mix64(id_u32(m.root_eclass) as u64 | ((m.num_substs() as u64) << 32)));
     }
-    h64(0x9001_9001, &(arity, matches.len(), acc))
+    h64(SALT_PROXY, &(arity, matches.len(), acc))
 }
 
 /// Tracks already-seen match footprints to dedupe successors, mirroring
@@ -338,7 +431,9 @@ pub struct FootprintTracker {
 #[derive(Default)]
 struct Bucket {
     rep: Option<RepHandle>,
-    entries: Vec<(u128, Vec<u64>, usize)>,
+    /// Each entry: `(signature, frozen colours, min size, node id)`. The node id
+    /// resolves the entry's match set on demand for the `check_slow` validation.
+    entries: Vec<(u128, Vec<u64>, usize, usize)>,
 }
 
 /// A deferred representative: enough to materialise its bucket entry on demand
@@ -368,17 +463,20 @@ impl FootprintTracker {
     /// representative can re-read its match set later), and `resolve` maps a node
     /// index back to its stored match set. Returns `true` (skip) on a dominated
     /// repeat.
-    pub fn check_state<'n, F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, frozen: &[bool], size: usize, id: usize, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
+    pub fn check_state<'n, F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, frozen: &[bool], size: usize, id: usize, check_slow: bool, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
         let t = Instant::now();
-        let skip = self.check_core(&state.matches, state.pattern.vars.len(), frozen, size, id, resolve);
+        let skip = self.check_core(&state.matches, state.pattern.vars.len(), frozen, size, id, check_slow, resolve);
         self.time += t.elapsed();
         skip
     }
 
     /// Core dedup over raw match data (split out from [`check_state`] so it can be
     /// unit-tested with a plain match-set resolver). See the type docs for the
-    /// lazy-representative scheme.
-    fn check_core<'n>(&mut self, matches: &[MatchAtEClass], arity: usize, frozen: &[bool], size: usize, id: usize, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
+    /// lazy-representative scheme. With `check_slow`, every signature equality is
+    /// validated against the exact [`footprint_equivalent`] relation before being
+    /// trusted — catching a hash collision or over-merge rather than silently
+    /// pruning a genuinely distinct candidate.
+    fn check_core<'n>(&mut self, matches: &[MatchAtEClass], arity: usize, frozen: &[bool], size: usize, id: usize, check_slow: bool, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
         let proxy = cheap_proxy_of(matches, arity);
         let rep = {
             let bucket = self.buckets.entry(proxy).or_default();
@@ -399,14 +497,24 @@ impl FootprintTracker {
                 self.capped += 1;
             }
             let rfc = frozen_colors(&rep.frozen, &rcolors);
-            self.buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size));
+            self.buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size, rep.id));
         }
         let (sig, colors, capped) = compute(matches, arity);
         if capped {
             self.capped += 1;
         }
+        // Slow guard: a signature equality must reflect a genuine footprint
+        // equivalence. Re-read each same-sig entry's match set and confirm an
+        // exact column-permutation witness before any dedup decision rests on it.
+        if check_slow {
+            for e in &self.buckets.get(&proxy).expect("present").entries {
+                if e.0 == sig {
+                    assert!(footprint_equivalent(resolve(e.3), matches, arity), "footprint signature collision: distinct match sets share signature {sig:#034x}");
+                }
+            }
+        }
         let fc = frozen_colors(frozen, &colors);
-        let skip = dedup_in_bucket(&mut self.buckets.get_mut(&proxy).expect("present").entries, sig, fc, size);
+        let skip = dedup_in_bucket(&mut self.buckets.get_mut(&proxy).expect("present").entries, sig, fc, size, id);
         if skip {
             self.hits += 1;
         }
@@ -420,7 +528,7 @@ impl FootprintTracker {
             self.capped += 1;
         }
         let fc = frozen_colors(frozen, &fp.colors);
-        let skip = dedup_in_bucket(&mut self.buckets.entry(0).or_default().entries, fp.sig, fc, size);
+        let skip = dedup_in_bucket(&mut self.buckets.entry(0).or_default().entries, fp.sig, fc, size, 0);
         if skip {
             self.hits += 1;
         }
@@ -443,8 +551,8 @@ fn frozen_colors(frozen: &[bool], colors: &[u64]) -> Vec<u64> {
 /// keep, and fold the newcomer's (more-flexible) frozen set and (smaller) size
 /// into the entry. Footprint-equal patterns differ only in definition size, so
 /// the size guard ensures a strictly smaller equivalent is never pruned away.
-fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>, usize)>, sig: u128, fc: Vec<u64>, size: usize) -> bool {
-    match bucket.iter_mut().find(|(s, _, _)| *s == sig) {
+fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>, usize, usize)>, sig: u128, fc: Vec<u64>, size: usize, id: usize) -> bool {
+    match bucket.iter_mut().find(|(s, ..)| *s == sig) {
         Some(entry) if submultiset(&entry.1, &fc) && entry.2 <= size => true,
         Some(entry) => {
             entry.1 = fc;
@@ -452,7 +560,7 @@ fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>, usize)>, sig: u128, fc: Vec
             false
         }
         None => {
-            bucket.push((sig, fc, size));
+            bucket.push((sig, fc, size, id));
             false
         }
     }
@@ -559,8 +667,8 @@ mod tests {
         let store = vec![vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![10, 11]])]];
         let resolve = |i: usize| &store[i][..];
         // Representative kept (deferred), then its identical-footprint peer pruned.
-        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, &resolve));
-        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, &resolve));
+        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, true, &resolve));
+        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, true, &resolve));
         assert_eq!(t.proxy_skips, 1);
         assert_eq!(t.hits, 1);
     }
@@ -572,8 +680,34 @@ mod tests {
         let mut t = FootprintTracker::new();
         let store = vec![vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![11, 10]])]];
         let resolve = |i: usize| &store[i][..];
-        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, &resolve));
-        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, &resolve));
+        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, true, &resolve));
+        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, true, &resolve));
+    }
+
+    /// Exact slow-path check: a commutative swap is a genuine equivalence (a
+    /// global column permutation witnesses it).
+    #[test]
+    fn equivalent_accepts_commutative_swap() {
+        let a = vec![match_at(100, 2, vec![vec![10, 11]])];
+        let b = vec![match_at(100, 2, vec![vec![11, 10]])];
+        assert!(footprint_equivalent(&a, &b, 2));
+    }
+
+    /// Exact slow-path check: same per-column marginals but a different joint
+    /// pairing is NOT equivalent — no global permutation maps one to the other.
+    #[test]
+    fn equivalent_rejects_different_joint() {
+        let a = vec![match_at(100, 2, vec![vec![10, 11], vec![12, 13]])];
+        let b = vec![match_at(100, 2, vec![vec![10, 13], vec![12, 11]])];
+        assert!(!footprint_equivalent(&a, &b, 2));
+    }
+
+    /// Exact slow-path check: distinct roots are never equivalent (anchored ids).
+    #[test]
+    fn equivalent_rejects_distinct_roots() {
+        let a = vec![match_at(100, 2, vec![vec![10, 11]])];
+        let b = vec![match_at(200, 2, vec![vec![10, 11]])];
+        assert!(!footprint_equivalent(&a, &b, 2));
     }
 
     /// Cost guard: a footprint-equal pattern that is *strictly smaller* is never

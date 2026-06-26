@@ -7,6 +7,7 @@ pub mod egraph_util;
 pub mod factor;
 pub mod follow;
 pub mod footprint;
+pub mod hashing;
 pub mod io;
 pub mod lang;
 pub mod logging;
