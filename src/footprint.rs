@@ -64,27 +64,6 @@ fn id_u32(id: egg::Id) -> u32 {
     usize::from(id) as u32
 }
 
-/// Reusable buffers for [`compute`], owned by [`FootprintTracker`] so the hot
-/// path allocates nothing per candidate.
-#[derive(Default)]
-pub struct FootprintScratch {
-    /// Per-variable colour contributions (one bucket per slot), then the colours.
-    buckets: Vec<Vec<u64>>,
-    pub colors: Vec<u64>,
-    /// Scratch column / per-factor / per-root hash buffers.
-    col: Vec<u32>,
-    fh: Vec<u64>,
-    root_sigs: Vec<u64>,
-    /// Scratch for canonical column ordering.
-    order: Vec<usize>,
-    col_colors: Vec<u64>,
-    /// Working column permutation and tie-run table for the tie path.
-    perm: Vec<usize>,
-    runs: Vec<(usize, usize)>,
-    /// Per-row keys for the canonical-matrix hash (see [`factor_hash`]).
-    keys: Vec<u64>,
-}
-
 /// The permutation-invariant footprint of a candidate's match set.
 pub struct Footprint {
     pub sig: u128,
@@ -92,8 +71,7 @@ pub struct Footprint {
     pub capped: bool,
 }
 
-/// Computes the footprint of a search state (allocates its own scratch; used by
-/// tests). The hot path goes through [`FootprintTracker::check_state`] instead.
+/// Computes the footprint of a search state.
 pub fn footprint<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> Footprint {
     footprint_of(&state.matches, state.pattern.vars.len())
 }
@@ -101,50 +79,51 @@ pub fn footprint<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> F
 /// Footprint of raw match data over `arity` slots. Split out for unit testing
 /// without a full e-graph.
 fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint {
-    let mut s = FootprintScratch::default();
-    let (sig, capped) = compute(matches, arity, &mut s);
-    Footprint { sig, colors: s.colors, capped }
+    let (sig, colors, capped) = compute(matches, arity);
+    Footprint { sig, colors, capped }
 }
 
-/// Core signature computation, writing per-variable colours into `s.colors`.
-/// Returns `(signature, capped)` where `capped` flags a tie-group that exceeded
-/// [`TIE_PERM_CAP`].
-fn compute(matches: &[MatchAtEClass], arity: usize, s: &mut FootprintScratch) -> (u128, bool) {
+/// Core signature computation. Returns `(signature, per-variable colours,
+/// capped)`, where `capped` flags a tie-group that exceeded [`TIE_PERM_CAP`].
+/// Buffers are reused across the inner factor loops but allocated per call —
+/// they're small and same-sized, so the allocator serves them essentially free.
+fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
     // Pass 1: global per-variable colours. colour(v) fingerprints v's
     // root-anchored value distribution, read column-by-column off the stored
     // factors (no cartesian product, no HashMap).
-    s.buckets.resize_with(arity, Vec::new);
-    for b in s.buckets.iter_mut() {
-        b.clear();
-    }
+    let mut buckets: Vec<Vec<u64>> = vec![Vec::new(); arity];
+    let mut col: Vec<u32> = Vec::new();
     for m in matches {
         let root = id_u32(m.root_eclass);
         for f in &m.factors {
             for (ci, &slot) in f.slots.iter().enumerate() {
-                s.buckets[slot].push(column_hash(f, ci, root, &mut s.col));
+                buckets[slot].push(column_hash(f, ci, root, &mut col));
             }
         }
     }
-    s.colors.clear();
-    for b in s.buckets.iter_mut() {
-        b.sort_unstable();
-        s.colors.push(h64(0x0C01_1EC7, b));
-    }
+    let colors: Vec<u64> = buckets
+        .iter_mut()
+        .map(|b| {
+            b.sort_unstable();
+            h64(0x0C01_1EC7, b)
+        })
+        .collect();
 
     // Pass 2: hash each factor canonically, combine per root then over roots as
     // sorted multisets.
     let mut capped = false;
-    s.root_sigs.clear();
+    let (mut fh, mut order, mut col_colors, mut perm, mut runs, mut keys) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut root_sigs: Vec<u64> = Vec::with_capacity(matches.len());
     for m in matches {
-        s.fh.clear();
+        fh.clear();
         for f in &m.factors {
-            s.fh.push(factor_hash(f, &s.colors, &mut s.order, &mut s.col_colors, &mut s.perm, &mut s.runs, &mut s.keys, &mut capped));
+            fh.push(factor_hash(f, &colors, &mut order, &mut col_colors, &mut perm, &mut runs, &mut keys, &mut capped));
         }
-        s.fh.sort_unstable();
-        s.root_sigs.push(h64(0x2007, &(id_u32(m.root_eclass), &s.fh)));
+        fh.sort_unstable();
+        root_sigs.push(h64(0x2007, &(id_u32(m.root_eclass), &fh)));
     }
-    s.root_sigs.sort_unstable();
-    (h128(&s.root_sigs), capped)
+    root_sigs.sort_unstable();
+    (h128(&root_sigs), colors, capped)
 }
 
 /// Hash of column `ci` of `f` at `root` as a root-anchored value multiset. For a
@@ -338,7 +317,6 @@ fn cheap_proxy<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> u64
 #[derive(Default)]
 pub struct FootprintTracker {
     buckets: FxHashMap<u64, Vec<(u128, Vec<u64>)>>,
-    scratch: FootprintScratch,
     pub hits: usize,
     /// Candidates kept via the unique-proxy fast path (full signatures avoided).
     pub proxy_skips: usize,
@@ -370,11 +348,10 @@ impl FootprintTracker {
             return false;
         }
         // Collision: fall back to the real signature.
-        let (sig, capped) = compute(&state.matches, state.pattern.vars.len(), &mut self.scratch);
+        let (sig, colors, capped) = compute(&state.matches, state.pattern.vars.len());
         if capped {
             self.capped += 1;
         }
-        let colors = &self.scratch.colors;
         let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| colors[v]).collect();
         fc.sort_unstable();
         let skip = dedup_in_bucket(self.buckets.get_mut(&proxy).expect("present"), sig, fc);
