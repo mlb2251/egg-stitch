@@ -12,16 +12,21 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
-/// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
+/// Inserts a freshly-expanded state into the parallel (states, weights) deduped-by-pattern
+/// buffer, either adding `weight` to an existing group's importance weight or pushing a new one.
+///
+/// `weight` is the particle's self-normalized importance weight `count · p(a)/q(a)`:
+/// the number of particles that took the producing action, times the ratio of the
+/// natural prior `p(a) ∝ support` to the (boosted) proposal `q(a) ∝ kind_scale·support`
+/// it was actually sampled from. With `boost = 1` this is just the integer multiplicity.
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, weight: f64, states: &mut Vec<SearchState<F, O>>, weights: &mut Vec<f64>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
     match dedup.get(&s.pattern) {
-        Some(&idx) => mults[idx] += count,
+        Some(&idx) => weights[idx] += weight,
         None => {
             let idx = states.len();
             dedup.insert(s.pattern.clone(), idx);
             states.push(s);
-            mults.push(count);
+            weights.push(weight);
         }
     }
 }
@@ -42,8 +47,13 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
 ///
 /// Particles are stored as `(SearchState, multiplicity)` pairs. After each
-/// expansion step, identical patterns are deduplicated and their counts merged,
-/// so cost computation runs once per unique pattern instead of once per particle.
+/// expansion step, identical patterns are deduplicated, so cost computation runs
+/// once per unique pattern instead of once per particle. Each unique pattern
+/// accumulates a self-normalized importance weight `Σ count · p(a)/q(a)`: the
+/// successor actions are *sampled* from the boosted proposal `q(a) ∝
+/// kind_scale·support`, then reweighted by the natural prior `p(a) ∝ support` so
+/// the resampling targets `p(x)·exp(-cost(x)/T)` rather than the proposal. The
+/// reweight multiplies that importance weight by `exp(-cost/T)` (see below).
 #[allow(clippy::needless_range_loop)]
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
@@ -96,13 +106,15 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // avoiding the per-shape `clone + expand` work for successors that
         // win zero samples. Resulting patterns are deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
-        let mut mults: Vec<usize> = Vec::new();
+        let mut imp_weights: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
+                    // Deterministic successor: proposal == prior == 1, so the
+                    // importance weight is just the parent multiplicity.
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                        dedup_insert(child, mult as f64, &mut expanded, &mut imp_weights, &mut dedup);
                     }
                     continue;
                 }
@@ -111,20 +123,33 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 SuccessorEnum::All { actions, .. } => actions,
             };
             if actions.is_empty() {
-                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                // Terminal particle carried forward unchanged: weight is its
+                // multiplicity (no transition, so no prior/proposal correction).
+                dedup_insert(state, mult as f64, &mut expanded, &mut imp_weights, &mut dedup);
                 continue;
             }
+            // Sample `mult` actions from the boosted proposal q(a) ∝
+            // kind_scale·support, then debias each sampled child by p(a)/q(a),
+            // where the natural prior is p(a) ∝ support. This makes the boost a
+            // pure proposal knob: it steers *which* children get materialised
+            // without biasing the target the resampling converges to.
+            let s_prior: f64 = actions.iter().map(|(_, support)| *support as f64).sum();
             let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
+            // `normalize_and_accumulate` normalizes `weights` in place, so after
+            // this `weights[k]` holds q(a_k) (incl. the uniform zero-sum fallback).
             let acc = normalize_and_accumulate(&mut weights);
             let mut counts: Vec<usize> = vec![0; actions.len()];
             for _ in 0..mult {
                 counts[weighted_choice(&acc, rng)] += 1;
             }
-            for ((action, _), count) in actions.into_iter().zip(counts) {
+            for (k, ((action, support), count)) in actions.into_iter().zip(counts).enumerate() {
                 if count > 0 {
                     let child = state.apply_action(&action, &shared, true, None);
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                        // p(a)/q(a) · count. q(a) = weights[k] > 0 (a 0-prob
+                        // action can't have been sampled), so no division by zero.
+                        let prior_over_proposal = (support as f64 / s_prior) / weights[k];
+                        dedup_insert(child, count as f64 * prior_over_proposal, &mut expanded, &mut imp_weights, &mut dedup);
                     }
                 }
             }
@@ -158,9 +183,12 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             pruned.push(false);
         }
 
-        // log-space weights: logw_i = -cost_i / temperature; pruned particles
-        // (lb >= best) are dead since no descendant can beat the current best.
-        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
+        // log-space weights: logw_i = ln(imp_weight_i) - cost_i / temperature.
+        // The ln(imp_weight_i) term carries the deduped particle multiplicities,
+        // prior-corrected for the proposal (see the expansion loop). Pruned
+        // particles (lb >= best) are dead since no descendant can beat the
+        // current best.
+        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { imp_weights[i].ln() - (*c as f64) / temperature }).collect();
 
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
