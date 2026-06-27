@@ -1,22 +1,22 @@
 {
-  "compression_ratio": 2.034754948162111,
+  "compression_ratio": 2.0342756183745583,
   "cost_after_rewrites": 17271,
   "cost_at_end_of_each_iter": [
-    10432,
-    9065,
-    8676,
-    8488
+    10434,
+    9067,
+    8678,
+    8490
   ],
-  "final_cost": 8488,
+  "final_cost": 8490,
   "initial_cost": 25999,
   "library": [
     {
-      "approx_cost": 13248,
+      "approx_cost": 12354,
       "arity": 2,
-      "lambda": "(lam (lam (and (or $1 (not $0)) (or (not $1) $0))))",
+      "lambda": "(lam (lam (and (or (not (not $1)) (not $0)) (or (not $1) $0))))",
       "num_matches": 49,
-      "pattern": "fn_0: (and (or ?#0 (not ?#1)) (or (not ?#0) ?#1))",
-      "pattern_size": 9,
+      "pattern": "fn_0: (and (or (not (not ?#0)) (not ?#1)) (or (not ?#0) ?#1))",
+      "pattern_size": 11,
       "usage_matches": 448
     },
     {
