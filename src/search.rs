@@ -1,12 +1,14 @@
 use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
 use crate::factor::{Factor, rebuild_factor};
-use crate::lang::{LanguageFamily, OpWithFrozenVar, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
+use crate::seen_slotted::{SeenLang, SlottedSeen, pattern_to_seen_recexpr};
 use crate::shift_equal::shift_equal;
-use egg::{Id, Language, RecExpr};
+use egg::{Id, Language};
 use rustc_hash::{FxHashMap, FxHashSet};
+use slotted_egraphs::{AppliedId as SlottedAppliedId, Rewrite as SlottedRewrite};
 use std::time::{Duration, Instant};
 
 /// A candidate expansion shape: an enode's discriminant paired with its arity.
@@ -47,55 +49,44 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// `full_dom_hits - hits` is the extra dedup that never forgetting a mask
     /// would buy over the single-slot `map`.
     dom_map: FxHashMap<Pattern<F, O>, Vec<Vec<bool>>>,
-    /// Experimental second seen-set: an egraph over the frozen-var language.
-    /// Each pattern is converted into a `RecExpr<F::Apply<OpWithFrozenVar<O>>>`
-    /// and looked up / inserted here, so the freeze mask is part of the *term*
-    /// rather than a side value. Shadow-run alongside `map` to validate the
-    /// encoding — `map` still drives the search.
+    /// The seen-egraph proper: a *slotted* e-graph over [`SeenLang`]. Each pattern
+    /// plus its freeze mask is encoded as a `$root$`-wrapped term where non-frozen
+    /// metavariables become free slots `(pv $k)` and frozen ones become `(fpv $k)`
+    /// (see [`crate::seen_slotted`]). Alpha-equivalent patterns — the same shape
+    /// with metavariables permuted — share an e-class *natively*, with no rules:
+    /// that is the blow-up (commutativity/associativity emitting reordered
+    /// variables) this backend exists to fold. Lifted DSRs run to saturation add
+    /// DSR-equivalence on top, matching the egg seen-egraph this replaces.
     ///
-    /// With `saturate_each` on (the default) the lifted DSRs are run to
-    /// saturation and the egraph rebuilt after every genuine insert, so an
-    /// `egraph_hits` records a *DSR-equivalent* repeat, not just a syntactic
-    /// one. With it off the egraph is a pure hash-cons that only dedups
-    /// syntactically identical terms.
-    ///
-    /// Each inserted term is wrapped in a `Root` sentinel
-    /// ([`pattern_to_frozen_recexpr`]). Without it, `add_expr` interns every
-    /// subterm, so `lookup_expr` would hit on a pattern that merely appears
-    /// inside a larger inserted one — far more than true top-level repeats. With
-    /// the wrapper a hit means the whole `(syntax, frozen)` term was inserted as
-    /// a top-level pattern (modulo congruence), matching `map`'s notion of a
-    /// visited state.
-    seen_egraph: egg::EGraph<F::Apply<OpWithFrozenVar<O>>, ()>,
+    /// `$root$` wrapping keeps membership top-level only: `add_expr` interns every
+    /// subterm, so without it a lookup would hit a pattern that merely occurs
+    /// inside a larger inserted one. Shadow-run alongside `map`; `egraph_decides`
+    /// selects which verdict drives the search.
+    seen: SlottedSeen,
     pub hits: usize,
     /// Calls that would skip under *exact*-mask matching rather than subset
     /// domination: same `map` lookup, but the stored mask must equal `frozen`
     /// exactly. `hits - exact_hits` is the extra dedup subset-domination buys.
     pub exact_hits: usize,
     pub time: Duration,
-    /// Total calls the shadow seen-egraph deduped (exact `(syntax, frozen)`
-    /// membership, modulo congruence). The `map`-side total is `hits`.
+    /// Total calls the seen-egraph deduped (membership of the `$root$`-wrapped
+    /// term, modulo slot renaming and any saturation merges). The `map`-side
+    /// total is `hits`.
     pub egraph_hits: usize,
     /// Calls the never-evicted [`Self::dom_map`] would skip: some retained mask
     /// dominates `frozen`. This is what `map`'s subset domination would catch if
     /// it never overwrote, so `full_dom_hits >= hits`.
     pub full_dom_hits: usize,
-    /// Genuine top-level inserts into `seen_egraph`: incremented only when the
-    /// `Root`-wrapped term was *not* already present (one `add_expr` per
-    /// increment). Equals the number of distinct `(syntax, frozen)` terms the
-    /// egraph holds — modulo DSR-equivalence when `saturate_each` — which the
-    /// end-of-run audit checks against the distinct `Root` e-class count. Total
-    /// `check_and_insert` calls is `inserted + egraph_hits`.
+    /// Genuine top-level inserts into the seen-egraph: incremented only when the
+    /// `$root$`-wrapped term was *not* already present. Equals the number of
+    /// distinct states the egraph holds — modulo alpha- and DSR-equivalence —
+    /// which the end-of-run audit checks against the distinct `$root$` e-class
+    /// count. Total `check_and_insert` calls is `inserted + egraph_hits`.
     pub inserted: usize,
-    /// Program-language DSRs lifted to the frozen-var language, run on
-    /// `seen_egraph` (per insert when `saturate_each`, and by the end-of-run
-    /// audit). Empty when no rule file was given or lifting failed.
-    rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>,
-    /// Saturation limits for the seen-egraph runner (high so saturation, not a
+    /// Saturation iteration cap for the slotted runner (high so saturation, not a
     /// cap, stops it where the rules permit).
     iter_limit: usize,
-    node_limit: usize,
-    /// Whether to saturate + rebuild `seen_egraph` after each genuine insert.
+    /// Whether to saturate the seen-egraph after each genuine insert.
     saturate_each: bool,
     /// Saturate only once every `saturate_every` genuine inserts (1 = every
     /// insert). Batches saturation to cut its cost at the price of some dedup
@@ -107,46 +98,28 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// Auto-tune `saturate_every` after every flush (see
     /// `--seen-egraph-saturate-dynamic`): halve on effect, double on none.
     saturate_dynamic: bool,
-    /// Root e-class ids of the genuine inserts since the last flush. Each is a
+    /// Root applied-ids of the genuine inserts since the last flush. Each is a
     /// single-enode class at insertion; after a flush, any that became multinode
-    /// merged with another `Root` term — the effect signal that drives tuning.
-    pending_root_ids: Vec<Id>,
-    /// Dynamic-tuning tallies: flushes that did vs didn't dedup a fresh Root term.
+    /// merged with another root term — the effect signal that drives tuning.
+    pending_root_aids: Vec<SlottedAppliedId>,
+    /// Dynamic-tuning tallies: flushes that did vs didn't dedup a fresh root term.
     pub dynamic_effects: usize,
     pub dynamic_noeffects: usize,
     /// Whether [`Self::check_and_insert`] returns the egraph-membership verdict
-    /// (skip iff the `Root`-wrapped term is already present) instead of the
+    /// (skip iff the `$root$`-wrapped term is already present) instead of the
     /// `map`'s subset-domination verdict. Both are always computed; this only
     /// selects which one drives the search's dedup.
     egraph_decides: bool,
     /// Wall-clock spent in per-insert seen-egraph saturation (separate from
     /// `time`, which is the map/lookup bookkeeping).
     pub egraph_time: Duration,
-    /// Number of per-insert saturation runs (one per genuine insert when
-    /// `saturate_each`). `egraph_time / saturate_calls` is the average cost,
-    /// which grows as the egraph accumulates classes.
+    /// Number of per-insert saturation runs (one per flush). `egraph_time /
+    /// saturate_calls` is the average cost, which grows as the egraph accumulates
+    /// classes.
     pub saturate_calls: usize,
-    /// Wall-clock spent building the `Root`-wrapped frozen-var `RecExpr` for each
-    /// lookup (the `pattern_to_frozen_recexpr` conversion). Also excluded from
-    /// `time` so the three costs report disjointly.
+    /// Wall-clock spent building the `$root$`-wrapped `SeenLang` `RecExpr` for each
+    /// lookup. Also excluded from `time` so the costs report disjointly.
     pub recexpr_time: Duration,
-    /// Per-insert saturation wall-clock split out by egg's own iteration timers:
-    /// e-matching (search), rule application, and congruence rebuild. Sums may be
-    /// slightly under `egraph_time` (they omit runner setup/teardown).
-    pub egraph_search_time: Duration,
-    pub egraph_apply_time: Duration,
-    pub egraph_rebuild_time: Duration,
-}
-
-/// Internal breakdown returned by [`SeenTracker::saturate`] so callers can fold
-/// it into per-insert stats or report it for the audit pass.
-struct SaturateStats {
-    iterations: usize,
-    applications: usize,
-    stop_reason: String,
-    search: Duration,
-    apply: Duration,
-    rebuild: Duration,
 }
 
 /// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
@@ -155,66 +128,30 @@ fn frozen_subset(a: &[bool], b: &[bool]) -> bool {
     a.iter().zip(b).all(|(&fa, &fb)| !fa || fb)
 }
 
-/// Convert a pattern plus its freeze mask into a `RecExpr` over the frozen-var
-/// language: every `Var(k)` leaf becomes `FrozenVar(k)` iff `frozen[k]`, so the
-/// freeze bit is encoded structurally. Reuses the existing `RevExpr -> RecExpr`
-/// conversion, then functor-maps each node's leaf-op slot via
-/// `LanguageFamily::map_discriminant` (structural variants pass through; only
-/// the leaf op is rewritten), preserving children and node order.
-fn pattern_to_frozen_recexpr<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, frozen: &[bool]) -> RecExpr<F::Apply<OpWithFrozenVar<O>>> {
-    // The canonical invariant numbers `?#k` as `egg::Var::from(k)`, so build the
-    // frozen set keyed by that same `Var` rather than recovering `k` per leaf.
-    let frozen_vars: FxHashSet<egg::Var> = frozen.iter().enumerate().filter_map(|(k, &f)| f.then(|| egg::Var::from(k as u32))).collect();
-    let src: RecExpr<F::Apply<OpWithVar<O>>> = pattern.pattern.clone().into();
-    let src_nodes: Vec<F::Apply<OpWithVar<O>>> = src.into();
-    let mut nodes: Vec<F::Apply<OpWithFrozenVar<O>>> = src_nodes
-        .into_iter()
-        .map(|node| {
-            let kids = node.children().to_vec();
-            let disc = F::map_discriminant(node.discriminant(), |op| match op {
-                OpWithVar::Node(o) => OpWithFrozenVar::Node(o),
-                OpWithVar::Var(v) if frozen_vars.contains(&v) => OpWithFrozenVar::FrozenVar(v),
-                OpWithVar::Var(v) => OpWithFrozenVar::Var(v),
-            });
-            F::make(disc, kids)
-        })
-        .collect();
-    // Wrap the whole term in a `Root` sentinel so lookups match only against
-    // top-level inserts, not subterms `add_expr` interned from larger patterns.
-    let root = Id::from(nodes.len() - 1);
-    F::wrap_seen_root::<O>(&mut nodes, root);
-    RecExpr::from(nodes)
-}
-
 impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
     fn default() -> Self {
         Self {
             map: FxHashMap::default(),
             dom_map: FxHashMap::default(),
-            seen_egraph: egg::EGraph::new(()),
+            seen: SlottedSeen::new(Vec::new()),
             hits: 0,
             exact_hits: 0,
             time: Duration::ZERO,
             egraph_hits: 0,
             full_dom_hits: 0,
             inserted: 0,
-            rules: Vec::new(),
             iter_limit: 0,
-            node_limit: 0,
             saturate_each: false,
             saturate_every: 1,
             pending_inserts: 0,
             saturate_dynamic: false,
-            pending_root_ids: Vec::new(),
+            pending_root_aids: Vec::new(),
             dynamic_effects: 0,
             dynamic_noeffects: 0,
             egraph_decides: false,
             egraph_time: Duration::ZERO,
             saturate_calls: 0,
             recexpr_time: Duration::ZERO,
-            egraph_search_time: Duration::ZERO,
-            egraph_apply_time: Duration::ZERO,
-            egraph_rebuild_time: Duration::ZERO,
         }
     }
 }
@@ -228,11 +165,10 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     /// `saturate_dynamic` retunes `saturate_every` after each flush (which then
     /// acts only as the starting batch size); see
     /// [`Self::adjust_saturate_every`].
-    pub fn new(rules: Vec<egg::Rewrite<F::Apply<OpWithFrozenVar<O>>, ()>>, iter_limit: usize, node_limit: usize, saturate_each: bool, saturate_every: usize, egraph_decides: bool, saturate_dynamic: bool) -> Self {
+    pub fn new(rules: Vec<SlottedRewrite<SeenLang>>, iter_limit: usize, saturate_each: bool, saturate_every: usize, egraph_decides: bool, saturate_dynamic: bool) -> Self {
         Self {
-            rules,
-            iter_limit,
-            node_limit,
+            seen: SlottedSeen::new(rules),
+            iter_limit: iter_limit.max(1),
             saturate_each,
             saturate_every: saturate_every.max(1),
             egraph_decides,
@@ -247,10 +183,10 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
-    /// Number of e-classes in the shadow seen-egraph (one per distinct
-    /// `(syntax, frozen)` term inserted, modulo congruence).
+    /// Number of e-classes in the seen-egraph (one per distinct state inserted,
+    /// modulo alpha- and DSR-equivalence).
     pub fn egraph_len(&self) -> usize {
-        self.seen_egraph.number_of_classes()
+        self.seen.num_classes()
     }
     /// Whether per-insert saturation of the seen-egraph is enabled.
     pub fn saturate_each_on(&self) -> bool {
@@ -272,52 +208,47 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     /// Decides whether this `(pattern, frozen)` visit is a repeat to skip, and
     /// records it. Both seen-sets below are always maintained and tallied for
     /// comparison; `egraph_decides` selects which verdict the caller acts on:
-    /// - egraph side (default): skip iff the `Root`-wrapped frozen-var term is
-    ///   already in `seen_egraph` — an earlier visit's term, modulo
-    ///   DSR-equivalence when `saturate_each` is on.
+    /// - egraph side (default): skip iff the `$root$`-wrapped slotted term is
+    ///   already in the seen-egraph — an earlier visit's term, modulo
+    ///   alpha-equivalence and (when `saturate_each`) DSR-equivalence.
     /// - map side: skip iff a recorded visit's frozen set is a subset of
     ///   `frozen` (subset domination — the prior visit was at least as flexible,
     ///   so all this visit's reachable successors are already reachable).
     pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen: Vec<bool>) -> bool {
         let t = Instant::now();
-        // The frozen-recexpr build and saturation are each timed and reported on
-        // their own; subtract them from `self.time` so that stays the pure
+        // The recexpr build and saturation are each timed and reported on their
+        // own; subtract them from `self.time` so that stays the pure
         // lookup/map/dom bookkeeping cost.
         let mut saturate_elapsed = Duration::ZERO;
 
-        // Egraph side (shadow): exact `(syntax, frozen)` membership. Look up
+        // Egraph side: membership of the `$root$`-wrapped slotted term. Look up
         // before inserting so `egraph_skip` reflects prior visits only.
         let rt = Instant::now();
-        let recexpr = pattern_to_frozen_recexpr(&pattern, &frozen);
+        let recexpr = pattern_to_seen_recexpr(&pattern, &frozen);
         let recexpr_elapsed = rt.elapsed();
         self.recexpr_time += recexpr_elapsed;
-        let egraph_skip = self.seen_egraph.lookup_expr(&recexpr).is_some();
+        let egraph_skip = self.seen.contains(&recexpr);
         if egraph_skip {
-            // The whole wrapped term is already present, so `add_expr` would be a
+            // The whole wrapped term is already present, so `insert` would be a
             // pure no-op (and the egraph is still saturated) — skip both it and
             // the insert bookkeeping.
             self.egraph_hits += 1;
         } else {
-            let root_id = self.seen_egraph.add_expr(&recexpr);
+            let root_aid = self.seen.insert(&recexpr);
             self.inserted += 1;
             self.pending_inserts += 1;
             if self.saturate_dynamic {
-                // The whole term was absent (`egraph_skip` false), so its `Root`
-                // enode is fresh: a single-enode class until saturation merges it.
-                assert_eq!(self.seen_egraph[root_id].len(), 1, "freshly inserted Root term must be a single-enode class");
-                self.pending_root_ids.push(root_id);
+                // Fresh root: a single-enode class until saturation merges it.
+                self.pending_root_aids.push(root_aid);
             }
             if self.saturate_each && self.pending_inserts >= self.saturate_every {
                 // Flush the batch: the new terms' fresh nodes may unlock new
                 // rewrite matches, so re-saturate so later lookups dedup modulo
                 // DSR-equivalence. Timed separately from the map bookkeeping.
                 let st = Instant::now();
-                let stats = self.saturate();
+                self.seen.saturate(self.iter_limit);
                 saturate_elapsed = st.elapsed();
                 self.egraph_time += saturate_elapsed;
-                self.egraph_search_time += stats.search;
-                self.egraph_apply_time += stats.apply;
-                self.egraph_rebuild_time += stats.rebuild;
                 self.saturate_calls += 1;
                 if self.saturate_dynamic {
                     self.adjust_saturate_every();
@@ -376,54 +307,14 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         if self.egraph_decides { egraph_skip } else { map_skip }
     }
 
-    /// Run the stored DSRs to saturation on `seen_egraph` and rebuild it in
-    /// place, returning egg's per-iteration counts and search/apply/rebuild time
-    /// split. `SimpleScheduler` fires every match each iteration (true
-    /// saturation, no backoff); the high limits keep a cap from stopping it
-    /// before the fixpoint.
-    fn saturate(&mut self) -> SaturateStats {
-        let egraph = std::mem::replace(&mut self.seen_egraph, egg::EGraph::new(()));
-        let runner = egg::Runner::default()
-            .with_egraph(egraph)
-            .with_node_limit(self.node_limit)
-            .with_iter_limit(self.iter_limit)
-            .with_time_limit(Duration::from_secs(60 * 60 * 24))
-            .with_scheduler(egg::SimpleScheduler)
-            .run(&self.rules);
-        let iterations = runner.iterations.len();
-        // `applied` is keyed per rule per iteration, so sum it for total firings.
-        let applications: usize = runner.iterations.iter().map(|it| it.applied.values().sum::<usize>()).sum();
-        let stop_reason = format!("{:?}", runner.stop_reason);
-        // egg records each iteration's search/apply/rebuild seconds; fold them up
-        // to see e-matching vs rebuild cost.
-        let (mut search, mut apply, mut rebuild) = (Duration::ZERO, Duration::ZERO, Duration::ZERO);
-        for it in &runner.iterations {
-            search += Duration::from_secs_f64(it.search_time);
-            apply += Duration::from_secs_f64(it.apply_time);
-            rebuild += Duration::from_secs_f64(it.rebuild_time);
-        }
-        self.seen_egraph = runner.egraph;
-        self.seen_egraph.rebuild();
-        SaturateStats {
-            iterations,
-            applications,
-            stop_reason,
-            search,
-            apply,
-            rebuild,
-        }
-    }
-
     /// Retune `saturate_every` after a flush (dynamic mode). The flush had an
-    /// *effect* iff some Root term inserted this batch became multinode — its
-    /// single-enode class (asserted at insert) merged with another `Root` term,
-    /// which is exactly the cross-state dedup the seen-egraph exists to find.
-    /// Since the rest of the egraph was already saturated, any new merge must
-    /// involve a fresh node, so it suffices to inspect this batch's roots. Halve
-    /// the batch (min 1) on effect to saturate more eagerly while it keeps
-    /// paying; double it on none to back off. Clears the batch's root ids.
+    /// *effect* iff some root term inserted this batch became multinode — its
+    /// single-enode class merged (via congruence) with another root term, which
+    /// is exactly the cross-state dedup the seen-egraph exists to find. Halve the
+    /// batch (min 1) on effect to saturate more eagerly while it keeps paying;
+    /// double it on none to back off. Clears the batch's root ids.
     fn adjust_saturate_every(&mut self) {
-        let effect = self.pending_root_ids.iter().any(|&id| self.seen_egraph[id].len() > 1);
+        let effect = self.pending_root_aids.iter().any(|aid| self.seen.root_is_multinode(aid));
         if effect {
             self.saturate_every = (self.saturate_every / 2).max(1);
             self.dynamic_effects += 1;
@@ -431,40 +322,39 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
             self.saturate_every = self.saturate_every.saturating_mul(2);
             self.dynamic_noeffects += 1;
         }
-        self.pending_root_ids.clear();
+        self.pending_root_aids.clear();
     }
 
-    /// End-of-run audit of the shadow seen-egraph (pure stats — nothing the
-    /// search reads). Records enodes, eclasses, and the number of distinct
-    /// e-classes the inserted top-level terms occupy (see
-    /// [`Self::distinct_root_classes`]), then runs the stored DSRs to saturation,
-    /// rebuilds, and re-records. The returned `stop_reason`/`applications` report
-    /// whether it saturated and how many firings occurred.
+    /// End-of-run audit of the seen-egraph (pure stats — nothing the search
+    /// reads). Records enodes, eclasses, and the number of distinct e-classes the
+    /// inserted top-level terms occupy (see [`Self::distinct_root_classes`]), then
+    /// runs the lifted DSRs to saturation and re-records. `iterations`/`saturated`
+    /// report whether the final pass reached a fixpoint.
     ///
     /// `root_classes_before` always equals the number of genuine inserts
-    /// (`inserted`): without per-insert saturation that's one class per syntactic
-    /// insert and this pass collapses them, so `root_classes_after` drops; with
+    /// (`inserted`): without per-insert saturation that's one class per inserted
+    /// state and this pass collapses them, so `root_classes_after` drops; with
     /// `saturate_each` the egraph is already saturated, so before == after and
     /// this pass is a no-op re-check.
     pub fn audit_seen_egraph(&mut self) -> SeenEgraphAudit {
         let unique_inserted = self.inserted;
-        let nodes_before = self.seen_egraph.total_number_of_nodes();
-        let classes_before = self.seen_egraph.number_of_classes();
+        let nodes_before = self.seen.num_nodes();
+        let classes_before = self.seen.num_classes();
         let root_classes_before = self.distinct_root_classes();
 
-        let stats = self.saturate();
+        let (_changed, iterations) = self.seen.saturate(self.iter_limit);
 
-        let nodes_after = self.seen_egraph.total_number_of_nodes();
-        let classes_after = self.seen_egraph.number_of_classes();
+        let nodes_after = self.seen.num_nodes();
+        let classes_after = self.seen.num_classes();
         let root_classes_after = self.distinct_root_classes();
 
         SeenEgraphAudit {
             unique_inserted,
             total_inserted: self.inserted + self.egraph_hits,
-            num_rules: self.rules.len(),
-            iterations: stats.iterations,
-            applications: stats.applications,
-            stop_reason: stats.stop_reason,
+            num_rules: self.seen.num_rules(),
+            iterations,
+            // The runner stops only on a fixpoint or the iteration cap.
+            stop_reason: if iterations < self.iter_limit { "Saturated".to_string() } else { "IterationLimit".to_string() },
             nodes_before,
             classes_before,
             root_classes_before,
@@ -476,17 +366,17 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
 
     /// Number of distinct e-classes the inserted top-level terms currently
     /// occupy. `dom_map` retains every distinct `(pattern, frozen)` ever
-    /// inserted, so re-derive each one's `Root`-wrapped frozen-var term, look up
+    /// inserted, so re-derive each one's `$root$`-wrapped slotted term, look up
     /// its canonical e-class id (asserting it's present — it *was* inserted),
     /// and count the distinct ids. Before rewriting this equals `unique_inserted`
-    /// (pure hash-cons); after, it drops by however many inserted terms the
-    /// rewrites proved equivalent.
+    /// (alpha-canonical hash-cons); after, it drops by however many inserted
+    /// terms the rewrites proved equivalent.
     fn distinct_root_classes(&self) -> usize {
-        let mut classes: FxHashSet<Id> = FxHashSet::default();
+        let mut classes: FxHashSet<slotted_egraphs::Id> = FxHashSet::default();
         for (pattern, masks) in &self.dom_map {
             for mask in masks {
-                let recexpr = pattern_to_frozen_recexpr(pattern, mask);
-                let id = self.seen_egraph.lookup_expr(&recexpr).expect("every inserted root term must be present in the seen-egraph");
+                let recexpr = pattern_to_seen_recexpr(pattern, mask);
+                let id = self.seen.class_of(&recexpr).expect("every inserted root term must be present in the seen-egraph");
                 classes.insert(id);
             }
         }
@@ -495,7 +385,7 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
 }
 
 /// Stats produced by [`SeenTracker::audit_seen_egraph`], split before/after the
-/// saturation+rebuild pass. `root_classes_*` is the number of distinct e-classes
+/// final saturation pass. `root_classes_*` is the number of distinct e-classes
 /// the inserted top-level terms occupy — finite even when the rewrites make each
 /// class represent infinitely many terms.
 pub struct SeenEgraphAudit {
@@ -503,7 +393,6 @@ pub struct SeenEgraphAudit {
     pub total_inserted: usize,
     pub num_rules: usize,
     pub iterations: usize,
-    pub applications: usize,
     pub stop_reason: String,
     pub nodes_before: usize,
     pub classes_before: usize,

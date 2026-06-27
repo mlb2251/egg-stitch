@@ -16,6 +16,7 @@ pub mod pattern;
 pub mod results;
 pub mod revexpr;
 pub mod search;
+pub mod seen_slotted;
 pub mod shared;
 pub mod shift;
 pub mod shift_equal;

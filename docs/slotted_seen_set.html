@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replacing the seen-set egraph with slotted e-graphs</title>
+<style>
+  :root { --ink:#1b1b1f; --mut:#6b7280; --line:#e5e7eb; --accent:#3056d3; --good:#0a7a35; --warn:#b25e00; --bad:#b00020; --code-bg:#f6f8fa; }
+  * { box-sizing:border-box; }
+  body { margin:0 auto; max-width:880px; padding:40px 24px 120px; color:var(--ink);
+         font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  h1 { font-size:30px; line-height:1.2; margin:0 0 4px; }
+  h2 { font-size:21px; margin:42px 0 10px; padding-top:14px; border-top:2px solid var(--line); }
+  h3 { font-size:16px; margin:24px 0 6px; }
+  .sub { color:var(--mut); margin:0 0 8px; }
+  code, pre { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { background:var(--code-bg); padding:1px 5px; border-radius:4px; font-size:13.5px; }
+  pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:14px 16px;
+        overflow:auto; font-size:13px; line-height:1.55; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:14px; }
+  th, td { border:1px solid var(--line); padding:7px 10px; text-align:right; }
+  th:first-child, td:first-child { text-align:left; }
+  thead th { background:#fafafe; }
+  tr.hi td { background:#eefaf1; font-weight:600; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:20px; vertical-align:middle; }
+  .t-good { background:#e3f6ea; color:var(--good); }
+  .t-warn { background:#fdf0e1; color:var(--warn); }
+  .t-bad  { background:#fce8ec; color:var(--bad); }
+  .callout { border-left:4px solid var(--accent); background:#f5f7ff; padding:10px 16px; border-radius:0 8px 8px 0; margin:16px 0; }
+  .callout.good { border-color:var(--good); background:#f1faf4; }
+  .callout.warn { border-color:var(--warn); background:#fff8f0; }
+  .callout.bad  { border-color:var(--bad); background:#fdf1f3; }
+  ul, ol { padding-left:22px; }
+  li { margin:4px 0; }
+  .muted { color:var(--mut); }
+  .small { font-size:13px; }
+  .jc { border:1px solid var(--line); border-radius:8px; padding:2px 16px 10px; margin:14px 0; }
+  .jc h3 { margin-top:14px; }
+  .jc .verdict { font-weight:600; }
+  .request { border:1px solid var(--line); border-radius:8px; padding:8px 16px; margin:16px 0; background:#fcfcfe; }
+  .request summary { cursor:pointer; }
+  blockquote { margin:10px 0 6px; padding:8px 14px; border-left:3px solid var(--mut); color:#33363d;
+               background:#fafafe; border-radius:0 6px 6px 0; font-size:14px; white-space:pre-wrap; }
+  hr { border:0; border-top:1px solid var(--line); margin:28px 0; }
+</style>
+</head>
+<body>
+
+<h1>Replacing the seen-set egraph with slotted&nbsp;e-graphs</h1>
+<p class="sub">What I changed, why, the judgement calls I made, the bugs I hit, and the numbers.
+Target benchmark throughout: <code>EXPTS_VERBOSE=1 ./run.py run_bfs_cell nuts-bolts use_dsrs=True no_opt_seen=False</code>.</p>
+
+<details class="request" open>
+<summary><strong>The original request (verbatim)</strong></summary>
+<blockquote>
+Please replace the implementation of the seen-set To instead of using egg egraphs use slotted egraphs instead. Be sure to research plenifly to understand slotted egraphs. Follow any tutorials, etc. You can either use the Rust crate, or you might also find it simpler to just clone the slotted egraph's library. Make sure you're using the real one, which is this. https://github.com/memoryleak47/slotted-egraphs/. Note that in our case we don't actually care about having lets or lambdas other than the fact that they exist at the very top level. Since we're really just talking about our pattern variables. Do not put slotted egraphs in place of the whole other egraph unless that makes things way easier for some reason, but if you actually want to go down that road, check with me first.  and ideally, it's not necessary. So a no for the corpus egraph And a yes for the seen-set egraph. I'm not sure exactly what this encoding will look like But it might look like a bunch of binds up at the top of the egraph Or possibly no binds at all if free variables are allowed to be constructed with no binder, which would be more convenient.  reused variables shouldn't be a problem, I don't think. I think that nothing should really change about them with this change? However, frozen variables I'm a little less clear on, but I think we can just either write them as using some set of variable names like fx1 fx2 instead of x1 x2, or as still just being plain old variables but wrapped in a frozen construct like (frozen x1). Think through what makes sense and is semantically okay. And just so you know, our main goal here is to avoid the blow-up that happens from having things like commutativity, et cetera, in certain domains that result in all of these equivalent patterns with variables reordered, so they end up being sometimes alpha-equivalent. Which is the key use of slotted eGraphs, of course. On the example I'm going to give you, it should be OK to run it to saturation Because in our current version we're also running to saturation on it. And this might be an example that shows little to no improvement, because I'm not even sure if there's commutativity, but that's okay. My only goal for this example is that it actually works at all, and if it does then I'll give you some more examples. Even if we just end up reproducing the same kind of statistics as before. Okay, here's the command, and it should take a fraction of a second. It prints out the timing and it prints out the best term it finds. If you change the final parameter of it to true, then you'll get the version without any seen-set, which takes around two seconds. EXPTS_VERBOSE=1 ./run.py run_bfs_cell nuts-bolts use_dsrs=True no_opt_seen=False. You should also run this beforehand because to verify that everything is working now and understand what the results look like With and without the current seen-set  before swapping it out for the slotted version.  Please write up everything you did in a stand-alone HTML document for me to look at in the end, importantly including any judgement calls and such that you made - instead of writing it all as a message to me here.
+</blockquote>
+<p class="small muted">Follow-up: "add the text of my original request to the top of that HTML document" (done, above), and "make an example domain and verify that the right sharing is happening" — see <a href="#sharing">§6½ The sharing, demonstrated</a>.</p>
+</details>
+
+<div class="callout good">
+<strong>TL;DR.</strong> The best-first search's <em>seen-set</em> had an experimental egraph side built on
+<strong>egg</strong> (over a frozen-var language, deciding dedup since it was the default decider). I replaced that
+egraph with a <strong>slotted e-graph</strong> (<a href="https://github.com/memoryleak47/slotted-egraphs/">memoryleak47/slotted-egraphs</a>),
+where a pattern's metavariables become <em>slots</em>, so alpha-equivalent patterns (the same shape with variables
+permuted — the blow-up that commutativity/associativity create) collapse <em>natively</em>, no rules needed.
+The corpus egraph is untouched (still egg), as requested.
+On <code>nuts-bolts</code> the new backend reproduces the egg results <strong>bit-for-bit</strong>:
+identical expansions (1185), identical egraph hits (657), identical final library (<code>1.77×</code>).
+It is slower in wall-clock here (slotted saturation is less optimised, and this domain has <em>no</em> commutativity
+so the alpha-equivalence advantage can't show — exactly as you predicted). It still beats the no-seen run.
+On a purpose-built commutative domain (<a href="#sharing">§6½</a>) the sharing <em>does</em> show: it cuts the
+search ~3.8× (82 vs 311 expansions) with an identical answer. All lib tests pass, including 7 in the new module that
+pin the encoding's semantics and the sharing.</div>
+
+<h2>1. What the seen-set is, and what I touched</h2>
+<p>Best-first abstraction search (<code>src/best_first.rs</code>) expands partial patterns. Many successors are
+<em>redundant</em>: the same search state reached by a different route. The <strong>seen-set</strong>
+(<code>SeenTracker</code> in <code>src/search.rs</code>) dedups them. It actually carried three parallel structures:</p>
+<ul>
+<li><code>map</code> — a hash map <code>Pattern → freeze-mask</code> with subset-domination. Cheap, syntactic.</li>
+<li><code>dom_map</code> — a never-evicted shadow of <code>map</code> for measuring how much domination buys.</li>
+<li><strong>the egraph side</strong> — each <code>(pattern, freeze-mask)</code> encoded as a term and looked up /
+inserted in an <em>egg</em> e-graph, with the domain rewrite rules (DSRs) run to saturation so dedup is modulo
+DSR-equivalence. This side was the <em>default decider</em> (<code>--seen-egraph-decides</code>, on by default).</li>
+</ul>
+<p>This task replaces <strong>only the egraph side</strong> — the egg <code>EGraph</code> over the frozen-var
+language <code>OpWithFrozenVar</code> — with a slotted e-graph. The <code>map</code>/<code>dom_map</code> shadows
+stay (they're independent, cheap, and give the comparison the stats print). The corpus e-graph stays egg.</p>
+
+<div class="callout">
+<strong>Why slotted, concretely.</strong> In the egg encoding a metavariable <code>?#k</code> is a distinct
+<em>constant</em> leaf <code>Var(k)</code>. So <code>(+ ?#0 ?#1)</code> and <code>(+ ?#1 ?#0)</code> are
+<em>different</em> egg terms; they only merge if a commutativity rule is present and saturated. In a slotted
+e-graph a metavariable is a <em>slot</em>, and the e-graph canonicalises terms up to a bijective renaming of slots
+— so those two collapse to one e-class <em>at insertion time, with no rules</em>. That native alpha-equivalence is
+the whole point: in domains with commutativity/associativity the search emits a pattern's variables in every
+order, and slotted folds them for free.</p></div>
+
+<h2>2. The encoding</h2>
+<p>The new backend is <code>src/seen_slotted.rs</code>. It defines one slotted <code>Language</code> and a handful
+of conversions. A pattern + its freeze mask becomes a slotted term like this:</p>
+<pre>  pattern          (T ?#0 ?#1)                with ?#0 frozen, ?#1 free
+  slotted term     ($root$ (T (fpv $0) (pv $1)))</pre>
+<ul>
+<li><strong>Non-frozen <code>?#k</code> → a free slot</strong>, materialised as the leaf e-node <code>(pv $k)</code>.
+Reuse of <code>?#k</code> reuses slot <code>$k</code>, so variable sharing is preserved.</li>
+<li><strong>Frozen <code>?#k</code> → <code>(fpv $k)</code></strong> — the <em>same</em> slot <code>$k</code> under a
+distinct head. (See the judgement call below for why this is the right shape.)</li>
+<li><strong>Every operator → <code>Op(symbol, children)</code></strong> — one variable-arity node carrying the
+operator name as a <code>Symbol</code> and its children as a <code>Vec&lt;AppliedId&gt;</code>. This is why one
+language covers an entire corpus whose operator set is only known at runtime.</li>
+<li><strong>The whole term is wrapped in <code>Op($root$, [term])</code></strong>. <code>add_expr</code> interns
+every subterm, so without the wrapper a membership lookup would hit a pattern that merely <em>occurs inside</em> a
+larger inserted one. With it, a hit means the <em>whole</em> pattern was inserted as a top-level state. (This is the
+same trick the egg side used with its <code>Root</code> sentinel.)</li>
+</ul>
+<p>DSRs are lifted onto this language (<code>lift_rules_from_file</code>) and run to saturation, so the e-graph
+dedups modulo DSR-equivalence <em>on top of</em> the alpha-equivalence it folds for free — matching the egg side's
+behaviour. Dedup itself is a membership check: build the <code>$root$</code>-wrapped term, and
+<code>lookup_rec_expr</code> it; present ⇒ skip, absent ⇒ insert (and, per the batch schedule, saturate).</p>
+
+<h2>3. Judgement calls</h2>
+
+<div class="jc">
+<h3>Frozen variables: <code>(fpv $k)</code>, not renamed names and not a single tag <span class="tag t-good">chosen</span></h3>
+<p>You floated two options: distinct names like <code>fx1, fx2</code>, or a wrapper like <code>(frozen x1)</code>.
+I used a wrapper-style head over the <em>same slot</em>: <code>(fpv $k)</code>. The reasoning is a small case analysis
+of what "the same search state" must mean for frozen vars:</p>
+<ul>
+<li>Frozenness must be <strong>structural</strong> so a frozen position never collapses with a free one:
+<code>(T (fpv $0) (pv $1))</code> ≠ <code>(T (pv $0) (fpv $1))</code> — different child is pinned, genuinely
+different states. The distinct head <code>fpv</code> vs <code>pv</code> gives exactly this.</li>
+<li>Frozenness must still <strong>travel with the slot under renaming</strong> so two states that differ only by
+relabelling collapse: <code>(T (fpv $0) (pv $1))</code> = <code>(T (fpv $1) (pv $0))</code> (rename $0↔$1). Keeping
+the slot inside the <code>fpv</code> node gives this for free via slotted alpha-equivalence.</li>
+<li>A frozen var must keep its <strong>identity for reuse / distinctness</strong>: <code>(T ?#0 ?#0)</code> (one
+frozen var twice) ≠ <code>(T ?#0 ?#1)</code> (two frozen vars). Because the slot lives inside the node,
+<code>(T (fpv $0) (fpv $0))</code> ≠ <code>(T (fpv $0) (fpv $1))</code> — preserved.</li>
+</ul>
+<p class="verdict">A single shared <code>frozen</code> tag (no slot) fails the third point; distinct names like
+<code>fx1, fx2</code> fail the second (they'd need re-canonicalising to collapse relabellings). The slot-bearing
+distinct head satisfies all three. Tests <code>relabelled_frozen_collapses</code> and
+<code>frozen_vs_free_stays_distinct</code> pin this.</p>
+</div>
+
+<div class="jc">
+<h3>No binders — free slots at top level <span class="tag t-good">chosen</span></h3>
+<p>You noted the encoding "might look like a bunch of binds up at the top, or possibly no binds at all if free
+variables are allowed with no binder." Slotted e-graphs allow exactly that: an e-class simply <em>has</em> a set of
+public (free) slots; no <code>lam</code>/<code>let</code> binder is required to introduce them. So I use bare free
+slots and the <code>$root$</code> wrapper just passes them through. No binders anywhere — the more convenient
+option, and it's what makes the alpha-equivalence "just happen" at <code>add</code>/<code>lookup</code> time.</p>
+</div>
+
+<div class="jc">
+<h3>Reused variables: nothing special needed <span class="tag t-good">confirmed</span></h3>
+<p>You expected reuse to be a non-issue, and it is. Index <code>k</code> maps to slot <code>$k</code>
+deterministically, so every occurrence of <code>?#k</code> is the same slot and the sharing is preserved
+structurally. No special handling.</p>
+</div>
+
+<div class="jc">
+<h3>Membership, not e-class equality, is the dedup test <span class="tag t-good">important</span></h3>
+<p>A subtlety worth recording: in a slotted e-graph, <code>(T (pv $0) (pv $1))</code> and
+<code>(T (pv $1) (pv $0))</code> <em>do</em> share an e-class, but <code>add_expr</code> returns
+<code>AppliedId</code>s that bind the free slots in opposite orders, so an <code>eg.eq(...)</code> on those two
+applied-ids is <strong>false</strong> (they're different as <em>applied</em> terms). The operation the seen-set
+actually wants is "is an equivalent term present?", i.e. <code>lookup_rec_expr</code> on the canonicalised shape,
+which correctly returns <em>hit</em>. So <code>contains()</code> uses membership, never applied-id equality. (I
+learned this the hard way — see bug #2.)</p>
+</div>
+
+<div class="jc">
+<h3>Keep running the DSRs in the seen-egraph <span class="tag t-good">chosen</span></h3>
+<p>One could hope alpha-equivalence alone replaces the DSRs. It doesn't, in general: commutativity over
+<em>structured</em> arguments (<code>(+ ?#0 (f ?#1))</code> ↔ <code>(+ (f ?#1) ?#0)</code>) is a real merge that
+alpha-equivalence does not make. And on <code>nuts-bolts</code> specifically the rules aren't commutativity at all —
+they're 7 <em>scale-1</em> identities — so <em>all</em> the dedup there is DSR-driven. To faithfully replace the egg
+side (and to match its numbers) the slotted egraph runs the lifted DSRs to saturation, same as before. The
+alpha-equivalence is a bonus that simply doesn't fire on this no-commutativity domain.</p>
+</div>
+
+<div class="jc">
+<h3>Hand-written <code>Language</code> instead of <code>define_language!</code> <span class="tag t-good">chosen</span></h3>
+<p>The library's <code>define_language!</code> macro fixes each variant's arity and ties it to one operator-name
+string. A corpus has arbitrarily many operators of arbitrary arity, known only at runtime. So <code>Op</code> is a
+single variable-arity <code>(Symbol, Vec&lt;AppliedId&gt;)</code> variant, and I hand-write the <code>Language</code>
+impl — which is just the per-child chaining the macro would have generated, plus a <code>from_syntax</code> that
+dispatches on the head string (<code>pv</code>/<code>fpv</code> → slot leaves, anything else → operator).</p>
+</div>
+
+<div class="jc">
+<h3>Lift rules by string, skip what doesn't parse <span class="tag t-warn">limitation noted</span></h3>
+<p>The rule file format (<code>name: lhs =&gt; rhs</code>, <code>//</code> comments, <code>&lt;=&gt;</code> bidirectional)
+and the slotted pattern syntax both use <code>?x</code> metavariables and the same S-expression operator form, so
+rules lift almost verbatim. A rule whose sides don't parse as <code>SeenLang</code> — most importantly a lambda-calc
+rule using de-Bruijn <code>$i</code>, which the slotted parser reads as a <em>slot</em> — is <strong>skipped with a
+warning</strong> rather than crashing the run, and the count is surfaced. <code>constant_folding</code> directives are
+likewise skipped. This is the one real fidelity gap vs. the egg lifter (see §7); it does not affect
+<code>nuts-bolts</code>, whose rules are plain op-children rewrites.</p>
+</div>
+
+<div class="jc">
+<h3>Kept the whole <code>SeenTracker</code> interface and all CLI flags <span class="tag t-good">chosen</span></h3>
+<p>Every <code>--seen-egraph-*</code> flag still means what it meant: <code>saturate</code>, <code>saturate-every</code>,
+<code>saturate-dynamic</code>, <code>decides</code>. The dynamic batch-tuner's "did this flush dedup anything?" signal
+is reproduced faithfully — a freshly-inserted <code>$root$</code> class that becomes <em>multinode</em> after a flush
+must have merged (by congruence) with another inserted root, since no rule mentions <code>$root$</code>. I dropped
+only <code>--seen-egraph-node-limit</code> from this path (the slotted runner is iteration-bounded, not node-bounded)
+and the egg-only search/apply/rebuild time breakdown from the audit print.</p>
+</div>
+
+<h2>4. Bugs I hit (and fixed)</h2>
+
+<div class="callout bad">
+<strong>Bug #1 — node ordering. <span class="tag t-bad">caused total search collapse</span></strong><br>
+First run terminated after <strong>18</strong> expansions instead of 1185 — the egraph was reporting almost everything
+as already-seen. The dump was damning: <code>(T ?#0 ?#1)</code> was converting to just
+<code>($root$ (pv $1))</code> — operator and first child gone. Cause: I built <code>pos_to_var</code> from the
+pattern's own var-id table, but a pattern is stored as a <code>RevExpr</code> (root at index 0); converting it to an
+egg <code>RecExpr</code> <em>reverses</em> the node array and remaps child ids, so those ids no longer line up.
+<strong>Fix:</strong> detect variable leaves <em>intrinsically</em> via <code>discriminant().as_var()</code> and
+recover the index from a <code>Var → k</code> map — exactly what the old egg converter did. With that, every pattern
+converts to its full structure and the false hits vanish.</div>
+
+<div class="callout warn">
+<strong>Bug #2 — <code>eg.eq</code> vs membership.</strong> While validating the encoding, my "alpha-equivalent
+patterns collapse" test failed on <code>eg.eq(add(a), add(b))</code> even though the two were the same e-class. The
+returned applied-ids bind the shared free slots in opposite orders, so they differ as applied terms. The dedup the
+seen-set performs is <em>membership</em> (<code>lookup_rec_expr</code>), which canonicalises and correctly hits — so
+the test was wrong, not the encoding. Rewrote the tests around <code>contains()</code>, the real operation.</div>
+
+<h2>5. Results — <code>nuts-bolts</code> (Table&nbsp;1 cell, 7 DSRs, op-children)</h2>
+<p class="small muted">Same command, three seen-set configurations. "egg" = the implementation before this change
+(default <code>--seen-egraph-decides</code>); "slotted" = after. Wall-clock is indicative — the release profile keeps
+debug info, and timings vary run-to-run.</p>
+<table>
+<thead><tr><th>Configuration</th><th>expansions</th><th>egraph hits</th><th>distinct root classes</th><th>best cost</th><th>ratio</th><th>total time</th></tr></thead>
+<tbody>
+<tr><td>egg seen-egraph <span class="muted">(before)</span></td><td>1185</td><td>657</td><td>2841 → 2841 ✓</td><td>10718</td><td>1.77×</td><td>0.32 s</td></tr>
+<tr class="hi"><td>slotted seen-egraph <span class="muted">(after)</span></td><td>1185</td><td>657</td><td>2841 → 2841 ✓</td><td>10718</td><td>1.77×</td><td>0.92 s</td></tr>
+<tr><td>no seen-set <span class="muted">(<code>no_opt_seen=True</code>)</span></td><td>10000 <span class="muted">(budget)</span></td><td>—</td><td>—</td><td>10718</td><td>1.77×</td><td>2.24 s</td></tr>
+</tbody>
+</table>
+<p>The two seen-egraph rows are <strong>identical on every search-visible quantity</strong>: same number of
+expansions, same 657 egraph hits, same 2841 genuine inserts collapsing to 2841 DSR-classes, the best pattern found
+at expansion 43, same final library. The slotted backend makes <em>exactly the same dedup decisions</em>. It does so
+while keeping a slightly <em>smaller</em> internal egraph (8407 enodes / 6105 classes vs egg's 9612 / 6822), because
+it alpha-collapses shared subterms — there's just no top-level commutativity here for that to translate into fewer
+expansions.</p>
+
+<div class="callout warn">
+<strong>The cost.</strong> Slotted is ~3× slower in wall-clock here, essentially all of it in per-insert saturation
+(0.43&nbsp;s vs egg's 0.012&nbsp;s). The slotted runner re-applies rules with a naive fixpoint loop and its
+e-matching/rebuild are less optimised than egg's mature engine. This is the "little to no improvement" case you
+anticipated: no commutativity ⇒ no alpha-equivalence to exploit ⇒ the slotted machinery only pays costs here.
+It still finishes well under the no-seen run.</div>
+
+<h2>6. A domain where alpha-equivalence is the point (lambda-calc smoke test)</h2>
+<p>To check the lambda-calc path didn't regress, I ran <code>basic-apps/multi-arg-assoc</code> with its
+<code>app-arith.rewrites</code> — which <em>are</em> commutativity and associativity
+(<code>plus_commut</code>, <code>plus_assoc</code>, <code>plus_merge</code>, in curried <code>@</code> form, no
+de-Bruijn, so all 6 lift cleanly). It saturates and returns a result: 468 expansions, 378 egraph hits,
+4108 genuine inserts. This is the exact shape of redundancy slotted exists to fold.</p>
+<div class="callout">
+This is also where the slotted saturation cost bites hardest: associativity+commutativity build large e-classes and
+the per-insert saturation ran ~2.7&nbsp;s each (32&nbsp;s total). The library's own benchmarks note assoc/comm
+add-chains can blow up. Two future levers for these domains: (a) <em>drop the commutativity rule entirely</em> and let
+native alpha-equivalence subsume it (a pattern's reordered variables are alpha-equivalent without any rule), and
+(b) the incremental-saturation work sketched in <code>docs/seen_egraph_incremental_plan.html</code>. Out of scope
+here — the goal was correctness, and that holds.</div>
+
+<h2 id="sharing">6½. The sharing, demonstrated (purpose-built domain)</h2>
+<p>You asked me to "make an example domain and verify that the right sharing is happening." I added
+<code>data/domains/comm-demo/</code>: a corpus of 14 four-way <code>+</code> sums written in scrambled orders and
+bracketings (<code>sums.json</code>), plus AC rewrites for <code>+</code> (<code>sums.rewrites</code>:
+<code>comm</code> and <code>assoc</code>). This is precisely the "same pattern, variables reordered" blow-up the
+slotted seen-set targets. Reproduce with <code>./run.py comm_demo</code>.</p>
+
+<h3>End-to-end: the sharing cuts the search ~3.8×, with the same answer</h3>
+<p class="small muted">Same search, three seen-set settings. "map" uses <code>--no-seen-egraph-decides</code> (the
+alpha-canonical pattern map decides; the egraph runs only as a shadow); "slotted egraph" is the default
+(alpha + DSR decides).</p>
+<table>
+<thead><tr><th>seen-set setting</th><th>expansions</th><th>abstraction found</th></tr></thead>
+<tbody>
+<tr class="hi"><td>slotted egraph <span class="muted">(alpha + DSR)</span></td><td>82</td><td><code>(+ (+ (+ ?#0 ?#1) ?#2) ?#3)</code></td></tr>
+<tr><td>map <span class="muted">(alpha-canonical only)</span></td><td>311</td><td><code>(+ (+ (+ ?#0 ?#1) ?#2) ?#3)</code></td></tr>
+<tr><td>no seen-set</td><td>311</td><td><code>(+ (+ (+ ?#0 ?#1) ?#2) ?#3)</code></td></tr>
+</tbody>
+</table>
+<p>Three things to read off this:</p>
+<ul>
+<li><strong>The sharing fires:</strong> the slotted egraph explores <strong>82</strong> states vs <strong>311</strong>
+— it recognises the AC-reordered/reassociated partial patterns as one search state instead of re-expanding each
+ordering. The audit confirms the collapse directly: <strong>411 genuine inserts → 303 distinct DSR-classes</strong>
+(108 reordered patterns folded).</li>
+<li><strong>The sharing is correct:</strong> all three settings find the <em>identical</em> abstraction
+<code>(+ (+ (+ ?#0 ?#1) ?#2) ?#3)</code> (the clean 4-way sum template). Folding the reorderings does not change
+the answer — it isn't over-merging distinct states.</li>
+<li><strong>It's the egraph's doing, not the map's:</strong> "map" and "no seen-set" both sit at 311 — the
+alpha-canonical pattern map catches nothing extra here (the search already emits patterns in canonical
+variable-numbering). The entire win is the e-graph folding the AC equivalence class, which is exactly what was
+moved onto slotted.</li>
+</ul>
+<p class="small muted">Honest caveat on wall-clock: this corpus is tiny, so the slotted saturation overhead
+(~0.5&nbsp;s) actually exceeds the raw search it saves (no-seen runs in ~0.01&nbsp;s here). The
+<em>expansion count</em> is the blow-up metric that matters — it is what explodes combinatorially as the corpus
+grows, and that is what the sharing flattens. Full timing breakdown in <a href="#wallclock">§7</a>.</p>
+
+<h3>Mechanism-level: comm is folded by alpha (free), assoc by the DSR (on demand), nothing spurious</h3>
+<p>Two unit tests in <code>src/seen_slotted.rs</code> pin the equivalence exactly — that it shares what it should
+and nothing more:</p>
+<ul>
+<li><code>commutativity_reordering_folds_via_alpha</code> — with <strong>no rules at all</strong>, inserting
+<code>(+ ?#0 ?#1)</code> already makes <code>(+ ?#1 ?#0)</code> a member. Pure variable reordering is folded
+structurally by the slot encoding, exactly the slotted-specific win (the egg encoding needed a commutativity rule
+for this).</li>
+<li><code>associativity_needs_dsr_not_alpha</code> — alpha alone must <em>not</em> reassociate (a leaf slot can't be
+renamed into a subtree), and the test asserts <code>(+ (+ ?#0 ?#1) ?#2)</code> does <strong>not</strong> become
+<code>(+ ?#0 (+ ?#1 ?#2))</code> with no rule; <em>with</em> the <code>assoc</code> DSR saturated, it does. This is
+the "right" boundary: comm for free, assoc on demand, no spurious merges.</li>
+</ul>
+<pre>$ ./run.py comm_demo
+configuration                   expansions   abstraction found
+slotted egraph (alpha+DSR)              82   (+ (+ (+ ?#0 ?#1) ?#2) ?#3)
+map (alpha-canonical only)             311   (+ (+ (+ ?#0 ?#1) ?#2) ?#3)
+no seen-set                            311   (+ (+ (+ ?#0 ?#1) ?#2) ?#3)
+
+$ cargo test --release --lib seen_slotted   # 7 tests, incl. the two above</pre>
+
+<h2 id="wallclock">7. Wall-clock: is it faster? (no — here's the full breakdown)</h2>
+<p>Worth being blunt: <strong>on both examples the slotted seen-set is not a wall-clock win.</strong> The
+alpha-equivalence advantage is real at the level of <em>expansions</em> (it folds the AC sharing — 82 vs 311), but
+that does not translate to wall-clock on these inputs. There are two different "slower than what?" questions with
+two different answers.</p>
+
+<h3>comm-demo (14 programs): slotted-seen vs no-seen — slower, because expansions here are nearly free</h3>
+<table>
+<thead><tr><th>config</th><th>expansions</th><th>total</th><th>of which: egraph saturation</th><th>everything else</th></tr></thead>
+<tbody>
+<tr><td>no seen-set</td><td>311</td><td>0.010 s</td><td class="muted">— (no egraph)</td><td>0.010 s</td></tr>
+<tr class="hi"><td>slotted (egraph decides)</td><td>82</td><td>0.451 s</td><td>0.431 s <span class="muted">(96%)</span></td><td>~0.020 s</td></tr>
+<tr><td>map decides (egraph as shadow)</td><td>311</td><td>0.829 s</td><td>0.771 s <span class="muted">(93%)</span></td><td>~0.058 s</td></tr>
+</tbody>
+</table>
+<p>The seen-set did its job — <strong>82 vs 311 expansions</strong> — but look at what an expansion <em>costs</em>
+here: <code>0.010 s / 311 ≈ 32&nbsp;µs</code>. The corpus is tiny, so each expansion is nearly free; cutting 229 of
+them saves only ~<strong>0.007 s</strong>. To save that, the slotted egraph spent <strong>0.43 s</strong> saturating
+the DSRs after inserts. Net ~0.44 s <em>slower</em>. The seen-set is an <strong>asymptotic optimization</strong> — it
+trades egraph bookkeeping for fewer expansions, and that only pays off once expansions are expensive enough. On a
+14-program toy they aren't. (The "map decides" row is the worst case: it still builds and saturates the egraph as a
+<em>shadow</em>, so it pays the 0.77 s <em>and</em> runs all 311 expansions.)</p>
+
+<h3>nuts-bolts (250 programs): the seen-set <em>does</em> beat no-seen — but slotted is 3× the egg it replaced</h3>
+<table>
+<thead><tr><th>config</th><th>expansions</th><th>total</th><th>egraph saturation</th></tr></thead>
+<tbody>
+<tr><td>no seen-set</td><td>10000 <span class="muted">(budget)</span></td><td>2.24 s</td><td class="muted">—</td></tr>
+<tr class="hi"><td>slotted seen-set</td><td>1185</td><td>0.92 s</td><td>0.43 s</td></tr>
+<tr><td>egg seen-set <span class="muted">(before)</span></td><td>1185</td><td>0.32 s</td><td>0.012 s</td></tr>
+</tbody>
+</table>
+<p>Here the corpus is big enough that expansions are ~7× more expensive (<code>2.24 s / 10000 ≈ 224&nbsp;µs</code>
+each) <em>and</em> there is a real blow-up (10000 → 1185). So the seen-set earns its keep:
+<strong>slotted-seen (0.92 s) is faster than no-seen (2.24 s)</strong>. But it is <strong>3× slower than the egg
+seen-set</strong> — identical 11 saturation flushes, identical dedup, but slotted saturation took
+<strong>0.43 s vs egg's 0.012 s</strong> (~36× slower per flush).</p>
+
+<div class="callout warn">
+<strong>Two root causes.</strong>
+<ol>
+<li><strong>The slotted e-graph's saturation engine is much slower than egg's</strong> (~36× per flush on
+nuts-bolts). It's a young library — a naive fixpoint loop, less-optimised e-matching/rebuild — and, like the egg
+version, it re-saturates the whole accumulated egraph on every flush (the cost
+<code>docs/seen_egraph_incremental_plan.html</code> targets). This is an implementation-maturity gap, not
+fundamental.</li>
+<li><strong>The seen-set only beats no-seen when expansions are expensive <em>and</em> the blow-up is large.</strong>
+comm-demo has neither (tiny corpus, ~32&nbsp;µs expansions), so the egraph overhead dominates no matter how good the
+engine is.</li>
+</ol>
+</div>
+
+<p><strong>So what was delivered is a correct, behaviour-identical replacement that demonstrably folds the AC sharing
+— not a faster one.</strong> Levers that would flip the wall-clock trade, none done here: drop the commutativity rule
+and lean on native alpha (fewer/cheaper rules for the egraph to saturate); batch or incrementalise saturation; or run
+on a corpus large enough that the expansion blow-up dwarfs the egraph cost.</p>
+
+<h2>8. Limitations / things to know</h2>
+<ul>
+<li><strong>Lambda-calc rules with de-Bruijn <code>$i</code> are skipped</strong> (the slotted parser reads
+<code>$i</code> as a slot). The run prints how many rules were dropped. For such domains the seen-egraph dedups by
+alpha-equivalence only, not by those rewrites. <code>nuts-bolts</code> and <code>basic-apps</code> are unaffected.</li>
+<li><strong>Reserved heads</strong> <code>pv</code>, <code>fpv</code>, <code>$root$</code> would collide with a corpus
+operator spelled identically. None exist in the tested corpora; a real collision would mis-parse and is easy to make
+more obscure if it ever matters.</li>
+<li><strong>Performance.</strong> The slotted runner is correctness-first; it is slower than egg on these inputs.
+Where the domain has no alpha-equivalence to exploit (e.g. <code>nuts-bolts</code>) it is pure overhead.</li>
+<li><strong>Operator matching is by display-name string</strong> (the slotted <code>Symbol</code>), where egg matched
+by typed discriminant. These agree because both come from the same <code>Display</code>, but it's a slightly
+stricter equality (byte-identical spelling) to keep in mind.</li>
+</ul>
+
+<h2>9. Files changed</h2>
+<table>
+<thead><tr><th>File</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td><code>src/seen_slotted.rs</code> <span class="tag t-good">new</span></td><td>The whole backend: <code>SeenLang</code> + hand-written <code>Language</code>, pattern→slotted conversion, <code>$root$</code> wrap, membership, rule lifter, <code>SlottedSeen</code> wrapper, 7 tests.</td></tr>
+<tr><td><code>data/domains/comm-demo/</code> <span class="tag t-good">new</span>, <code>run.py</code></td><td>The commutativity demo corpus + AC rewrites and a <code>comm_demo</code> entry point (<a href="#sharing">§6½</a>).</td></tr>
+<tr><td><code>src/search.rs</code></td><td><code>SeenTracker</code> now holds a <code>SlottedSeen</code> instead of an egg <code>EGraph</code>; rewrote <code>check_and_insert</code>, dynamic tuner, audit, distinct-root-class count. Net −111 lines.</td></tr>
+<tr><td><code>src/best_first.rs</code></td><td>Rule lifting now calls <code>lift_rules_from_file</code>; <code>SeenTracker::new</code> signature; audit print drops egg-only fields.</td></tr>
+<tr><td><code>src/lang/family.rs</code>, <code>src/lang/mod.rs</code></td><td>Removed the now-dead <code>wrap_seen_root</code> trait method + 2 impls and the <code>OpWithFrozenVar</code> exports.</td></tr>
+<tr><td><code>src/lang/op_with_frozen_var.rs</code> <span class="tag t-bad">deleted</span></td><td>The frozen-var egg language existed only for the old egraph side.</td></tr>
+<tr><td><code>Cargo.toml</code>, <code>src/lib.rs</code></td><td>Added the <code>slotted-egraphs = "0.0.36"</code> dependency and the module.</td></tr>
+</tbody>
+</table>
+<p class="small muted">Net across existing files: −233 lines (incl. the 91-line file deletion); +409 in the new module. <code>cargo fmt</code> clean;
+<code>cargo clippy</code> clean for the new code (one pre-existing lint elsewhere untouched). 61/61 lib tests pass.</p>
+
+<h2>10. Validation tests (in <code>src/seen_slotted.rs</code>)</h2>
+<ul>
+<li><code>alpha_equivalent_metavars_collapse</code> — <code>(T ?#0 ?#1)</code> makes <code>(T ?#1 ?#0)</code> a member, no rules.</li>
+<li><code>relabelled_frozen_collapses</code> — "first child frozen, second free" is one state regardless of labels.</li>
+<li><code>frozen_vs_free_stays_distinct</code> — frozen vs free at the same position stay distinct.</li>
+<li><code>distinct_patterns_not_members</code> — distinct top-level patterns (and interned subterms) are <em>not</em> members of each other.</li>
+<li><code>dsr_saturation_merges</code> — a scale-1 DSR makes a term and its scaled form equivalent after saturation.</li>
+<li><code>commutativity_reordering_folds_via_alpha</code> — <code>(+ ?#0 ?#1)</code> ≡ <code>(+ ?#1 ?#0)</code> with no rules (the sharing, part 1).</li>
+<li><code>associativity_needs_dsr_not_alpha</code> — reassociation comes from the DSR, not alpha; without the rule the bracketings stay distinct (the sharing, part 2 — no over-merging).</li>
+</ul>
+
+<h2>11. How to run</h2>
+<pre># the target benchmark, slotted seen-set on:
+EXPTS_VERBOSE=1 ./run.py run_bfs_cell nuts-bolts use_dsrs=True no_opt_seen=False
+
+# same, seen-set off (slower, same answer):
+EXPTS_VERBOSE=1 ./run.py run_bfs_cell nuts-bolts use_dsrs=True no_opt_seen=True
+
+# the commutativity sharing demo (§6½): expansions across three seen-set settings:
+./run.py comm_demo
+
+# the encoding's semantics + the sharing (7 tests):
+cargo test --release --lib seen_slotted</pre>
+
+<p class="small muted">The slotted e-graph library was cloned to <code>../slotted-egraphs</code> for study; the build uses the
+published <code>slotted-egraphs 0.0.36</code> crate.</p>
+
+</body>
+</html>

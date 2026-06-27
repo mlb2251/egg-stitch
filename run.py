@@ -304,6 +304,40 @@ def show_table1(folder=None):
         show_cell(d, use_dsrs=True, folder=folder)
 
 
+def comm_demo():
+    """Demonstrate the slotted seen-set folding commutativity/associativity sharing.
+
+    Corpus ``data/domains/comm-demo/sums.json`` is 14 four-way ``+`` sums in
+    scrambled orders/bracketings; ``sums.rewrites`` is AC for ``+`` — exactly the
+    "same pattern, variables reordered" blow-up. Runs the same search under three
+    seen-set settings and prints expansions + the abstraction found, so the
+    sharing is visible: the slotted egraph (alpha + DSR) explores far fewer states
+    than the alpha-canonical ``map`` or no seen-set, and all three agree on the
+    answer (the sharing is correct, not over-merging).
+    """
+    import re
+    import subprocess
+
+    subprocess.run(["cargo", "build", "--release", "--bin=egg-stitch"], check=True)
+    binary = "target/release/egg-stitch"
+    base = ["-i", "data/domains/comm-demo/sums.json",
+            "-r", "data/domains/comm-demo/sums.rewrites",
+            "--search", "best-first", "--language", "op-children",
+            "--max-arity", "4", "--num-abstractions", "1", "--num-steps", "500000"]
+    configs = [
+        ("slotted egraph (alpha+DSR)", []),
+        ("map (alpha-canonical only)", ["--no-seen-egraph-decides"]),
+        ("no seen-set", ["--no-opt-seen"]),
+    ]
+    print(f"{'configuration':30} {'expansions':>11}   abstraction found")
+    for name, extra in configs:
+        out = subprocess.run([binary, "--output", "out.json", *base, *extra],
+                             capture_output=True, text=True).stdout
+        exp = re.search(r"expansions:\s*(\d+)", out)
+        pat = re.search(r"^pattern:\s*(.+)$", out, re.MULTILINE)
+        print(f"{name:30} {exp.group(1) if exp else '?':>11}   {pat.group(1) if pat else '?'}")
+
+
 def _parse_arg(s):
     """Coerce a CLI string to a bool, then an int, then a float, else a string."""
     if s in ("True", "False"):

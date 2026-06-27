@@ -165,24 +165,24 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     // insertion order breaks remaining ties to stay deterministic.
     let mut heap: BinaryHeap<Reverse<((usize, usize), usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(|| {
-        // Lift the program-language DSRs onto the frozen-var seen language by
-        // re-parsing the rule file at `F::Apply<OpWithFrozenVar<O>>` with `()`
-        // analysis: op names route to `Node(..)`, `?x` metavars stay metavars,
-        // so the rules match the inserted patterns directly. Plain `lhs => rhs`
-        // rules lift cleanly; a parse failure degrades to an empty set with a
-        // warning rather than aborting. With `--seen-egraph-saturate` (default
-        // on) these run after each insert so the egraph dedups modulo
-        // DSR-equivalence; the end-of-run audit uses them either way.
-        let weights = shared.egraph.analysis.weights;
-        let rules: Vec<egg::Rewrite<F::Apply<crate::lang::OpWithFrozenVar<O>>, ()>> = match args.rules.as_deref() {
-            Some(path) => crate::io::from_file(path, &weights).unwrap_or_else(|e| {
-                println!("{} {}", "seen-egraph: failed to lift rules:".red(), e);
-                vec![]
-            }),
-            None => vec![],
+        // Lift the program-language DSRs onto the slotted `SeenLang`: operator
+        // names and `?x` metavars carry over verbatim (the slotted pattern syntax
+        // is the same), so the rules match the inserted patterns directly. Plain
+        // `lhs => rhs` rules lift cleanly; a rule whose sides don't parse (e.g.
+        // lambda-calc de-Bruijn `$i`) is skipped with a warning rather than
+        // aborting. With `--seen-egraph-saturate` (default on) these run after
+        // each insert so the egraph dedups modulo DSR-equivalence (on top of the
+        // alpha-equivalence the slotted e-graph folds for free); the end-of-run
+        // audit uses them either way.
+        let (rules, skipped) = match args.rules.as_deref() {
+            Some(path) => crate::seen_slotted::lift_rules_from_file(path),
+            None => (vec![], 0),
         };
-        // High limits so saturation, not a cap, stops the run where the rules permit.
-        SeenTracker::new(rules, args.iter_limit.max(1000), args.node_limit, args.seen_egraph_saturate, args.seen_egraph_saturate_every, args.seen_egraph_decides, args.seen_egraph_saturate_dynamic)
+        if skipped > 0 {
+            println!("{} {}", "seen-egraph:".red(), format!("{skipped} rule(s) not lifted (unsupported by SeenLang)").red());
+        }
+        // High limit so saturation, not a cap, stops the run where the rules permit.
+        SeenTracker::new(rules, args.iter_limit.max(1000), args.seen_egraph_saturate, args.seen_egraph_saturate_every, args.seen_egraph_decides, args.seen_egraph_saturate_dynamic)
     });
 
     nodes.push(Node {
@@ -424,21 +424,16 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         let sat_calls = s.saturate_calls;
         let avg_ms = if sat_calls > 0 { per_insert_secs * 1000.0 / sat_calls as f64 } else { 0.0 };
         let recexpr_secs = s.recexpr_time.as_secs_f64();
-        let search_secs = s.egraph_search_time.as_secs_f64();
-        let apply_secs = s.egraph_apply_time.as_secs_f64();
-        let rebuild_secs = s.egraph_rebuild_time.as_secs_f64();
         let audit = s.audit_seen_egraph();
-        println!("{}", "── seen-egraph audit ──".dimmed());
+        println!("{}", "── seen-egraph audit (slotted) ──".dimmed());
         println!(
-            "{} {} {} {}",
+            "{} {} {}",
             "  rewrites:".dimmed(),
             format!("{} rules, saturate-each={saturate_each}, every={every}, decider={decider}", audit.num_rules).bold(),
-            format!("(audit pass: {} firings over {} iters,", audit.applications, audit.iterations).dimmed(),
-            format!("stop {})", audit.stop_reason).dimmed(),
+            format!("(audit pass: {} iters, stop {})", audit.iterations, audit.stop_reason).dimmed(),
         );
         println!("{} {}", "  per-insert saturation:".dimmed(), format!("{per_insert_secs:.3}s over {sat_calls} runs ({avg_ms:.3}ms avg)").bold());
-        println!("{} {}", "    of which (egg):".dimmed(), format!("search {search_secs:.3}s, apply {apply_secs:.3}s, rebuild {rebuild_secs:.3}s").bold());
-        println!("{} {}", "  frozen-recexpr build:".dimmed(), format!("{recexpr_secs:.3}s").bold());
+        println!("{} {}", "  seen-recexpr build:".dimmed(), format!("{recexpr_secs:.3}s").bold());
         println!(
             "{} {} {}",
             "  before saturation:".dimmed(),

@@ -7,7 +7,6 @@ mod lambda_calc;
 mod op;
 mod op_children;
 mod op_db;
-mod op_with_frozen_var;
 mod op_with_var;
 
 pub use family::{LambdaCalc, LanguageFamily, OpChildren};
@@ -15,7 +14,6 @@ pub use lambda_calc::{LambdaCalcDisc, LambdaCalcLanguage};
 pub use op::{Op, StitchDisc, StitchOp, de_bruijn_strictly_more_expensive_than_symbols};
 pub use op_children::OpChildrenLanguage;
 pub use op_db::OpDB;
-pub use op_with_frozen_var::{FROZEN_ROOT_NAME, OpWithFrozenVar};
 pub use op_with_var::OpWithVar;
 
 /// Trait covering every language usable with the search machinery.

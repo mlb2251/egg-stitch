@@ -1,0 +1,92 @@
+{
+  "timestamp": 1782597586.542928,
+  "search": "best-first",
+  "input_file": "data/domains/comm-demo/sums.json",
+  "rules_file": "data/domains/comm-demo/sums.rewrites",
+  "elapsed_secs": 0.212872584,
+  "initial_cost": 99,
+  "cost_after_rewrites": 99,
+  "cost_at_end_of_each_iter": [
+    78
+  ],
+  "final_cost": 78,
+  "compression_ratio": 1.2692307692307692,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "original_programs": [
+    "(+ (+ (+ a b) c) d)",
+    "(+ a (+ b (+ c d)))",
+    "(+ (+ a b) (+ c d))",
+    "(+ (+ (+ d c) b) a)",
+    "(+ (+ e f) (+ g h))",
+    "(+ e (+ f (+ g h)))",
+    "(+ (+ (+ h g) f) e)",
+    "(+ (+ a c) (+ e g))",
+    "(+ (+ b d) (+ f h))",
+    "(+ (+ (+ a d) f) g)",
+    "(+ b (+ c (+ e h)))",
+    "(+ (+ (+ g e) c) a)",
+    "(+ (+ h f) (+ d b))",
+    "(+ d (+ (+ a g) e))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 a b c d)",
+    "(fn_0 a b c d)",
+    "(fn_0 a b c d)",
+    "(fn_0 a b c d)",
+    "(fn_0 e f g h)",
+    "(fn_0 e f g h)",
+    "(fn_0 e f g h)",
+    "(fn_0 a c e g)",
+    "(fn_0 b d f h)",
+    "(fn_0 a d f g)",
+    "(fn_0 b c e h)",
+    "(fn_0 a c e g)",
+    "(fn_0 b d f h)",
+    "(fn_0 a d e g)"
+  ],
+  "library": [
+    {
+      "pattern": "fn_0: (+ (+ (+ ?#0 ?#1) ?#2) ?#3)",
+      "lambda": "(lam (lam (lam (lam (+ (+ (+ $3 $2) $1) $0)))))",
+      "arity": 4,
+      "pattern_size": 7,
+      "num_matches": 7,
+      "usage_matches": 14,
+      "approx_cost": 8,
+      "num_steps_run": 311,
+      "num_expansions": 11,
+      "best_iteration": 10,
+      "best_history": [
+        {
+          "expansion": 9,
+          "elapsed_secs": 0.000335625,
+          "cost": 94,
+          "pattern": "(+ a ?#0)"
+        },
+        {
+          "expansion": 9,
+          "elapsed_secs": 0.000369042,
+          "cost": 90,
+          "pattern": "(+ (+ ?#0 ?#1) ?#2)"
+        },
+        {
+          "expansion": 10,
+          "elapsed_secs": 0.000788292,
+          "cost": 88,
+          "pattern": "(+ (+ d ?#0) ?#1)"
+        },
+        {
+          "expansion": 10,
+          "elapsed_secs": 0.000804667,
+          "cost": 78,
+          "pattern": "(+ (+ (+ ?#0 ?#1) ?#2) ?#3)"
+        }
+      ]
+    }
+  ],
+  "iteration_times": [
+    0.21284775
+  ]
+}

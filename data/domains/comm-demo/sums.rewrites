@@ -1,0 +1,7 @@
+// Commutative + associative `+`. These are exactly the rewrites that produce
+// "the same pattern with its variables reordered" — the blow-up the slotted
+// seen-set is meant to fold. comm is pure variable reordering (handled natively
+// by alpha-equivalence in the slotted seen-egraph); assoc reshapes the tree
+// (handled by DSR saturation).
+comm:  (+ ?a ?b) <=> (+ ?b ?a)
+assoc: (+ (+ ?a ?b) ?c) <=> (+ ?a (+ ?b ?c))
