@@ -12,21 +12,26 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
-/// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
+/// Inserts a freshly-expanded state into the parallel (states, mults, probs) deduped-by-pattern
+/// buffer, bumping an existing group's count/proposal-mass by `count`/`prob` or pushing a new one.
 ///
-/// The accumulated multiplicity `mult_i` is the number of particles that landed on this
-/// pattern, i.e. an estimate (`mult_i / N`) of the expansion proposal's marginal at this
-/// pattern. The reweight divides by it (`-ln mult_i`) to undo the proposal frequency and
-/// recover the uniform-prior target.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
+/// `mult_i = Σ count` is the realized particle count that landed on this pattern. `prob_i =
+/// Σ prob` is the *exact* one-step proposal mass `Σ_(p,a)→i M_p·q(a|p)` (an unnormalized
+/// proposal marginal, `q(i) = prob_i / N`). The reweight uses `ln(mult_i) - ln(prob_i)`:
+/// the analytic proposal probability, not the `mult_i/N` self-estimate, so the multiplicity
+/// no longer cancels against the proposal it is being divided by.
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, prob: f64, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, probs: &mut Vec<f64>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
     match dedup.get(&s.pattern) {
-        Some(&idx) => mults[idx] += count,
+        Some(&idx) => {
+            mults[idx] += count;
+            probs[idx] += prob;
+        }
         None => {
             let idx = states.len();
             dedup.insert(s.pattern.clone(), idx);
             states.push(s);
             mults.push(count);
+            probs.push(prob);
         }
     }
 }
@@ -47,12 +52,14 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
 ///
 /// Particles are stored as `(SearchState, multiplicity)` pairs. After each
-/// expansion step, identical patterns are deduplicated and their counts merged,
-/// so cost computation runs once per unique pattern instead of once per particle.
-/// The merged multiplicity `mult_i` estimates the expansion proposal's marginal
-/// (`mult_i / N`) at that pattern; the reweight divides it back out (`-ln mult_i`)
-/// so the resampling targets the uniform-prior posterior `exp(-cost(x)/T)` rather
-/// than the proposal-frequency-biased distribution.
+/// expansion step, identical patterns are deduplicated, so cost computation runs
+/// once per unique pattern instead of once per particle. Each unique pattern
+/// accumulates both its realized multiplicity `mult_i` and the *exact* proposal
+/// mass `prob_i = Σ M_p·q(a|p)` of the parent/actions that reach it. The reweight
+/// is the Rao-Blackwellized importance weight `mult_i·exp(-cost_i/T)/q(i)` (with
+/// `q(i) ∝ prob_i`), targeting the uniform-prior posterior `exp(-cost(x)/T)`:
+/// dividing by the analytic proposal — rather than the `mult_i/N` self-estimate,
+/// which would cancel `mult_i` — keeps the multiplicity as a real correction.
 #[allow(clippy::needless_range_loop)]
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
@@ -106,12 +113,15 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // win zero samples. Resulting patterns are deduped globally across groups.
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         let mut mults: Vec<usize> = Vec::new();
+        let mut probs: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
             let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
+                    // Deterministic successor: q(a|p) = 1, so the proposal-mass
+                    // contribution is M_p·1 = mult.
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                        dedup_insert(child, mult, mult as f64, &mut expanded, &mut mults, &mut probs, &mut dedup);
                     }
                     continue;
                 }
@@ -120,20 +130,27 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 SuccessorEnum::All { actions, .. } => actions,
             };
             if actions.is_empty() {
-                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                // Terminal particle carried forward unchanged: q = 1.
+                dedup_insert(state, mult, mult as f64, &mut expanded, &mut mults, &mut probs, &mut dedup);
                 continue;
             }
             let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
+            // `normalize_and_accumulate` normalizes in place, so afterwards
+            // `weights[k]` holds q(a_k|p) (incl. the uniform zero-sum fallback).
             let acc = normalize_and_accumulate(&mut weights);
             let mut counts: Vec<usize> = vec![0; actions.len()];
             for _ in 0..mult {
                 counts[weighted_choice(&acc, rng)] += 1;
             }
-            for ((action, _), count) in actions.into_iter().zip(counts) {
+            for (k, ((action, _), count)) in actions.into_iter().zip(counts).enumerate() {
                 if count > 0 {
                     let child = state.apply_action(&action, &shared, true, None);
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                        // Exact proposal-mass contribution from this parent:
+                        // M_p·q(a|p) = mult·weights[k]. Accumulated independent of
+                        // the realized `count` so the reweight divides by the true
+                        // proposal probability, not its mult_i/N self-estimate.
+                        dedup_insert(child, count, mult as f64 * weights[k], &mut expanded, &mut mults, &mut probs, &mut dedup);
                     }
                 }
             }
@@ -167,13 +184,16 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             pruned.push(false);
         }
 
-        // log-space weights for the uniform-prior target π(x) ∝ exp(-cost/T):
-        // logw_i = -cost_i/T - ln(mult_i). The `-ln(mult_i)` divides out the
-        // expansion proposal's marginal (estimated by mult_i / N), so a pattern
-        // reached by many particles isn't over-weighted just for being easy to
-        // reach. Pruned particles (lb >= best) are dead since no descendant can
-        // beat the current best.
-        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature - (mults[i] as f64).ln() }).collect();
+        // log-space weights for the uniform-prior target π(x) ∝ exp(-cost/T),
+        // as a Rao-Blackwellized importance weight mult_i·π(i)/q(i):
+        // logw_i = ln(mult_i) - cost_i/T - ln(prob_i), where prob_i ∝ q(i) is the
+        // *exact* one-step proposal marginal. Dividing by the analytic proposal
+        // (not the mult_i/N self-estimate, which would cancel mult_i) leaves a
+        // small ln(mult_i/E[mult_i]) correction: patterns sampled above their
+        // proposal probability are up-weighted, lucky-rare ones down-weighted.
+        // Pruned particles (lb >= best) are dead since no descendant can beat
+        // the current best.
+        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { (mults[i] as f64).ln() - (*c as f64) / temperature - probs[i].ln() }).collect();
 
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
