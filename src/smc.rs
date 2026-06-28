@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use crate::cost::{CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
+use crate::cost::{CostCache, CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
@@ -41,16 +41,6 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
     pub num_steps_run: usize,
     pub data: crate::shared::SharedData<F, O>,
     pub debug_log: Option<DebugLog>,
-}
-
-/// Result of reweighting one expanded generation into a resampling distribution.
-enum ReweightOutcome {
-    /// Normalized resample probabilities (all-zero if every particle died).
-    Weights(Vec<f64>),
-    /// `--follow` mode: a surviving particle exactly matches the follow target,
-    /// so the search is done. Carries the winner's index, its cost, and the
-    /// post-constraint weights for the final debug-log entry.
-    FollowExactMatch { index: usize, cost: usize, probs: Vec<f64> },
 }
 
 /// Mutable driver state for one SMC run: the read-only [`SharedSearchData`]
@@ -147,52 +137,56 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         expanded
     }
 
-    /// Reweights the expanded generation into a resampling distribution.
-    ///
-    /// Steps: cost → log-weight `-cost/temperature` (lower-bound-pruned
-    /// particles are dead at `-inf`, since no descendant can beat the current
-    /// best); in `--follow` mode, zero out particles whose pattern isn't a valid
-    /// prefix of the target and register prefix progress; kill zero-arity
-    /// patterns (they can't abstract anything); then log-normalize to
-    /// probabilities. If a surviving particle exactly matches the follow target,
-    /// returns [`ReweightOutcome::FollowExactMatch`] instead so the caller can
-    /// record it and stop.
-    fn reweight(&mut self, expanded: &[SearchState<F, O>], costs: &[usize], pruned: &[bool], step: usize) -> ReweightOutcome {
+    /// Computes each expanded particle's cost, lower-bound-pruning where it can,
+    /// and updates `best_so_far` inline so later particles in the same step see a
+    /// tighter `cost_to_beat`. Returns parallel `(costs, pruned)` vecs: `pruned[i]`
+    /// marks particles killed by the lower bound (no descendant can beat the
+    /// current best), whose `costs[i]` is the bound they failed rather than a
+    /// real cost. In `--follow` mode the best update is skipped — only the
+    /// exact-match exit promotes a particle.
+    fn compute_costs(&mut self, expanded: &[SearchState<F, O>], step: usize, cost_cache: &CostCache, scratch: &mut CostScratch, lower_bound_pruner: &mut LowerBoundPruner) -> (Vec<usize>, Vec<bool>) {
+        let max_arity = self.args.max_arity;
+        let no_zero_arity = self.args.no_zero_arity;
+        let mut costs: Vec<usize> = Vec::with_capacity(expanded.len());
+        let mut pruned: Vec<bool> = Vec::with_capacity(expanded.len());
+        for s in expanded.iter() {
+            let cost_to_beat: usize = self.cost_to_beat();
+            if let PruneResult::Pruned = lower_bound_pruner.try_prune(&self.shared.egraph, self.shared.root, cost_cache, scratch, s, cost_to_beat) {
+                costs.push(cost_to_beat);
+                pruned.push(true);
+                continue;
+            }
+            let selection = compute_cost_and_select(&self.shared.egraph, self.shared.root, cost_cache, scratch, s, self.shared.check_slow);
+            let cost = selection.cost;
+            let arity = s.pattern.vars.len();
+            // In `--follow` mode the prefix filter lets cheaper non-matching
+            // particles through, so skip the prefix-best update — only the
+            // exact-match exit promotes a particle to `best`.
+            if self.shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && !s.has_useless_var(&self.shared) {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
+                self.record_best(step, cost, SearchStateWithCostSelection { state: s.clone(), selection });
+            }
+            costs.push(cost);
+            pruned.push(false);
+        }
+        (costs, pruned)
+    }
+
+    /// Per-particle un-normalized log-weights: `-cost/temperature`, or `-inf`
+    /// for dead (`pruned`) particles. The follow stage inspects and extends
+    /// these before [`reweight`] normalizes them.
+    fn raw_log_weights(&self, costs: &[usize], pruned: &[bool]) -> Vec<f64> {
         let temperature = self.args.temperature;
-        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
+        costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect()
+    }
 
-        if let Some(ref follow) = self.shared.follow {
-            apply_follow_constraint(expanded, &mut log_weights, follow, &self.shared, self.original_size, costs, self.args.verbose);
-            // Read everything that needs `follow` while its borrow is live, then
-            // update best-so-far afterwards (the bookkeeping methods borrow all
-            // of `self`, so they can't run while `follow` borrows `self.shared`).
-            //
-            // Prefix progress: a deeper RecExpr means the particle has expanded
-            // further into the follow target's shape (see `note_prefix_progress`).
-            let step_progress: usize = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| expanded[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
-            // If any surviving particle is alpha-equivalent to the follow target,
-            // the search has reached the goal — pick the cheapest such particle.
-            // Prefix-survival is noisy; an exact hit is unambiguous.
-            let exact = (0..expanded.len())
-                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &self.shared.egraph))
-                .map(|i| (i, costs[i]))
-                .min_by_key(|&(_, c)| c);
-            self.note_prefix_progress(step, step_progress);
-            if let Some((index, cost)) = exact {
-                let probs = log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect();
-                return ReweightOutcome::FollowExactMatch { index, cost, probs };
-            }
-        }
-
-        for (i, s) in expanded.iter().enumerate() {
-            if s.pattern.vars.is_empty() {
-                log_weights[i] = f64::NEG_INFINITY;
-            }
-        }
-
+    /// Normalizes the dead mask + costs into a resampling distribution via
+    /// log-sum-exp. Returns probabilities summing to 1, or an all-zero vector if
+    /// every particle is dead (the caller treats that as "all particles died").
+    fn reweight(&self, costs: &[usize], pruned: &[bool]) -> Vec<f64> {
+        let log_weights = self.raw_log_weights(costs, pruned);
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-        let weights = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
-        ReweightOutcome::Weights(weights)
+        if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] }
     }
 
     /// The cost a candidate must come in strictly under to become the new best:
@@ -270,8 +264,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     // `weighted_choice`. Zero is allowed.
     assert!(args.boost_reuse_weight >= 0.0 && args.boost_reuse_weight.is_finite(), "--boost-reuse-weight must be a non-negative finite number, got {}", args.boost_reuse_weight);
     let dead_runs = args.dead_runs;
-    let max_arity = args.max_arity;
-    let no_zero_arity = args.no_zero_arity;
     let verbose = args.verbose;
 
     let mut steps_run = 0;
@@ -291,45 +283,53 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     for step in 0..num_steps {
         let expanded = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
 
-        // Per-particle: optional lower-bound prune, else full cost; running
-        // `best_so_far` update inline so later particles in the same step can
-        // benefit from a tighter `cost_to_beat`.
-        let mut costs: Vec<usize> = Vec::with_capacity(expanded.len());
-        let mut pruned: Vec<bool> = Vec::with_capacity(expanded.len());
-        for s in expanded.iter() {
-            let cost_to_beat: usize = search.cost_to_beat();
-            if let PruneResult::Pruned = lower_bound_pruner.try_prune(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, s, cost_to_beat) {
-                costs.push(cost_to_beat);
-                pruned.push(true);
-                continue;
-            }
-            let selection = compute_cost_and_select(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, s, search.shared.check_slow);
-            let cost = selection.cost;
-            let arity = s.pattern.vars.len();
-            // In `--follow` mode the prefix filter lets cheaper non-matching
-            // particles through, so skip the prefix-best update — only the
-            // exact-match exit below promotes a particle to `best`.
-            if search.shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && !s.has_useless_var(&search.shared) {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
-                search.record_best(step, cost, SearchStateWithCostSelection { state: s.clone(), selection });
-            }
-            costs.push(cost);
-            pruned.push(false);
-        }
+        let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
 
-        let mut weights = match search.reweight(&expanded, &costs, &pruned, step) {
-            ReweightOutcome::FollowExactMatch { index, cost, probs } => {
+        // Follow stage: kill non-prefix particles, register prefix progress, and
+        // stop on an exact match. Kills are folded into `pruned` so the pure
+        // `reweight` below drops them. Kept inline (not in `reweight`) because
+        // the exact-match exit owns the loop's `break` / `steps_run` / logging.
+        if let Some(ref follow) = search.shared.follow {
+            let mut log_weights = search.raw_log_weights(&costs, &pruned);
+            apply_follow_constraint(&expanded, &mut log_weights, follow, &search.shared, original_size, &costs, verbose);
+            for (p, &lw) in pruned.iter_mut().zip(log_weights.iter()) {
+                *p |= lw == f64::NEG_INFINITY;
+            }
+            // Read prefix progress + exact match while `follow` is borrowed, then
+            // update best-so-far afterwards (the bookkeeping methods borrow all
+            // of `search`, so they can't run while `follow` borrows `search.shared`).
+            //
+            // Prefix progress: a deeper RecExpr means the particle has expanded
+            // further into the follow target's shape (see `note_prefix_progress`).
+            let step_progress: usize = (0..expanded.len()).filter(|&i| !pruned[i]).map(|i| expanded[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
+            // If any surviving particle is alpha-equivalent to the follow target,
+            // the search has reached the goal — pick the cheapest such particle.
+            // Prefix-survival is noisy; an exact hit is unambiguous.
+            let exact = (0..expanded.len()).filter(|&i| !pruned[i] && crate::follow::matches_follow_serialized(&expanded[i], follow, &search.shared.egraph)).map(|i| (i, costs[i])).min_by_key(|&(_, c)| c);
+            search.note_prefix_progress(step, step_progress);
+            if let Some((index, cost)) = exact {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", cost).green().bold(), expanded[index].pattern.to_string().cyan());
                 // Re-derive the selection for this particle: we didn't keep
                 // selections in `costs`, and exact-match fires at most once.
                 let selection = compute_cost_and_select(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, &expanded[index], search.shared.check_slow);
                 search.record_best(step, cost, SearchStateWithCostSelection { state: expanded[index].clone(), selection });
                 steps_run = step + 1;
+                let probs: Vec<f64> = log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect();
                 log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &probs, search.best(), &[]);
                 break;
             }
-            ReweightOutcome::Weights(weights) => weights,
-        };
+        }
+
+        // Zero-arity patterns can't abstract anything; drop them before
+        // resampling. After the follow exact-match check, which must see them
+        // alive (a follow target can itself be zero-arity).
+        for (i, s) in expanded.iter().enumerate() {
+            if s.pattern.vars.is_empty() {
+                pruned[i] = true;
+            }
+        }
+
+        let mut weights = search.reweight(&costs, &pruned);
 
         if weights.iter().sum::<f64>() == 0.0 {
             log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, search.best(), &[]);
