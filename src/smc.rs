@@ -43,6 +43,16 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
     pub debug_log: Option<DebugLog>,
 }
 
+/// Result of reweighting one expanded generation into a resampling distribution.
+enum ReweightOutcome {
+    /// Normalized resample probabilities (all-zero if every particle died).
+    Weights(Vec<f64>),
+    /// `--follow` mode: a surviving particle exactly matches the follow target,
+    /// so the search is done. Carries the winner's index, its cost, and the
+    /// post-constraint weights for the final debug-log entry.
+    FollowExactMatch { index: usize, cost: usize, probs: Vec<f64> },
+}
+
 /// Mutable driver state for one SMC run: the read-only [`SharedSearchData`]
 /// context, the borrowed CLI `args` and `rng`, and the running best-so-far
 /// bookkeeping. The best-so-far fields are private so all reads and writes go
@@ -82,6 +92,107 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
             best_found_at: None,
             best_prefix_progress: 0,
         }
+    }
+
+    /// Expands one generation of particles into the next. For each `(state, mult)`
+    /// group, enumerates successor *actions* (no child states built up front),
+    /// then resamples `mult` of them. Each action's sampling weight is its
+    /// `(match, subst)` support count; reuse-action weights are additionally
+    /// multiplied by `--boost-reuse-weight`. Child states are materialised only
+    /// for sampled actions via `apply_action`, avoiding the per-shape
+    /// `clone + expand` work for successors that win zero samples. Children over
+    /// the match-set cap are dropped. Resulting patterns are deduped globally
+    /// across groups, so the returned vec holds one entry per unique pattern.
+    /// `dominance_hits` / `useless_inline_hits` accumulate the run-wide pruning
+    /// stats reported at the end.
+    fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> Vec<SearchState<F, O>> {
+        let max_match_set = self.args.max_match_set;
+        let mut expanded: Vec<SearchState<F, O>> = Vec::new();
+        // Per-pattern multiplicities, needed only to merge duplicate patterns
+        // during dedup; the merged counts aren't read after expansion (resample
+        // weights are per unique pattern, by cost).
+        let mut mults: Vec<usize> = Vec::new();
+        let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
+        for (state, mult) in particles {
+            let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
+                SuccessorEnum::Dominant { child, .. } => {
+                    if child.within_match_set_cap(max_match_set) {
+                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                    }
+                    continue;
+                }
+                // SMC keeps creation order (`freeze_rule = false`), so the freeze
+                // rule is inert — `apply_action` ignores `rank` below.
+                SuccessorEnum::All { actions, .. } => actions,
+            };
+            if actions.is_empty() {
+                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                continue;
+            }
+            let mut weights = action_weights_with_reuse_boost(&actions, self.args.boost_reuse_weight);
+            let acc = normalize_and_accumulate(&mut weights);
+            let mut counts: Vec<usize> = vec![0; actions.len()];
+            for _ in 0..mult {
+                counts[weighted_choice(&acc, self.rng)] += 1;
+            }
+            for ((action, _), count) in actions.into_iter().zip(counts) {
+                if count > 0 {
+                    let child = state.apply_action(&action, &self.shared, true, None);
+                    if child.within_match_set_cap(max_match_set) {
+                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                    }
+                }
+            }
+        }
+        expanded
+    }
+
+    /// Reweights the expanded generation into a resampling distribution.
+    ///
+    /// Steps: cost → log-weight `-cost/temperature` (lower-bound-pruned
+    /// particles are dead at `-inf`, since no descendant can beat the current
+    /// best); in `--follow` mode, zero out particles whose pattern isn't a valid
+    /// prefix of the target and register prefix progress; kill zero-arity
+    /// patterns (they can't abstract anything); then log-normalize to
+    /// probabilities. If a surviving particle exactly matches the follow target,
+    /// returns [`ReweightOutcome::FollowExactMatch`] instead so the caller can
+    /// record it and stop.
+    fn reweight(&mut self, expanded: &[SearchState<F, O>], costs: &[usize], pruned: &[bool], step: usize) -> ReweightOutcome {
+        let temperature = self.args.temperature;
+        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
+
+        if let Some(ref follow) = self.shared.follow {
+            apply_follow_constraint(expanded, &mut log_weights, follow, &self.shared, self.original_size, costs, self.args.verbose);
+            // Read everything that needs `follow` while its borrow is live, then
+            // update best-so-far afterwards (the bookkeeping methods borrow all
+            // of `self`, so they can't run while `follow` borrows `self.shared`).
+            //
+            // Prefix progress: a deeper RecExpr means the particle has expanded
+            // further into the follow target's shape (see `note_prefix_progress`).
+            let step_progress: usize = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| expanded[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
+            // If any surviving particle is alpha-equivalent to the follow target,
+            // the search has reached the goal — pick the cheapest such particle.
+            // Prefix-survival is noisy; an exact hit is unambiguous.
+            let exact = (0..expanded.len())
+                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &self.shared.egraph))
+                .map(|i| (i, costs[i]))
+                .min_by_key(|&(_, c)| c);
+            self.note_prefix_progress(step, step_progress);
+            if let Some((index, cost)) = exact {
+                let probs = log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect();
+                return ReweightOutcome::FollowExactMatch { index, cost, probs };
+            }
+        }
+
+        for (i, s) in expanded.iter().enumerate() {
+            if s.pattern.vars.is_empty() {
+                log_weights[i] = f64::NEG_INFINITY;
+            }
+        }
+
+        let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
+        let weights = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
+        ReweightOutcome::Weights(weights)
     }
 
     /// The cost a candidate must come in strictly under to become the new best:
@@ -176,53 +287,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
-    // Per-factor match-set cap (best-first's `--max-match-set`): drop expanded
-    // particles over the cap before the commutativity blowup cascades.
-    let max_match_set = args.max_match_set;
 
     for step in 0..num_steps {
-        // For each (state, mult) group, enumerate successor *actions* (no child
-        // states built up front), then resample `mult` of them. Each action's
-        // sampling weight is its `(match, subst)` support count; reuse-action
-        // weights are additionally multiplied by `boost_reuse_weight`. Child
-        // states are materialised only for sampled actions via `apply_action`,
-        // avoiding the per-shape `clone + expand` work for successors that
-        // win zero samples. Resulting patterns are deduped globally across groups.
-        let mut expanded: Vec<SearchState<F, O>> = Vec::new();
-        let mut mults: Vec<usize> = Vec::new();
-        let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
-        for (state, mult) in particles.drain(..) {
-            let actions = match state.enumerate_successor_actions(&search.shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
-                SuccessorEnum::Dominant { child, .. } => {
-                    if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
-                    }
-                    continue;
-                }
-                // SMC keeps creation order (`freeze_rule = false`), so the freeze
-                // rule is inert — `apply_action` ignores `rank` below.
-                SuccessorEnum::All { actions, .. } => actions,
-            };
-            if actions.is_empty() {
-                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
-                continue;
-            }
-            let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
-            let acc = normalize_and_accumulate(&mut weights);
-            let mut counts: Vec<usize> = vec![0; actions.len()];
-            for _ in 0..mult {
-                counts[weighted_choice(&acc, search.rng)] += 1;
-            }
-            for ((action, _), count) in actions.into_iter().zip(counts) {
-                if count > 0 {
-                    let child = state.apply_action(&action, &search.shared, true, None);
-                    if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
-                    }
-                }
-            }
-        }
-        drop(dedup);
+        let expanded = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
 
         // Per-particle: optional lower-bound prune, else full cost; running
         // `best_so_far` update inline so later particles in the same step can
@@ -250,47 +317,19 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             pruned.push(false);
         }
 
-        // log-space weights: logw_i = -cost_i / temperature; pruned particles
-        // (lb >= best) are dead since no descendant can beat the current best.
-        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
-
-        if let Some(ref follow) = search.shared.follow {
-            apply_follow_constraint(&expanded, &mut log_weights, follow, &search.shared, original_size, &costs, verbose);
-            // Read everything that needs `follow` while its borrow is live, then
-            // update best-so-far afterwards (the bookkeeping methods borrow all
-            // of `search`, so they can't run while `follow` borrows `search.shared`).
-            //
-            // Prefix progress: a deeper RecExpr means the particle has expanded
-            // further into the follow target's shape (see `note_prefix_progress`).
-            let step_progress: usize = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| expanded[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
-            // If any surviving particle is alpha-equivalent to the follow target,
-            // the search has reached the goal — pick the cheapest such particle
-            // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
-            let exact = (0..expanded.len())
-                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &search.shared.egraph))
-                .map(|i| (i, costs[i]))
-                .min_by_key(|&(_, c)| c);
-            search.note_prefix_progress(step, step_progress);
-            if let Some((i, c)) = exact {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
+        let mut weights = match search.reweight(&expanded, &costs, &pruned, step) {
+            ReweightOutcome::FollowExactMatch { index, cost, probs } => {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", cost).green().bold(), expanded[index].pattern.to_string().cyan());
                 // Re-derive the selection for this particle: we didn't keep
                 // selections in `costs`, and exact-match fires at most once.
-                let selection = compute_cost_and_select(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, &expanded[i], search.shared.check_slow);
-                search.record_best(step, c, SearchStateWithCostSelection { state: expanded[i].clone(), selection });
+                let selection = compute_cost_and_select(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, &expanded[index], search.shared.check_slow);
+                search.record_best(step, cost, SearchStateWithCostSelection { state: expanded[index].clone(), selection });
                 steps_run = step + 1;
-                log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), search.best(), &[]);
+                log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &probs, search.best(), &[]);
                 break;
             }
-        }
-
-        for (i, s) in expanded.iter().enumerate() {
-            if s.pattern.vars.is_empty() {
-                log_weights[i] = f64::NEG_INFINITY;
-            }
-        }
-
-        let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-        let mut weights: Vec<f64> = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
+            ReweightOutcome::Weights(weights) => weights,
+        };
 
         if weights.iter().sum::<f64>() == 0.0 {
             log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, search.best(), &[]);
