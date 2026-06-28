@@ -47,7 +47,6 @@ fn main() {
     let compression_ratio = final_cost.map(|fc| original_size as f64 / fc as f64);
 
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-    let debug_log_file = None; // debug log wiring removed; add back if needed
 
     let search_kind = match args.search {
         SearchKind::Smc => "smc",
@@ -68,7 +67,6 @@ fn main() {
         final_cost,
         compression_ratio,
         heap_sizes_at_end,
-        debug_log_file,
         original_programs,
         rewritten_programs,
         library,
