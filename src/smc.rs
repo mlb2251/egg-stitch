@@ -13,14 +13,14 @@ use rustc_hash::FxHashMap;
 
 /// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
 /// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, weight: f64, states: &mut Vec<SearchState<F, O>>, weights: &mut Vec<f64>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
     match dedup.get(&s.pattern) {
-        Some(&idx) => mults[idx] += count,
+        Some(&idx) => weights[idx] += weight,
         None => {
             let idx = states.len();
             dedup.insert(s.pattern.clone(), idx);
             states.push(s);
-            mults.push(count);
+            weights.push(weight);
         }
     }
 }
@@ -77,30 +77,21 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         }
     }
 
-    /// Expands one generation of particles into the next. For each `(state, mult)`
-    /// group, enumerates successor *actions* (no child states built up front),
-    /// then resamples `mult` of them. Each action's sampling weight is its
-    /// `(match, subst)` support count; reuse-action weights are additionally
-    /// multiplied by `--boost-reuse-weight`. Child states are materialised only
-    /// for sampled actions via `apply_action`, avoiding the per-shape
-    /// `clone + expand` work for successors that win zero samples. Children over
-    /// the match-set cap are dropped. Resulting patterns are deduped globally
-    /// across groups, so the returned vec holds one entry per unique pattern.
-    /// `dominance_hits` / `useless_inline_hits` accumulate the run-wide pruning
-    /// stats reported at the end.
-    fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> Vec<SearchState<F, O>> {
+    /// Expands one generation of particles into the next. Returns the new particles q_j as well as their correction factors v'_j^{t+1},
+    /// which are defined in the docstring for `smc`.
+    fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> (Vec<SearchState<F, O>>, Vec<f64>) {
         let max_match_set = self.args.max_match_set;
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         // Per-pattern multiplicities, needed only to merge duplicate patterns
         // during dedup; the merged counts aren't read after expansion (resample
         // weights are per unique pattern, by cost).
-        let mut mults: Vec<usize> = Vec::new();
+        let mut sum_corrects: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles {
             let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                        dedup_insert(child, 1.0, &mut expanded, &mut sum_corrects, &mut dedup);
                     }
                     continue;
                 }
@@ -109,21 +100,23 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
                 SuccessorEnum::All { actions, .. } => actions,
             };
             if actions.is_empty() {
-                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                dedup_insert(state, 1.0, &mut expanded, &mut sum_corrects, &mut dedup);
                 continue;
             }
             let mut weights = action_weights_with_reuse_boost(&actions, self.args.boost_reuse_weight);
             let counts = sample_counts(&mut weights, mult, self.rng);
-            for ((action, _), count) in actions.into_iter().zip(counts) {
+            let uniform_weight = 1.0 / (actions.len() as f64);
+            for (((action, _), count), weight) in actions.into_iter().zip(counts).zip(weights) {
                 if count > 0 {
+                    let correction = uniform_weight / weight;
                     let child = state.apply_action(&action, &self.shared, true, None);
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                        dedup_insert(child, correction, &mut expanded, &mut sum_corrects, &mut dedup);
                     }
                 }
             }
         }
-        expanded
+        (expanded, sum_corrects)
     }
 
     /// Computes each expanded particle's cost, lower-bound-pruning where it can,
@@ -166,9 +159,10 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     /// `-cost/temperature` (`-inf` for dead/`pruned` particles); returns
     /// probabilities summing to 1, or an all-zero vector if every particle is
     /// dead (the caller treats that as "all particles died").
-    fn reweight(&self, costs: &[usize], pruned: &[bool]) -> Vec<f64> {
+    fn reweight(&self, vprimes: &[f64], costs: &[usize], pruned: &[bool]) -> Vec<f64> {
         let temperature = self.args.temperature;
-        let log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
+        let log_w: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
+        let log_weights: Vec<f64> = log_w.iter().zip(vprimes.iter()).map(|(lw, vp)| lw + vp.ln()).collect();
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
         if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] }
     }
@@ -234,10 +228,45 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 }
 
 /// Runs SMC to find a pattern that minimizes compressed corpus size.
+/// The algorithm here is a standard Kitagawa particle filter as described on
+/// Wikipedia: https://en.wikipedia.org/wiki/Particle_filter#Sequential_Importance_Resampling_(SIR)
 ///
-/// Particles are stored as `(SearchState, multiplicity)` pairs. After each
-/// expansion step, identical patterns are deduplicated and their counts merged,
-/// so cost computation runs once per unique pattern instead of once per particle.
+/// At all times t we have N particles p_1^t ... p_N^t
+/// We draw the next generation of particles p_1^{t+1} ... p_N^{t+1} by:
+/// 1. Sampling q_i^{t+1} from the proposal distribution pi(p_i^{t+1} | p_i^t)
+/// 2. Assigning a "prior weight"
+///    v_i^{t+1} = p(q_i^{t+1} | p_i^t) / pi(q_i^{t+1} | p_i^t)
+/// 3. Assigning a "likelihood weight"
+///    w_i^{t+1} = p(y | q_i^{t+1}) where y is the observed data (the corpus)
+/// 4. Defining the posterior probabilities
+///    a. Defining a "posterior weight": beta_i^{t+1} = w_i^{t+1} * v_i^{t+1}
+///    b. Normalizing the posterior weights: alpha_i^{t+1} = beta_i^{t+1} / sum_j beta_j^{t+1}
+/// 5. Resampling the next generation
+///    p_i^{t+1} ~ Multinomial_alpha(q_1...q_N)
+///
+/// In practice, we use deduplication to avoid storing multiple copies of the same particle, which
+/// changes the algorithm to be:
+///
+/// At all times t we have n_t unique particles p_1^t ... p_{n_t}^t with multiplicities m_1^t ... m_{n_t}^t such that sum_i m_i^t = N
+/// We draw the next generation of particles p_i^{t+1} with multiplicities m_i^{t+1}
+/// 1. Sampling q_{i l}^{t+1} from the proposal distribution pi(p_i^{t+1} | p_i^t) for l in 1..m_i^t
+///    We also let q_1 ... q_{n_{t+1}} be the unique particles in the next generation, with multiplicities m'_j based on how many q_{i l}^{t+1} are equal to q_j
+/// 2. Assigning a "prior weight"
+///    v_{i l}^{t+1} = p(q_{i l}^{t+1} | p_i^t) / pi(q_{i l}^{t+1} | p_i^t)
+/// 3. Assigning a "likelihood weight"
+///    w_{i l}^{t+1} = p(y | q_{i l}^{t+1}) where y is the observed data (the corpus)
+/// 4. Defining alpha is where it gets different, we really want to operate over the multiplicities and compute alpha this way. We can just
+///    collapse alpha to be the sum of alpha as defined above across the duplicates. It computes as
+///    alpha_j^{t+1} = sum_{(i l) with q_{i l}^{t + 1} = q_j} w_{i l}^{t+1} * v_{i l}^{t+1}
+///    alpha_j^{t+1} = sum_{(i l) with q_{i l}^{t + 1} = q_j} p(y | q_{i l}^{t+1}) * p(q_{i l}^{t+1} | p_i^t) / pi(q_{i l}^{t+1} | p_i^t)
+///    alpha_j^{t+1} = sum_{(i l) with q_{i l}^{t + 1} = q_j} p(y | q_j^{t+1}) * p(q_j^{t+1} | p_i^t) / pi(q_j^{t+1} | p_i^t)
+///    alpha_j^{t+1} = p(y | q_j^{t+1}) * sum_{(i l) with q_{i l}^{t + 1} = q_j} p(q_j^{t+1} | p_i^t) / pi(q_j^{t+1} | p_i^t)
+///    alpha_j^{t+1} = w_j^{t + 1} * sum_{(i l) with q_{i l}^{t + 1} = q_j} p(q_j^{t+1} | p_i^t) / pi(q_j^{t+1} | p_i^t)
+///    This leads us to the new quantity
+///    v'_j^{t+1} = sum_{(i l) with q_{i l}^{t + 1} = q_j} p(q_j^{t+1} | p_i^t) / pi(q_j^{t+1} | p_i^t)
+///    That is, the sum of undersampling correction factors.
+/// 5. Resampling the next generation: alpha_j^{t+1} = w_j^{t + 1} * v'_j^{t+1}
+///    and then p_j^{t+1} ~ Multinomial_alpha(q_1...q_{n_{t+1}})
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
@@ -269,7 +298,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
 
     for step in 0..num_steps {
-        let expanded = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
+        let (expanded, vprimes) = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
 
         let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
 
@@ -305,7 +334,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             }
         }
 
-        let weights = search.reweight(&costs, &pruned);
+        let weights = search.reweight(&vprimes, &costs, &pruned);
 
         if weights.iter().sum::<f64>() == 0.0 {
             steps_run = step + 1;
