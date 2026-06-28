@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use crate::cost::{CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
+use crate::cost::{CostCache, CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
@@ -77,6 +77,119 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         }
     }
 
+    /// Expands one generation of particles into the next. For each `(state, mult)`
+    /// group, enumerates successor *actions* (no child states built up front),
+    /// then resamples `mult` of them. Each action's sampling weight is its
+    /// `(match, subst)` support count; reuse-action weights are additionally
+    /// multiplied by `--boost-reuse-weight`. Child states are materialised only
+    /// for sampled actions via `apply_action`, avoiding the per-shape
+    /// `clone + expand` work for successors that win zero samples. Children over
+    /// the match-set cap are dropped. Resulting patterns are deduped globally
+    /// across groups, so the returned vec holds one entry per unique pattern.
+    /// `dominance_hits` / `useless_inline_hits` accumulate the run-wide pruning
+    /// stats reported at the end.
+    fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> Vec<SearchState<F, O>> {
+        let max_match_set = self.args.max_match_set;
+        let mut expanded: Vec<SearchState<F, O>> = Vec::new();
+        // Per-pattern multiplicities, needed only to merge duplicate patterns
+        // during dedup; the merged counts aren't read after expansion (resample
+        // weights are per unique pattern, by cost).
+        let mut mults: Vec<usize> = Vec::new();
+        let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
+        for (state, mult) in particles {
+            let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
+                SuccessorEnum::Dominant { child, .. } => {
+                    if child.within_match_set_cap(max_match_set) {
+                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                    }
+                    continue;
+                }
+                // SMC keeps creation order (`freeze_rule = false`), so the freeze
+                // rule is inert — `apply_action` ignores `rank` below.
+                SuccessorEnum::All { actions, .. } => actions,
+            };
+            if actions.is_empty() {
+                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                continue;
+            }
+            let mut weights = action_weights_with_reuse_boost(&actions, self.args.boost_reuse_weight);
+            let counts = sample_counts(&mut weights, mult, self.rng);
+            for ((action, _), count) in actions.into_iter().zip(counts) {
+                if count > 0 {
+                    let child = state.apply_action(&action, &self.shared, true, None);
+                    if child.within_match_set_cap(max_match_set) {
+                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                    }
+                }
+            }
+        }
+        expanded
+    }
+
+    /// Computes each expanded particle's cost, lower-bound-pruning where it can,
+    /// and updates `best_so_far` inline so later particles in the same step see a
+    /// tighter `cost_to_beat`. Returns parallel `(costs, pruned)` vecs: `pruned[i]`
+    /// marks particles killed by the lower bound (no descendant can beat the
+    /// current best), whose `costs[i]` is the bound they failed rather than a
+    /// real cost. In `--follow` mode the best update is skipped — only the
+    /// exact-match exit promotes a particle.
+    fn compute_costs(&mut self, expanded: &[SearchState<F, O>], step: usize, cost_cache: &CostCache, scratch: &mut CostScratch, lower_bound_pruner: &mut LowerBoundPruner) -> (Vec<usize>, Vec<bool>) {
+        let max_arity = self.args.max_arity;
+        let no_zero_arity = self.args.no_zero_arity;
+        let mut costs: Vec<usize> = Vec::with_capacity(expanded.len());
+        let mut pruned: Vec<bool> = Vec::with_capacity(expanded.len());
+        for s in expanded.iter() {
+            let cost_to_beat: usize = self.cost_to_beat();
+            if let PruneResult::Pruned = lower_bound_pruner.try_prune(&self.shared.egraph, self.shared.root, cost_cache, scratch, s, cost_to_beat) {
+                costs.push(cost_to_beat);
+                pruned.push(true);
+                continue;
+            }
+            let selection = compute_cost_and_select(&self.shared.egraph, self.shared.root, cost_cache, scratch, s, self.shared.check_slow);
+            let cost = selection.cost;
+            let arity = s.pattern.vars.len();
+            // In `--follow` mode the prefix filter lets cheaper non-matching
+            // particles through, so skip the prefix-best update — only the
+            // exact-match exit promotes a particle to `best`.
+            if self.shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && !s.has_useless_var(&self.shared) {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
+                self.record_best(step, cost, SearchStateWithCostSelection { state: s.clone(), selection });
+            }
+            costs.push(cost);
+            pruned.push(false);
+        }
+        (costs, pruned)
+    }
+
+    /// Normalizes the dead mask + costs into a resampling distribution via
+    /// log-sum-exp. Each live particle gets un-normalized log-weight
+    /// `-cost/temperature` (`-inf` for dead/`pruned` particles); returns
+    /// probabilities summing to 1, or an all-zero vector if every particle is
+    /// dead (the caller treats that as "all particles died").
+    fn reweight(&self, costs: &[usize], pruned: &[bool]) -> Vec<f64> {
+        let temperature = self.args.temperature;
+        let log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
+        let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
+        if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] }
+    }
+
+    /// Resamples the next generation from `weights`: draws `num_particles`
+    /// indices proportional to the normalized weights, then returns each
+    /// `expanded` particle paired with how many draws it won (its multiplicity),
+    /// dropping particles that won zero. `costs`/`step` feed the verbose dump.
+    fn resample(&mut self, expanded: Vec<SearchState<F, O>>, weights: Vec<f64>, costs: &[usize], step: usize) -> Vec<(SearchState<F, O>, usize)> {
+        let num_particles = self.args.num_particles;
+        let counts = sample_counts_normalized(&weights, num_particles, self.rng);
+
+        if self.args.verbose {
+            println!("{}", format!("Step {}: resampled all particles", step).dimmed());
+            let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
+            print_top_particles(&expanded, &resample_weights, &self.shared, self.original_size, |i| costs[i]);
+        }
+
+        expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect()
+    }
+
     /// The cost a candidate must come in strictly under to become the new best:
     /// the current best's cost, or `original_size` while no best exists.
     fn cost_to_beat(&self) -> usize {
@@ -125,7 +238,6 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 /// Particles are stored as `(SearchState, multiplicity)` pairs. After each
 /// expansion step, identical patterns are deduplicated and their counts merged,
 /// so cost computation runs once per unique pattern instead of once per particle.
-#[allow(clippy::needless_range_loop)]
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
@@ -142,8 +254,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     // `weighted_choice`. Zero is allowed.
     assert!(args.boost_reuse_weight >= 0.0 && args.boost_reuse_weight.is_finite(), "--boost-reuse-weight must be a non-negative finite number, got {}", args.boost_reuse_weight);
     let dead_runs = args.dead_runs;
-    let max_arity = args.max_arity;
-    let no_zero_arity = args.no_zero_arity;
     let verbose = args.verbose;
 
     let mut steps_run = 0;
@@ -157,114 +267,45 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
-    // Per-factor match-set cap (best-first's `--max-match-set`): drop expanded
-    // particles over the cap before the commutativity blowup cascades.
-    let max_match_set = args.max_match_set;
 
     for step in 0..num_steps {
-        // For each (state, mult) group, enumerate successor *actions* (no child
-        // states built up front), then resample `mult` of them. Each action's
-        // sampling weight is its `(match, subst)` support count; reuse-action
-        // weights are additionally multiplied by `boost_reuse_weight`. Child
-        // states are materialised only for sampled actions via `apply_action`,
-        // avoiding the per-shape `clone + expand` work for successors that
-        // win zero samples. Resulting patterns are deduped globally across groups.
-        let mut expanded: Vec<SearchState<F, O>> = Vec::new();
-        let mut mults: Vec<usize> = Vec::new();
-        let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
-        for (state, mult) in particles.drain(..) {
-            let actions = match state.enumerate_successor_actions(&search.shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
-                SuccessorEnum::Dominant { child, .. } => {
-                    if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
-                    }
-                    continue;
-                }
-                // SMC keeps creation order (`freeze_rule = false`), so the freeze
-                // rule is inert — `apply_action` ignores `rank` below.
-                SuccessorEnum::All { actions, .. } => actions,
-            };
-            if actions.is_empty() {
-                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
-                continue;
-            }
-            let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
-            let acc = normalize_and_accumulate(&mut weights);
-            let mut counts: Vec<usize> = vec![0; actions.len()];
-            for _ in 0..mult {
-                counts[weighted_choice(&acc, search.rng)] += 1;
-            }
-            for ((action, _), count) in actions.into_iter().zip(counts) {
-                if count > 0 {
-                    let child = state.apply_action(&action, &search.shared, true, None);
-                    if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
-                    }
-                }
-            }
-        }
-        drop(dedup);
+        let expanded = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
 
-        // Per-particle: optional lower-bound prune, else full cost; running
-        // `best_so_far` update inline so later particles in the same step can
-        // benefit from a tighter `cost_to_beat`.
-        let mut costs: Vec<usize> = Vec::with_capacity(expanded.len());
-        let mut pruned: Vec<bool> = Vec::with_capacity(expanded.len());
-        for s in expanded.iter() {
-            let cost_to_beat: usize = search.cost_to_beat();
-            if let PruneResult::Pruned = lower_bound_pruner.try_prune(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, s, cost_to_beat) {
-                costs.push(cost_to_beat);
-                pruned.push(true);
-                continue;
-            }
-            let selection = compute_cost_and_select(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, s, search.shared.check_slow);
-            let cost = selection.cost;
-            let arity = s.pattern.vars.len();
-            // In `--follow` mode the prefix filter lets cheaper non-matching
-            // particles through, so skip the prefix-best update — only the
-            // exact-match exit below promotes a particle to `best`.
-            if search.shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && !s.has_useless_var(&search.shared) {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
-                search.record_best(step, cost, SearchStateWithCostSelection { state: s.clone(), selection });
-            }
-            costs.push(cost);
-            pruned.push(false);
-        }
+        let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
 
-        // log-space weights: logw_i = -cost_i / temperature; pruned particles
-        // (lb >= best) are dead since no descendant can beat the current best.
-        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
-
+        // Follow stage: kill non-matching particles directly in `pruned` so the
+        // `reweight` below drops them, and stop on an exact match. Kept inline
+        // (not in `reweight`) because the exact-match exit owns the loop's
+        // `break` / `steps_run` / logging.
         if let Some(ref follow) = search.shared.follow {
-            apply_follow_constraint(&expanded, &mut log_weights, follow, &search.shared, original_size, &costs, verbose);
+            if !apply_follow_constraint(&expanded, &mut pruned, follow) {
+                println!("{}", "No particles match the follow pattern".red().bold());
+            }
             // If any surviving particle is alpha-equivalent to the follow target,
             // the search has reached the goal — pick the cheapest such particle
             // and stop. Compute the match before `record_best` so `follow`'s
             // borrow of `search.shared` is released before the bookkeeping method
             // takes `&mut search`.
-            let exact = (0..expanded.len())
-                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &search.shared.egraph))
-                .map(|i| (i, costs[i]))
-                .min_by_key(|&(_, c)| c);
-            if let Some((i, c)) = exact {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
+            let exact = (0..expanded.len()).filter(|&i| !pruned[i] && crate::follow::matches_follow_serialized(&expanded[i], follow, &search.shared.egraph)).map(|i| (i, costs[i])).min_by_key(|&(_, c)| c);
+            if let Some((index, cost)) = exact {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", cost).green().bold(), expanded[index].pattern.to_string().cyan());
                 // Re-derive the selection for this particle: we didn't keep
                 // selections in `costs`, and exact-match fires at most once.
-                let selection = compute_cost_and_select(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, &expanded[i], search.shared.check_slow);
-                search.record_best(step, c, SearchStateWithCostSelection { state: expanded[i].clone(), selection });
+                let selection = compute_cost_and_select(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, &expanded[index], search.shared.check_slow);
+                search.record_best(step, cost, SearchStateWithCostSelection { state: expanded[index].clone(), selection });
                 steps_run = step + 1;
                 break;
             }
         }
 
+        // Zero-arity patterns can't be further expanded.
         for (i, s) in expanded.iter().enumerate() {
             if s.pattern.vars.is_empty() {
-                log_weights[i] = f64::NEG_INFINITY;
+                pruned[i] = true;
             }
         }
 
-        let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-        let mut weights: Vec<f64> = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
+        let weights = search.reweight(&costs, &pruned);
 
         if weights.iter().sum::<f64>() == 0.0 {
             steps_run = step + 1;
@@ -289,19 +330,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             print_top_particles(&expanded, &weights, &search.shared, original_size, |i| costs[i]);
         }
 
-        let weights_acc = normalize_and_accumulate(&mut weights);
-        let mut counts: Vec<usize> = vec![0; expanded.len()];
-        for _ in 0..num_particles {
-            counts[weighted_choice(&weights_acc, search.rng)] += 1;
-        }
-
-        if verbose {
-            println!("{}", format!("Step {}: resampled all particles", step).dimmed());
-            let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
-            print_top_particles(&expanded, &resample_weights, &search.shared, original_size, |i| costs[i]);
-        }
-
-        particles = expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect();
+        particles = search.resample(expanded, weights, &costs, step);
         steps_run = step + 1;
     }
 
@@ -369,6 +398,31 @@ pub fn weighted_choice(acc_weights: &[f64], rng: &mut StdRng) -> usize {
     index_from_cumulative(acc_weights, r)
 }
 
+/// Draws `draws` independent samples from the categorical distribution given by
+/// the un-normalized `weights`, returning how many times each index was chosen.
+/// `weights` is normalized in place in the process.
+pub fn sample_counts(weights: &mut [f64], draws: usize, rng: &mut StdRng) -> Vec<usize> {
+    let acc = normalize_and_accumulate(weights);
+    counts_from_cumulative(&acc, draws, rng)
+}
+
+/// Draws `draws` independent samples from an already-normalized probability
+/// slice `probs` (must sum to 1), returning how many times each index was
+/// chosen. Skips the normalization pass that `sample_counts` does.
+pub fn sample_counts_normalized(probs: &[f64], draws: usize, rng: &mut StdRng) -> Vec<usize> {
+    counts_from_cumulative(&accumulate(probs), draws, rng)
+}
+
+/// Draws `draws` samples from the cumulative distribution `acc`, returning
+/// per-index counts.
+fn counts_from_cumulative(acc: &[f64], draws: usize, rng: &mut StdRng) -> Vec<usize> {
+    let mut counts: Vec<usize> = vec![0; acc.len()];
+    for _ in 0..draws {
+        counts[weighted_choice(acc, rng)] += 1;
+    }
+    counts
+}
+
 /// Normalizes weights in-place and returns a separate cumulative distribution.
 pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
     assert!(!weights.is_empty(), "normalize_and_accumulate requires a non-empty slice");
@@ -379,6 +433,11 @@ pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
     } else {
         weights.iter_mut().for_each(|w| *w /= weight_sum);
     }
+    accumulate(weights)
+}
+
+/// Builds a cumulative distribution from `weights` (assumed to sum to 1).
+fn accumulate(weights: &[f64]) -> Vec<f64> {
     let mut weights_acc = Vec::with_capacity(weights.len());
     let mut accum = 0.0;
     for w in weights.iter() {

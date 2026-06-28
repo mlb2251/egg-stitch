@@ -4,51 +4,20 @@ use colored::Colorize;
 
 use crate::cost::compute_pattern_size;
 use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
-use crate::math::logaddexp;
 use crate::search::{SearchState, SharedSearchData};
 
-/// Sets the log weight of particles that don't match the follow pattern to -inf.
-pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchState<F, O>], log_weights: &mut [f64], follow: &crate::revexpr::RevExpr<F::Apply<OpWithVar<O>>>, shared: &SharedSearchData<F, O>, original_size: usize, costs: &[usize], verbose: bool) {
-    let log_total = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-
-    if verbose {
-        let weights_before: Vec<f64> = if log_total.is_finite() { log_weights.iter().map(|lw| (lw - log_total).exp()).collect() } else { vec![0.0; log_weights.len()] };
-        let mut sorted_idx: Vec<usize> = (0..states.len()).collect();
-        sorted_idx.sort_by(|&a, &b| weights_before[b].partial_cmp(&weights_before[a]).unwrap_or(std::cmp::Ordering::Equal));
-        println!("{}", "top 5 particles before follow constraint:".dimmed());
-        for &i in sorted_idx.iter().take(5) {
-            let pat_size = compute_pattern_size(&states[i].pattern, &shared.egraph.analysis.weights);
-            println!(
-                "  {} {} cost={} ratio={:.2}x weight={:.4} matches={} pat_size={}",
-                format!("p{}:", i).dimmed(),
-                states[i].pattern.to_string().cyan(),
-                costs[i],
-                original_size as f64 / costs[i] as f64,
-                weights_before[i],
-                states[i].matches.len(),
-                pat_size,
-            );
-        }
-    }
-
+/// Marks particles that don't match the follow pattern as `pruned`, returning
+/// whether any particle matched (the caller warns when none do).
+pub fn apply_follow_constraint<F: LanguageFamily, O: StitchOp>(states: &[SearchState<F, O>], pruned: &mut [bool], follow: &crate::revexpr::RevExpr<F::Apply<OpWithVar<O>>>) -> bool {
     let mut found = false;
     for (i, state) in states.iter().enumerate() {
-        if !state.matches_follow(follow) {
-            log_weights[i] = f64::NEG_INFINITY;
-        } else {
+        if state.matches_follow(follow) {
             found = true;
+        } else {
+            pruned[i] = true;
         }
     }
-    if found {
-        if verbose {
-            let log_matching = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
-            let frac = if log_total > f64::NEG_INFINITY { (log_matching - log_total).exp() } else { 0.0 };
-            let num_matching = log_weights.iter().filter(|&&lw| lw > f64::NEG_INFINITY).count();
-            println!("{} {}", "follow:".dimmed(), format!("{} / {} particles match ({:.1}% of weight)", num_matching, log_weights.len(), frac * 100.0).blue());
-        }
-    } else {
-        println!("{}", "No particles match the follow pattern".red().bold());
-    }
+    found
 }
 
 /// Prints summary info for the top particles (up to 5), ordered by descending weight.
