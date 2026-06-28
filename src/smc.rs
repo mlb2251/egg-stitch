@@ -314,9 +314,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             }
         }
 
-        // Zero-arity patterns can't abstract anything; drop them before
-        // resampling. After the follow exact-match check, which must see them
-        // alive (a follow target can itself be zero-arity).
+        // Zero-arity patterns can't be further expanded.
         for (i, s) in expanded.iter().enumerate() {
             if s.pattern.vars.is_empty() {
                 pruned[i] = true;
