@@ -2,7 +2,6 @@ pub mod best_first;
 pub mod candidates;
 pub mod constant_folding;
 pub mod cost;
-pub mod debug_log;
 pub mod egraph_util;
 pub mod factor;
 pub mod follow;
@@ -223,10 +222,6 @@ pub struct Args {
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
-
-    /// Enable detailed debug logging of all particles at each SMC step.
-    #[arg(long, default_value_t = false)]
-    pub debug_log: bool,
 
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]

@@ -1,7 +1,6 @@
 use colored::Colorize;
 
 use crate::cost::{CostCache, CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
-use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
@@ -40,7 +39,6 @@ pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
     pub data: crate::shared::SharedData<F, O>,
-    pub debug_log: Option<DebugLog>,
 }
 
 /// Mutable driver state for one SMC run: the read-only [`SharedSearchData`]
@@ -267,8 +265,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let verbose = args.verbose;
 
     let mut steps_run = 0;
-    let debug = args.debug_log;
-    let mut debug_steps: Vec<StepLog> = Vec::new();
 
     // Bundle the shared context, args, rng, and best-so-far bookkeeping into one
     // driver. All best-so-far access goes through its methods.
@@ -314,8 +310,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 let selection = compute_cost_and_select(&search.shared.egraph, search.shared.root, &cost_cache, &mut scratch, &expanded[index], search.shared.check_slow);
                 search.record_best(step, cost, SearchStateWithCostSelection { state: expanded[index].clone(), selection });
                 steps_run = step + 1;
-                let probs: Vec<f64> = log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect();
-                log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &probs, search.best(), &[]);
                 break;
             }
         }
@@ -332,7 +326,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut weights = search.reweight(&costs, &pruned);
 
         if weights.iter().sum::<f64>() == 0.0 {
-            log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, search.best(), &[]);
             steps_run = step + 1;
             println!("{}", "all particles died, stopping".red().bold());
             break;
@@ -341,7 +334,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // so a fully stuck search still aborts after `dead_runs`. Use `>=` so we
         // stop after exactly `dead_runs` no-improvement steps, per the CLI help.
         if (step as i64) - (search.last_improvement_step() as i64) >= dead_runs as i64 {
-            log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, search.best(), &[]);
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
@@ -354,22 +346,8 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         let weights_acc = normalize_and_accumulate(&mut weights);
         let mut counts: Vec<usize> = vec![0; expanded.len()];
-        let resample_indices: Vec<usize> = (0..num_particles)
-            .map(|_| {
-                let idx = weighted_choice(&weights_acc, search.rng);
-                counts[idx] += 1;
-                idx
-            })
-            .collect();
-
-        if debug {
-            debug_steps.push(StepLog {
-                step,
-                particles: build_particle_logs(&expanded, &costs, &weights),
-                resample_indices,
-                best_cost: search.best().as_ref().map(|(c, _)| *c),
-                best_pattern: search.best().as_ref().map(|(_, b)| b.state.pattern.to_string()),
-            });
+        for _ in 0..num_particles {
+            counts[weighted_choice(&weights_acc, search.rng)] += 1;
         }
 
         if verbose {
@@ -400,16 +378,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
     }
 
-    let debug_log = if debug {
-        Some(DebugLog {
-            original_size,
-            num_particles,
-            temperature,
-            steps: debug_steps,
-        })
-    } else {
-        None
-    };
     let best_found_at = search.best_found_at();
     let (best, data) = search.into_parts();
     SmcResult {
@@ -418,7 +386,6 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         best_found_at,
         num_steps_run: steps_run,
         data,
-        debug_log,
     }
 }
 
