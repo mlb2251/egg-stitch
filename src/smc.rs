@@ -182,6 +182,27 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] }
     }
 
+    /// Resamples the next generation from `weights`: draws `num_particles`
+    /// indices proportional to the normalized weights, then returns each
+    /// `expanded` particle paired with how many draws it won (its multiplicity),
+    /// dropping particles that won zero. `costs`/`step` feed the verbose dump.
+    fn resample(&mut self, expanded: Vec<SearchState<F, O>>, mut weights: Vec<f64>, costs: &[usize], step: usize) -> Vec<(SearchState<F, O>, usize)> {
+        let num_particles = self.args.num_particles;
+        let weights_acc = normalize_and_accumulate(&mut weights);
+        let mut counts: Vec<usize> = vec![0; expanded.len()];
+        for _ in 0..num_particles {
+            counts[weighted_choice(&weights_acc, self.rng)] += 1;
+        }
+
+        if self.args.verbose {
+            println!("{}", format!("Step {}: resampled all particles", step).dimmed());
+            let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
+            print_top_particles(&expanded, &resample_weights, &self.shared, self.original_size, |i| costs[i]);
+        }
+
+        expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect()
+    }
+
     /// The cost a candidate must come in strictly under to become the new best:
     /// the current best's cost, or `original_size` while no best exists.
     fn cost_to_beat(&self) -> usize {
@@ -300,7 +321,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             }
         }
 
-        let mut weights = search.reweight(&costs, &pruned);
+        let weights = search.reweight(&costs, &pruned);
 
         if weights.iter().sum::<f64>() == 0.0 {
             steps_run = step + 1;
@@ -325,19 +346,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             print_top_particles(&expanded, &weights, &search.shared, original_size, |i| costs[i]);
         }
 
-        let weights_acc = normalize_and_accumulate(&mut weights);
-        let mut counts: Vec<usize> = vec![0; expanded.len()];
-        for _ in 0..num_particles {
-            counts[weighted_choice(&weights_acc, search.rng)] += 1;
-        }
-
-        if verbose {
-            println!("{}", format!("Step {}: resampled all particles", step).dimmed());
-            let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
-            print_top_particles(&expanded, &resample_weights, &search.shared, original_size, |i| costs[i]);
-        }
-
-        particles = expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect();
+        particles = search.resample(expanded, weights, &costs, step);
         steps_run = step + 1;
     }
 
