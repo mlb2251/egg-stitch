@@ -18,12 +18,6 @@ run all experiments
 python3 -c 'from expts import *; runall(num_steps=10, num_particles=100)'
 ```
 
-Debug the dials domain
-
-```
-python3 -c 'from expts import *; run_domain("dials", num_steps=10, num_particles=1000, debug_log=True)'
-```
-
 run a single (method, domain) cell of Table 1/2 directly
 
 ```
