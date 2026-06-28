@@ -7,31 +7,100 @@ use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::math::logaddexp;
 use crate::pattern::Pattern;
-use crate::search::{Action, SearchState, SuccessorEnum, setup_search};
+use crate::search::{Action, SearchState, SharedSearchData, SuccessorEnum, setup_search};
+use crate::shared::SharedData;
 use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults, probs) deduped-by-pattern
-/// buffer, bumping an existing group's count/proposal-mass by `count`/`prob` or pushing a new one.
-///
-/// `mult_i = Σ count` is the realized particle count that landed on this pattern. `prob_i =
-/// Σ prob` is the *exact* one-step proposal mass `Σ_(p,a)→i M_p·q(a|p)` (an unnormalized
-/// proposal marginal, `q(i) = prob_i / N`). The reweight uses `ln(mult_i) - ln(prob_i)`:
-/// the analytic proposal probability, not the `mult_i/N` self-estimate, so the multiplicity
-/// no longer cancels against the proposal it is being divided by.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, prob: f64, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, probs: &mut Vec<f64>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
-    match dedup.get(&s.pattern) {
-        Some(&idx) => {
-            mults[idx] += count;
-            probs[idx] += prob;
+struct SMCFringe<F: LanguageFamily, O: StitchOp> {
+    states: Vec<SearchState<F, O>>,
+    /// Multiplicity of each particle.
+    mults: Vec<usize>,
+    /// Amount of weight this collection of particles received
+    /// as a result of the parents' proposal distribution.
+    extra_weight: Vec<f64>,
+}
+
+struct SMS<'a, F: LanguageFamily, O: StitchOp> {
+    shared: &'a SharedSearchData<F, O>,
+    args: &'a crate::Args,
+    rng: &'a mut StdRng,
+}
+
+impl<F: LanguageFamily, O: StitchOp> SMCFringe<F, O> {
+    fn new(start_state: SearchState<F, O>) -> Self {
+        Self {
+            states: vec![start_state],
+            mults: vec![1],
+            extra_weight: vec![1.0],
         }
-        None => {
-            let idx = states.len();
-            dedup.insert(s.pattern.clone(), idx);
-            states.push(s);
-            mults.push(count);
-            probs.push(prob);
+    }
+
+    /// expand all the particles out, creating a new state.
+    fn expand_all(self: SMCFringe<F, O>, smc_meta_state: SMS<'_, F, O>) -> Self {
+        let mut dedup = FxHashMap::default();
+        let mut fringe = Self {
+            states: Vec::new(),
+            mults: Vec::new(),
+            extra_weight: Vec::new(),
+        };
+        for (state, mult) in self.states.into_iter().zip(self.mults) {
+            let actions = match state.enumerate_successor_actions(&smc_meta_state.shared, smc_meta_state.args.opt_dominance_reuse, smc_meta_state.args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
+                SuccessorEnum::Dominant { child, .. } => {
+                    // Deterministic successor: q(a|p) = 1, so the proposal-mass
+                    // contribution is M_p·1 = mult.
+                    if child.within_match_set_cap(smc_meta_state.args.max_match_set) {
+                        fringe.dedup_insert(child, mult, mult as f64, &mut dedup);
+                    }
+                    continue;
+                }
+                // SMC keeps creation order (`freeze_rule = false`), so the freeze
+                // rule is inert — `apply_action` ignores `rank` below.
+                SuccessorEnum::All { actions, .. } => actions,
+            };
+            if actions.is_empty() {
+                // Terminal particle carried forward unchanged: q = 1.
+                fringe.dedup_insert(state, mult, mult as f64, &mut dedup);
+                continue;
+            }
+            let mut weights = action_weights_with_reuse_boost(&actions, smc_meta_state.args.boost_reuse_weight);
+            // `normalize_and_accumulate` normalizes in place, so afterwards
+            // `weights[k]` holds q(a_k|p) (incl. the uniform zero-sum fallback).
+            let acc = normalize_and_accumulate(&mut weights);
+            let mut counts: Vec<usize> = vec![0; actions.len()];
+            for _ in 0..mult {
+                counts[weighted_choice(&acc, smc_meta_state.rng)] += 1;
+            }
+            for (k, ((action, _), count)) in actions.into_iter().zip(counts).enumerate() {
+                if count > 0 {
+                    let child = state.apply_action(&action, &smc_meta_state.shared, true, None);
+                    if child.within_match_set_cap(smc_meta_state.args.max_match_set) {
+                        // Exact proposal-mass contribution from this parent:
+                        // M_p·q(a|p) = mult·weights[k]. Accumulated independent of
+                        // the realized `count` so the reweight divides by the true
+                        // proposal probability, not its mult_i/N self-estimate.
+                        fringe.dedup_insert(child, count, mult as f64 * weights[k], &mut dedup);
+                    }
+                }
+            }
+        }
+        fringe
+    }
+
+    fn dedup_insert(&mut self, s: SearchState<F, O>, count: usize, prob: f64, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
+        match dedup.get(&s.pattern) {
+            Some(&idx) => {
+                self.mults[idx] += count;
+                self.extra_weight[idx] += prob;
+            }
+            None => {
+                let idx = self.states.len();
+                dedup.insert(s.pattern.clone(), idx);
+                self.states.push(s);
+                self.mults.push(count);
+                self.extra_weight.push(prob);
+            }
         }
     }
 }
@@ -94,7 +163,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
 
-    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&shared, false), num_particles)];
+    let mut particles = SMCFringe::new(SearchState::new(&shared, false));
     let mut scratch = CostScratch::new(&shared.egraph);
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
@@ -102,6 +171,12 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     // Per-factor match-set cap (best-first's `--max-match-set`): drop expanded
     // particles over the cap before the commutativity blowup cascades.
     let max_match_set = args.max_match_set;
+
+    let smc_meta_state = SMS {
+        shared: &shared,
+        args,
+        rng,
+    };
 
     for step in 0..num_steps {
         // For each (state, mult) group, enumerate successor *actions* (no child
@@ -111,58 +186,15 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // states are materialised only for sampled actions via `apply_action`,
         // avoiding the per-shape `clone + expand` work for successors that
         // win zero samples. Resulting patterns are deduped globally across groups.
-        let mut expanded: Vec<SearchState<F, O>> = Vec::new();
-        let mut mults: Vec<usize> = Vec::new();
-        let mut probs: Vec<f64> = Vec::new();
-        let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
-        for (state, mult) in particles.drain(..) {
-            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, usize::MAX, &mut dominance_hits, &mut useless_inline_hits) {
-                SuccessorEnum::Dominant { child, .. } => {
-                    // Deterministic successor: q(a|p) = 1, so the proposal-mass
-                    // contribution is M_p·1 = mult.
-                    if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, mult, mult as f64, &mut expanded, &mut mults, &mut probs, &mut dedup);
-                    }
-                    continue;
-                }
-                // SMC keeps creation order (`freeze_rule = false`), so the freeze
-                // rule is inert — `apply_action` ignores `rank` below.
-                SuccessorEnum::All { actions, .. } => actions,
-            };
-            if actions.is_empty() {
-                // Terminal particle carried forward unchanged: q = 1.
-                dedup_insert(state, mult, mult as f64, &mut expanded, &mut mults, &mut probs, &mut dedup);
-                continue;
-            }
-            let mut weights = action_weights_with_reuse_boost(&actions, args.boost_reuse_weight);
-            // `normalize_and_accumulate` normalizes in place, so afterwards
-            // `weights[k]` holds q(a_k|p) (incl. the uniform zero-sum fallback).
-            let acc = normalize_and_accumulate(&mut weights);
-            let mut counts: Vec<usize> = vec![0; actions.len()];
-            for _ in 0..mult {
-                counts[weighted_choice(&acc, rng)] += 1;
-            }
-            for (k, ((action, _), count)) in actions.into_iter().zip(counts).enumerate() {
-                if count > 0 {
-                    let child = state.apply_action(&action, &shared, true, None);
-                    if child.within_match_set_cap(max_match_set) {
-                        // Exact proposal-mass contribution from this parent:
-                        // M_p·q(a|p) = mult·weights[k]. Accumulated independent of
-                        // the realized `count` so the reweight divides by the true
-                        // proposal probability, not its mult_i/N self-estimate.
-                        dedup_insert(child, count, mult as f64 * weights[k], &mut expanded, &mut mults, &mut probs, &mut dedup);
-                    }
-                }
-            }
-        }
-        drop(dedup);
+        
+        particles = particles.expand_all(smc_meta_state);
 
         // Per-particle: optional lower-bound prune, else full cost; running
         // `best_so_far` update inline so later particles in the same step can
         // benefit from a tighter `cost_to_beat`.
-        let mut costs: Vec<usize> = Vec::with_capacity(expanded.len());
-        let mut pruned: Vec<bool> = Vec::with_capacity(expanded.len());
-        for s in expanded.iter() {
+        let mut costs: Vec<usize> = Vec::with_capacity(fringe.states.len());
+        let mut pruned: Vec<bool> = Vec::with_capacity(fringe.states.len());
+        for s in fringe.states.iter() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
             if let PruneResult::Pruned = lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, cost_to_beat) {
                 costs.push(cost_to_beat);
@@ -196,12 +228,12 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { (mults[i] as f64).ln() - (*c as f64) / temperature - probs[i].ln() }).collect();
 
         if let Some(ref follow) = shared.follow {
-            apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
+            apply_follow_constraint(&fringe.states, &mut log_weights, follow, &shared, original_size, &costs, verbose);
             // Prefix progress: a deeper RecExpr means the particle has expanded
             // further into the follow target's shape. When this grows, count it
             // as improvement so the dead-runs check doesn't abort searches that
             // are making progress but haven't yet reached exact match.
-            let step_progress: usize = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| expanded[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
+            let step_progress: usize = (0..fringe.states.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| fringe.states[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
             if step_progress > best_prefix_progress {
                 best_prefix_progress = step_progress;
                 best_found_at = Some(step);
@@ -209,24 +241,24 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             // If any surviving particle is alpha-equivalent to the follow target,
             // the search has reached the goal — pick the cheapest such particle
             // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
-            if let Some((i, c)) = (0..expanded.len())
-                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &shared.egraph))
+            if let Some((i, c)) = (0..fringe.states.len())
+                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&fringe.states[i], follow, &shared.egraph))
                 .map(|i| (i, costs[i]))
                 .min_by_key(|&(_, c)| c)
             {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), fringe.states[i].pattern.to_string().cyan());
                 // Re-derive the selection for this particle: we didn't keep
                 // selections in `costs`, and exact-match fires at most once.
-                let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &expanded[i], shared.check_slow);
-                best_so_far = Some((c, SearchStateWithCostSelection { state: expanded[i].clone(), selection }));
+                let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &fringe.states[i], shared.check_slow);
+                best_so_far = Some((c, SearchStateWithCostSelection { state: fringe.states[i].clone(), selection }));
                 best_found_at = Some(step);
                 steps_run = step + 1;
-                log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), &best_so_far, &[]);
+                log_debug_step(debug, &mut debug_steps, step, &fringe.states, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), &best_so_far, &[]);
                 break;
             }
         }
 
-        for (i, s) in expanded.iter().enumerate() {
+        for (i, s) in fringe.states.iter().enumerate() {
             if s.pattern.vars.is_empty() {
                 log_weights[i] = f64::NEG_INFINITY;
             }
@@ -236,7 +268,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut weights: Vec<f64> = if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] };
 
         if weights.iter().sum::<f64>() == 0.0 {
-            log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
+            log_debug_step(debug, &mut debug_steps, step, &fringe.states, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", "all particles died, stopping".red().bold());
             break;
@@ -245,7 +277,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // so a fully stuck search still aborts after `dead_runs`. Use `>=` so we
         // stop after exactly `dead_runs` no-improvement steps, per the CLI help.
         if (step as i64) - (best_found_at.unwrap_or(0) as i64) >= dead_runs as i64 {
-            log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &weights, &best_so_far, &[]);
+            log_debug_step(debug, &mut debug_steps, step, &fringe.states, &costs, &weights, &best_so_far, &[]);
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
@@ -253,11 +285,11 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         if verbose {
             println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-            print_top_particles(&expanded, &weights, &shared, original_size, |i| costs[i]);
+            print_top_particles(&fringe.states, &weights, &shared, original_size, |i| costs[i]);
         }
 
         let weights_acc = normalize_and_accumulate(&mut weights);
-        let mut counts: Vec<usize> = vec![0; expanded.len()];
+        let mut counts: Vec<usize> = vec![0; fringe.states.len()];
         let resample_indices: Vec<usize> = (0..num_particles)
             .map(|_| {
                 let idx = weighted_choice(&weights_acc, rng);
@@ -269,7 +301,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         if debug {
             debug_steps.push(StepLog {
                 step,
-                particles: build_particle_logs(&expanded, &costs, &weights),
+                particles: build_particle_logs(&fringe.states, &costs, &weights),
                 resample_indices,
                 best_cost: best_so_far.as_ref().map(|(c, _)| *c),
                 best_pattern: best_so_far.as_ref().map(|(_, b)| b.state.pattern.to_string()),
@@ -279,10 +311,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         if verbose {
             println!("{}", format!("Step {}: resampled all particles", step).dimmed());
             let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
-            print_top_particles(&expanded, &resample_weights, &shared, original_size, |i| costs[i]);
+            print_top_particles(&fringe.states, &resample_weights, &shared, original_size, |i| costs[i]);
         }
 
-        particles = expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect();
+        particles = fringe.states.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect();
         steps_run = step + 1;
     }
 
