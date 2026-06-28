@@ -177,9 +177,9 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     /// indices proportional to the normalized weights, then returns each
     /// `expanded` particle paired with how many draws it won (its multiplicity),
     /// dropping particles that won zero. `costs`/`step` feed the verbose dump.
-    fn resample(&mut self, expanded: Vec<SearchState<F, O>>, mut weights: Vec<f64>, costs: &[usize], step: usize) -> Vec<(SearchState<F, O>, usize)> {
+    fn resample(&mut self, expanded: Vec<SearchState<F, O>>, weights: Vec<f64>, costs: &[usize], step: usize) -> Vec<(SearchState<F, O>, usize)> {
         let num_particles = self.args.num_particles;
-        let counts = sample_counts(&mut weights, num_particles, self.rng);
+        let counts = sample_counts_normalized(&weights, num_particles, self.rng);
 
         if self.args.verbose {
             println!("{}", format!("Step {}: resampled all particles", step).dimmed());
@@ -403,9 +403,22 @@ pub fn weighted_choice(acc_weights: &[f64], rng: &mut StdRng) -> usize {
 /// `weights` is normalized in place in the process.
 pub fn sample_counts(weights: &mut [f64], draws: usize, rng: &mut StdRng) -> Vec<usize> {
     let acc = normalize_and_accumulate(weights);
+    counts_from_cumulative(&acc, draws, rng)
+}
+
+/// Draws `draws` independent samples from an already-normalized probability
+/// slice `probs` (must sum to 1), returning how many times each index was
+/// chosen. Skips the normalization pass that `sample_counts` does.
+pub fn sample_counts_normalized(probs: &[f64], draws: usize, rng: &mut StdRng) -> Vec<usize> {
+    counts_from_cumulative(&accumulate(probs), draws, rng)
+}
+
+/// Draws `draws` samples from the cumulative distribution `acc`, returning
+/// per-index counts.
+fn counts_from_cumulative(acc: &[f64], draws: usize, rng: &mut StdRng) -> Vec<usize> {
     let mut counts: Vec<usize> = vec![0; acc.len()];
     for _ in 0..draws {
-        counts[weighted_choice(&acc, rng)] += 1;
+        counts[weighted_choice(acc, rng)] += 1;
     }
     counts
 }
@@ -420,6 +433,11 @@ pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
     } else {
         weights.iter_mut().for_each(|w| *w /= weight_sum);
     }
+    accumulate(weights)
+}
+
+/// Builds a cumulative distribution from `weights` (assumed to sum to 1).
+fn accumulate(weights: &[f64]) -> Vec<f64> {
     let mut weights_acc = Vec::with_capacity(weights.len());
     let mut accum = 0.0;
     for w in weights.iter() {
