@@ -113,11 +113,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
                 continue;
             }
             let mut weights = action_weights_with_reuse_boost(&actions, self.args.boost_reuse_weight);
-            let acc = normalize_and_accumulate(&mut weights);
-            let mut counts: Vec<usize> = vec![0; actions.len()];
-            for _ in 0..mult {
-                counts[weighted_choice(&acc, self.rng)] += 1;
-            }
+            let counts = sample_counts(&mut weights, mult, self.rng);
             for ((action, _), count) in actions.into_iter().zip(counts) {
                 if count > 0 {
                     let child = state.apply_action(&action, &self.shared, true, None);
@@ -165,19 +161,14 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         (costs, pruned)
     }
 
-    /// Per-particle un-normalized log-weights: `-cost/temperature`, or `-inf`
-    /// for dead (`pruned`) particles. The follow stage inspects and extends
-    /// these before [`reweight`] normalizes them.
-    fn raw_log_weights(&self, costs: &[usize], pruned: &[bool]) -> Vec<f64> {
-        let temperature = self.args.temperature;
-        costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect()
-    }
-
     /// Normalizes the dead mask + costs into a resampling distribution via
-    /// log-sum-exp. Returns probabilities summing to 1, or an all-zero vector if
-    /// every particle is dead (the caller treats that as "all particles died").
+    /// log-sum-exp. Each live particle gets un-normalized log-weight
+    /// `-cost/temperature` (`-inf` for dead/`pruned` particles); returns
+    /// probabilities summing to 1, or an all-zero vector if every particle is
+    /// dead (the caller treats that as "all particles died").
     fn reweight(&self, costs: &[usize], pruned: &[bool]) -> Vec<f64> {
-        let log_weights = self.raw_log_weights(costs, pruned);
+        let temperature = self.args.temperature;
+        let log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
         if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] }
     }
@@ -188,11 +179,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     /// dropping particles that won zero. `costs`/`step` feed the verbose dump.
     fn resample(&mut self, expanded: Vec<SearchState<F, O>>, mut weights: Vec<f64>, costs: &[usize], step: usize) -> Vec<(SearchState<F, O>, usize)> {
         let num_particles = self.args.num_particles;
-        let weights_acc = normalize_and_accumulate(&mut weights);
-        let mut counts: Vec<usize> = vec![0; expanded.len()];
-        for _ in 0..num_particles {
-            counts[weighted_choice(&weights_acc, self.rng)] += 1;
-        }
+        let counts = sample_counts(&mut weights, num_particles, self.rng);
 
         if self.args.verbose {
             println!("{}", format!("Step {}: resampled all particles", step).dimmed());
@@ -287,15 +274,13 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
 
-        // Follow stage: kill non-prefix particles, register prefix progress, and
-        // stop on an exact match. Kills are folded into `pruned` so the pure
-        // `reweight` below drops them. Kept inline (not in `reweight`) because
-        // the exact-match exit owns the loop's `break` / `steps_run` / logging.
+        // Follow stage: kill non-matching particles directly in `pruned` so the
+        // `reweight` below drops them, and stop on an exact match. Kept inline
+        // (not in `reweight`) because the exact-match exit owns the loop's
+        // `break` / `steps_run` / logging.
         if let Some(ref follow) = search.shared.follow {
-            let mut log_weights = search.raw_log_weights(&costs, &pruned);
-            apply_follow_constraint(&expanded, &mut log_weights, follow, &search.shared, original_size, &costs, verbose);
-            for (p, &lw) in pruned.iter_mut().zip(log_weights.iter()) {
-                *p |= lw == f64::NEG_INFINITY;
+            if !apply_follow_constraint(&expanded, &mut pruned, follow) {
+                println!("{}", "No particles match the follow pattern".red().bold());
             }
             // If any surviving particle is alpha-equivalent to the follow target,
             // the search has reached the goal — pick the cheapest such particle
@@ -412,6 +397,18 @@ pub fn index_from_cumulative(acc_weights: &[f64], r: f64) -> usize {
 pub fn weighted_choice(acc_weights: &[f64], rng: &mut StdRng) -> usize {
     let r: f64 = rng.random_range(0.0..1.0);
     index_from_cumulative(acc_weights, r)
+}
+
+/// Draws `draws` independent samples from the categorical distribution given by
+/// the un-normalized `weights`, returning how many times each index was chosen.
+/// `weights` is normalized in place in the process.
+pub fn sample_counts(weights: &mut [f64], draws: usize, rng: &mut StdRng) -> Vec<usize> {
+    let acc = normalize_and_accumulate(weights);
+    let mut counts: Vec<usize> = vec![0; acc.len()];
+    for _ in 0..draws {
+        counts[weighted_choice(&acc, rng)] += 1;
+    }
+    counts
 }
 
 /// Normalizes weights in-place and returns a separate cumulative distribution.
