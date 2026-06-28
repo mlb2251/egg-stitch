@@ -58,13 +58,9 @@ pub struct SmcSearchData<'a, F: LanguageFamily, O: StitchOp> {
     /// `(cost, winning state + the cost selection the optimiser picked)` of the
     /// best particle found so far.
     best_so_far: BestSoFar<F, O>,
-    /// Step at which the best (or, in `--follow` mode, prefix progress) last
-    /// improved; the dead-runs stopping rule measures staleness from here.
+    /// Step at which the best particle was last recorded; the dead-runs stopping
+    /// rule (non-`--follow` mode) measures staleness from here.
     best_found_at: Option<usize>,
-    /// `--follow` mode only: deepest prefix-passing RecExpr node count seen so
-    /// far. Growth counts as improvement so the dead-runs check doesn't abort a
-    /// search still climbing toward an exact match. See [`smc`].
-    best_prefix_progress: usize,
 }
 
 impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
@@ -78,7 +74,6 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
             original_size,
             best_so_far: None,
             best_found_at: None,
-            best_prefix_progress: 0,
         }
     }
 
@@ -92,16 +87,6 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     fn record_best(&mut self, step: usize, cost: usize, pair: SearchStateWithCostSelection<F, O>) {
         self.best_so_far = Some((cost, pair));
         self.best_found_at = Some(step);
-    }
-
-    /// `--follow` mode: registers `progress` prefix nodes seen at `step`. If it
-    /// beats the deepest prefix seen so far, treats it as improvement (bumps
-    /// `best_found_at`) so the dead-runs check keeps the search alive.
-    fn note_prefix_progress(&mut self, step: usize, progress: usize) {
-        if progress > self.best_prefix_progress {
-            self.best_prefix_progress = progress;
-            self.best_found_at = Some(step);
-        }
     }
 
     /// The step the last improvement happened, or 0 if none yet — the baseline
@@ -252,21 +237,15 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         if let Some(ref follow) = search.shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &search.shared, original_size, &costs, verbose);
-            // Read everything that needs `follow` while its borrow is live, then
-            // update best-so-far afterwards (the bookkeeping methods borrow all
-            // of `search`, so they can't run while `follow` borrows `search.shared`).
-            //
-            // Prefix progress: a deeper RecExpr means the particle has expanded
-            // further into the follow target's shape (see `note_prefix_progress`).
-            let step_progress: usize = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| expanded[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
             // If any surviving particle is alpha-equivalent to the follow target,
             // the search has reached the goal — pick the cheapest such particle
-            // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
+            // and stop. Compute the match before `record_best` so `follow`'s
+            // borrow of `search.shared` is released before the bookkeeping method
+            // takes `&mut search`.
             let exact = (0..expanded.len())
                 .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &search.shared.egraph))
                 .map(|i| (i, costs[i]))
                 .min_by_key(|&(_, c)| c);
-            search.note_prefix_progress(step, step_progress);
             if let Some((i, c)) = exact {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
                 // Re-derive the selection for this particle: we didn't keep
@@ -292,10 +271,14 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             println!("{}", "all particles died, stopping".red().bold());
             break;
         }
-        // Steps since last improvement; if no improvement yet, measure from step 0
-        // so a fully stuck search still aborts after `dead_runs`. Use `>=` so we
-        // stop after exactly `dead_runs` no-improvement steps, per the CLI help.
-        if (step as i64) - (search.last_improvement_step() as i64) >= dead_runs as i64 {
+        // `--follow` mode has no cost objective (the prefix filter lets cheaper
+        // non-matching particles through), so the no-improvement heuristic
+        // doesn't apply — a follow run stops only on exact match, all particles
+        // dying, or the `num_steps` cap. Otherwise: steps since the last
+        // improvement; if none yet, measure from step 0 so a fully stuck search
+        // still aborts after `dead_runs`. `>=` stops after exactly `dead_runs`
+        // no-improvement steps, per the CLI help.
+        if search.shared.follow.is_none() && (step as i64) - (search.last_improvement_step() as i64) >= dead_runs as i64 {
             steps_run = step + 1;
             println!("{}", format!("no progress in {} steps, stopping at {}", dead_runs, step).yellow());
             break;
