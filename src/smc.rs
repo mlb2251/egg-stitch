@@ -11,8 +11,8 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
-/// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
+/// Inserts a freshly-expanded state into the parallel (states, weights) deduped-by-pattern
+/// buffer, either adding `weight` to an existing group's accumulated correction or pushing a new one.
 fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, weight: f64, states: &mut Vec<SearchState<F, O>>, weights: &mut Vec<f64>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
     match dedup.get(&s.pattern) {
         Some(&idx) => weights[idx] += weight,
@@ -82,16 +82,17 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> (Vec<SearchState<F, O>>, Vec<f64>) {
         let max_match_set = self.args.max_match_set;
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
-        // Per-pattern multiplicities, needed only to merge duplicate patterns
-        // during dedup; the merged counts aren't read after expansion (resample
-        // weights are per unique pattern, by cost).
+        // Per-unique-pattern accumulated correction factors v'_j (the sum of the
+        // per-sample undersampling corrections that landed on each pattern). These
+        // are returned and fed into `reweight`, where they form alpha_j alongside
+        // the cost-based likelihood weight.
         let mut sum_corrects: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles {
             let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, 1.0, &mut expanded, &mut sum_corrects, &mut dedup);
+                        dedup_insert(child, mult as f64, &mut expanded, &mut sum_corrects, &mut dedup);
                     }
                     continue;
                 }
@@ -100,7 +101,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
                 SuccessorEnum::All { actions, .. } => actions,
             };
             if actions.is_empty() {
-                dedup_insert(state, 1.0, &mut expanded, &mut sum_corrects, &mut dedup);
+                dedup_insert(state, mult as f64, &mut expanded, &mut sum_corrects, &mut dedup);
                 continue;
             }
             let mut weights = action_weights_with_reuse_boost(&actions, self.args.boost_reuse_weight);
@@ -108,7 +109,10 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
             let uniform_weight = 1.0 / (actions.len() as f64);
             for (((action, _), count), weight) in actions.into_iter().zip(counts).zip(weights) {
                 if count > 0 {
-                    let correction = uniform_weight / weight;
+                    // This action was sampled `count` times from this parent; each
+                    // sample contributes the same per-sample correction
+                    // p/pi = uniform_weight / weight, so v' gains `count * correction`.
+                    let correction = count as f64 * uniform_weight / weight;
                     let child = state.apply_action(&action, &self.shared, true, None);
                     if child.within_match_set_cap(max_match_set) {
                         dedup_insert(child, correction, &mut expanded, &mut sum_corrects, &mut dedup);
