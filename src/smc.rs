@@ -190,17 +190,18 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         (costs, pruned)
     }
 
-    /// Normalizes costs + proposal marginals into the resampling distribution
-    /// `α_j` via log-sum-exp. Each live particle gets the optimal-backward-kernel
-    /// importance weight (Del Moral, Doucet & Jasra 2006, §3.3.1, Proposition 1,
-    /// eq. 21) `α_j ∝ C_j · exp(-cost_j / T) / Q_j`, i.e. log-weight
-    /// `ln(mults[j]) - cost_j/T - ln(props[j])`. Here `props[j] = Q_j` is the
-    /// proposal marginal `η_n` that the weight divides by so the cloud targets the
-    /// fixed Gibbs posterior `π(x) ∝ exp(-cost(x)/T)` rather than drifting with the
-    /// proposal; the realized count `C_j = mults[j]` survives only as a mean-1
-    /// fluctuation `C_j / Q_j` (`Q_j = E[C_j]`). Pruned particles get `-inf`.
-    /// Returns probabilities summing to 1, or an all-zero vector if every particle
-    /// is dead (the caller treats that as "all particles died").
+    /// Normalizes the per-pattern weights `v(t_j')` into the resampling
+    /// distribution via log-sum-exp. `v(t_j')` is the deduplicated, optimal-
+    /// backward-kernel importance weight derived in [`smc`] (Del Moral, Doucet &
+    /// Jasra 2006, §3.3.1, Proposition 1, eq. 21):
+    /// `v(t_j') = C_j' · exp(-cost_j / T) / [Σ_l C_l K_n(t_l, t_j')]`, i.e. the
+    /// log-weight `ln(mults[j]) - cost_j/T - ln(props[j])`, where
+    /// `mults[j] = C_j'` is the realized child multiplicity and
+    /// `props[j] = Σ_l C_l K_n(t_l, t_j')` is the proposal mass routed to `t_j'`.
+    /// Dividing by that proposal mass is what keeps the cloud on the fixed target
+    /// `exp(-cost(x)/T)` rather than drifting with the proposal. Pruned particles
+    /// get `-inf`. Returns probabilities summing to 1, or an all-zero vector if
+    /// every particle is dead (the caller treats that as "all particles died").
     fn reweight(&self, mults: &[usize], props: &[f64], costs: &[usize], pruned: &[bool]) -> Vec<f64> {
         let temperature = self.args.temperature;
         let log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { (mults[i] as f64).ln() - (*c as f64) / temperature - props[i].ln() }).collect();
