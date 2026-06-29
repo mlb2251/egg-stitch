@@ -278,7 +278,7 @@ fn follow_exact_match_exits_early_smc() {
         "--num-particles",
         "500",
         "--temperature",
-        "1000",
+        "100",
         "--follow",
         follow,
         "--max-arity",
