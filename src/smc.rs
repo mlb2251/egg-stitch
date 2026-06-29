@@ -313,7 +313,9 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 /// Then let v(t_j')
 ///     = sum_{i in S'(j)} w_n(x_i')
 ///     = sum_{i in S'(j)} exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
-///     = sum_{i in S'(j)} exp(-cost(t_j')/T) / [Σ_l C_j K_n(t_l, t_j')]
+///     = C_j' · exp(-cost(t_j')/T) / [Σ_l C_l K_n(t_l, t_j')]
+/// where C_j' = |S'(j)| is the child multiplicity (the Σ over S'(j) collapses to it
+/// since every term is equal) and C_l = |S(l)| is the parent multiplicity.
 ///
 /// So the denominator term here can be computed by summing the proposal mass routed to t_j' from each parent t_l, weighted by the realized multiplicity C_l.
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
