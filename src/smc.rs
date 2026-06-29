@@ -270,48 +270,52 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 
 /// Runs an SMC sampler to find a pattern that minimizes compressed corpus size.
 ///
-/// The target is the fixed Gibbs posterior over patterns `π(x) ∝ exp(-cost(x)/T)`
-/// (`cost` = compressed corpus size, `T` = `--temperature`); as `T → 0` this
-/// concentrates on the minimum-cost pattern, so the sampler doubles as the
-/// optimiser (the annealing-for-optimization construction of Del Moral, Doucet &
-/// Jasra 2006, §2.3.1(c), eq. 8). This is an **SMC sampler** (Del Moral, Doucet &
-/// Jasra, "Sequential Monte Carlo samplers", J. R. Statist. Soc. B 68(3):411–436,
-/// 2006), *not* a bootstrap / SIR particle filter: there is no physical transition
-/// prior here, so the pattern-expansion step is treated as a proposal kernel that
-/// we divide back out, rather than as system dynamics that belong in the target.
+/// Follows the construction given  in https://www.stats.ox.ac.uk/~doucet/delmoral_doucet_jasra_sequentialmontecarlosamplersJRSSB.pdf
+/// 
+/// Specifically, we use 2.3.1(c) Equation 8; we wish to have π(x) ∝ exp(-cost(x)/T)
+/// 
+/// First, we provide an exposition without multiplicity: 
+/// 
+/// At step n we hold N particles x_1, …, x_N. One step is expand → weight →
+/// resample:
 ///
-/// Particles are stored as `(SearchState, multiplicity)` pairs; each step runs
-/// expand → cost → reweight → resample:
+/// 1. Expand: Sample x_i' ∼ K_n(x_i, x_i') via the kernel
+/// 2. **Weight.** The unnormalized incremental importance weight (eq. 12) is
+///    ~w_n(x_i, x_i') = [γ_n(x_i') · L_{n-1}(x_i', x_i)] / [γ_{n-1}(x_i) · K_n(x_i, x_i')]
+///    where γ is the target distribution
+///    γ_n(x) = exp(-cost(x)/T)
+///    Taking the *optimal* backward kernel L_{n-1}^opt as defined by (eq. 21) as
+///    L_{n-1}(x_i', x_i) = [η_{n-1}(x_i) · K_n(x_i, x_i')] / η_n(x_i')
+///    and substituting into the weight gives
+///    ~w_n(x_i, x_i') = [γ_n(x_i') · η_{n-1}(x_i)] / [γ_{n-1}(x_i) · η_n(x_i')]
+///    = [γ_n(x_i') / η_n(x_i')] · [η_{n-1}(x_i) / γ_{n-1}(x_i)]
+///    Because we resample every step, the parents x_i are distributed as the
+///    normalized target π_{n-1} = γ_{n-1}/Z_{n-1}, so the parent marginal is
+///    η_{n-1}(x_i) = π_{n-1}(x_i) = γ_{n-1}(x_i)/Z_{n-1}. The parent factor is thus
+///    η_{n-1}(x_i)/γ_{n-1}(x_i) = 1/Z_{n-1}, a particle-independent constant that
+///    cancels under the step-3 normalization, leaving a function of x_i' alone:
+///    ~w_n(x_i') ∝ γ_n(x_i') / η_n(x_i')
+///    where η_n(x') = η_{n-1} K_n (x') is the proposal marginal (eq. 9).
+///    η_n has no closed form, so we estimate it empirically as
+///    η_{n-1}^N K_n(x') = (1/N) Σ_k K_n(x_k, x')
+///    (the difficulty raised in §2.4).
+///    This leads us to the final per-particle weight
+///    ~w_n(x_i') ∝ exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
+/// 3. **Resample.** Normalize to `α_i = ~w_n(x_i') / Σ_k ~w_n(x_k')` and draw N new
+///    particles ∝ α.
 ///
-/// 1. **Expand (propose).** Each parent `p_i` with multiplicity `M_i` draws `M_i`
-///    successor actions from the proposal `q(a | p_i)` (support-weighted, with the
-///    `--boost-reuse-weight` factor on reuse actions) — the forward kernel `K_n`
-///    of eq. (12). Children are deduplicated globally into unique patterns; for
-///    each unique child `j` we accumulate the realized count `C_j` and the analytic
-///    proposal mass `Q_j = Σ_i M_i · q(j | p_i)` (see [`dedup_insert`]).
-/// 2. **Cost (likelihood).** `exp(-cost_j / T)` plays the role of the likelihood.
-/// 3. **Reweight (optimal backward kernel).** The resampling weight is the
-///    importance weight of the *optimal* backward kernel (§3.3.1, Proposition 1,
-///    eq. 21): `w_n(x) = γ_n(x) / η_n(x)`, where `η_n` is the proposal marginal.
-///    `η_n` has no closed form (§2.4, eq. 9) and is estimated by the empirical
-///    mixture marginal `η_{n-1}^N K_n(x_j) = (1/N) Σ_i M_i · q(j | p_i)` — exactly
-///    our `Q_j` (the per-parent mixture marginal of §3.3.1, eqs. 23–24). Collapsing
-///    the per-particle weights over the `C_j` duplicates of `j` gives
-///    `α_j ∝ C_j · exp(-cost_j / T) / Q_j`, so [`SmcSearchData::reweight`] uses
-///    `ln(C_j) - cost_j/T - ln(Q_j)`. Dividing by the analytic marginal `Q_j`
-///    (`= E[C_j]`) is what keeps the cloud on the fixed `exp(-cost/T)`: the proposal
-///    and the parent multiplicity cancel, leaving `C_j` only as a mean-1 fluctuation
-///    `C_j / Q_j`. (Using the per-parent *conditional* `q(j | p_i)` instead — the
-///    bootstrap / SIR weight, eq. 12 with the prior backward kernel — leaves a
-///    residual `Σ_i M_i / |A_i|` factor that biases toward high-multiplicity /
-///    low-branching lineages and collapses the population prematurely.)
-/// 4. **Resample.** Draw `N` particles `∝ α_j` over the unique patterns (§3.1.1;
-///    multinomial / Kitagawa resampling) to get the next generation's
-///    multiplicities. Lower-bound-pruned and zero-arity particles are dead (`-inf`).
+/// Now, accounting for multiplicity via deduplication:
+/// We want to make sure that w_n(x_i') ∝ exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
+/// is preserved. Let t_1...t_k be the deduplicated patterns, let S(j) = {i | x_i = t_j}
+/// be the set of particles that collapsed to t_j, and let C_j = |S(j)| be the realized multiplicity of t_j.
+/// Define the same for t_j'.
+/// 
+/// Then let v(t_j')
+///     = sum_{i in S'(j)} w_n(x_i')
+///     = sum_{i in S'(j)} exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
+///     = sum_{i in S'(j)} exp(-cost(t_j')/T) / [Σ_l C_j K_n(t_l, t_j')]
 ///
-/// Deduplication makes cost computation run once per unique pattern instead of once
-/// per particle, and is exact: the collapsed `α_j` is the sum of the per-particle
-/// SMC weights over all duplicates of `j`.
+/// So the denominator term here can be computed by summing the proposal mass routed to t_j' from each parent t_l, weighted by the realized multiplicity C_l.
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
