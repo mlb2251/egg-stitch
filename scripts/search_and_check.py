@@ -23,7 +23,7 @@ REPO = HERE.parent
 CHECKER = HERE / "check_equiv.py"
 
 # Match the defaults used in tests/stitch_compat_test.rs.
-SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]
+SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "1000", "--temperature", "100"]
 BF_DEFAULTS = ["--num-steps", "50000"]
 
 

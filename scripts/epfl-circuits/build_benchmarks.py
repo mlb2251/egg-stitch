@@ -73,7 +73,7 @@ def no_rules_compression(corpus_path):
     subprocess.run(
         [BIN, "-i", corpus_path, "--output", out, "--search", "smc", "--language", "op-children-db",
          "--max-arity", "4", "--num-abstractions", "4", "--num-particles", "500", "--num-steps", "100",
-         "--temperature", "1000", "--seed", "1", "--iter-limit", "30"],
+         "--temperature", "100", "--seed", "1", "--iter-limit", "30"],
         check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     d = json.load(open(out))
     return d["initial_cost"] / d["final_cost"]

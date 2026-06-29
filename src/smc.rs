@@ -271,11 +271,11 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 /// Runs an SMC sampler to find a pattern that minimizes compressed corpus size.
 ///
 /// Follows the construction given  in https://www.stats.ox.ac.uk/~doucet/delmoral_doucet_jasra_sequentialmontecarlosamplersJRSSB.pdf
-/// 
+///
 /// Specifically, we use 2.3.1(c) Equation 8; we wish to have π(x) ∝ exp(-cost(x)/T)
-/// 
-/// First, we provide an exposition without multiplicity: 
-/// 
+///
+/// First, we provide an exposition without multiplicity:
+///
 /// At step n we hold N particles x_1, …, x_N. One step is expand → weight →
 /// resample:
 ///
@@ -309,7 +309,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 /// is preserved. Let t_1...t_k be the deduplicated patterns, let S(j) = {i | x_i = t_j}
 /// be the set of particles that collapsed to t_j, and let C_j = |S(j)| be the realized multiplicity of t_j.
 /// Define the same for t_j'.
-/// 
+///
 /// Then let v(t_j')
 ///     = sum_{i in S'(j)} w_n(x_i')
 ///     = sum_{i in S'(j)} exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
