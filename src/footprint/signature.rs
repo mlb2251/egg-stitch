@@ -88,7 +88,7 @@ pub(super) fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64
 /// *marginal* value distribution: all pairs (r, sigma(v)) with every other
 /// variable projected out, read column-by-column off the stored factors.
 /// Corresponding variables across a single global permutation get equal marginals.
-/// 
+///
 /// Note: this depends on the other variables to some degree still, but only
 /// in the way that they modify the factor structure and the number of ocurrences
 /// of the given variable (inflated by other variables' presence in a factor).
