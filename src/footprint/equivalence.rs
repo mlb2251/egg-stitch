@@ -1,8 +1,4 @@
-//! Exact, slow-path footprint equivalence — the oracle behind `check_slow` (see
-//! the [module docs](super)). [`footprint_equivalent`] decides whether two match
-//! sets are related by a single global colour-preserving column permutation,
-//! validating signature hits against an exact witness search rather than trusting
-//! the hash.
+//! Exact footprint equivalence, used by check_slow.
 
 use super::signature::compute_colors;
 use super::{factorial, heap_permute, id_u32};
