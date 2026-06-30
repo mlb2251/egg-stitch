@@ -283,7 +283,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 ///
 /// At step n we hold N particles x_1, …, x_N. One step is expand → weight →
 /// resample.
-/// 
+///
 /// Since we resample at every step, we can assume γ_n(x_i) ∝ η_n(x_i) for all n and i.
 ///
 /// 1. Expand: Sample x_i' ∼ K_n(x_i, x_i') via the kernel
@@ -317,7 +317,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 ///     = C_j' · exp(-cost(t_j')/T) / [Σ_l C_l K_n(t_l, t_j')]
 /// where C_j' = |S'(j)| is the child multiplicity (the Σ over S'(j) collapses to it
 /// since every term is equal) and C_l = |S(l)| is the parent multiplicity.
-/// 
+///
 /// So the denominator term here can be computed by summing the proposal mass routed to t_j' from each parent t_l, weighted by the realized multiplicity C_l.
 ///
 /// We further assume that K_n(t_l, t_j') = 0 for all transitions that are not realized in the sample, so we
