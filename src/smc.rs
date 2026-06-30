@@ -15,14 +15,15 @@ use rustc_hash::FxHashMap;
 /// deduped-by-pattern buffer, accumulating into an existing group or pushing a new
 /// one.
 ///
-/// Two quantities are accumulated per unique child pattern `j`:
-/// * `mults[j] += count` — the realized number of particles that landed on `j`
-///   this step (`C_j`, a random multinomial outcome of the proposal sampling).
-/// * `props[j] += prop` — the *analytic* one-step proposal mass routed to `j`,
-///   `Q_j = Σ_i M_i · q(j | p_i)`, summed over every parent/action that reaches it.
-///   This is the empirical estimate of the proposal marginal `η_n(x_n)` (Del Moral,
-///   Doucet & Jasra 2006, §2.4, eq. 9) that the optimal-backward-kernel importance
-///   weight divides by — see [`smc`] and [`SmcSearchData::reweight`].
+/// Two quantities are accumulated per unique child pattern `t_j'`:
+/// * `mults[j] += count` — the realized child multiplicity `C_j'` (the number of
+///   particles that landed on `t_j'`, a multinomial outcome of the proposal
+///   sampling).
+/// * `props[j] += prop` — the proposal mass routed to `t_j'`,
+///   `Σ_l C_l · K_n(t_l, t_j')`, summed over every parent `t_l` (multiplicity `C_l`)
+///   that reaches it. This is the empirical proposal marginal (Del Moral, Doucet &
+///   Jasra 2006, §2.4, eq. 9) the optimal-backward-kernel weight divides by — see
+///   [`smc`] and [`SmcSearchData::reweight`].
 fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, prop: f64, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, props: &mut Vec<f64>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
     match dedup.get(&s.pattern) {
         Some(&idx) => {
@@ -190,17 +191,18 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         (costs, pruned)
     }
 
-    /// Normalizes costs + proposal marginals into the resampling distribution
-    /// `α_j` via log-sum-exp. Each live particle gets the optimal-backward-kernel
-    /// importance weight (Del Moral, Doucet & Jasra 2006, §3.3.1, Proposition 1,
-    /// eq. 21) `α_j ∝ C_j · exp(-cost_j / T) / Q_j`, i.e. log-weight
-    /// `ln(mults[j]) - cost_j/T - ln(props[j])`. Here `props[j] = Q_j` is the
-    /// proposal marginal `η_n` that the weight divides by so the cloud targets the
-    /// fixed Gibbs posterior `π(x) ∝ exp(-cost(x)/T)` rather than drifting with the
-    /// proposal; the realized count `C_j = mults[j]` survives only as a mean-1
-    /// fluctuation `C_j / Q_j` (`Q_j = E[C_j]`). Pruned particles get `-inf`.
-    /// Returns probabilities summing to 1, or an all-zero vector if every particle
-    /// is dead (the caller treats that as "all particles died").
+    /// Normalizes the per-pattern weights `v(t_j')` into the resampling
+    /// distribution via log-sum-exp. `v(t_j')` is the deduplicated, optimal-
+    /// backward-kernel importance weight derived in [`smc`] (Del Moral, Doucet &
+    /// Jasra 2006, §3.3.1, Proposition 1, eq. 21):
+    /// `v(t_j') = C_j' · exp(-cost_j / T) / [Σ_l C_l K_n(t_l, t_j')]`, i.e. the
+    /// log-weight `ln(mults[j]) - cost_j/T - ln(props[j])`, where
+    /// `mults[j] = C_j'` is the realized child multiplicity and
+    /// `props[j] = Σ_l C_l K_n(t_l, t_j')` is the proposal mass routed to `t_j'`.
+    /// Dividing by that proposal mass is what keeps the cloud on the fixed target
+    /// `exp(-cost(x)/T)` rather than drifting with the proposal. Pruned particles
+    /// get `-inf`. Returns probabilities summing to 1, or an all-zero vector if
+    /// every particle is dead (the caller treats that as "all particles died").
     fn reweight(&self, mults: &[usize], props: &[f64], costs: &[usize], pruned: &[bool]) -> Vec<f64> {
         let temperature = self.args.temperature;
         let log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { (mults[i] as f64).ln() - (*c as f64) / temperature - props[i].ln() }).collect();
@@ -277,7 +279,9 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 /// First, we provide an exposition without multiplicity:
 ///
 /// At step n we hold N particles x_1, …, x_N. One step is expand → weight →
-/// resample:
+/// resample.
+///
+/// Since we resample at every step, we can assume γ_n(x_i) ∝ η_n(x_i) for all n and i.
 ///
 /// 1. Expand: Sample x_i' ∼ K_n(x_i, x_i') via the kernel
 /// 2. **Weight.** The unnormalized incremental importance weight (eq. 12) is
@@ -286,19 +290,13 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 ///    γ_n(x) = exp(-cost(x)/T)
 ///    Taking the *optimal* backward kernel L_{n-1}^opt as defined by (eq. 21) as
 ///    L_{n-1}(x_i', x_i) = [η_{n-1}(x_i) · K_n(x_i, x_i')] / η_n(x_i')
-///    and substituting into the weight gives
 ///    ~w_n(x_i, x_i') = [γ_n(x_i') · η_{n-1}(x_i)] / [γ_{n-1}(x_i) · η_n(x_i')]
 ///    = [γ_n(x_i') / η_n(x_i')] · [η_{n-1}(x_i) / γ_{n-1}(x_i)]
-///    Because we resample every step, the parents x_i are distributed as the
-///    normalized target π_{n-1} = γ_{n-1}/Z_{n-1}, so the parent marginal is
-///    η_{n-1}(x_i) = π_{n-1}(x_i) = γ_{n-1}(x_i)/Z_{n-1}. The parent factor is thus
-///    η_{n-1}(x_i)/γ_{n-1}(x_i) = 1/Z_{n-1}, a particle-independent constant that
-///    cancels under the step-3 normalization, leaving a function of x_i' alone:
-///    ~w_n(x_i') ∝ γ_n(x_i') / η_n(x_i')
-///    where η_n(x') = η_{n-1} K_n (x') is the proposal marginal (eq. 9).
+///    the paper says that this gives us w_n(x_i') ∝ γ_n(x_i') / η_n(x_i')
+///
+///    Now, η_n(x') = η_{n-1} K_n (x') is the proposal marginal (eq. 9).
 ///    η_n has no closed form, so we estimate it empirically as
-///    η_{n-1}^N K_n(x') = (1/N) Σ_k K_n(x_k, x')
-///    (the difficulty raised in §2.4).
+///    η_{n-1}^N K_n(x') = (1/N) Σ_k K_n(x_k, x') (the equation after eq. 9)
 ///    This leads us to the final per-particle weight
 ///    ~w_n(x_i') ∝ exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
 /// 3. **Resample.** Normalize to `α_i = ~w_n(x_i') / Σ_k ~w_n(x_k')` and draw N new
@@ -318,6 +316,9 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 /// since every term is equal) and C_l = |S(l)| is the parent multiplicity.
 ///
 /// So the denominator term here can be computed by summing the proposal mass routed to t_j' from each parent t_l, weighted by the realized multiplicity C_l.
+///
+/// We further assume that K_n(t_l, t_j') = 0 for all transitions that are not realized in the sample, so we
+/// only accumulate over the parents that actually reached t_j'.
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
