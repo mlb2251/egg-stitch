@@ -5,8 +5,7 @@ use super::{heap_permute, id_u32};
 use crate::matching::MatchAtEClass;
 use rustc_hash::FxHashMap;
 
-/// Checks if two match sets are equivalent under a global column permutation. Can
-/// return true even if they are not (when the search space is too large), but never false.
+/// Checks if two match sets are equivalent under a global column permutation.
 /// Does depend on factor structure, but so does the signature being checked.
 pub(super) fn footprint_equivalent(a: &[MatchAtEClass], b: &[MatchAtEClass], arity: usize) -> bool {
     if a.len() != b.len() {
