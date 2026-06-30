@@ -1,36 +1,37 @@
-//! Permutation-invariant *match-footprint* deduplication for best-first search.
+//! Permutation-invariant match-footprint deduplication for best-first search.
 //!
-//! Two candidate patterns are "the same footprint" when their match data —
-//! `{ root e-class ↦ set of substitutions }` — coincides modulo (1) one global
-//! variable-column permutation, (2) per-root substitution reordering, and
-//! (3) factor order. Root e-class ids and bound value ids are literal anchors
-//! (the e-graph isn't unioned during search), so only those symmetries are
-//! quotiented out. Such candidates yield identical compression and reach the
-//! same refined footprints, so keeping one is sound — the same reasoning the
-//! structural seen-set ([`crate::search::SeenTracker`]) relies on.
+//! Two candidate patterns have the same footprint when their set of match locations
+//! M: {(r, sigma)} coincides modulo
+//! 1. a permutation of the variables (i.e., sigma[v] = sigma'[perm[v]] for some global `perm`),
+//! 2. reordering the substitutions within each factor
 //!
-//! Example made equal: `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)` over a
-//! commutative e-graph match the same roots and capture the same argument
-//! multiset with the two variables' roles swapped (a single global permutation).
+//! As an example: `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)` should be
+//! considered equal, by swapping the variables.
+//! 
+//! We perform this check by computing an injective-in-practice "footprint signature"
+//! for each candidate, which is a hash.
+//! 
+//! This is a double-order invariant and cannot be easily computed directly.
+//! The obvious way would be to try every permutation of the variables
+//! and then canonicalize the match sets relative to the variable order,
+//! which is factorial in the number of variables.
+//! 
+//! We perform a more efficient variant of this where we first identify a
+//! partial order on variables: specifically, we compute a "marginal identity hash"
+//! for each variable that is invariant to the variable's position.
+//! We then only consider permutations that respect the marginal identity hash order,
+//! which is a much smaller set of permutations to consider. (We only have to
+//! permute variables with an identical marginal identity hash).
 //!
-//! The signature is computed straight off the *stored* factored match set (never
-//! the materialised cartesian product) in two passes: (1) give each variable a
-//! global *marginal* from its root-anchored value projection so corresponding
-//! variables across permuted candidates get equal marginals; (2) hash each factor
-//! as a unit in a column-permutation-canonical way (so within-root cross-column
-//! correlation is preserved — what a per-column scheme would lose) and combine
-//! over factors/roots as sorted multisets into a 128-bit signature.
-//!
-//! We deliberately do *not* re-decompose factors to a canonical finest form: the
-//! search already decomposes consistently, so footprint-equal candidates almost
-//! always share a factorisation. Skipping it only ever *misses* a merge (lower
-//! recall), never causes a false merge (a different match set still hashes
-//! differently), and avoids a per-factor clone + `O(slots²·rows)` decompose on
-//! the hot path.
-//!
-//! The module is split into [`signature`] (the two-pass signature `compute`),
-//! [`equivalence`] (the exact slow-path oracle validating signature hits), and
-//! [`tracker`] (the stateful [`FootprintTracker`] that dedupes successors).
+//! This process never expands out factors to the full cartesian product:
+//! cartesian products are in general canonical and in our case mostly canonical
+//! and close enough.
+//! 
+//! To avoid the expensive computation of the footprint hash in domains
+//! where there are few true duplicates, we first compute a cheap hash that is not
+//! injective-in-practice but does identify many unique patterns. If it does not
+//! match any previous cheap hash, we store the cheap hash and move on without
+//! needing to do any furthher computation.
 
 mod equivalence;
 mod signature;
