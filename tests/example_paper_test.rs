@@ -1,5 +1,6 @@
-//! Worked example for the paper: a commutative ordering that does *not* fall out
-//! of canonicalization, so live rewriting beats `--only-use-dsrs-at-start`.
+//! Worked example for the paper (e-stitch figure-1 shape): a commutative
+//! ordering that does *not* fall out of canonicalization, so live rewriting
+//! beats `--only-use-dsrs-at-start`.
 //!
 //! The only rewrite is commutativity of `+`
 //! (`data/domains/examples-paper/rules.rewrites`):
@@ -7,33 +8,27 @@
 //! plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
 //! ```
 //!
-//! Each program is a sum of two *blocks*; block `k` pairs a shared anchor
-//! `k{1,2}` with a per-program value, and the (arity-2) abstraction is the
-//! skeleton `(+ (+ k1 ?) (+ k2 ?))`.
+//! The shared abstraction is `f0 = (+ ?x (* ?y ?y))` (i.e. `x + y²`, arity 2).
+//! Its `?x` slot is filled with varied per-program subterms — bare symbols and
+//! larger `(* ..)` terms — and some programs are wrapped in an outer function
+//! (`sqrt`, `f1`).
 //!
-//! * `corpus_a.json` writes both blocks anchor-first, so all four programs are
-//!   instances of that skeleton and a plain *syntactic* (rule-free) search finds
-//!   it.
-//! * `corpus_b.json` is a size-minimal canonical form whose block orientations
-//!   are deliberately *inconsistent* across programs. egg's min-term extractor
-//!   breaks the `(+ P Q)` vs `(+ Q P)` tie by smaller child e-class id first, and
-//!   ids follow parse order, so a block `(+ k v)` extracts value-first iff `v`
-//!   was introduced before the anchor `k`. The first program is the
-//!   all-value-first one, so it introduces the shared values `e1,e2` *before* the
-//!   anchors; later programs reuse `e_j` for a value-first block or a fresh
-//!   "late" value for an anchor-first block. The four programs realize the four
-//!   distinct orientation patterns, so no consistent skeleton survives — and
-//!   crucially extracting the minimal term does not re-align them.
-//!
-//! Hence `--only-use-dsrs-at-start`, which abstracts over the extracted minimal
-//! corpus, is stuck with the scrambled B, while live commutativity re-aligns the
-//! blocks and recovers A's compression.
+//! * `corpus_a.json` writes every program with the square *second*, matching
+//!   `f0`, so a plain *syntactic* (rule-free) search finds it.
+//! * `corpus_b.json` is the same programs, commutatively scrambled: half put the
+//!   square first. Because *both* operands of each `+` are per-program subterms
+//!   (no shared anchor leaf), the left one is parsed first and gets the smaller
+//!   e-class id, so egg's min-term extractor keeps each `+` in its written
+//!   orientation — it does *not* re-align them. With a balanced split no single
+//!   orientation wins, so a search over the minimal corpus falls back to the
+//!   weaker `(* ?y ?y)` and misses the `+`. Live commutativity re-aligns every
+//!   program and recovers the full `f0`.
 //!
 //! Measured (best-first, `--max-arity 2`):
 //! | corpus | rule-free | at-start | live |
 //! |--------|-----------|----------|------|
-//! | A      | ~1.45x    | ~1.21x   | ~1.45x |
-//! | B      | ~1.04x    | ~1.04x   | ~1.45x |
+//! | A      | ~1.31x    | ~1.31x   | ~1.31x |
+//! | B      | ~1.12x    | ~1.12x   | ~1.31x |
 
 use egg::Language;
 use egg_stitch::{
@@ -125,19 +120,20 @@ fn b_is_size_minimal() {
 fn syntactic_search_compresses_a_but_not_b() {
     let a = compression_ratio("corpus_a.json", Mode::RuleFree);
     let b = compression_ratio("corpus_b.json", Mode::RuleFree);
-    assert!(a >= 1.35, "rule-free search should compress aligned A well (got {a})");
-    assert!(b <= 1.15, "rule-free search should barely compress scrambled B (got {b})");
+    assert!(a >= 1.25, "rule-free search should find f0 on aligned A (got {a})");
+    assert!(b <= 1.2, "rule-free search should only manage bare squaring on scrambled B (got {b})");
+    assert!(a >= 1.1 * b, "A should compress clearly better than B syntactically (A={a}, B={b})");
 }
 
-/// The headline: live commutativity re-aligns B's blocks and recovers A's
-/// compression, but `--only-use-dsrs-at-start` searches the minimal (scrambled)
-/// corpus and can't — the compressive ordering does not fall out of
-/// canonicalization.
+/// The headline: live commutativity re-aligns B's `+` nodes and recovers the
+/// full `f0`, but `--only-use-dsrs-at-start` searches the minimal (scrambled)
+/// corpus and is stuck with bare squaring — the compressive ordering does not
+/// fall out of canonicalization.
 #[test]
 fn live_beats_only_use_dsrs_at_start_on_b() {
     let live = compression_ratio("corpus_b.json", Mode::Live);
     let at_start = compression_ratio("corpus_b.json", Mode::AtStart);
-    assert!(live >= 1.35, "live rewriting should recover B's compression (got {live})");
-    assert!(at_start <= 1.15, "at-start should be stuck on the scrambled minimal term (got {at_start})");
-    assert!(live >= 1.25 * at_start, "live should clearly beat at-start (live={live}, at-start={at_start})");
+    assert!(live >= 1.25, "live rewriting should recover f0 on B (got {live})");
+    assert!(at_start <= 1.2, "at-start should be stuck on the scrambled minimal term (got {at_start})");
+    assert!(live >= 1.1 * at_start, "live should clearly beat at-start (live={live}, at-start={at_start})");
 }

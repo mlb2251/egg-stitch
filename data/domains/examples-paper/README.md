@@ -1,8 +1,9 @@
 # examples-paper
 
-A minimal worked example showing that a compressive *commutative ordering* need
-not fall out of canonicalization — so library learning with **live** rewrites
-beats "minimize first, then abstract" (`--only-use-dsrs-at-start`).
+A minimal worked example (in the shape of the e-stitch figure-1 running example)
+showing that a compressive *commutative ordering* need not fall out of
+canonicalization — so library learning with **live** rewrites beats "minimize
+first, then abstract" (`--only-use-dsrs-at-start`).
 
 The only rewrite is commutativity of `+` (`rules.rewrites`):
 
@@ -10,35 +11,37 @@ The only rewrite is commutativity of `+` (`rules.rewrites`):
 plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
 ```
 
-Each program is a sum of two *blocks*; block `k` pairs a shared anchor `k1/k2`
-with a per-program value. The (arity-2) abstraction is the skeleton
-`(+ (+ k1 ?) (+ k2 ?))`.
+The shared abstraction is
 
-- **`corpus_a.json`** — both blocks anchor-first, so all four programs are
-  instances of the skeleton and a plain *syntactic* (rule-free) search finds it.
+```
+f0 = (+ ?x (* ?y ?y))      // x + y², arity 2
+```
 
-- **`corpus_b.json`** — a size-minimal canonical form whose block orientations
-  are inconsistent across programs. egg's min-term extractor breaks the
-  `(+ P Q)` vs `(+ Q P)` tie by smaller child e-class id first, and ids follow
-  parse order, so a block `(+ k v)` extracts value-first iff `v` was introduced
-  before the anchor `k`. The first program is the all-value-first one, so it
-  introduces the shared values `e1,e2` *before* the anchors; later programs reuse
-  `e_j` for a value-first block or a fresh "late" value for an anchor-first
-  block. The four programs realize the four distinct orientation patterns, so no
-  consistent skeleton survives — and extracting the minimal term does **not**
-  re-align them. (No throwaway program is needed: the all-value-first program is
-  a normal member of the corpus.)
+Its `?x` slot is filled with varied per-program subterms — bare symbols and
+larger `(* ..)` terms — and some programs are wrapped in an outer function
+(`sqrt`, `f1`).
+
+- **`corpus_a.json`** — every program is written with the square *second*,
+  matching `f0`, so a plain *syntactic* (rule-free) search finds it.
+
+- **`corpus_b.json`** — the same programs, commutatively scrambled: half put the
+  square first. Because *both* operands of each `+` are per-program subterms (no
+  shared anchor leaf), the left operand is parsed first and gets the smaller
+  e-class id, so egg's min-term extractor keeps each `+` in its written
+  orientation — it does **not** re-align them. With a balanced split, no single
+  orientation wins, so a search over the minimal corpus falls back to the weaker
+  `(* ?y ?y)` and misses the `+`. Live commutativity re-aligns every program and
+  recovers the full `f0`.
 
 So `--only-use-dsrs-at-start`, which abstracts over the extracted minimal corpus,
-is stuck with the scrambled B, while live commutativity re-aligns the blocks and
-recovers A's compression.
+is stuck with the scrambled B, while live commutativity recovers A's compression.
 
 Measured with best-first, `--max-arity 2`:
 
 | corpus | rule-free | `--only-use-dsrs-at-start` | live |
 |--------|-----------|----------------------------|------|
-| A      | ~1.45×    | ~1.21×                     | ~1.45× |
-| B      | ~1.04×    | ~1.04×                     | ~1.45× |
+| A      | ~1.31× (`(+ ?x (* ?y ?y))`) | ~1.31× | ~1.31× |
+| B      | ~1.12× (`(* ?y ?y)`)        | ~1.12× | ~1.31× (`(+ (* ?y ?y) ?x)`) |
 
 `tests/example_paper_test.rs` pins this: A ≡ B under commutativity, B is
 size-minimal, syntactic search compresses A but not B, and live rewriting beats
