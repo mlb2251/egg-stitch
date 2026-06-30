@@ -5,11 +5,6 @@ use super::{factorial, heap_permute, id_u32};
 use crate::matching::MatchAtEClass;
 use rustc_hash::FxHashMap;
 
-/// Cap on the number of colour-group column permutations brute-forced by the
-/// slow-path equivalence check. Beyond it we cannot disprove equivalence, so we
-/// conservatively report `true` (never a false alarm).
-const SLOW_PERM_CAP: usize = 100_000;
-
 /// Checks if two match sets are equivalent under a global column permutation. Can
 /// return true even if they are not (when the search space is too large), but never false.
 /// Does depend on factor structure, but so does the signature being checked.
@@ -23,11 +18,6 @@ pub(super) fn footprint_equivalent(a: &[MatchAtEClass], b: &[MatchAtEClass], ari
     let Some(groups) = pair_columns_by_color(&ca, &cb) else {
         return false;
     };
-    // Bail (can't disprove) when the permutation search is too large.
-    let total = groups.iter().try_fold(1usize, |acc, (ga, _)| acc.checked_mul(factorial(ga.len())));
-    if total.is_none_or(|t| t > SLOW_PERM_CAP) {
-        return true;
-    }
     let canon_b = canonicalize(b, &(0..arity).collect::<Vec<_>>());
     let mut perm = vec![0usize; arity];
     enumerate_perms(&groups, 0, &mut perm, &mut |perm| canonicalize(a, perm) == canon_b)
