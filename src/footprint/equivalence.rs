@@ -1,6 +1,6 @@
 //! Exact footprint equivalence, used by check_slow.
 
-use super::signature::compute_colors;
+use super::signature::compute_marginals;
 use super::{heap_permute, id_u32};
 use crate::matching::MatchAtEClass;
 use rustc_hash::FxHashMap;
@@ -11,10 +11,10 @@ pub(super) fn footprint_equivalent(a: &[MatchAtEClass], b: &[MatchAtEClass], ari
     if a.len() != b.len() {
         return false;
     }
-    let (ca, cb) = (compute_colors(a, arity), compute_colors(b, arity));
-    // A valid π maps each a-column to a b-column of equal colour; mismatched
-    // colour multisets ⇒ no such π.
-    let Some(groups) = pair_columns_by_color(&ca, &cb) else {
+    let (ca, cb) = (compute_marginals(a, arity), compute_marginals(b, arity));
+    // A valid π maps each a-column to a b-column of equal marginal; mismatched
+    // marginal multisets ⇒ no such π.
+    let Some(groups) = pair_columns_by_marginal(&ca, &cb) else {
         return false;
     };
     let canon_b = canonicalize(b, &(0..arity).collect::<Vec<_>>());
@@ -22,11 +22,9 @@ pub(super) fn footprint_equivalent(a: &[MatchAtEClass], b: &[MatchAtEClass], ari
     enumerate_perms(&groups, 0, &mut perm, &mut |perm| canonicalize(a, perm) == canon_b)
 }
 
-/// Pairs the two match sets' columns by colour into `(a-columns, b-columns)` per
-/// colour — the colour groups a global colour-preserving permutation must map
-/// within. Returns `None` when no such permutation can exist: a colour present on
-/// one side but not the other, or a colour whose two groups differ in size.
-fn pair_columns_by_color(ca: &[u64], cb: &[u64]) -> Option<Vec<(Vec<usize>, Vec<usize>)>> {
+/// Pairs the two match sets' columns by marginal hash. Returns `None` if the two sets have different
+/// marginal multisets (no global permutation can make them equivalent).
+fn pair_columns_by_marginal(ca: &[u64], cb: &[u64]) -> Option<Vec<(Vec<usize>, Vec<usize>)>> {
     let mut groups: FxHashMap<u64, (Vec<usize>, Vec<usize>)> = FxHashMap::default();
     for (v, &c) in ca.iter().enumerate() {
         groups.entry(c).or_default().0.push(v);
@@ -69,8 +67,8 @@ fn canonicalize(matches: &[MatchAtEClass], perm: &[usize]) -> Vec<(u32, Vec<(Vec
     out
 }
 
-/// Enumerates every global colour-preserving permutation `perm[a_col] = b_col`,
-/// one colour group at a time, returning `true` as soon as `test` accepts a
+/// Enumerates every global marginal-preserving permutation `perm[a_col] = b_col`,
+/// one marginal group at a time, returning `true` as soon as `test` accepts a
 /// completed `perm` (short-circuits the remaining orderings).
 fn enumerate_perms(groups: &[(Vec<usize>, Vec<usize>)], gi: usize, perm: &mut [usize], test: &mut dyn FnMut(&[usize]) -> bool) -> bool {
     let Some((ga, gb)) = groups.get(gi) else {

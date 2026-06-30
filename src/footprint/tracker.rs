@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use super::signature::{Footprint, footprint_of};
 
 /// Salt for the cheap proxy hash, domain-separated from the signature's salts so
-/// a proxy can't alias a column/colour/factor/root hash.
+/// a proxy can't alias a column/marginal/factor/root hash.
 const SALT_PROXY: u64 = 0x9001_9001;
 
 /// A cheap, permutation-invariant *proxy* for a candidate's footprint: a hash of
@@ -48,10 +48,10 @@ fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
 /// that deferred representative — computing its signature lazily, only now that a
 /// peer actually needs comparing against it — and then dedup the newcomer.
 ///
-/// Each bucket entry is `(sig, frozen colours, min size)`; the frozen colours are
-/// the most-flexible set seen for that sig (a *colour multiset*, compared up to
+/// Each bucket entry is `(sig, frozen marginals, min size)`; the frozen marginals are
+/// the most-flexible set seen for that sig (a *marginal multiset*, compared up to
 /// the variable permutation the sig quotients out), and a repeat is a hit when a
-/// recorded entry's frozen colours are a sub-multiset of the new ones — it was at
+/// recorded entry's frozen marginals are a sub-multiset of the new ones — it was at
 /// least as flexible, so this visit's successors are already reachable.
 ///
 /// Cost: signatures are still computed only on genuine proxy collisions (the
@@ -80,7 +80,7 @@ pub struct FootprintTracker {
 #[derive(Default)]
 struct Bucket {
     rep: Option<RepHandle>,
-    /// Each entry: `(signature, frozen colours, min size, node id)`. The node id
+    /// Each entry: `(signature, frozen marginals, min size, node id)`. The node id
     /// resolves the entry's match set on demand for the `check_slow` validation.
     entries: Vec<(u128, Vec<u64>, usize, usize)>,
 }
@@ -142,14 +142,14 @@ impl FootprintTracker {
         // First collision in this bucket: materialise the deferred representative
         // from its retained match set before comparing the newcomer against it.
         if let Some(rep) = rep {
-            let (rsig, rcolors, rcapped) = compute(resolve(rep.id), rep.frozen.len(), &mut self.scratch);
+            let (rsig, rmarginals, rcapped) = compute(resolve(rep.id), rep.frozen.len(), &mut self.scratch);
             if rcapped {
                 self.capped += 1;
             }
-            let rfc = frozen_colors(&rep.frozen, &rcolors);
+            let rfc = frozen_marginals(&rep.frozen, &rmarginals);
             self.buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size, rep.id));
         }
-        let (sig, colors, capped) = compute(matches, arity, &mut self.scratch);
+        let (sig, marginals, capped) = compute(matches, arity, &mut self.scratch);
         if capped {
             self.capped += 1;
         }
@@ -163,7 +163,7 @@ impl FootprintTracker {
                 }
             }
         }
-        let fc = frozen_colors(frozen, &colors);
+        let fc = frozen_marginals(frozen, &marginals);
         let skip = dedup_in_bucket(&mut self.buckets.get_mut(&proxy).expect("present").entries, sig, fc, size, id);
         if skip {
             self.hits += 1;
@@ -178,7 +178,7 @@ impl FootprintTracker {
         if fp.capped {
             self.capped += 1;
         }
-        let fc = frozen_colors(frozen, &fp.colors);
+        let fc = frozen_marginals(frozen, &fp.marginals);
         let skip = dedup_in_bucket(&mut self.buckets.entry(0).or_default().entries, fp.sig, fc, size, 0);
         if skip {
             self.hits += 1;
@@ -187,16 +187,16 @@ impl FootprintTracker {
     }
 }
 
-/// The frozen variables' colours, sorted — a colour multiset compared up to the
+/// The frozen variables' marginals, sorted — a marginal multiset compared up to the
 /// variable permutation the signature quotients out.
-fn frozen_colors(frozen: &[bool], colors: &[u64]) -> Vec<u64> {
-    let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| colors[v]).collect();
+fn frozen_marginals(frozen: &[bool], marginals: &[u64]) -> Vec<u64> {
+    let mut fc: Vec<u64> = frozen.iter().enumerate().filter(|(_, b)| **b).map(|(v, _)| marginals[v]).collect();
     fc.sort_unstable();
     fc
 }
 
 /// Subsumption within one proxy bucket. Skip only if a recorded same-`sig` entry
-/// dominates the newcomer on *both* axes: its frozen colours are a sub-multiset
+/// dominates the newcomer on *both* axes: its frozen marginals are a sub-multiset
 /// of `fc` (at least as flexible — successors already reachable) **and** its
 /// pattern size is `≤ size` (at least as cheap — `best` not worse). Otherwise
 /// keep, and fold the newcomer's (more-flexible) frozen set and (smaller) size
@@ -217,7 +217,7 @@ fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>, usize, usize)>, sig: u128, 
     }
 }
 
-/// True iff sorted `a` is a sub-multiset of sorted `b` (the colour-space analogue
+/// True iff sorted `a` is a sub-multiset of sorted `b` (the marginal-space analogue
 /// of `frozen_subset`: a smaller frozen set is at least as flexible).
 fn submultiset(a: &[u64], b: &[u64]) -> bool {
     let mut j = 0;
@@ -238,7 +238,7 @@ mod tests {
     use super::*;
     use crate::footprint::test_helpers::match_at;
 
-    /// Frozen-colour subsumption: freezing the *other* of two swapped variables
+    /// Frozen-marginal subsumption: freezing the *other* of two swapped variables
     /// is the same frozen set up to the permutation, so the second visit is a hit.
     #[test]
     fn frozen_subsumption_up_to_permutation() {

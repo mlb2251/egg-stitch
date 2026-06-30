@@ -1,5 +1,5 @@
 //! The two-pass permutation-invariant signature `compute` (see the [module
-//! docs](super)): global per-variable colours, then canonical per-factor hashing
+//! docs](super)): global per-variable marginals, then canonical per-factor hashing
 //! combined over factors and roots into a 128-bit signature. Runs on the
 //! reusable [`FootprintScratch`] buffers so the hot path allocates nothing.
 
@@ -10,18 +10,18 @@ use crate::matching::MatchAtEClass;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 
-/// Max within-colour-group permutations brute-forced per factor when
+/// Max within-marginal-group permutations brute-forced per factor when
 /// canonicalising its column order (pass 2). Tie-groups this large only arise
 /// under wide genuine symmetry (many interchangeable args binding identical
-/// value sets); beyond the cap we fall back to a plain colour-sorted order for
+/// value sets); beyond the cap we fall back to a plain marginal-sorted order for
 /// that factor — which can over-merge it — and surface the count as `capped`.
 const TIE_PERM_CAP: usize = 720; // 6!
 
 // Domain-separation salts: a distinct tag at each hash position so structurally
-// different inputs (a column vs a colour vs a factor vs a root) can't alias even
+// different inputs (a column vs a marginal vs a factor vs a root) can't alias even
 // if their byte streams coincide.
 const SALT_COLUMN: u64 = 0xC01C;
-const SALT_COLOR: u64 = 0x0C01_1EC7;
+const SALT_MARGINAL: u64 = 0x0C01_1EC7;
 const SALT_FACTOR: u64 = 0xFAC2;
 const SALT_ROOT: u64 = 0x2007;
 const SALT_ROW_LIST: u64 = 0x0072_6F77;
@@ -30,7 +30,7 @@ const SALT_ROW_LIST: u64 = 0x0072_6F77;
 #[cfg(test)]
 pub(super) struct Footprint {
     pub(super) sig: u128,
-    pub(super) colors: Vec<u64>,
+    pub(super) marginals: Vec<u64>,
     pub(super) capped: bool,
 }
 
@@ -39,8 +39,8 @@ pub(super) struct Footprint {
 #[cfg(test)]
 pub(super) fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint {
     let mut scratch = FootprintScratch::default();
-    let (sig, colors, capped) = compute(matches, arity, &mut scratch);
-    Footprint { sig, colors, capped }
+    let (sig, marginals, capped) = compute(matches, arity, &mut scratch);
+    Footprint { sig, marginals, capped }
 }
 
 /// Reusable scratch buffers for the pass-2 signature computation, so a
@@ -52,24 +52,24 @@ pub(super) fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint
 pub(super) struct FootprintScratch {
     /// Per-root factor hashes, sorted then folded into the root signature.
     fh: Vec<u64>,
-    /// Column indices of a factor, sorted by colour.
+    /// Column indices of a factor, sorted by marginal.
     order: Vec<usize>,
-    /// Colour of each column in `order`.
-    col_colors: Vec<u64>,
+    /// Marginal of each column in `order`.
+    col_marginals: Vec<u64>,
     /// Working column permutation for the tie-group brute force.
     perm: Vec<usize>,
-    /// Maximal equal-colour runs `(start, len)` with `len ≥ 2`.
+    /// Maximal equal-marginal runs `(start, len)` with `len ≥ 2`.
     runs: Vec<(usize, usize)>,
     /// Per-row hash keys for the factor being hashed.
     keys: Vec<u64>,
 }
 
-/// Core signature computation. Returns `(signature, per-variable colours,
+/// Core signature computation. Returns `(signature, per-variable marginals,
 /// capped)`, where `capped` flags a tie-group that exceeded [`TIE_PERM_CAP`].
 /// `scratch`'s buffers are reused across factors and across candidates.
 pub(super) fn compute(matches: &[MatchAtEClass], arity: usize, scratch: &mut FootprintScratch) -> (u128, Vec<u64>, bool) {
-    // Pass 1: global per-variable colours.
-    let colors = compute_colors(matches, arity);
+    // Pass 1: global per-variable marginals.
+    let marginals = compute_marginals(matches, arity);
 
     // Pass 2: hash each factor canonically, combine per root then over roots as
     // sorted multisets.
@@ -78,21 +78,22 @@ pub(super) fn compute(matches: &[MatchAtEClass], arity: usize, scratch: &mut Foo
     for m in matches {
         scratch.fh.clear();
         for f in &m.factors {
-            let fh = factor_hash(f, &colors, scratch, &mut capped);
+            let fh = factor_hash(f, &marginals, scratch, &mut capped);
             scratch.fh.push(fh);
         }
         scratch.fh.sort_unstable();
         root_sigs.push(h64(SALT_ROOT, &(id_u32(m.root_eclass), &scratch.fh)));
     }
     root_sigs.sort_unstable();
-    (h128(&root_sigs), colors, capped)
+    (h128(&root_sigs), marginals, capped)
 }
 
-/// Pass 1: global per-variable colours. colour(v) fingerprints v's root-anchored
-/// value distribution, read column-by-column off the stored factors (no
+/// Pass 1: global per-variable marginals. marginal(v) is a fingerprint of v's
+/// *marginal* value distribution — its root-anchored values with every other
+/// variable projected out — read column-by-column off the stored factors (no
 /// cartesian product, no HashMap). Corresponding variables across a single
-/// global permutation get equal colours.
-pub(super) fn compute_colors(matches: &[MatchAtEClass], arity: usize) -> Vec<u64> {
+/// global permutation get equal marginals.
+pub(super) fn compute_marginals(matches: &[MatchAtEClass], arity: usize) -> Vec<u64> {
     let mut buckets: Vec<Vec<u64>> = vec![Vec::new(); arity];
     let mut col: Vec<u32> = Vec::new();
     for m in matches {
@@ -107,7 +108,7 @@ pub(super) fn compute_colors(matches: &[MatchAtEClass], arity: usize) -> Vec<u64
         .iter_mut()
         .map(|b| {
             b.sort_unstable();
-            h64(SALT_COLOR, b)
+            h64(SALT_MARGINAL, b)
         })
         .collect()
 }
@@ -139,33 +140,33 @@ fn column_hash(f: &Factor, ci: usize, root: u32, col: &mut Vec<u32>) -> u64 {
 }
 
 /// Canonical 64-bit hash of one factor (pass 2): invariant to permuting columns
-/// within equal-colour groups. Columns are ordered by colour; equal colours form
+/// within equal-marginal groups. Columns are ordered by marginal; equal marginals form
 /// tie-groups whose within-group permutations are brute-forced to the canonical
 /// (smallest) sorted row-hash list. Sets `*capped` and falls back to the plain
-/// colour order if a tie-group exceeds [`TIE_PERM_CAP`].
+/// marginal order if a tie-group exceeds [`TIE_PERM_CAP`].
 ///
 /// The canonical matrix is encoded by hashing each reordered row to a `u64`,
 /// sorting those, and hashing the list — order-invariant over rows and far
 /// cheaper than allocating and lex-sorting a `Vec<Vec<u32>>` (the sort is over
 /// scalars). Works for any column count.
-fn factor_hash(f: &Factor, colors: &[u64], scratch: &mut FootprintScratch, capped: &mut bool) -> u64 {
+fn factor_hash(f: &Factor, marginals: &[u64], scratch: &mut FootprintScratch, capped: &mut bool) -> u64 {
     let n = f.slots.len();
     scratch.order.clear();
     scratch.order.extend(0..n);
-    scratch.order.sort_by_key(|&p| colors[f.slots[p]]);
-    scratch.col_colors.clear();
-    scratch.col_colors.extend(scratch.order.iter().map(|&p| colors[f.slots[p]]));
+    scratch.order.sort_by_key(|&p| marginals[f.slots[p]]);
+    scratch.col_marginals.clear();
+    scratch.col_marginals.extend(scratch.order.iter().map(|&p| marginals[f.slots[p]]));
 
     let mut h = FxHasher::default();
     SALT_FACTOR.hash(&mut h);
-    scratch.col_colors.hash(&mut h);
+    scratch.col_marginals.hash(&mut h);
 
-    // Maximal equal-colour runs of length ≥ 2 are the tie-groups to permute.
+    // Maximal equal-marginal runs of length ≥ 2 are the tie-groups to permute.
     scratch.runs.clear();
     let mut i = 0;
-    while i < scratch.col_colors.len() {
+    while i < scratch.col_marginals.len() {
         let mut j = i + 1;
-        while j < scratch.col_colors.len() && scratch.col_colors[j] == scratch.col_colors[i] {
+        while j < scratch.col_marginals.len() && scratch.col_marginals[j] == scratch.col_marginals[i] {
             j += 1;
         }
         if j - i >= 2 {
@@ -175,7 +176,7 @@ fn factor_hash(f: &Factor, colors: &[u64], scratch: &mut FootprintScratch, cappe
     }
 
     if scratch.runs.is_empty() {
-        // No ties: the colour-sorted order is the single canonical one.
+        // No ties: the marginal-sorted order is the single canonical one.
         row_hashes(&mut scratch.keys, f, &scratch.order);
         scratch.keys.hash(&mut h);
         return h.finish();

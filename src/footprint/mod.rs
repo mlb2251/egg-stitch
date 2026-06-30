@@ -15,8 +15,8 @@
 //!
 //! The signature is computed straight off the *stored* factored match set (never
 //! the materialised cartesian product) in two passes: (1) give each variable a
-//! global *colour* from its root-anchored value projection so corresponding
-//! variables across permuted candidates get equal colours; (2) hash each factor
+//! global *marginal* from its root-anchored value projection so corresponding
+//! variables across permuted candidates get equal marginals; (2) hash each factor
 //! as a unit in a column-permutation-canonical way (so within-root cross-column
 //! correlation is preserved — what a per-column scheme would lose) and combine
 //! over factors/roots as sorted multisets into a 128-bit signature.
