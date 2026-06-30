@@ -1,7 +1,7 @@
 //! Exact footprint equivalence, used by check_slow.
 
 use super::signature::compute_colors;
-use super::{factorial, heap_permute, id_u32};
+use super::{heap_permute, id_u32};
 use crate::matching::MatchAtEClass;
 use rustc_hash::FxHashMap;
 
