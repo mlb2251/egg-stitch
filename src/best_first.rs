@@ -6,6 +6,7 @@ use std::collections::BinaryHeap;
 use std::time::{Duration, Instant};
 
 use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, compute_cost_and_select};
+use crate::footprint::FootprintTracker;
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::search::{SearchState, SeenTracker, SharedSearchData, SuccessorEnum, setup_search};
@@ -158,6 +159,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     // insertion order breaks remaining ties to stay deterministic.
     let mut heap: BinaryHeap<Reverse<((usize, usize), usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
+    let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
 
     nodes.push(Node {
         state: initial_state.clone(),
@@ -168,6 +170,11 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     heap.push(Reverse((initial_prio, 0)));
     if let Some(s) = seen.as_mut() {
         s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.frozen_mask());
+    }
+    if let Some(fp) = footprints.as_mut() {
+        // The initial state is node 0; a deferred representative re-reads its
+        // match set by index from the (append-only) node array.
+        fp.check_state(&initial_state, &shared, 0, &|i| &nodes[i].state.matches[..]);
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -276,6 +283,15 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 PruneResult::Disabled => None,
             };
 
+            // Placed last as it is very expensive. `nodes.len()` is the index this
+            // child will occupy (it is pushed unconditionally below if it survives),
+            // letting a deferred representative re-read its match set on a collision.
+            if let Some(fp) = footprints.as_mut()
+                && fp.check_state(&child_state, &shared, nodes.len(), &|i| &nodes[i].state.matches[..])
+            {
+                continue;
+            }
+
             let cost_t = Instant::now();
             // Capture the selection here so updates to `best` can stash it
             // without re-running the optimisation in `multiple_step_search`.
@@ -370,6 +386,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let (seen_len, seen_hits, seen_secs) = seen.as_ref().map_or((0, 0, 0.0), |s| (s.len(), s.hits, s.time.as_secs_f64()));
     println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
     println!("{} {} {}", "seen-set hits:".dimmed(), seen_hits.to_string().bold(), format!("(time: {:.3}s)", seen_secs).dimmed());
+    let (fp_len, fp_hits, fp_skips, fp_capped, fp_secs) = footprints.as_ref().map_or((0, 0, 0, 0, 0.0), |f| (f.len(), f.hits, f.proxy_skips, f.capped, f.time.as_secs_f64()));
+    println!("{} {}", "footprint-set size:".dimmed(), fp_len.to_string().bold());
+    println!("{} {} {}", "footprint-set hits:".dimmed(), fp_hits.to_string().bold(), format!("(proxy-skips: {}, capped: {}, time: {:.3}s)", fp_skips, fp_capped, fp_secs).dimmed());
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
