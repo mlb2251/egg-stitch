@@ -195,9 +195,13 @@ fn frozen_marginals(frozen: &[bool], marginals: &[u64]) -> Vec<u64> {
 /// dominates the newcomer on *both* axes: its frozen marginals are a sub-multiset
 /// of `fc` (at least as flexible — successors already reachable) **and** its
 /// pattern size is `≤ size` (at least as cheap — `best` not worse). Otherwise
-/// keep, and fold the newcomer's (more-flexible) frozen set and (smaller) size
-/// into the entry. Footprint-equal patterns differ only in definition size, so
-/// the size guard ensures a strictly smaller equivalent is never pruned away.
+/// keep, and refold the entry onto this (now kept) candidate: adopt its frozen
+/// set and the smaller of the two sizes. The newcomer is not necessarily more
+/// flexible — but it *is* a retained candidate, so recording its frozen set keeps
+/// the entry pinned to something actually reachable (sound; at worst it weakens a
+/// future subsumption). Footprint-equal patterns differ only in definition size,
+/// so keeping the smaller size ensures a strictly smaller equivalent is never
+/// pruned away.
 fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>, usize, usize)>, sig: u128, fc: Vec<u64>, size: usize, id: usize) -> bool {
     match bucket.iter_mut().find(|(s, ..)| *s == sig) {
         Some(entry) if submultiset(&entry.1, &fc) && entry.2 <= size => true,

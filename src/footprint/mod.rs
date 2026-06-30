@@ -44,11 +44,6 @@ fn id_u32(id: egg::Id) -> u32 {
     usize::from(id) as u32
 }
 
-/// `n!` (callers cap first, so no overflow concern in practice).
-fn factorial(n: usize) -> usize {
-    (1..=n).product::<usize>().max(1)
-}
-
 /// Heap's algorithm over `perm[start..start+len]`, calling `emit` once per
 /// permutation (the rest of `perm` is left untouched).
 fn heap_permute(perm: &mut Vec<usize>, start: usize, len: usize, emit: &mut dyn FnMut(&mut Vec<usize>)) {

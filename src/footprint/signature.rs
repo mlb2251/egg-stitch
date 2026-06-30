@@ -1,4 +1,4 @@
-use super::{factorial, heap_permute, id_u32};
+use super::{heap_permute, id_u32};
 use crate::factor::Factor;
 use crate::hashing::{h64, h128};
 use crate::matching::MatchAtEClass;
@@ -173,9 +173,8 @@ fn factor_hash(f: &Factor, marginals: &[u64], scratch: &mut FootprintScratch, ca
     // Tie-group(s): canonical = the smallest sorted row-hash list over within-
     // group permutations. Enumerated in place (Heap's algorithm into `perm`), so
     // no per-permutation allocation. Bail to the plain order past the cap.
-    let total = scratch.runs.iter().try_fold(1usize, |acc, &(_, l)| acc.checked_mul(factorial(l)));
     let mut best: Option<u64> = None;
-    if total.is_some_and(|t| t <= TIE_PERM_CAP) {
+    if tie_perms_within_cap(&scratch.runs) {
         scratch.perm.clear();
         scratch.perm.extend_from_slice(&scratch.order);
         permute_runs(&mut scratch.perm, &scratch.runs, 0, f, &mut scratch.keys, &mut best);
@@ -186,6 +185,23 @@ fn factor_hash(f: &Factor, marginals: &[u64], scratch: &mut FootprintScratch, ca
     }
     best.expect("≥1 ordering").hash(&mut h);
     h.finish()
+}
+
+/// Whether the within-tie-group column permutations number at most [`TIE_PERM_CAP`].
+/// The count is `∏ len!` over `runs`; we accumulate it incrementally (multiplying
+/// in each factor `2..=len`) and bail the instant it exceeds the cap, so a large
+/// run can never overflow `usize` — the cap is enforced before the product grows.
+fn tie_perms_within_cap(runs: &[(usize, usize)]) -> bool {
+    let mut total = 1usize;
+    for &(_, len) in runs {
+        for k in 2..=len {
+            total *= k;
+            if total > TIE_PERM_CAP {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// Enumerates every column ordering reachable by permuting within each tie-run of
