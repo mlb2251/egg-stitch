@@ -6,26 +6,22 @@
 use super::equivalence::footprint_equivalent;
 use super::id_u32;
 use super::signature::compute;
+use crate::cost::compute_pattern_size;
 use crate::hashing::{h64, mix64};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::matching::MatchAtEClass;
-use crate::search::SearchState;
+use crate::search::{SearchState, SharedSearchData};
 use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
 
 #[cfg(test)]
 use super::signature::{Footprint, footprint_of};
 
-/// Salt for the cheap proxy hash, domain-separated from the signature's salts so
-/// a proxy can't alias a column/marginal/factor/root hash.
+/// Salt for the cheap proxy hash.
 const SALT_PROXY: u64 = 0x9001_9001;
 
 /// A cheap, permutation-invariant *proxy* for a candidate's footprint: a hash of
-/// `(arity, num_matches, ⊕ over matches of mix(root | num_substs<<32))`. It
-/// depends only on quantities the full signature also quotients invariant (root
-/// ids, per-root subst counts, arity, match count) and never on variable identity
-/// or order, so **footprint-equal ⇒ equal proxy**. One `mix64` per match, no
-/// per-factor/row work — far cheaper than [`compute`].
+/// `(arity, num_matches, sum over matches of (root, num_substs))`
 fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
     let mut acc: u64 = 0;
     for m in matches {
@@ -105,14 +101,16 @@ impl FootprintTracker {
         self.buckets.is_empty()
     }
 
-    /// Dedupes `state` at `frozen`, with `size = compute_pattern_size(pattern)`.
-    /// `id` is the node index this candidate will occupy (so a deferred
-    /// representative can re-read its match set later), and `resolve` maps a node
-    /// index back to its stored match set. Returns `true` (skip) on a dominated
-    /// repeat.
-    pub fn check_state<'n, F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, frozen: &[bool], size: usize, id: usize, check_slow: bool, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
+    /// Dedupes `state` against everything seen so far. The frozen mask, pattern
+    /// `size`, and `check_slow` flag are derived from `state` and `shared`. `id` is
+    /// the node index this candidate will occupy (so a deferred representative can
+    /// re-read its match set later), and `resolve` maps a node index back to its
+    /// stored match set. Returns `true` (skip) on a dominated repeat.
+    pub fn check_state<'n, F: LanguageFamily, O: StitchOp>(&mut self, state: &SearchState<F, O>, shared: &SharedSearchData<F, O>, id: usize, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
         let t = Instant::now();
-        let skip = self.check_core(&state.matches, state.pattern.vars.len(), frozen, size, id, check_slow, resolve);
+        let frozen = state.pattern.frozen_mask();
+        let size = compute_pattern_size(&state.pattern, &shared.egraph.analysis.weights);
+        let skip = self.check_core(&state.matches, state.pattern.vars.len(), &frozen, size, id, shared.check_slow, resolve);
         self.time += t.elapsed();
         skip
     }
