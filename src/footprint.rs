@@ -66,38 +66,54 @@ pub struct Footprint {
     pub capped: bool,
 }
 
-/// Computes the footprint of a search state.
-pub fn footprint<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>) -> Footprint {
-    footprint_of(&state.matches, state.pattern.vars.len())
+/// Footprint of raw match data over `arity` slots. Test-only entry point that
+/// exercises [`compute`] without a full e-graph.
+#[cfg(test)]
+fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint {
+    let mut scratch = FootprintScratch::default();
+    let (sig, colors, capped) = compute(matches, arity, &mut scratch);
+    Footprint { sig, colors, capped }
 }
 
-/// Footprint of raw match data over `arity` slots. Split out for unit testing
-/// without a full e-graph.
-fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint {
-    let (sig, colors, capped) = compute(matches, arity);
-    Footprint { sig, colors, capped }
+/// Reusable scratch buffers for the pass-2 signature computation, so a
+/// candidate's factor loop allocates nothing on the hot path. Held across
+/// candidates by [`FootprintTracker`]; the buffers are small and same-sized, so
+/// reuse keeps each `compute` allocation-free after the first.
+#[derive(Default)]
+struct FootprintScratch {
+    /// Per-root factor hashes, sorted then folded into the root signature.
+    fh: Vec<u64>,
+    /// Column indices of a factor, sorted by colour.
+    order: Vec<usize>,
+    /// Colour of each column in `order`.
+    col_colors: Vec<u64>,
+    /// Working column permutation for the tie-group brute force.
+    perm: Vec<usize>,
+    /// Maximal equal-colour runs `(start, len)` with `len ≥ 2`.
+    runs: Vec<(usize, usize)>,
+    /// Per-row hash keys for the factor being hashed.
+    keys: Vec<u64>,
 }
 
 /// Core signature computation. Returns `(signature, per-variable colours,
 /// capped)`, where `capped` flags a tie-group that exceeded [`TIE_PERM_CAP`].
-/// Buffers are reused across the inner factor loops but allocated per call —
-/// they're small and same-sized, so the allocator serves them essentially free.
-fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
+/// `scratch`'s buffers are reused across factors and across candidates.
+fn compute(matches: &[MatchAtEClass], arity: usize, scratch: &mut FootprintScratch) -> (u128, Vec<u64>, bool) {
     // Pass 1: global per-variable colours.
     let colors = compute_colors(matches, arity);
 
     // Pass 2: hash each factor canonically, combine per root then over roots as
     // sorted multisets.
     let mut capped = false;
-    let (mut fh, mut order, mut col_colors, mut perm, mut runs, mut keys) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut root_sigs: Vec<u64> = Vec::with_capacity(matches.len());
     for m in matches {
-        fh.clear();
+        scratch.fh.clear();
         for f in &m.factors {
-            fh.push(factor_hash(f, &colors, &mut order, &mut col_colors, &mut perm, &mut runs, &mut keys, &mut capped));
+            let fh = factor_hash(f, &colors, scratch, &mut capped);
+            scratch.fh.push(fh);
         }
-        fh.sort_unstable();
-        root_sigs.push(h64(SALT_ROOT, &(id_u32(m.root_eclass), &fh)));
+        scratch.fh.sort_unstable();
+        root_sigs.push(h64(SALT_ROOT, &(id_u32(m.root_eclass), &scratch.fh)));
     }
     root_sigs.sort_unstable();
     (h128(&root_sigs), colors, capped)
@@ -263,53 +279,52 @@ fn column_hash(f: &Factor, ci: usize, root: u32, col: &mut Vec<u32>) -> u64 {
 /// sorting those, and hashing the list — order-invariant over rows and far
 /// cheaper than allocating and lex-sorting a `Vec<Vec<u32>>` (the sort is over
 /// scalars). Works for any column count.
-#[allow(clippy::too_many_arguments)]
-fn factor_hash(f: &Factor, colors: &[u64], order: &mut Vec<usize>, col_colors: &mut Vec<u64>, perm: &mut Vec<usize>, runs: &mut Vec<(usize, usize)>, keys: &mut Vec<u64>, capped: &mut bool) -> u64 {
+fn factor_hash(f: &Factor, colors: &[u64], scratch: &mut FootprintScratch, capped: &mut bool) -> u64 {
     let n = f.slots.len();
-    order.clear();
-    order.extend(0..n);
-    order.sort_by_key(|&p| colors[f.slots[p]]);
-    col_colors.clear();
-    col_colors.extend(order.iter().map(|&p| colors[f.slots[p]]));
+    scratch.order.clear();
+    scratch.order.extend(0..n);
+    scratch.order.sort_by_key(|&p| colors[f.slots[p]]);
+    scratch.col_colors.clear();
+    scratch.col_colors.extend(scratch.order.iter().map(|&p| colors[f.slots[p]]));
 
     let mut h = FxHasher::default();
     SALT_FACTOR.hash(&mut h);
-    col_colors.hash(&mut h);
+    scratch.col_colors.hash(&mut h);
 
     // Maximal equal-colour runs of length ≥ 2 are the tie-groups to permute.
-    runs.clear();
+    scratch.runs.clear();
     let mut i = 0;
-    while i < col_colors.len() {
+    while i < scratch.col_colors.len() {
         let mut j = i + 1;
-        while j < col_colors.len() && col_colors[j] == col_colors[i] {
+        while j < scratch.col_colors.len() && scratch.col_colors[j] == scratch.col_colors[i] {
             j += 1;
         }
         if j - i >= 2 {
-            runs.push((i, j - i));
+            scratch.runs.push((i, j - i));
         }
         i = j;
     }
 
-    if runs.is_empty() {
+    if scratch.runs.is_empty() {
         // No ties: the colour-sorted order is the single canonical one.
-        row_hashes(keys, f, order);
-        keys.hash(&mut h);
+        row_hashes(&mut scratch.keys, f, &scratch.order);
+        scratch.keys.hash(&mut h);
         return h.finish();
     }
 
     // Tie-group(s): canonical = the smallest sorted row-hash list over within-
     // group permutations. Enumerated in place (Heap's algorithm into `perm`), so
     // no per-permutation allocation. Bail to the plain order past the cap.
-    let total = runs.iter().try_fold(1usize, |acc, &(_, l)| acc.checked_mul(factorial(l)));
+    let total = scratch.runs.iter().try_fold(1usize, |acc, &(_, l)| acc.checked_mul(factorial(l)));
     let mut best: Option<u64> = None;
     if total.is_some_and(|t| t <= TIE_PERM_CAP) {
-        perm.clear();
-        perm.extend_from_slice(order);
-        permute_runs(perm, runs, 0, f, keys, &mut best);
+        scratch.perm.clear();
+        scratch.perm.extend_from_slice(&scratch.order);
+        permute_runs(&mut scratch.perm, &scratch.runs, 0, f, &mut scratch.keys, &mut best);
     } else {
         *capped = true;
-        row_hashes(keys, f, order);
-        best = Some(hash_list(keys));
+        row_hashes(&mut scratch.keys, f, &scratch.order);
+        best = Some(hash_list(&scratch.keys));
     }
     best.expect("≥1 ordering").hash(&mut h);
     h.finish()
@@ -417,6 +432,8 @@ fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
 pub struct FootprintTracker {
     /// Per proxy: the bucket's deferred representative plus its materialised entries.
     buckets: FxHashMap<u64, Bucket>,
+    /// Signature-computation buffers, reused across candidates so the hot path allocates nothing.
+    scratch: FootprintScratch,
     pub hits: usize,
     /// Candidates kept via the unique-proxy fast path (full signatures avoided).
     pub proxy_skips: usize,
@@ -493,14 +510,14 @@ impl FootprintTracker {
         // First collision in this bucket: materialise the deferred representative
         // from its retained match set before comparing the newcomer against it.
         if let Some(rep) = rep {
-            let (rsig, rcolors, rcapped) = compute(resolve(rep.id), rep.frozen.len());
+            let (rsig, rcolors, rcapped) = compute(resolve(rep.id), rep.frozen.len(), &mut self.scratch);
             if rcapped {
                 self.capped += 1;
             }
             let rfc = frozen_colors(&rep.frozen, &rcolors);
             self.buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size, rep.id));
         }
-        let (sig, colors, capped) = compute(matches, arity);
+        let (sig, colors, capped) = compute(matches, arity, &mut self.scratch);
         if capped {
             self.capped += 1;
         }
