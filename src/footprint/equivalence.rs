@@ -22,20 +22,11 @@ pub(super) fn footprint_equivalent(a: &[MatchAtEClass], b: &[MatchAtEClass], ari
         return false;
     }
     let (ca, cb) = (compute_colors(a, arity), compute_colors(b, arity));
-    let mut groups: FxHashMap<u64, (Vec<usize>, Vec<usize>)> = FxHashMap::default();
-    for (v, &c) in ca.iter().enumerate() {
-        groups.entry(c).or_default().0.push(v);
-    }
-    for (v, &c) in cb.iter().enumerate() {
-        match groups.get_mut(&c) {
-            Some(g) => g.1.push(v),
-            None => return false,
-        }
-    }
-    let groups: Vec<(Vec<usize>, Vec<usize>)> = groups.into_values().collect();
-    if groups.iter().any(|(ga, gb)| ga.len() != gb.len()) {
+    // A valid π maps each a-column to a b-column of equal colour; mismatched
+    // colour multisets ⇒ no such π.
+    let Some(groups) = pair_columns_by_color(&ca, &cb) else {
         return false;
-    }
+    };
     // Bail (can't disprove) when the permutation search is too large.
     let total = groups.iter().try_fold(1usize, |acc, (ga, _)| acc.checked_mul(factorial(ga.len())));
     if total.is_none_or(|t| t > SLOW_PERM_CAP) {
@@ -44,6 +35,22 @@ pub(super) fn footprint_equivalent(a: &[MatchAtEClass], b: &[MatchAtEClass], ari
     let canon_b = canonicalize(b, &(0..arity).collect::<Vec<_>>());
     let mut perm = vec![0usize; arity];
     enumerate_perms(&groups, 0, &mut perm, &mut |perm| canonicalize(a, perm) == canon_b)
+}
+
+/// Pairs the two match sets' columns by colour into `(a-columns, b-columns)` per
+/// colour — the colour groups a global colour-preserving permutation must map
+/// within. Returns `None` when no such permutation can exist: a colour present on
+/// one side but not the other, or a colour whose two groups differ in size.
+fn pair_columns_by_color(ca: &[u64], cb: &[u64]) -> Option<Vec<(Vec<usize>, Vec<usize>)>> {
+    let mut groups: FxHashMap<u64, (Vec<usize>, Vec<usize>)> = FxHashMap::default();
+    for (v, &c) in ca.iter().enumerate() {
+        groups.entry(c).or_default().0.push(v);
+    }
+    for (v, &c) in cb.iter().enumerate() {
+        groups.get_mut(&c)?.1.push(v);
+    }
+    let groups: Vec<(Vec<usize>, Vec<usize>)> = groups.into_values().collect();
+    groups.iter().all(|(ga, gb)| ga.len() == gb.len()).then_some(groups)
 }
 
 /// Comparable canonical form of a match set under column relabelling `perm`
