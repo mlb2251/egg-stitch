@@ -59,7 +59,7 @@ fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
 #[derive(Default)]
 pub struct FootprintTracker {
     /// Per proxy: the bucket's deferred representative plus its materialised entries.
-    buckets: FxHashMap<u64, Bucket>,
+    proxy_buckets: FxHashMap<u64, Bucket>,
     pub hits: usize,
     /// Candidates kept via the unique-proxy fast path (full signatures avoided).
     pub proxy_skips: usize,
@@ -95,10 +95,10 @@ impl FootprintTracker {
     }
     /// Number of distinct proxy buckets recorded.
     pub fn len(&self) -> usize {
-        self.buckets.len()
+        self.proxy_buckets.len()
     }
     pub fn is_empty(&self) -> bool {
-        self.buckets.is_empty()
+        self.proxy_buckets.is_empty()
     }
 
     /// Dedupes `state` against everything seen so far. The frozen mask, pattern
@@ -125,7 +125,7 @@ impl FootprintTracker {
     fn check_core<'n>(&mut self, matches: &[MatchAtEClass], arity: usize, frozen: &[bool], size: usize, id: usize, check_slow: bool, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
         let proxy = cheap_proxy_of(matches, arity);
         let rep = {
-            let bucket = self.buckets.entry(proxy).or_default();
+            let bucket = self.proxy_buckets.entry(proxy).or_default();
             // Fresh proxy: defer the signature, keeping only a handle to the
             // candidate so its duplicates can still be caught later.
             if bucket.rep.is_none() && bucket.entries.is_empty() {
@@ -143,7 +143,7 @@ impl FootprintTracker {
                 self.capped += 1;
             }
             let rfc = frozen_marginals(&rep.frozen, &rmarginals);
-            self.buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size, rep.id));
+            self.proxy_buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size, rep.id));
         }
         let (sig, marginals, capped) = compute(matches, arity);
         if capped {
@@ -153,14 +153,14 @@ impl FootprintTracker {
         // equivalence. Re-read each same-sig entry's match set and confirm an
         // exact column-permutation witness before any dedup decision rests on it.
         if check_slow {
-            for e in &self.buckets.get(&proxy).expect("present").entries {
+            for e in &self.proxy_buckets.get(&proxy).expect("present").entries {
                 if e.0 == sig {
                     assert!(footprint_equivalent(resolve(e.3), matches, arity), "footprint signature collision: distinct match sets share signature {sig:#034x}");
                 }
             }
         }
         let fc = frozen_marginals(frozen, &marginals);
-        let skip = dedup_in_bucket(&mut self.buckets.get_mut(&proxy).expect("present").entries, sig, fc, size, id);
+        let skip = dedup_in_bucket(&mut self.proxy_buckets.get_mut(&proxy).expect("present").entries, sig, fc, size, id);
         if skip {
             self.hits += 1;
         }
@@ -175,7 +175,7 @@ impl FootprintTracker {
             self.capped += 1;
         }
         let fc = frozen_marginals(frozen, &fp.marginals);
-        let skip = dedup_in_bucket(&mut self.buckets.entry(0).or_default().entries, fp.sig, fc, size, 0);
+        let skip = dedup_in_bucket(&mut self.proxy_buckets.entry(0).or_default().entries, fp.sig, fc, size, 0);
         if skip {
             self.hits += 1;
         }
