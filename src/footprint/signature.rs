@@ -1,7 +1,3 @@
-//! The two-pass permutation-invariant signature `compute` (see the [module
-//! docs](super)): global per-variable marginals, then canonical per-factor hashing
-//! combined over factors and roots into a 128-bit signature.
-
 use super::{factorial, heap_permute, id_u32};
 use crate::factor::Factor;
 use crate::hashing::{h64, h128};
@@ -41,8 +37,7 @@ pub(super) fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint
 
 /// Scratch buffers for the pass-2 signature computation, allocated once per
 /// [`compute`] call and reused across that candidate's factors so the factor loop
-/// doesn't reallocate. (Reusing them across *candidates* too was measured to save
-/// nothing, so each `compute` just makes its own.)
+/// doesn't reallocate.
 #[derive(Default)]
 struct FootprintScratch {
     /// Per-root factor hashes, sorted then folded into the root signature.
