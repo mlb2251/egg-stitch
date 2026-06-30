@@ -1,0 +1,288 @@
+//! The two-pass permutation-invariant signature `compute` (see the [module
+//! docs](super)): global per-variable colours, then canonical per-factor hashing
+//! combined over factors and roots into a 128-bit signature. Runs on the
+//! reusable [`FootprintScratch`] buffers so the hot path allocates nothing.
+
+use super::{factorial, heap_permute, id_u32};
+use crate::factor::Factor;
+use crate::hashing::{h64, h128};
+use crate::matching::MatchAtEClass;
+use rustc_hash::FxHasher;
+use std::hash::{Hash, Hasher};
+
+/// Max within-colour-group permutations brute-forced per factor when
+/// canonicalising its column order (pass 2). Tie-groups this large only arise
+/// under wide genuine symmetry (many interchangeable args binding identical
+/// value sets); beyond the cap we fall back to a plain colour-sorted order for
+/// that factor — which can over-merge it — and surface the count as `capped`.
+const TIE_PERM_CAP: usize = 720; // 6!
+
+// Domain-separation salts: a distinct tag at each hash position so structurally
+// different inputs (a column vs a colour vs a factor vs a root) can't alias even
+// if their byte streams coincide.
+const SALT_COLUMN: u64 = 0xC01C;
+const SALT_COLOR: u64 = 0x0C01_1EC7;
+const SALT_FACTOR: u64 = 0xFAC2;
+const SALT_ROOT: u64 = 0x2007;
+const SALT_ROW_LIST: u64 = 0x0072_6F77;
+
+/// The permutation-invariant footprint of a candidate's match set.
+#[cfg(test)]
+pub(super) struct Footprint {
+    pub(super) sig: u128,
+    pub(super) colors: Vec<u64>,
+    pub(super) capped: bool,
+}
+
+/// Footprint of raw match data over `arity` slots. Test-only entry point that
+/// exercises [`compute`] without a full e-graph.
+#[cfg(test)]
+pub(super) fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint {
+    let mut scratch = FootprintScratch::default();
+    let (sig, colors, capped) = compute(matches, arity, &mut scratch);
+    Footprint { sig, colors, capped }
+}
+
+/// Reusable scratch buffers for the pass-2 signature computation, so a
+/// candidate's factor loop allocates nothing on the hot path. Held across
+/// candidates by [`FootprintTracker`](super::FootprintTracker); the buffers are
+/// small and same-sized, so reuse keeps each `compute` allocation-free after the
+/// first.
+#[derive(Default)]
+pub(super) struct FootprintScratch {
+    /// Per-root factor hashes, sorted then folded into the root signature.
+    fh: Vec<u64>,
+    /// Column indices of a factor, sorted by colour.
+    order: Vec<usize>,
+    /// Colour of each column in `order`.
+    col_colors: Vec<u64>,
+    /// Working column permutation for the tie-group brute force.
+    perm: Vec<usize>,
+    /// Maximal equal-colour runs `(start, len)` with `len ≥ 2`.
+    runs: Vec<(usize, usize)>,
+    /// Per-row hash keys for the factor being hashed.
+    keys: Vec<u64>,
+}
+
+/// Core signature computation. Returns `(signature, per-variable colours,
+/// capped)`, where `capped` flags a tie-group that exceeded [`TIE_PERM_CAP`].
+/// `scratch`'s buffers are reused across factors and across candidates.
+pub(super) fn compute(matches: &[MatchAtEClass], arity: usize, scratch: &mut FootprintScratch) -> (u128, Vec<u64>, bool) {
+    // Pass 1: global per-variable colours.
+    let colors = compute_colors(matches, arity);
+
+    // Pass 2: hash each factor canonically, combine per root then over roots as
+    // sorted multisets.
+    let mut capped = false;
+    let mut root_sigs: Vec<u64> = Vec::with_capacity(matches.len());
+    for m in matches {
+        scratch.fh.clear();
+        for f in &m.factors {
+            let fh = factor_hash(f, &colors, scratch, &mut capped);
+            scratch.fh.push(fh);
+        }
+        scratch.fh.sort_unstable();
+        root_sigs.push(h64(SALT_ROOT, &(id_u32(m.root_eclass), &scratch.fh)));
+    }
+    root_sigs.sort_unstable();
+    (h128(&root_sigs), colors, capped)
+}
+
+/// Pass 1: global per-variable colours. colour(v) fingerprints v's root-anchored
+/// value distribution, read column-by-column off the stored factors (no
+/// cartesian product, no HashMap). Corresponding variables across a single
+/// global permutation get equal colours.
+pub(super) fn compute_colors(matches: &[MatchAtEClass], arity: usize) -> Vec<u64> {
+    let mut buckets: Vec<Vec<u64>> = vec![Vec::new(); arity];
+    let mut col: Vec<u32> = Vec::new();
+    for m in matches {
+        let root = id_u32(m.root_eclass);
+        for f in &m.factors {
+            for (ci, &slot) in f.slots.iter().enumerate() {
+                buckets[slot].push(column_hash(f, ci, root, &mut col));
+            }
+        }
+    }
+    buckets
+        .iter_mut()
+        .map(|b| {
+            b.sort_unstable();
+            h64(SALT_COLOR, b)
+        })
+        .collect()
+}
+
+/// Hash of column `ci` of `f` at `root` as a root-anchored value multiset. For a
+/// single-slot factor the rows are already the sorted, deduped column, so we hash
+/// them directly; otherwise we extract, sort, and run-length-hash the column.
+fn column_hash(f: &Factor, ci: usize, root: u32, col: &mut Vec<u32>) -> u64 {
+    if f.slots.len() == 1 {
+        return h64(SALT_COLUMN, &(root, &f.rows));
+    }
+    col.clear();
+    col.extend(f.rows.iter().map(|r| id_u32(r[ci])));
+    col.sort_unstable();
+    let mut h = FxHasher::default();
+    root.hash(&mut h);
+    let mut i = 0;
+    while i < col.len() {
+        let v = col[i];
+        let mut c = 1usize;
+        while i + c < col.len() && col[i + c] == v {
+            c += 1;
+        }
+        v.hash(&mut h);
+        c.hash(&mut h);
+        i += c;
+    }
+    h.finish()
+}
+
+/// Canonical 64-bit hash of one factor (pass 2): invariant to permuting columns
+/// within equal-colour groups. Columns are ordered by colour; equal colours form
+/// tie-groups whose within-group permutations are brute-forced to the canonical
+/// (smallest) sorted row-hash list. Sets `*capped` and falls back to the plain
+/// colour order if a tie-group exceeds [`TIE_PERM_CAP`].
+///
+/// The canonical matrix is encoded by hashing each reordered row to a `u64`,
+/// sorting those, and hashing the list — order-invariant over rows and far
+/// cheaper than allocating and lex-sorting a `Vec<Vec<u32>>` (the sort is over
+/// scalars). Works for any column count.
+fn factor_hash(f: &Factor, colors: &[u64], scratch: &mut FootprintScratch, capped: &mut bool) -> u64 {
+    let n = f.slots.len();
+    scratch.order.clear();
+    scratch.order.extend(0..n);
+    scratch.order.sort_by_key(|&p| colors[f.slots[p]]);
+    scratch.col_colors.clear();
+    scratch.col_colors.extend(scratch.order.iter().map(|&p| colors[f.slots[p]]));
+
+    let mut h = FxHasher::default();
+    SALT_FACTOR.hash(&mut h);
+    scratch.col_colors.hash(&mut h);
+
+    // Maximal equal-colour runs of length ≥ 2 are the tie-groups to permute.
+    scratch.runs.clear();
+    let mut i = 0;
+    while i < scratch.col_colors.len() {
+        let mut j = i + 1;
+        while j < scratch.col_colors.len() && scratch.col_colors[j] == scratch.col_colors[i] {
+            j += 1;
+        }
+        if j - i >= 2 {
+            scratch.runs.push((i, j - i));
+        }
+        i = j;
+    }
+
+    if scratch.runs.is_empty() {
+        // No ties: the colour-sorted order is the single canonical one.
+        row_hashes(&mut scratch.keys, f, &scratch.order);
+        scratch.keys.hash(&mut h);
+        return h.finish();
+    }
+
+    // Tie-group(s): canonical = the smallest sorted row-hash list over within-
+    // group permutations. Enumerated in place (Heap's algorithm into `perm`), so
+    // no per-permutation allocation. Bail to the plain order past the cap.
+    let total = scratch.runs.iter().try_fold(1usize, |acc, &(_, l)| acc.checked_mul(factorial(l)));
+    let mut best: Option<u64> = None;
+    if total.is_some_and(|t| t <= TIE_PERM_CAP) {
+        scratch.perm.clear();
+        scratch.perm.extend_from_slice(&scratch.order);
+        permute_runs(&mut scratch.perm, &scratch.runs, 0, f, &mut scratch.keys, &mut best);
+    } else {
+        *capped = true;
+        row_hashes(&mut scratch.keys, f, &scratch.order);
+        best = Some(hash_list(&scratch.keys));
+    }
+    best.expect("≥1 ordering").hash(&mut h);
+    h.finish()
+}
+
+/// Enumerates every column ordering reachable by permuting within each tie-run of
+/// `perm` (Heap's algorithm, in place), tracking the smallest per-ordering
+/// row-list hash in `best`. Fully reuses `keys` — no per-permutation allocation.
+/// (The min over orderings of `hash(sorted row-keys)` is itself permutation-
+/// canonical, so a scalar min suffices — no need to retain the winning list.)
+fn permute_runs(perm: &mut Vec<usize>, runs: &[(usize, usize)], ri: usize, f: &Factor, keys: &mut Vec<u64>, best: &mut Option<u64>) {
+    let Some(&(start, len)) = runs.get(ri) else {
+        // All runs placed: evaluate this full ordering.
+        row_hashes(keys, f, perm);
+        let hk = hash_list(keys);
+        if best.is_none_or(|b| hk < b) {
+            *best = Some(hk);
+        }
+        return;
+    };
+    heap_permute(perm, start, len, &mut |perm| permute_runs(perm, runs, ri + 1, f, keys, best));
+}
+
+/// Order-sensitive 64-bit hash of a sorted key list.
+fn hash_list(keys: &[u64]) -> u64 {
+    h64(SALT_ROW_LIST, keys)
+}
+
+/// Hashes each row of `f` (columns projected through `perm`) to a `u64` into
+/// `keys`, then sorts — an order-invariant fingerprint of the canonical matrix.
+/// `u64` is ample here: a factor holds at most a few dozen rows, so a row-key
+/// collision is negligible (the cross-candidate signature stays 128-bit).
+fn row_hashes(keys: &mut Vec<u64>, f: &Factor, perm: &[usize]) {
+    keys.clear();
+    keys.extend(f.rows.iter().map(|r| {
+        let mut h = FxHasher::default();
+        for &p in perm {
+            id_u32(r[p]).hash(&mut h);
+        }
+        h.finish()
+    }));
+    keys.sort_unstable();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::footprint::test_helpers::match_at;
+
+    /// `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)` over a commutative e-graph
+    /// match the same root binding the same args with the roles swapped — a
+    /// single global permutation — so footprints must coincide.
+    #[test]
+    fn commutative_swap_is_equal() {
+        let p1 = footprint_of(&[match_at(100, 2, vec![vec![10, 11]])], 2);
+        let p2 = footprint_of(&[match_at(100, 2, vec![vec![11, 10]])], 2);
+        assert_eq!(p1.sig, p2.sig);
+    }
+
+    /// Same per-column marginals but a different *joint* pairing must NOT merge.
+    #[test]
+    fn different_joint_is_distinct() {
+        let q1 = footprint_of(&[match_at(100, 2, vec![vec![10, 11], vec![12, 13]])], 2);
+        let q2 = footprint_of(&[match_at(100, 2, vec![vec![10, 13], vec![12, 11]])], 2);
+        assert_ne!(q1.sig, q2.sig);
+    }
+
+    /// A genuinely symmetric commutative match `{(a,b),(b,a)}` canonicalises
+    /// regardless of which subst comes first (tie-group brute force).
+    #[test]
+    fn symmetric_tie_canonicalises() {
+        let a = footprint_of(&[match_at(100, 2, vec![vec![10, 11], vec![11, 10]])], 2);
+        let b = footprint_of(&[match_at(100, 2, vec![vec![11, 10], vec![10, 11]])], 2);
+        assert_eq!(a.sig, b.sig);
+    }
+
+    /// Different roots ⇒ different footprint (root ids are literal anchors).
+    #[test]
+    fn root_is_anchored() {
+        let a = footprint_of(&[match_at(100, 2, vec![vec![10, 11]])], 2);
+        let b = footprint_of(&[match_at(200, 2, vec![vec![10, 11]])], 2);
+        assert_ne!(a.sig, b.sig);
+    }
+
+    /// Subst order within a root is irrelevant (rows are a set).
+    #[test]
+    fn subst_order_irrelevant() {
+        let a = footprint_of(&[match_at(100, 2, vec![vec![10, 11], vec![12, 13]])], 2);
+        let b = footprint_of(&[match_at(100, 2, vec![vec![12, 13], vec![10, 11]])], 2);
+        assert_eq!(a.sig, b.sig);
+    }
+}
