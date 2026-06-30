@@ -82,7 +82,7 @@ fn run_backend_steps(search: &str, input: &str, bf_steps: &str, extra_args: &[&s
     if search == "best-first" {
         cmd.args(["--num-steps", bf_steps]);
     } else {
-        cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
+        cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "100"]);
     }
     cmd.args(extra_args);
     let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));

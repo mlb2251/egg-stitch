@@ -11,16 +11,31 @@ use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-/// Inserts a freshly-expanded state into the parallel (states, mults) deduped-by-pattern
-/// buffer, either bumping the multiplicity of an existing group by `count` or pushing a new one.
-fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
+/// Inserts a freshly-expanded state into the parallel (states, mults, props)
+/// deduped-by-pattern buffer, accumulating into an existing group or pushing a new
+/// one.
+///
+/// Two quantities are accumulated per unique child pattern `t_j'`:
+/// * `mults[j] += count` — the realized child multiplicity `C_j'` (the number of
+///   particles that landed on `t_j'`, a multinomial outcome of the proposal
+///   sampling).
+/// * `props[j] += prop` — the proposal mass routed to `t_j'`,
+///   `Σ_l C_l · K_n(t_l, t_j')`, summed over every parent `t_l` (multiplicity `C_l`)
+///   that reaches it. This is the empirical proposal marginal (Del Moral, Doucet &
+///   Jasra 2006, §2.4, eq. 9) the optimal-backward-kernel weight divides by — see
+///   [`smc`] and [`SmcSearchData::reweight`].
+fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usize, prop: f64, states: &mut Vec<SearchState<F, O>>, mults: &mut Vec<usize>, props: &mut Vec<f64>, dedup: &mut FxHashMap<Pattern<F, O>, usize>) {
     match dedup.get(&s.pattern) {
-        Some(&idx) => mults[idx] += count,
+        Some(&idx) => {
+            mults[idx] += count;
+            props[idx] += prop;
+        }
         None => {
             let idx = states.len();
             dedup.insert(s.pattern.clone(), idx);
             states.push(s);
             mults.push(count);
+            props.push(prop);
         }
     }
 }
@@ -85,22 +100,31 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     /// for sampled actions via `apply_action`, avoiding the per-shape
     /// `clone + expand` work for successors that win zero samples. Children over
     /// the match-set cap are dropped. Resulting patterns are deduped globally
-    /// across groups, so the returned vec holds one entry per unique pattern.
+    /// across groups, so the returned vecs hold one entry per unique pattern.
     /// `dominance_hits` / `useless_inline_hits` accumulate the run-wide pruning
     /// stats reported at the end.
-    fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> Vec<SearchState<F, O>> {
+    ///
+    /// Returns `(states, mults, props)`: alongside each unique child `t_j'` it
+    /// reports the realized child multiplicity `C_j'` (`mults`) and the proposal
+    /// mass `Σ_l C_l · K_n(t_l, t_j')` (`props`) — the denominator the optimal-
+    /// backward-kernel weight in [`Self::reweight`] divides by.
+    fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> (Vec<SearchState<F, O>>, Vec<usize>, Vec<f64>) {
         let max_match_set = self.args.max_match_set;
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
-        // Per-pattern multiplicities, needed only to merge duplicate patterns
-        // during dedup; the merged counts aren't read after expansion (resample
-        // weights are per unique pattern, by cost).
+        // Per-unique-pattern child multiplicities `C_j'` (the multinomial outcome
+        // of the proposal sampling) and proposal masses `Σ_l C_l · K_n(t_l, t_j')`
+        // (the denominator the reweight divides by). Both accumulate across parents
+        // during dedup.
         let mut mults: Vec<usize> = Vec::new();
+        let mut props: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles {
             let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
+                    // Deterministic successor: K_n(t_l, t_j') = 1, so the proposal
+                    // mass routed here is C_l · 1 = mult.
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
+                        dedup_insert(child, mult, mult as f64, &mut expanded, &mut mults, &mut props, &mut dedup);
                     }
                     continue;
                 }
@@ -109,21 +133,30 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
                 SuccessorEnum::All { actions, .. } => actions,
             };
             if actions.is_empty() {
-                dedup_insert(state, mult, &mut expanded, &mut mults, &mut dedup);
+                // Terminal particle carried forward unchanged: K_n = 1.
+                dedup_insert(state, mult, mult as f64, &mut expanded, &mut mults, &mut props, &mut dedup);
                 continue;
             }
             let mut weights = action_weights_with_reuse_boost(&actions, self.args.boost_reuse_weight);
+            // `sample_counts` normalizes `weights` in place, so afterwards
+            // `weights[k]` holds the proposal kernel value K_n(t_l, t_j') for the
+            // action a_k leading to child `t_j'`.
             let counts = sample_counts(&mut weights, mult, self.rng);
-            for ((action, _), count) in actions.into_iter().zip(counts) {
+            for (((action, _), count), q) in actions.into_iter().zip(counts).zip(weights) {
                 if count > 0 {
                     let child = state.apply_action(&action, &self.shared, true, None);
                     if child.within_match_set_cap(max_match_set) {
-                        dedup_insert(child, count, &mut expanded, &mut mults, &mut dedup);
+                        // Proposal mass from this parent: C_l · K_n(t_l, t_j') =
+                        // mult · q. Accumulated independent of the realized `count`
+                        // so the reweight divides by the true proposal mass
+                        // `Σ_l C_l · K_n(t_l, t_j')`, not the realized-count
+                        // self-estimate (which would cancel the multiplicity).
+                        dedup_insert(child, count, mult as f64 * q, &mut expanded, &mut mults, &mut props, &mut dedup);
                     }
                 }
             }
         }
-        expanded
+        (expanded, mults, props)
     }
 
     /// Computes each expanded particle's cost, lower-bound-pruning where it can,
@@ -161,14 +194,21 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         (costs, pruned)
     }
 
-    /// Normalizes the dead mask + costs into a resampling distribution via
-    /// log-sum-exp. Each live particle gets un-normalized log-weight
-    /// `-cost/temperature` (`-inf` for dead/`pruned` particles); returns
-    /// probabilities summing to 1, or an all-zero vector if every particle is
-    /// dead (the caller treats that as "all particles died").
-    fn reweight(&self, costs: &[usize], pruned: &[bool]) -> Vec<f64> {
+    /// Normalizes the per-pattern weights `v(t_j')` into the resampling
+    /// distribution via log-sum-exp. `v(t_j')` is the deduplicated, optimal-
+    /// backward-kernel importance weight derived in [`smc`] (Del Moral, Doucet &
+    /// Jasra 2006, §3.3.1, Proposition 1, eq. 21):
+    /// `v(t_j') = C_j' · exp(-cost_j / T) / [Σ_l C_l K_n(t_l, t_j')]`, i.e. the
+    /// log-weight `ln(mults[j]) - cost_j/T - ln(props[j])`, where
+    /// `mults[j] = C_j'` is the realized child multiplicity and
+    /// `props[j] = Σ_l C_l K_n(t_l, t_j')` is the proposal mass routed to `t_j'`.
+    /// Dividing by that proposal mass is what keeps the cloud on the fixed target
+    /// `exp(-cost(x)/T)` rather than drifting with the proposal. Pruned particles
+    /// get `-inf`. Returns probabilities summing to 1, or an all-zero vector if
+    /// every particle is dead (the caller treats that as "all particles died").
+    fn reweight(&self, mults: &[usize], props: &[f64], costs: &[usize], pruned: &[bool]) -> Vec<f64> {
         let temperature = self.args.temperature;
-        let log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
+        let log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { (mults[i] as f64).ln() - (*c as f64) / temperature - props[i].ln() }).collect();
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
         if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] }
     }
@@ -233,11 +273,55 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     }
 }
 
-/// Runs SMC to find a pattern that minimizes compressed corpus size.
+/// Runs an SMC sampler to find a pattern that minimizes compressed corpus size.
 ///
-/// Particles are stored as `(SearchState, multiplicity)` pairs. After each
-/// expansion step, identical patterns are deduplicated and their counts merged,
-/// so cost computation runs once per unique pattern instead of once per particle.
+/// Follows the construction given  in https://www.stats.ox.ac.uk/~doucet/delmoral_doucet_jasra_sequentialmontecarlosamplersJRSSB.pdf
+///
+/// Specifically, we use 2.3.1(c) Equation 8; we wish to have π(x) ∝ exp(-cost(x)/T)
+///
+/// First, we provide an exposition without multiplicity:
+///
+/// At step n we hold N particles x_1, …, x_N. One step is expand → weight →
+/// resample.
+///
+/// Since we resample at every step, we can assume γ_n(x_i) ∝ η_n(x_i) for all n and i.
+///
+/// 1. Expand: Sample x_i' ∼ K_n(x_i, x_i') via the kernel
+/// 2. **Weight.** The unnormalized incremental importance weight (eq. 12) is
+///    ~w_n(x_i, x_i') = [γ_n(x_i') · L_{n-1}(x_i', x_i)] / [γ_{n-1}(x_i) · K_n(x_i, x_i')]
+///    where γ is the target distribution
+///    γ_n(x) = exp(-cost(x)/T)
+///    Taking the *optimal* backward kernel L_{n-1}^opt as defined by (eq. 21) as
+///    L_{n-1}(x_i', x_i) = [η_{n-1}(x_i) · K_n(x_i, x_i')] / η_n(x_i')
+///    ~w_n(x_i, x_i') = [γ_n(x_i') · η_{n-1}(x_i)] / [γ_{n-1}(x_i) · η_n(x_i')]
+///    = [γ_n(x_i') / η_n(x_i')] · [η_{n-1}(x_i) / γ_{n-1}(x_i)]
+///    the paper says that this gives us w_n(x_i') ∝ γ_n(x_i') / η_n(x_i')
+///
+///    Now, η_n(x') = η_{n-1} K_n (x') is the proposal marginal (eq. 9).
+///    η_n has no closed form, so we estimate it empirically as
+///    η_{n-1}^N K_n(x') = (1/N) Σ_k K_n(x_k, x') (the equation after eq. 9)
+///    This leads us to the final per-particle weight
+///    ~w_n(x_i') ∝ exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
+/// 3. **Resample.** Normalize to `α_i = ~w_n(x_i') / Σ_k ~w_n(x_k')` and draw N new
+///    particles ∝ α.
+///
+/// Now, accounting for multiplicity via deduplication:
+/// We want to make sure that w_n(x_i') ∝ exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
+/// is preserved. Let t_1...t_k be the deduplicated patterns, let S(j) = {i | x_i = t_j}
+/// be the set of particles that collapsed to t_j, and let C_j = |S(j)| be the realized multiplicity of t_j.
+/// Define the same for t_j'.
+///
+/// Then let v(t_j')
+///     = sum_{i in S'(j)} w_n(x_i')
+///     = sum_{i in S'(j)} exp(-cost(x_i')/T) / [Σ_k K_n(x_k, x_i')]
+///     = C_j' · exp(-cost(t_j')/T) / [Σ_l C_l K_n(t_l, t_j')]
+/// where C_j' = |S'(j)| is the child multiplicity (the Σ over S'(j) collapses to it
+/// since every term is equal) and C_l = |S(l)| is the parent multiplicity.
+///
+/// So the denominator term here can be computed by summing the proposal mass routed to t_j' from each parent t_l, weighted by the realized multiplicity C_l.
+///
+/// We further assume that K_n(t_l, t_j') = 0 for all transitions that are not realized in the sample, so we
+/// only accumulate over the parents that actually reached t_j'.
 pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
@@ -269,7 +353,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
 
     for step in 0..num_steps {
-        let expanded = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
+        let (expanded, mults, props) = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
 
         let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
 
@@ -305,7 +389,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             }
         }
 
-        let weights = search.reweight(&costs, &pruned);
+        let weights = search.reweight(&mults, &props, &costs, &pruned);
 
         if weights.iter().sum::<f64>() == 0.0 {
             steps_run = step + 1;
