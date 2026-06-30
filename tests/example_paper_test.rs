@@ -7,20 +7,21 @@
 //! plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
 //! ```
 //!
-//! Each program is a 3-level sum of *blocks*; block `k` pairs a shared anchor
-//! `k{1,2,3}` with a per-program value.
+//! Each program is a sum of two *blocks*; block `k` pairs a shared anchor
+//! `k{1,2}` with a per-program value, and the (arity-2) abstraction is the
+//! skeleton `(+ (+ k1 ?) (+ k2 ?))`.
 //!
-//! * `corpus_a.json` writes every block anchor-first, so all programs are
-//!   instances of one skeleton `(+ (+ k1 ?) (+ (+ k2 ?) (+ k3 ?)))` and a plain
-//!   *syntactic* (rule-free) search finds it.
+//! * `corpus_a.json` writes both blocks anchor-first, so all four programs are
+//!   instances of that skeleton and a plain *syntactic* (rule-free) search finds
+//!   it.
 //! * `corpus_b.json` is a size-minimal canonical form whose block orientations
 //!   are deliberately *inconsistent* across programs. egg's min-term extractor
 //!   breaks the `(+ P Q)` vs `(+ Q P)` tie by smaller child e-class id first, and
 //!   ids follow parse order, so a block `(+ k v)` extracts value-first iff `v`
 //!   was introduced before the anchor `k`. The first program is the
-//!   all-value-first one, so it introduces the shared values `e1,e2,e3` *before*
-//!   the anchors; later programs reuse `e_j` for a value-first block or a fresh
-//!   "late" value for an anchor-first block. The eight programs realize the eight
+//!   all-value-first one, so it introduces the shared values `e1,e2` *before* the
+//!   anchors; later programs reuse `e_j` for a value-first block or a fresh
+//!   "late" value for an anchor-first block. The four programs realize the four
 //!   distinct orientation patterns, so no consistent skeleton survives — and
 //!   crucially extracting the minimal term does not re-align them.
 //!
@@ -28,11 +29,11 @@
 //! corpus, is stuck with the scrambled B, while live commutativity re-aligns the
 //! blocks and recovers A's compression.
 //!
-//! Measured (best-first, `--max-arity 3`):
+//! Measured (best-first, `--max-arity 2`):
 //! | corpus | rule-free | at-start | live |
 //! |--------|-----------|----------|------|
-//! | A      | ~2.0x     | ~1.4x    | ~2.0x |
-//! | B      | ~1.1x     | ~1.1x    | ~2.0x |
+//! | A      | ~1.45x    | ~1.21x   | ~1.45x |
+//! | B      | ~1.04x    | ~1.04x   | ~1.45x |
 
 use egg::Language;
 use egg_stitch::{
@@ -78,7 +79,7 @@ fn compression_ratio(corpus: &str, mode: Mode) -> f64 {
     let out = std::env::temp_dir().join(format!("egg-stitch-examples-paper-{}-{}-{}.json", std::process::id(), corpus, mode as u8));
     let out_str = out.to_str().expect("utf-8 temp path");
     let mut cmd = Command::new(BIN);
-    cmd.args(["--search", "best-first", "--input", &input, "--max-arity", "3", "--num-steps", "200000", "--output", out_str]);
+    cmd.args(["--search", "best-first", "--input", &input, "--max-arity", "2", "--num-steps", "200000", "--output", out_str]);
     if !matches!(mode, Mode::RuleFree) {
         cmd.args(["--rules", &format!("{DIR}/rules.rewrites"), "--iter-limit", ITER_LIMIT]);
     }
@@ -124,8 +125,8 @@ fn b_is_size_minimal() {
 fn syntactic_search_compresses_a_but_not_b() {
     let a = compression_ratio("corpus_a.json", Mode::RuleFree);
     let b = compression_ratio("corpus_b.json", Mode::RuleFree);
-    assert!(a >= 1.8, "rule-free search should compress aligned A well (got {a})");
-    assert!(b <= 1.3, "rule-free search should barely compress scrambled B (got {b})");
+    assert!(a >= 1.35, "rule-free search should compress aligned A well (got {a})");
+    assert!(b <= 1.15, "rule-free search should barely compress scrambled B (got {b})");
 }
 
 /// The headline: live commutativity re-aligns B's blocks and recovers A's
@@ -136,7 +137,7 @@ fn syntactic_search_compresses_a_but_not_b() {
 fn live_beats_only_use_dsrs_at_start_on_b() {
     let live = compression_ratio("corpus_b.json", Mode::Live);
     let at_start = compression_ratio("corpus_b.json", Mode::AtStart);
-    assert!(live >= 1.8, "live rewriting should recover B's compression (got {live})");
-    assert!(at_start <= 1.3, "at-start should be stuck on the scrambled minimal term (got {at_start})");
-    assert!(live >= 1.5 * at_start, "live should clearly beat at-start (live={live}, at-start={at_start})");
+    assert!(live >= 1.35, "live rewriting should recover B's compression (got {live})");
+    assert!(at_start <= 1.15, "at-start should be stuck on the scrambled minimal term (got {at_start})");
+    assert!(live >= 1.25 * at_start, "live should clearly beat at-start (live={live}, at-start={at_start})");
 }
