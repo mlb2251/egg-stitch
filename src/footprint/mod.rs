@@ -7,15 +7,15 @@
 //!
 //! As an example: `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)` should be
 //! considered equal, by swapping the variables.
-//! 
+//!
 //! We perform this check by computing an injective-in-practice "footprint signature"
 //! for each candidate, which is a hash.
-//! 
+//!
 //! This is a double-order invariant and cannot be easily computed directly.
 //! The obvious way would be to try every permutation of the variables
 //! and then canonicalize the match sets relative to the variable order,
 //! which is factorial in the number of variables.
-//! 
+//!
 //! We perform a more efficient variant of this where we first identify a
 //! partial order on variables: specifically, we compute a "marginal identity hash"
 //! for each variable that is invariant to the variable's position.
@@ -26,7 +26,7 @@
 //! This process never expands out factors to the full cartesian product:
 //! cartesian products are in general canonical and in our case mostly canonical
 //! and close enough.
-//! 
+//!
 //! To avoid the expensive computation of the footprint hash in domains
 //! where there are few true duplicates, we first compute a cheap hash that is not
 //! injective-in-practice but does identify many unique patterns. If it does not
