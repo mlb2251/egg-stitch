@@ -1,0 +1,5 @@
+// Commutativity of +. Non-confluent in the sense that it has no single
+// canonical orientation: extracting the size-minimal term commits each program
+// to whatever orientation its e-class ids happen to favor, which need not be
+// the one that exposes shared structure.
+plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
