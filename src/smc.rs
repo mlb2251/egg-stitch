@@ -104,24 +104,25 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     /// `dominance_hits` / `useless_inline_hits` accumulate the run-wide pruning
     /// stats reported at the end.
     ///
-    /// Returns `(states, mults, props)`: alongside each unique child it reports
-    /// the realized particle count `C_j` (`mults`) and the analytic proposal mass
-    /// `Q_j = Σ_i M_i · q(j | p_i)` (`props`) — the proposal marginal the
-    /// optimal-backward-kernel weight in [`Self::reweight`] divides by.
+    /// Returns `(states, mults, props)`: alongside each unique child `t_j'` it
+    /// reports the realized child multiplicity `C_j'` (`mults`) and the proposal
+    /// mass `Σ_l C_l · K_n(t_l, t_j')` (`props`) — the denominator the optimal-
+    /// backward-kernel weight in [`Self::reweight`] divides by.
     fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> (Vec<SearchState<F, O>>, Vec<usize>, Vec<f64>) {
         let max_match_set = self.args.max_match_set;
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
-        // Per-unique-pattern realized counts `C_j` (the multinomial outcome of the
-        // proposal sampling) and analytic proposal masses `Q_j` (the marginal the
-        // reweight divides by). Both are accumulated across parents during dedup.
+        // Per-unique-pattern child multiplicities `C_j'` (the multinomial outcome
+        // of the proposal sampling) and proposal masses `Σ_l C_l · K_n(t_l, t_j')`
+        // (the denominator the reweight divides by). Both accumulate across parents
+        // during dedup.
         let mut mults: Vec<usize> = Vec::new();
         let mut props: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles {
             let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
-                    // Deterministic successor: q(a|p) = 1, so the proposal mass
-                    // routed here is M_i · 1 = mult.
+                    // Deterministic successor: K_n(t_l, t_j') = 1, so the proposal
+                    // mass routed here is C_l · 1 = mult.
                     if child.within_match_set_cap(max_match_set) {
                         dedup_insert(child, mult, mult as f64, &mut expanded, &mut mults, &mut props, &mut dedup);
                     }
@@ -132,22 +133,24 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
                 SuccessorEnum::All { actions, .. } => actions,
             };
             if actions.is_empty() {
-                // Terminal particle carried forward unchanged: q = 1.
+                // Terminal particle carried forward unchanged: K_n = 1.
                 dedup_insert(state, mult, mult as f64, &mut expanded, &mut mults, &mut props, &mut dedup);
                 continue;
             }
             let mut weights = action_weights_with_reuse_boost(&actions, self.args.boost_reuse_weight);
             // `sample_counts` normalizes `weights` in place, so afterwards
-            // `weights[k]` holds the proposal probability q(a_k | p).
+            // `weights[k]` holds the proposal kernel value K_n(t_l, t_j') for the
+            // action a_k leading to child `t_j'`.
             let counts = sample_counts(&mut weights, mult, self.rng);
             for (((action, _), count), q) in actions.into_iter().zip(counts).zip(weights) {
                 if count > 0 {
                     let child = state.apply_action(&action, &self.shared, true, None);
                     if child.within_match_set_cap(max_match_set) {
-                        // Analytic proposal mass from this parent: M_i · q(a|p) =
+                        // Proposal mass from this parent: C_l · K_n(t_l, t_j') =
                         // mult · q. Accumulated independent of the realized `count`
-                        // so the reweight divides by the true marginal Q_j, not the
-                        // C_j/N self-estimate (which would cancel the multiplicity).
+                        // so the reweight divides by the true proposal mass
+                        // `Σ_l C_l · K_n(t_l, t_j')`, not the realized-count
+                        // self-estimate (which would cancel the multiplicity).
                         dedup_insert(child, count, mult as f64 * q, &mut expanded, &mut mults, &mut props, &mut dedup);
                     }
                 }
