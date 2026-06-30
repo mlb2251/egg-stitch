@@ -6,7 +6,6 @@ use std::collections::BinaryHeap;
 use std::time::{Duration, Instant};
 
 use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, compute_cost_and_select, compute_pattern_size};
-use crate::debug_log::{SearchTreeLog, TreeNodeLog};
 use crate::footprint::FootprintTracker;
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
