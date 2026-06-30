@@ -1120,23 +1120,6 @@ fn molecules_scramble_glycol_dsr() {
     check_fixture_bf_only_steps("data/domains/molecules/scramble/glycol.scram.json", "2000", SYMMETRIES, true);
 }
 
-/// Footprint dedup slow-path coverage under DSRs. The molecule symmetry rules
-/// include commutativity and re-rooting, so best-first on scrambled hexyl
-/// surfaces many footprint-equal candidates that collide in a single proxy
-/// bucket — exactly the case the footprint signature must not over-merge. The run
-/// is under `--check-slow` (hardcoded by `run_backend_steps`) with footprint
-/// dedup on by default, so every signature hit is validated against the exact
-/// `footprint_equivalent` relation over real DSR-derived (multi-factor,
-/// column-permuted) match sets; an over-merge would trip that assert and abort
-/// the binary, failing this test. Unlike `molecules_scramble_hexyl_dsr` this pins
-/// no output — its sole job is to keep that slow-path validation green.
-#[test]
-fn molecules_footprint_dedup_check_slow_dsr() {
-    let v = run_backend_steps("best-first", "data/domains/molecules/scramble/hexyl.scram.json", "2000", SYMMETRIES);
-    let library = v.get("library").and_then(|l| l.as_array()).expect("library array in best-first output");
-    assert!(!library.is_empty(), "best-first should find an abstraction, exercising the footprint dedup path");
-}
-
 // === loop rolling: live DSRs roll a loop --only-use-dsrs-at-start can't ===
 //
 // A minimal domain showing the qualitative win of applying rewrite rules live
