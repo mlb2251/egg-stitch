@@ -11,15 +11,13 @@ use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 
 /// Max within-marginal-group permutations brute-forced per factor when
-/// canonicalising its column order (pass 2). Tie-groups this large only arise
-/// under wide genuine symmetry (many interchangeable args binding identical
-/// value sets); beyond the cap we fall back to a plain marginal-sorted order for
-/// that factor — which can over-merge it — and surface the count as `capped`.
-const TIE_PERM_CAP: usize = 720; // 6!
+/// canonicalising its column order (pass 2). If this triggers its
+/// because a bunch of variables have the same marginal.
+/// In this case we fall back to the plain marginal-sorted order, and maybe
+/// create a false under-merge, which doesn't impact soundness.
+const TIE_PERM_CAP: usize = 720;
 
-// Domain-separation salts: a distinct tag at each hash position so structurally
-// different inputs (a column vs a marginal vs a factor vs a root) can't alias even
-// if their byte streams coincide.
+// Domain-separation salts
 const SALT_COLUMN: u64 = 0xC01C;
 const SALT_MARGINAL: u64 = 0x0C01_1EC7;
 const SALT_FACTOR: u64 = 0xFAC2;
@@ -89,10 +87,13 @@ pub(super) fn compute(matches: &[MatchAtEClass], arity: usize, scratch: &mut Foo
 }
 
 /// Pass 1: global per-variable marginals. marginal(v) is a fingerprint of v's
-/// *marginal* value distribution — its root-anchored values with every other
-/// variable projected out — read column-by-column off the stored factors (no
-/// cartesian product, no HashMap). Corresponding variables across a single
-/// global permutation get equal marginals.
+/// *marginal* value distribution: all pairs (r, sigma(v)) with every other
+/// variable projected out, read column-by-column off the stored factors.
+/// Corresponding variables across a single global permutation get equal marginals.
+/// 
+/// Note: this depends on the other variables to some degree still, but only
+/// in the way that they modify the factor structure and the number of ocurrences
+/// of the given variable (inflated by other variables' presence in a factor).
 pub(super) fn compute_marginals(matches: &[MatchAtEClass], arity: usize) -> Vec<u64> {
     let mut buckets: Vec<Vec<u64>> = vec![Vec::new(); arity];
     let mut col: Vec<u32> = Vec::new();
@@ -142,13 +143,7 @@ fn column_hash(f: &Factor, ci: usize, root: u32, col: &mut Vec<u32>) -> u64 {
 /// Canonical 64-bit hash of one factor (pass 2): invariant to permuting columns
 /// within equal-marginal groups. Columns are ordered by marginal; equal marginals form
 /// tie-groups whose within-group permutations are brute-forced to the canonical
-/// (smallest) sorted row-hash list. Sets `*capped` and falls back to the plain
-/// marginal order if a tie-group exceeds [`TIE_PERM_CAP`].
-///
-/// The canonical matrix is encoded by hashing each reordered row to a `u64`,
-/// sorting those, and hashing the list — order-invariant over rows and far
-/// cheaper than allocating and lex-sorting a `Vec<Vec<u32>>` (the sort is over
-/// scalars). Works for any column count.
+/// (smallest) sorted row-hash list.
 fn factor_hash(f: &Factor, marginals: &[u64], scratch: &mut FootprintScratch, capped: &mut bool) -> u64 {
     let n = f.slots.len();
     scratch.order.clear();
