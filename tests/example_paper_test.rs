@@ -24,11 +24,14 @@
 //!   weaker `(* ?y ?y)` and misses the `+`. Live commutativity re-aligns every
 //!   program and recovers the full `f0`.
 //!
-//! Measured (best-first, `--max-arity 2`):
-//! | corpus | rule-free | at-start | live |
-//! |--------|-----------|----------|------|
-//! | A      | ~1.31x    | ~1.31x   | ~1.31x |
-//! | B      | ~1.12x    | ~1.12x   | ~1.31x |
+//! Measured (best-first, `--max-arity 2`, four programs):
+//! | corpus | rule-free        | at-start | live             |
+//! |--------|------------------|----------|------------------|
+//! | A      | ~1.14x (full f0) | ~1.14x   | ~1.14x (full f0) |
+//! | B      | ~1.04x (squaring)| ~1.04x   | ~1.14x (full f0) |
+//!
+//! The headline distinction is *which* abstraction is found: A and live-B find
+//! the full `(+ ?x (* ?y ?y))`; B's minimal corpus only yields bare `(* ?y ?y)`.
 
 use egg::Language;
 use egg_stitch::{
@@ -67,9 +70,17 @@ enum Mode {
     AtStart,
 }
 
-/// Runs best-first on a corpus under one rewrite regime and returns its
-/// `compression_ratio` (corpus size before / after one abstraction).
-fn compression_ratio(corpus: &str, mode: Mode) -> f64 {
+/// Result of one best-first run: its compression ratio and the abstraction it
+/// found. `found_f0` is true when the abstraction is the full `(+ ?x (* ?y ?y))`
+/// (it contains a `+`); the consolation `(* ?y ?y)` squaring abstraction does
+/// not.
+struct Run {
+    ratio: f64,
+    found_f0: bool,
+}
+
+/// Runs best-first on a corpus under one rewrite regime.
+fn run(corpus: &str, mode: Mode) -> Run {
     let input = format!("{DIR}/{corpus}");
     let out = std::env::temp_dir().join(format!("egg-stitch-examples-paper-{}-{}-{}.json", std::process::id(), corpus, mode as u8));
     let out_str = out.to_str().expect("utf-8 temp path");
@@ -86,7 +97,10 @@ fn compression_ratio(corpus: &str, mode: Mode) -> f64 {
     let text = fs::read_to_string(&out).unwrap_or_else(|e| panic!("read {}: {e}", out.display()));
     let _ = fs::remove_file(&out);
     let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
-    v["compression_ratio"].as_f64().expect("compression_ratio present")
+    let ratio = v["compression_ratio"].as_f64().expect("compression_ratio present");
+    // The full f0 contains a `+`; the bare-squaring fallback does not.
+    let found_f0 = v["library"].get(0).and_then(|e| e["pattern"].as_str()).is_some_and(|p| p.contains('+'));
+    Run { ratio, found_f0 }
 }
 
 #[test]
@@ -118,11 +132,11 @@ fn b_is_size_minimal() {
 
 #[test]
 fn syntactic_search_compresses_a_but_not_b() {
-    let a = compression_ratio("corpus_a.json", Mode::RuleFree);
-    let b = compression_ratio("corpus_b.json", Mode::RuleFree);
-    assert!(a >= 1.25, "rule-free search should find f0 on aligned A (got {a})");
-    assert!(b <= 1.2, "rule-free search should only manage bare squaring on scrambled B (got {b})");
-    assert!(a >= 1.1 * b, "A should compress clearly better than B syntactically (A={a}, B={b})");
+    let a = run("corpus_a.json", Mode::RuleFree);
+    let b = run("corpus_b.json", Mode::RuleFree);
+    assert!(a.found_f0, "rule-free search should find the full f0 on aligned A");
+    assert!(!b.found_f0, "rule-free search should only manage bare squaring on scrambled B");
+    assert!(a.ratio > b.ratio, "A should compress better than B syntactically (A={}, B={})", a.ratio, b.ratio);
 }
 
 /// The headline: live commutativity re-aligns B's `+` nodes and recovers the
@@ -131,9 +145,9 @@ fn syntactic_search_compresses_a_but_not_b() {
 /// fall out of canonicalization.
 #[test]
 fn live_beats_only_use_dsrs_at_start_on_b() {
-    let live = compression_ratio("corpus_b.json", Mode::Live);
-    let at_start = compression_ratio("corpus_b.json", Mode::AtStart);
-    assert!(live >= 1.25, "live rewriting should recover f0 on B (got {live})");
-    assert!(at_start <= 1.2, "at-start should be stuck on the scrambled minimal term (got {at_start})");
-    assert!(live >= 1.1 * at_start, "live should clearly beat at-start (live={live}, at-start={at_start})");
+    let live = run("corpus_b.json", Mode::Live);
+    let at_start = run("corpus_b.json", Mode::AtStart);
+    assert!(live.found_f0, "live rewriting should recover the full f0 on B");
+    assert!(!at_start.found_f0, "at-start should be stuck with bare squaring on the scrambled minimal term");
+    assert!(live.ratio > at_start.ratio, "live should beat at-start (live={}, at-start={})", live.ratio, at_start.ratio);
 }

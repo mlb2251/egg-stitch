@@ -36,12 +36,15 @@ larger `(* ..)` terms — and some programs are wrapped in an outer function
 So `--only-use-dsrs-at-start`, which abstracts over the extracted minimal corpus,
 is stuck with the scrambled B, while live commutativity recovers A's compression.
 
-Measured with best-first, `--max-arity 2`:
+Measured with best-first, `--max-arity 2` (four programs):
 
 | corpus | rule-free | `--only-use-dsrs-at-start` | live |
 |--------|-----------|----------------------------|------|
-| A      | ~1.31× (`(+ ?x (* ?y ?y))`) | ~1.31× | ~1.31× |
-| B      | ~1.12× (`(* ?y ?y)`)        | ~1.12× | ~1.31× (`(+ (* ?y ?y) ?x)`) |
+| A      | ~1.14× (`(+ ?x (* ?y ?y))`) | ~1.14× | ~1.14× |
+| B      | ~1.04× (`(* ?y ?y)`)        | ~1.04× | ~1.14× (`(+ (* ?y ?y) ?x)`) |
+
+The headline distinction is *which* abstraction is found: A and live-B recover
+the full `(+ ?x (* ?y ?y))`; B's minimal corpus only yields bare `(* ?y ?y)`.
 
 `tests/example_paper_test.rs` pins this: A ≡ B under commutativity, B is
 size-minimal, syntactic search compresses A but not B, and live rewriting beats
