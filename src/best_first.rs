@@ -108,17 +108,12 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     /// (the search converged); a non-zero value means it hit the `num_steps` cap.
     pub heap_size_at_end: usize,
     pub data: crate::shared::SharedData<F, O>,
-    pub tree_log: Option<SearchTreeLog>,
 }
 
-/// One node in the in-memory search tree. Retained for parent-pointer lookups
-/// and for the optional serialized debug log.
+/// One node in the in-memory search tree.
 struct Node<F: LanguageFamily, O: StitchOp> {
-    parent: Option<usize>,
     state: SearchState<F, O>,
-    cost: usize,
     depth: usize,
-    expanded: bool,
     /// Lower bound on cost of any descendant; only set when `--opt-lower-bound` is on.
     /// Re-checked on pop in case `best` improved between push and pop.
     lower_bound: Option<usize>,
@@ -146,7 +141,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     }
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
-    let debug = args.debug_log;
     // ForcedThenCost reduces to Cost when the e-graph is cost-balanced
     let strategy = if matches!(args.priority, SearchPriority::ForcedThenCost) && cost_balanced::<F, O>(&shared.egraph) {
         println!("{}", "rules are cost-balanced: ordering by cost (forced-expansion ordering not needed)".dimmed());
@@ -169,11 +163,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
 
     nodes.push(Node {
-        parent: None,
         state: initial_state.clone(),
-        cost: initial_cost,
         depth: 0,
-        expanded: false,
         lower_bound: None,
         forced: initial_forced,
     });
@@ -191,7 +182,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
     let mut best_found_at: Option<usize> = None;
     let mut best_history: Vec<BestHistoryEntry> = Vec::new();
-    let mut expansion_order: Vec<usize> = Vec::new();
     let mut num_expansions: usize = 0;
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
@@ -226,9 +216,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         {
             continue;
         }
-
-        nodes[node_id].expanded = true;
-        expansion_order.push(node_id);
 
         if args.verbose || args.verbose_forced_expansion {
             let tag = format!("[expansion {}]", num_expansions);
@@ -369,11 +356,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
 
             nodes.push(Node {
-                parent: Some(node_id),
                 state: child_state,
-                cost: child_cost,
                 depth: child_depth,
-                expanded: false,
                 lower_bound: child_lower_bound,
                 forced: child_forced,
             });
@@ -416,7 +400,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
-    let best_node_id = best.as_ref().map(|(_, id, _)| *id);
     // Canonicalize the winner's var numbering (DFS first-appearance) before it's
     // handed off for output/rewrite.
     let best_pair = best.map(|(cost, id, selection)| {
@@ -433,31 +416,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
     }
 
-    let tree_log = if debug {
-        let weights = shared.egraph.analysis.weights;
-        Some(SearchTreeLog {
-            original_size,
-            nodes: nodes
-                .iter()
-                .enumerate()
-                .map(|(id, n)| TreeNodeLog {
-                    id,
-                    parent: n.parent,
-                    pattern: n.state.pattern.to_string(),
-                    arity: n.state.pattern.vars.len(),
-                    pattern_size: compute_pattern_size(&n.state.pattern, &weights),
-                    num_matches: n.state.matches.len(),
-                    cost: n.cost,
-                    expanded: n.expanded,
-                })
-                .collect(),
-            expansion_order,
-            best_node: best_node_id,
-        })
-    } else {
-        None
-    };
-
     BestFirstResult {
         best: best_pair,
         original_size,
@@ -466,6 +424,5 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         num_expansions,
         heap_size_at_end: heap.len(),
         data: shared.into_data(),
-        tree_log,
     }
 }

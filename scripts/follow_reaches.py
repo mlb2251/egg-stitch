@@ -41,7 +41,7 @@ MAX_ARITY = 2
 # `--max-arity` matches the `-a{MAX_ARITY}` stitch was run at: egg-stitch
 # searches the same arity budget and should land on stitch's (possibly lower-
 # arity) optimum on its own. (Passthrough may override it via `_drop_overridden`.)
-SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "2000", "--temperature", "1000", "--max-arity", str(MAX_ARITY)]
+SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "2000", "--temperature", "100", "--max-arity", str(MAX_ARITY)]
 BF_DEFAULTS = ["--num-steps", "2000", "--max-arity", str(MAX_ARITY)]
 
 
