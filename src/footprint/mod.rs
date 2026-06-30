@@ -26,7 +26,7 @@
 //! always share a factorisation. Skipping it only ever *misses* a merge (lower
 //! recall), never causes a false merge (a different match set still hashes
 //! differently), and avoids a per-factor clone + `O(slots²·rows)` decompose on
-//! the hot path. Buffers are reused across candidates via a shared `FootprintScratch`.
+//! the hot path.
 //!
 //! The module is split into [`signature`] (the two-pass signature `compute`),
 //! [`equivalence`] (the exact slow-path oracle validating signature hits), and

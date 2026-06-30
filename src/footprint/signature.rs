@@ -1,7 +1,6 @@
 //! The two-pass permutation-invariant signature `compute` (see the [module
 //! docs](super)): global per-variable marginals, then canonical per-factor hashing
-//! combined over factors and roots into a 128-bit signature. Runs on the
-//! reusable [`FootprintScratch`] buffers so the hot path allocates nothing.
+//! combined over factors and roots into a 128-bit signature.
 
 use super::{factorial, heap_permute, id_u32};
 use crate::factor::Factor;
@@ -36,18 +35,16 @@ pub(super) struct Footprint {
 /// exercises [`compute`] without a full e-graph.
 #[cfg(test)]
 pub(super) fn footprint_of(matches: &[MatchAtEClass], arity: usize) -> Footprint {
-    let mut scratch = FootprintScratch::default();
-    let (sig, marginals, capped) = compute(matches, arity, &mut scratch);
+    let (sig, marginals, capped) = compute(matches, arity);
     Footprint { sig, marginals, capped }
 }
 
-/// Reusable scratch buffers for the pass-2 signature computation, so a
-/// candidate's factor loop allocates nothing on the hot path. Held across
-/// candidates by [`FootprintTracker`](super::FootprintTracker); the buffers are
-/// small and same-sized, so reuse keeps each `compute` allocation-free after the
-/// first.
+/// Scratch buffers for the pass-2 signature computation, allocated once per
+/// [`compute`] call and reused across that candidate's factors so the factor loop
+/// doesn't reallocate. (Reusing them across *candidates* too was measured to save
+/// nothing, so each `compute` just makes its own.)
 #[derive(Default)]
-pub(super) struct FootprintScratch {
+struct FootprintScratch {
     /// Per-root factor hashes, sorted then folded into the root signature.
     fh: Vec<u64>,
     /// Column indices of a factor, sorted by marginal.
@@ -64,19 +61,20 @@ pub(super) struct FootprintScratch {
 
 /// Core signature computation. Returns `(signature, per-variable marginals,
 /// capped)`, where `capped` flags a tie-group that exceeded [`TIE_PERM_CAP`].
-/// `scratch`'s buffers are reused across factors and across candidates.
-pub(super) fn compute(matches: &[MatchAtEClass], arity: usize, scratch: &mut FootprintScratch) -> (u128, Vec<u64>, bool) {
+pub(super) fn compute(matches: &[MatchAtEClass], arity: usize) -> (u128, Vec<u64>, bool) {
     // Pass 1: global per-variable marginals.
     let marginals = compute_marginals(matches, arity);
 
     // Pass 2: hash each factor canonically, combine per root then over roots as
-    // sorted multisets.
+    // sorted multisets. The scratch buffers live for this call, reused across the
+    // factor loop.
+    let mut scratch = FootprintScratch::default();
     let mut capped = false;
     let mut root_sigs: Vec<u64> = Vec::with_capacity(matches.len());
     for m in matches {
         scratch.fh.clear();
         for f in &m.factors {
-            let fh = factor_hash(f, &marginals, scratch, &mut capped);
+            let fh = factor_hash(f, &marginals, &mut scratch, &mut capped);
             scratch.fh.push(fh);
         }
         scratch.fh.sort_unstable();

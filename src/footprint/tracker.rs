@@ -5,7 +5,7 @@
 
 use super::equivalence::footprint_equivalent;
 use super::id_u32;
-use super::signature::{FootprintScratch, compute};
+use super::signature::compute;
 use crate::hashing::{h64, mix64};
 use crate::lang::{LanguageFamily, StitchOp};
 use crate::matching::MatchAtEClass;
@@ -64,8 +64,6 @@ fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
 pub struct FootprintTracker {
     /// Per proxy: the bucket's deferred representative plus its materialised entries.
     buckets: FxHashMap<u64, Bucket>,
-    /// Signature-computation buffers, reused across candidates so the hot path allocates nothing.
-    scratch: FootprintScratch,
     pub hits: usize,
     /// Candidates kept via the unique-proxy fast path (full signatures avoided).
     pub proxy_skips: usize,
@@ -142,14 +140,14 @@ impl FootprintTracker {
         // First collision in this bucket: materialise the deferred representative
         // from its retained match set before comparing the newcomer against it.
         if let Some(rep) = rep {
-            let (rsig, rmarginals, rcapped) = compute(resolve(rep.id), rep.frozen.len(), &mut self.scratch);
+            let (rsig, rmarginals, rcapped) = compute(resolve(rep.id), rep.frozen.len());
             if rcapped {
                 self.capped += 1;
             }
             let rfc = frozen_marginals(&rep.frozen, &rmarginals);
             self.buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size, rep.id));
         }
-        let (sig, marginals, capped) = compute(matches, arity, &mut self.scratch);
+        let (sig, marginals, capped) = compute(matches, arity);
         if capped {
             self.capped += 1;
         }
