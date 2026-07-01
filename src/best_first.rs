@@ -67,10 +67,6 @@ fn priority<F: LanguageFamily, O: StitchOp>(strategy: SearchPriority, cost: usiz
         SearchPriority::ForcedThenCost => match state.forced_expansion_argmin(shared, forced_lower_bound) {
             // clamp to 0 because anything <= 0 means no forced expansion
             Some((forced, _)) => ((forced.max(0) as usize, cost), forced),
-            // No root in the corpus's minimal extraction supports this pattern, so
-            // it can't compress: sink it to the back of the frontier. (A pattern
-            // with no in-extraction root has none among its descendants either —
-            // matches only shrink — so threading i64::MAX as their bound is safe.)
             None => ((usize::MAX, cost), i64::MAX),
         },
     }

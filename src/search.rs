@@ -253,11 +253,6 @@ fn rebuild_matches(parent_matches: &[MatchAtEClass], mut transform: impl FnMut(&
             }
         }
         new_factors.extend(replacement);
-        // A zero-slot factor is the product identity (one empty row, ×1 substs):
-        // it is the residue of expanding a variable to a 0-arity leaf, recording
-        // that a now-ground position matched without binding anything. Drop it so
-        // matches carry only real variable factors; a fully-ground match then has
-        // an empty factor list, whose empty product is still 1 subst.
         new_factors.retain(|f| !f.slots.is_empty());
         out.push(MatchAtEClass { root_eclass: m.root_eclass, factors: new_factors });
     }
@@ -652,17 +647,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// (one match's work for a valid `p`).
     ///
     /// Only roots that appear in the corpus's size-minimal extraction
-    /// (`usage_counts != 0`) are considered. Matches at rewrite-only e-classes —
-    /// algebraic alternates the rules synthesise (e.g. `(+ (cos ?x) -1.0)`) that
-    /// the extraction never picks — can't affect compression, so a pattern
-    /// supported only there fails the cap.
+    /// (`usage_counts != 0`) are considered.
     ///
     /// Sound to prune on: `ForcedExpansion(p)` is monotone non-decreasing under
     /// expand/reuse — committing a hole swaps a `Cost(r)`-minimal arg for `≥`-cost
     /// structure (`Cost(r | p)` rises, `Cost(r)` fixed) and substs only shrink — so
-    /// `ForcedExpansion(p) > cap` ⇒ every descendant `> cap`. The usage filter keeps
-    /// this: the considered-root set only shrinks under expand/reuse (matches
-    /// shrink, usage is fixed), so the min stays monotone.
+    /// `ForcedExpansion(p) > cap` ⇒ every descendant `> cap`.
     pub fn within_forced_expansion_cap(&self, shared: &SharedSearchData<F, O>, cap: i64) -> bool {
         let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
         self.matches.iter().filter(|m| shared.usage_counts.get(&m.root_eclass).is_some_and(|&u| u != 0)).any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
@@ -686,11 +676,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     }
 
     /// `(ForcedExpansion(p), argmin_r ForcedExpansion(r, p))` — the value paired
-    /// with the match root `r` closest to minimal. Like
-    /// [`Self::within_forced_expansion_cap`], only roots in the corpus's
-    /// size-minimal extraction (`usage_counts != 0`) are considered, so the
-    /// expansion-order priority ignores rewrite-only matches too. `None` when no
-    /// such root exists (no matches, or all at rewrite-only e-classes).
+    /// with the match root `r` closest to minimal. `None` when `p` has no matches.
     /// See [`Self::within_forced_expansion_cap`] for the per-`r` cost decomposition.
     ///
     /// `lower_bound` is a known lower bound on `ForcedExpansion(p)` — in best-first
