@@ -67,7 +67,7 @@ fn load_corpus(name: &str) -> Vec<String> {
 
 /// Weighted size (= node count under unit weights) of an s-expression string.
 fn tree_size(sexpr: &str) -> usize {
-    sexpr.replace('(', " ").replace(')', " ").split_whitespace().count()
+    sexpr.replace(['(', ')'], " ").split_whitespace().count()
 }
 
 /// Total weighted size of a corpus.
