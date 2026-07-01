@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rebase: seen-egraph-2 onto main — judgement calls</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --ink: #e6e8ec;
+    --muted: #9aa4b2; --line: #2a2f3a; --accent: #7aa2f7; --good: #7ee787;
+    --warn: #e3b341; --bad: #f7768e; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 40px 24px 96px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; }
+  h2 { font-size: 22px; margin: 44px 0 14px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 26px 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 26px; }
+  code, kbd { font-family: var(--mono); font-size: 0.88em; }
+  code { background: var(--panel2); padding: 1px 6px; border-radius: 5px; color: #cdd6f4; }
+  pre { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  a { color: var(--accent); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 14px 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+  .tag.keep { background: rgba(126,231,135,.15); color: var(--good); }
+  .tag.drop { background: rgba(247,118,142,.15); color: var(--bad); }
+  .tag.merge { background: rgba(122,162,247,.15); color: var(--accent); }
+  .tag.new { background: rgba(227,179,65,.15); color: var(--warn); }
+  .call { border-left: 3px solid var(--accent); padding-left: 16px; margin: 22px 0; }
+  .call.warn { border-left-color: var(--warn); }
+  .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .muted { color: var(--muted); }
+  ul { padding-left: 22px; } li { margin: 4px 0; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 18px; font-size: 14px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; font-family: var(--mono); }
+  .note { font-size: 14px; color: var(--muted); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Rebasing <code>seen-egraph-2</code> onto latest <code>main</code></h1>
+  <p class="sub">A record of the conflicts hit and the judgement calls made. Nothing was pushed.</p>
+
+  <div class="panel">
+    <strong>TL;DR</strong> — All 14 branch commits replayed cleanly onto the current <code>main</code>.
+    The branch really was just the <em>SeenTracker / seen-egraph</em> feature (plus a bench-tooling commit).
+    The only friction was that <code>main</code> has since <strong>deleted the debug-log / search-tree-log
+    feature</strong>, which the branch was still built on top of. The resolution was to <strong>drop the
+    branch's now-orphaned debug-log code and keep only its genuine additions</strong>
+    (<code>SearchStats</code> + the seen-egraph). The result compiles, is <code>fmt</code>-clean, and touches
+    the <em>exact same 20 files</em> as the pre-rebase branch (only <code>scripts/bench_pr.py</code> grew, by
+    11 lines, from one small reconciliation described below).
+  </div>
+
+  <h2>1 · Setup &amp; safety nets</h2>
+  <dl class="kv">
+    <dt>Branch</dt><dd>seen-egraph-2 (local-only — no upstream)</dd>
+    <dt>Old base (merge-base)</dt><dd>e90e77140401</dd>
+    <dt>New base (main)</dt><dd>f67f8408ea50 &nbsp;<span class="note">(fast-forwarded local <code>main</code> from 1640e79 after <code>git fetch</code>; it was 9 behind)</span></dd>
+    <dt>Old tip (pre-rebase)</dt><dd>30e4cabde246</dd>
+    <dt>New tip (rebased)</dt><dd>afbdfd629717</dd>
+    <dt>Commits replayed</dt><dd>14</dd>
+  </dl>
+  <p>Before touching anything I confirmed the pre-rebase commits are recoverable and left multiple backups:</p>
+  <ul>
+    <li><strong>Tag <code>seen-egraph-2-prerebase</code></strong> → <code>30e4cab</code> (created explicitly for this).</li>
+    <li><strong><code>origin/seen-egraph</code></strong> and local <strong><code>seen-egraph</code></strong> still point at <code>30e4cab</code> — the original commits live on the remote, untouched.</li>
+    <li>Enabled <code>rerere</code> (local config) so recurring conflict resolutions replay automatically across the 14-commit sequence. <span class="note">Undo with <code>git config --local --unset rerere.enabled</code>.</span></li>
+  </ul>
+  <p class="note">Because the branch is local-only and its commits are duplicated on <code>origin/seen-egraph</code>, this was never in "dangerous to git" territory — the rebase was fully abortable and nothing shared was rewritten.</p>
+
+  <h2>2 · The divergence — what each side changed</h2>
+  <div class="grid">
+    <div class="panel">
+      <h3 style="margin-top:0;"><code>main</code> since the fork</h3>
+      <ul>
+        <li><span class="bad">Removed</span> the whole <strong>debug-log / search-tree-log</strong> feature (#304): <code>src/debug_log.rs</code>, <code>viz/debug.{html,js}</code>, <code>viz/tree.{html,js}</code>, the <code>--debug-log</code> arg, <code>RunResult.debug_log_file</code>, and the <code>Node</code> bookkeeping fields (<code>parent</code>, <code>cost</code>, <code>expanded</code>) + <code>tree_log</code> construction that only fed it.</li>
+        <li><span class="good">Added</span> a <strong><code>FootprintTracker</code></strong> — dedup-by-match pruning behind <code>--no-opt-dedup-by-match</code> (#298).</li>
+        <li>A large SMC refactor (#301–#307) — <em>the branch doesn't touch <code>smc.rs</code></em>, so this never collided.</li>
+        <li>Added the <code>--method bfs|smc|both</code> flag to <code>bench_pr.py</code> (#299); dropped SMC temperature 1000→100.</li>
+        <li>Regenerated <code>results/*.json</code> and <code>figures/*</code> en masse — the branch touches none of these.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0;"><code>seen-egraph-2</code></h3>
+      <ul>
+        <li>Extended the pre-existing <strong><code>SeenTracker</code></strong> with a shadow <strong>seen-egraph</strong> over a frozen-var language: per-insert DSR saturation, dynamic batch tuning, an egraph-decides skip rule, and an end-of-run audit (all of <code>src/search.rs</code> + new <code>src/lang/op_with_frozen_var.rs</code> and <code>family.rs</code> hooks).</li>
+        <li>Added <strong><code>SearchStats</code> / <code>SeenStats</code></strong> (<code>src/results.rs</code>) and threaded them out of best-first search into the run JSON.</li>
+        <li>Flipped the seen set to <strong>on-by-default</strong>: <code>--opt-seen</code> → <code>--no-opt-seen</code>, plus new <code>--seen-egraph-*</code> flags.</li>
+        <li>A bench/tooling commit (<em>"ton of edits incl bench"</em>): <code>bench_pr.py</code> single-run mode, <code>viz/bench_viewer.html</code>, <code>run.py</code> helpers, connection-pooled <code>viz/analysis.js</code> loader.</li>
+      </ul>
+    </div>
+  </div>
+  <p>The two feature sets are <strong>largely orthogonal</strong> — the only real overlap is that both added pruning
+  machinery and stats output into the same regions of <code>best_first.rs</code>, and both edited the same
+  debug-log-adjacent and bench lines. Four of the fourteen commits stopped for conflicts
+  (<code>seen set work</code>, <code>post-running</code>, <code>saturate as you go</code>, <code>ton of edits incl bench</code>);
+  the rest replayed automatically.</p>
+
+  <h2>3 · Judgement calls</h2>
+
+  <div class="call">
+    <h3><span class="tag drop">drop</span> <span class="tag keep">keep</span> A. Discard the branch's debug-log / <code>tree_log</code> code; keep only <code>SearchStats</code></h3>
+    <p>This is the central call. The branch's <code>best_first.rs</code> still carried the entire debug-log scaffolding
+    (a <code>tree_log: Option&lt;SearchTreeLog&gt;</code> field, the <code>let tree_log = if debug { … }</code> builder that
+    reads <code>Node.parent/cost/expanded</code> and <code>expansion_order</code>, and the <code>SearchTreeLog</code>/<code>TreeNodeLog</code>
+    imports) — all of which <code>main</code> deleted. Alongside it the branch added its genuinely new field,
+    <code>stats: SearchStats</code>.</p>
+    <p><strong>Resolution:</strong> take <code>main</code>'s deletion wholesale and keep <em>only</em> the <code>stats</code> field and
+    its builder. Keeping <code>tree_log</code> would not compile (<code>debug_log.rs</code> no longer exists, and the
+    <code>Node</code> fields it reads are gone).</p>
+    <p class="note"><strong>Why this is safe:</strong> the branch's actual contribution here is <code>SearchStats</code>/<code>SeenStats</code>,
+    not <code>tree_log</code> — <code>tree_log</code> predates the branch (it lived in the merge-base) and the branch never
+    modified it, it just carried it along. Verified afterwards: no <code>debug_log</code> / <code>tree_log</code> /
+    <code>SearchTreeLog</code> reference survives anywhere in <code>src/</code> or <code>run.py</code>.</p>
+  </div>
+
+  <div class="call">
+    <h3><span class="tag merge">merge</span> B. Keep <em>both</em> pruning mechanisms — <code>FootprintTracker</code> and the seen-egraph</h3>
+    <p>Both <code>main</code> (footprint dedup-by-match) and the branch (seen-egraph) inject pruning state into the
+    same two spots of <code>best_first.rs</code>: the tracker initialisation next to the heap, and the
+    <code>═══ STATS ═══</code> print block. They are independent prunes, so both were preserved:</p>
+    <ul>
+      <li><strong>Init:</strong> kept the branch's <code>seen</code> closure (which lifts the DSRs and builds the <code>SeenTracker</code>) <em>and</em> <code>main</code>'s <code>let footprints = args.opt_dedup_by_match.then(FootprintTracker::new)</code> line side by side.</li>
+      <li><strong>Stats:</strong> merged the output so the run prints the seen-set hit breakdown, the <code>── seen-egraph audit ──</code> block (branch), <em>and</em> the <code>footprint-set</code> counters (main). Seen-related output is grouped together, footprint after.</li>
+    </ul>
+  </div>
+
+  <div class="call">
+    <h3><span class="tag merge">merge</span> C. <code>lib.rs</code> — new flags from both sides coexist</h3>
+    <p>The branch rewrote <code>--opt-seen</code> (opt-in) into <code>--no-opt-seen</code> (on by default) and added the
+    <code>--seen-egraph-saturate</code> / <code>-every</code> / <code>-dynamic</code> / <code>--seen-egraph-decides</code> flags.
+    <code>main</code> added <code>--no-opt-dedup-by-match</code> right after <code>opt_seen</code> and removed <code>--debug-log</code>.
+    All of these are non-overlapping in intent, so every flag was kept; only the debug-log arg was dropped
+    (per call A). The module-declaration block and the <code>multiple_step_search</code> stats threading auto-merged.</p>
+  </div>
+
+  <div class="call warn">
+    <h3><span class="tag new">reconcile</span> D. <code>bench_pr.py</code> — two independent "skip SMC" selectors <span class="warn">(only place new glue code was written)</span></h3>
+    <p>Both sides independently added a way to restrict which methods run, and both assign to the same
+    <code>methods</code> variable:</p>
+    <ul>
+      <li><strong><code>main</code> (#299):</strong> a CLI flag <code>--method bfs|smc|both</code> (default <code>both</code>) →
+        <code>methods = {…}[a.method]</code>.</li>
+      <li><strong>branch:</strong> a module constant <code>DO_SMC = False</code> (documented as "runs only best-first") →
+        <code>methods = ["enum","smc"] if DO_SMC else ["enum"]</code>, plus a <code>WORKTREES</code> single-run mode.</li>
+    </ul>
+    <p>Naively keeping both would define <code>methods</code> twice, with the branch's line silently clobbering
+    <code>main</code>'s <code>--method</code> flag. Dropping the branch's line instead would leave <code>DO_SMC</code> printed in the
+    run header but doing nothing — a latent bug either way.</p>
+    <p><strong>Resolution:</strong> made the two cooperate — <code>--method</code> wins when passed, otherwise the effective
+    method falls back to the <code>DO_SMC</code> toggle:</p>
+<pre>method  = a.method if a.method is not None else ("both" if DO_SMC else "bfs")
+methods = {"bfs": ["enum"], "smc": ["smc"], "both": ["enum", "smc"]}[method]</pre>
+    <p>I also took the branch's fuller <code>if WORKTREES: … else: …</code> output block (its single-run/<code>fmt_single_table</code>
+    path — which already contained <code>main</code>'s <code>methods=</code> keyword args) and the branch's <code>fmt_table</code>
+    signature (all call sites pass <code>methods=</code> by keyword, so parameter order is immaterial).</p>
+    <p class="note"><strong>Behavior note worth confirming:</strong> the default method selection now follows the branch's
+    <code>DO_SMC=False</code> (best-first only), <em>not</em> <code>main</code>'s old <code>both</code> default. Pass
+    <code>--method both</code> for the full side-by-side run. This is the only spot where I wrote reconciling code
+    rather than choosing one side verbatim, and the reason <code>bench_pr.py</code> is +11 lines vs the original branch.</p>
+  </div>
+
+  <div class="call warn">
+    <h3><span class="tag new">left as-is</span> E. Vestigial <code>_debug.json</code> filter in <code>viz/analysis.js</code></h3>
+    <p>The branch's connection-pooled results loader filters out files ending in <code>_debug.json</code>. Now that
+    <code>main</code> has removed debug-log output, that suffix is never produced, so the filter is a harmless no-op.
+    I left it untouched to keep the rebase faithful/minimal; it can be swept up in a later cleanup.</p>
+  </div>
+
+  <h2>4 · Auto-merged with no intervention</h2>
+  <p>These overlapped textually but resolved cleanly because the two sides touched disjoint regions —
+  I reviewed each to confirm the merge was correct, not just conflict-free:</p>
+  <table>
+    <tr><th>File</th><th>branch side</th><th>main side</th><th>why clean</th></tr>
+    <tr><td><code>src/search.rs</code></td><td>~450 lines of <code>SeenTracker</code>/seen-egraph impl</td><td>a <code>retain</code> in <code>rebuild_matches</code> + <code>usage_counts</code> filters in forced-expansion</td><td>different functions</td></tr>
+    <tr><td><code>src/results.rs</code></td><td>new <code>SearchStats</code>/<code>SeenStats</code> structs + field</td><td>removed <code>debug_log_file</code> from <code>RunResult</code></td><td>different structs</td></tr>
+    <tr><td><code>run.py</code></td><td>new benchmark helper functions</td><td>removed <code>debug_log=</code> kwargs</td><td>different regions</td></tr>
+    <tr><td><code>viz/analysis.js</code></td><td><code>mapPool</code> loader rewrite</td><td>removed debug column / delete-sibling / debug-link</td><td>different functions</td></tr>
+    <tr><td><code>expts/run_models/ours.py</code></td><td><code>raw=data</code> passthrough</td><td>temperature 1000→100</td><td>different functions</td></tr>
+  </table>
+
+  <h2>5 · Verification</h2>
+  <ul>
+    <li><span class="good">✓</span> <code>cargo check</code> — compiles.</li>
+    <li><span class="good">✓</span> <code>cargo fmt --check</code> — clean.</li>
+    <li><span class="warn">▲</span> <code>cargo clippy</code> — 2 warnings (<code>format_in_format_args</code> in the seen-set print, <code>filter_map_bool_then</code> in <code>pattern_to_frozen_recexpr</code>). Both are in the <strong>branch's own code</strong> and pre-date the rebase; left untouched to avoid scope creep.</li>
+    <li><span class="good">✓</span> Diff shape: the rebased branch touches the <strong>same 20 files</strong> as the pre-rebase branch, with the same line counts except <code>bench_pr.py</code> (+11, call D).</li>
+    <li><span class="good">✓</span> <code>main</code> is an ancestor of the rebased branch; <code>src/footprint/</code> present, <code>src/debug_log.rs</code> and the <code>viz/debug|tree</code> pages gone — i.e. <code>main</code> is fully absorbed.</li>
+    <li><span class="good">✓</span> No <code>debug_log</code> residue in <code>src/</code> or <code>run.py</code>.</li>
+  </ul>
+
+  <h2>6 · Not done / follow-ups</h2>
+  <ul>
+    <li><strong>Nothing was pushed.</strong> <code>seen-egraph-2</code> is a local branch; <code>origin/seen-egraph</code> still holds the pre-rebase commits.</li>
+    <li>Did <strong>not</strong> run the full test suite (not requested; feature content is identical to the pre-rebase branch). Worth a <code>cargo test --release</code> before merging if you want belt-and-suspenders.</li>
+    <li>Confirm the call-D default behavior (best-first only unless <code>--method both</code>) matches your intent.</li>
+    <li>Housekeeping when satisfied: delete the backup tag (<code>git tag -d seen-egraph-2-prerebase</code>) and, optionally, disable rerere (<code>git config --local --unset rerere.enabled</code>).</li>
+  </ul>
+
+  <hr>
+  <p class="note">To undo the whole thing: <code>git reset --hard seen-egraph-2-prerebase</code> (or <code>git reset --hard origin/seen-egraph</code>).</p>
+
+</div>
+</body>
+</html>
