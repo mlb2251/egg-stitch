@@ -150,10 +150,12 @@ class OursBf:
     max_forced_expansion: int | None = None
     max_arity: int = MAX_ARITY
     # only_use_dsrs_at_start = canonicalise once up front (dsrs-only-at-start
-    # baseline); no_dsrs = drop DSRs entirely (no-rules baseline). repr=False keeps
-    # the method label unchanged.
+    # baseline); no_dsrs = drop DSRs entirely (no-rules baseline);
+    # no_opt_seen = disable the best-first seen-set dedup (forwards
+    # --no-opt-seen). repr=False keeps the method label unchanged.
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
     no_dsrs: bool = field(default=False, repr=False)
+    no_opt_seen: bool = field(default=False, repr=False)
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
@@ -164,6 +166,8 @@ class OursBf:
             search_flags["num_steps"] = self.num_steps
         if self.max_forced_expansion is not None:
             search_flags["max_forced_expansion"] = self.max_forced_expansion
+        if self.no_opt_seen:
+            search_flags["no_opt_seen"] = True
         return _run(
             rounds=rounds, input_path=input_path,
             rewrites_path=None if self.no_dsrs else rewrites_path,
