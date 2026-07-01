@@ -1,5 +1,2 @@
-// Commutativity of +. No single canonical orientation: extracting the
-// size-minimal term keeps each (+ P Q) in whatever order it was written (the
-// left child is parsed first, so it gets the smaller e-class id and wins the
-// tie), which need not be the order that exposes shared structure.
 plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
+add_zero: ?x <=> (+ 0 ?x)
