@@ -1,53 +1,57 @@
 # examples-paper
 
 A minimal worked example (in the shape of the e-stitch figure-1 running example)
-showing that a compressive abstraction need not fall out of canonicalization —
-so library learning with **live** rewrites beats "minimize first, then abstract"
+showing that the abstraction-exposing corpus is **not** the minimal one, and its
+compressive form does not fall out of canonicalization — so library learning
+with **live** rewrites beats "minimize first, then abstract"
 (`--only-use-dsrs-at-start`).
 
-The rewrites (`rules.rewrites`) are commutativity of `+` and the additive
-identity:
+The rewrites (`rules.rewrites`) are:
 
 ```
 plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
 add_zero:  ?x       <=> (+ 0 ?x)
+neg_zero:  (- 0)    <=> 0
 ```
 
 The shared abstraction is
 
 ```
-f0 = (+ ?x (* ?y ?y))      // x + y², arity 2
+f0 = (+ (- ?0) (* ?1 ?1))      // -x + y², arity 2
 ```
 
-Its slots are filled with varied per-program subterms — bare symbols, larger
-`(* ..)` / `(/ ..)` terms — and some programs are wrapped in an outer function
-(`sqrt`, `f1`). Six programs are of `f0` shape; the seventh is the bare square
-`(* (/ x 2) (/ x 2))`, which has no `+` and only fits `f0` after an `add_zero`
-expansion: `(+ 0 (* (/ x 2) (/ x 2))) = (f0 0 (/ x 2))`.
+Both operands of the `+` are structured — a negation `(- ?0)` and a square
+`(* ?1 ?1)` — so bare `(* ?1 ?1)` squaring is a much weaker fallback (it misses
+the `-` and the `+`). Slots are filled with varied per-program subterms (bare
+symbols, `(* ..)` / `(/ ..)` terms) and one program is wrapped in `sqrt`. The
+last program is a square with no `+`, which fits `f0` only through the two
+identities: `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e. `(f0 0 d)`.
 
-- **`corpus_a.json`** — every `f0` program is written with the square *second*,
-  so a plain *syntactic* (rule-free) search finds `f0`.
+- **`corpus_a.json`** — the *expanded* corpus, written to match `f0`
+  syntactically: the `f0` programs put `(- ?0)` first, and the last is
+  `(+ (- 0) (* (/ x 2) (/ x 2)))`. A plain rule-free search finds `f0`. A is
+  deliberately **not** minimal — that `(+ (- 0) ..)` collapses to `(* ..)`.
 
-- **`corpus_b.json`** — the same programs, commutatively scrambled (half put the
-  square first). Because *both* operands of each `+` are per-program subterms (no
-  shared anchor leaf), the left operand is parsed first and gets the smaller
-  e-class id, so egg's min-term extractor keeps each `+` in its written
-  orientation — it does **not** re-align them. With a balanced split, no single
-  orientation wins, so a search over the minimal corpus falls back to the weaker
-  `(* ?y ?y)` squaring. Live rewriting re-aligns every `+` *and* uses `add_zero`
-  on the bare square, recovering the full `f0` across all programs.
+- **`corpus_b.json`** — the size-minimal form: the last program is the bare
+  `(* (/ x 2) (/ x 2))`, and the `f0` programs are commutatively scrambled (half
+  put the square first). Because *both* operands of each `+` are per-program
+  subterms (no shared anchor leaf), the left operand is parsed first and gets the
+  smaller e-class id, so egg's min-term extractor keeps each `+` in its written
+  orientation — it does **not** re-align them. So a search over the minimal
+  corpus falls back to the weak `(* ?1 ?1)` squaring. Live rewriting re-aligns
+  every `+` *and* `add_zero`/`neg_zero`-expands the bare square, recovering `f0`.
 
-So `--only-use-dsrs-at-start`, which abstracts over the extracted minimal corpus,
-is stuck with bare squaring, while live rewriting recovers the richer, more
-compressive `f0`.
+This is the paper's point that the abstraction-exposing corpus is not the minimal
+one: rule-free A (cost 24) beats abstracting B's minimal term (at-start, cost
+26), and live rewriting recovers A's cost (24) from B.
 
-Measured with best-first, `--max-arity 2` (seven programs):
+Measured with best-first, `--max-arity 2` (four programs):
 
 | corpus | rule-free | `--only-use-dsrs-at-start` | live |
 |--------|-----------|----------------------------|------|
-| A      | ~1.19× (`(+ ?x (* ?y ?y))`) | — | — |
-| B      | ~1.16× (`(* ?y ?y)`)        | ~1.16× | ~1.26× (`(+ (* ?y ?y) ?x)`) |
+| A      | ~1.33× (`(+ (- ?0) (* ?1 ?1))`) | — | — |
+| B      | ~1.12× (`(* ?1 ?1)`)            | ~1.12× | ~1.21× (`(+ (* ?1 ?1) (- ?0))`) |
 
-`tests/example_paper_test.rs` pins this: A ≡ B under the rewrites, B is
-size-minimal, syntactic search finds `f0` on A but only squaring on B, and live
-rewriting recovers `f0` on B (beating `--only-use-dsrs-at-start`).
+`tests/example_paper_test.rs` pins this: A ≡ B under the rewrites, B is minimal
+while A is expanded, syntactic search finds `f0` on A but only squaring on B, and
+live rewriting recovers `f0` on B (beating `--only-use-dsrs-at-start`).

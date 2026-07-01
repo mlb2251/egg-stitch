@@ -1,2 +1,3 @@
 plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
 add_zero: ?x <=> (+ 0 ?x)
+neg_zero: (- 0) <=> 0

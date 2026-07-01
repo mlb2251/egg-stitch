@@ -1,41 +1,46 @@
-//! Worked example for the paper (e-stitch figure-1 shape): a commutative
-//! ordering that does *not* fall out of canonicalization, so live rewriting
-//! beats `--only-use-dsrs-at-start`.
+//! Worked example for the paper (e-stitch figure-1 shape): a corpus whose
+//! abstraction-exposing form is neither the minimal one nor a canonical
+//! commutative ordering, so live rewriting beats `--only-use-dsrs-at-start`.
 //!
-//! The rewrites (`data/domains/examples-paper/rules.rewrites`) are commutativity
-//! of `+` plus the additive identity:
+//! The rewrites (`data/domains/examples-paper/rules.rewrites`) are:
 //! ```text
 //! plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
 //! add_zero:  ?x       <=> (+ 0 ?x)
+//! neg_zero:  (- 0)    <=> 0
 //! ```
 //!
-//! The shared abstraction is `f0 = (+ ?x (* ?y ?y))` (i.e. `x + y²`, arity 2).
-//! Its slots are filled with varied per-program subterms — bare symbols, larger
-//! `(* ..)` / `(/ ..)` terms — and some programs are wrapped in an outer function
-//! (`sqrt`, `f1`). Six programs are of `f0` shape; the seventh is the bare square
-//! `(* (/ x 2) (/ x 2))`, which has no `+` and only fits `f0` after an `add_zero`
-//! expansion `(+ 0 (* (/ x 2) (/ x 2))) = (f0 0 (/ x 2))`.
+//! The shared abstraction is `f0 = (+ (- ?0) (* ?1 ?1))` (i.e. `-x + y²`,
+//! arity 2). Both operands of the `+` are structured — a negation `(- ?0)` and a
+//! square `(* ?1 ?1)` — so bare `(* ?1 ?1)` squaring is a much weaker fallback
+//! (it misses the `-` and the `+`). Slots are filled with varied per-program
+//! subterms (bare symbols, `(* ..)` / `(/ ..)` terms) and one program is wrapped
+//! in `sqrt`. The last program is a *square with no `+`*, which fits `f0` only
+//! through the two identities: `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e.
+//! `(f0 0 d)`.
 //!
-//! * `corpus_a.json` writes every `f0` program with the square *second*, so a
-//!   plain *syntactic* (rule-free) search finds `f0`.
-//! * `corpus_b.json` is the same programs, commutatively scrambled (half put the
-//!   square first). Because *both* operands of each `+` are per-program subterms
-//!   (no shared anchor leaf), the left one is parsed first and gets the smaller
-//!   e-class id, so egg's min-term extractor keeps each `+` in its written
-//!   orientation — it does *not* re-align them. With a balanced split no single
-//!   orientation wins, so a search over the minimal corpus falls back to the
-//!   weaker `(* ?y ?y)` squaring. Live rewriting re-aligns every `+` and uses
-//!   `add_zero` on the bare square, recovering the full `f0` across all programs.
+//! * `corpus_a.json` is the *expanded* corpus matching `f0` syntactically: the
+//!   `f0` programs put `(- ?0)` first, and the last is written
+//!   `(+ (- 0) (* (/ x 2) (/ x 2)))`. A plain rule-free search finds `f0`. A is
+//!   deliberately *not* minimal — that `(+ (- 0) ..)` collapses to `(* ..)`.
+//! * `corpus_b.json` is the size-minimal form: the last program is the bare
+//!   `(* (/ x 2) (/ x 2))`, and the `f0` programs are commutatively scrambled
+//!   (half put the square first). Because *both* operands of each `+` are
+//!   per-program subterms (no shared anchor leaf), the left one is parsed first
+//!   and gets the smaller e-class id, so egg's min-term extractor keeps each `+`
+//!   in its written orientation — it does *not* re-align them. So a search over
+//!   the minimal corpus falls back to the weak `(* ?1 ?1)` squaring. Live
+//!   rewriting re-aligns every `+` and `add_zero`/`neg_zero`-expands the bare
+//!   square, recovering the full `f0`.
 //!
-//! Measured (best-first, `--max-arity 2`, seven programs):
+//! This is the paper's point that the abstraction-exposing corpus is *not* the
+//! minimal one: rule-free A (cost 24) beats abstracting B's minimal term
+//! (at-start, cost 26); live rewriting recovers A's cost (24) from B.
+//!
+//! Measured (best-first, `--max-arity 2`, four programs):
 //! | corpus | rule-free         | at-start | live             |
 //! |--------|-------------------|----------|------------------|
-//! | A      | ~1.19x (full f0)  | —        | —                |
-//! | B      | ~1.16x (squaring) | ~1.16x   | ~1.26x (full f0) |
-//!
-//! Live both re-aligns the scrambled `+`s and `add_zero`-expands the bare square,
-//! so it finds the full `(+ ?x (* ?y ?y))`; the minimal corpus only yields bare
-//! `(* ?y ?y)`.
+//! | A      | ~1.33x (full f0)  | —        | —                |
+//! | B      | ~1.12x (squaring) | ~1.12x   | ~1.21x (full f0) |
 
 use egg::Language;
 use egg_stitch::{
@@ -48,9 +53,11 @@ use std::{fs, process::Command};
 const BIN: &str = env!("CARGO_BIN_EXE_egg-stitch");
 const DIR: &str = "data/domains/examples-paper";
 
-/// Commutativity terminates as an e-graph saturation (each `+` class gains its
-/// swapped node and no more), so a small iter cap is plenty.
-const ITER_LIMIT: &str = "6";
+/// `--iter-limit` for rule runs. `add_zero`/`neg_zero` are size-increasing in one
+/// direction and never saturate, so this is a cap; a handful of iterations is
+/// enough to merge the orientations and expand the bare square, and small keeps
+/// the e-graph from ballooning.
+const ITER_LIMIT: &str = "4";
 
 /// Reads a corpus JSON file (an array of s-expression strings).
 fn load_corpus(name: &str) -> Vec<String> {
@@ -58,20 +65,22 @@ fn load_corpus(name: &str) -> Vec<String> {
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {name}: {e}"))
 }
 
-/// Writes a commutativity-only ruleset to a temp file and returns its path.
-/// The equivalence and minimal-term checks only need commutativity: `add_zero`
-/// (`?x => (+ 0 ?x)`) only ever *grows* terms, so it changes neither the e-class
-/// merges nor the minimal size — and saturating it with comm blows the e-graph
-/// up. Comm alone saturates cheaply.
-fn comm_rules_path() -> String {
-    let p = std::env::temp_dir().join(format!("egg-stitch-examples-paper-comm-{}.rewrites", std::process::id()));
-    fs::write(&p, "plus_comm: (+ ?x ?y) <=> (+ ?y ?x)\n").unwrap_or_else(|e| panic!("write {}: {e}", p.display()));
-    p.to_str().expect("utf-8 temp path").to_string()
-}
-
 /// Weighted size (= node count under unit weights) of an s-expression string.
 fn tree_size(sexpr: &str) -> usize {
     sexpr.replace('(', " ").replace(')', " ").split_whitespace().count()
+}
+
+/// Total weighted size of a corpus.
+fn total_size(programs: &[String]) -> usize {
+    programs.iter().map(|p| tree_size(p)).sum()
+}
+
+/// Saturates `programs` under the real ruleset (bounded iter-limit) and returns
+/// each program's size-minimal extraction.
+fn minimal_terms(programs: &[String]) -> Vec<String> {
+    let rules = format!("{DIR}/rules.rewrites");
+    let data = io::egraph_from_programs::<OpChildren, Op>(programs, Some(&rules), Weights::default(), 4, 200_000);
+    io::extract_programs(&data.egraph, data.root)
 }
 
 /// What rewrite regime a compression run uses.
@@ -86,9 +95,9 @@ enum Mode {
 }
 
 /// Result of one best-first run: its compression ratio and the abstraction it
-/// found. `found_f0` is true when the abstraction is the full `(+ ?x (* ?y ?y))`
-/// (it contains a `+`); the consolation `(* ?y ?y)` squaring abstraction does
-/// not.
+/// found. `found_f0` is true when the abstraction is the full
+/// `(+ (- ?0) (* ?1 ?1))` (it contains a `+`); the consolation `(* ?1 ?1)`
+/// squaring abstraction does not.
 struct Run {
     ratio: f64,
     found_f0: bool,
@@ -119,30 +128,29 @@ fn run(corpus: &str, mode: Mode) -> Run {
 }
 
 #[test]
-fn a_and_b_are_equivalent_under_commutativity() {
+fn a_and_b_are_equivalent_under_the_rewrites() {
     let a = load_corpus("corpus_a.json");
     let b = load_corpus("corpus_b.json");
     assert_eq!(a.len(), b.len(), "corpora must align program-for-program");
-    let rules = comm_rules_path();
+    let rules = format!("{DIR}/rules.rewrites");
     for (ai, bi) in a.iter().zip(&b) {
-        let data = io::egraph_from_programs::<OpChildren, Op>(&[ai.clone(), bi.clone()], Some(&rules), Weights::default(), 10, 1_000_000);
+        let data = io::egraph_from_programs::<OpChildren, Op>(&[ai.clone(), bi.clone()], Some(&rules), Weights::default(), 4, 200_000);
         let eg = &data.egraph;
         let programs = eg[data.root].nodes.iter().find(|n| n.is_programs_node()).expect("root has a programs node");
         let (ca, cb) = (eg.find(programs.children()[0]), eg.find(programs.children()[1]));
-        assert_eq!(ca, cb, "A and B programs should be equivalent under commutativity:\n  A = {ai}\n  B = {bi}");
+        assert_eq!(ca, cb, "A and B programs should be equivalent under the rewrites:\n  A = {ai}\n  B = {bi}");
     }
 }
 
 #[test]
-fn b_is_size_minimal() {
-    // Under commutativity (size-neutral) B has no reducible structure: its
-    // min-term extraction is the same size as B itself.
+fn b_is_minimal_but_a_is_expanded() {
+    // B is already size-minimal, so saturating + extracting shrinks nothing.
+    // A is the deliberately *expanded* corpus: its last program carries a
+    // removable `(+ (- 0) ..)`, so its minimal term is strictly smaller.
+    let a = load_corpus("corpus_a.json");
     let b = load_corpus("corpus_b.json");
-    let rules = comm_rules_path();
-    let data = io::egraph_from_programs::<OpChildren, Op>(&b, Some(&rules), Weights::default(), 10, 1_000_000);
-    for (bi, mi) in b.iter().zip(io::extract_programs(&data.egraph, data.root)) {
-        assert_eq!(tree_size(&mi), tree_size(bi), "B should be size-minimal, but extraction changed its size: {bi} -> {mi}");
-    }
+    assert_eq!(total_size(&minimal_terms(&b)), total_size(&b), "B should already be size-minimal");
+    assert!(total_size(&minimal_terms(&a)) < total_size(&a), "A should be non-minimal — its (+ (- 0) ..) strips away");
 }
 
 #[test]
@@ -154,10 +162,10 @@ fn syntactic_search_compresses_a_but_not_b() {
     assert!(a.ratio > b.ratio, "A should compress better than B syntactically (A={}, B={})", a.ratio, b.ratio);
 }
 
-/// The headline: live commutativity re-aligns B's `+` nodes and recovers the
-/// full `f0`, but `--only-use-dsrs-at-start` searches the minimal (scrambled)
-/// corpus and is stuck with bare squaring — the compressive ordering does not
-/// fall out of canonicalization.
+/// The headline: live rewriting re-aligns B's `+` nodes and expands the bare
+/// square to recover the full `f0`, but `--only-use-dsrs-at-start` searches the
+/// minimal corpus and is stuck with bare squaring — the abstraction-exposing
+/// form does not fall out of canonicalization.
 #[test]
 fn live_beats_only_use_dsrs_at_start_on_b() {
     let live = run("corpus_b.json", Mode::Live);
