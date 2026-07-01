@@ -166,6 +166,40 @@ fn var_slot(k: usize) -> Slot {
     Slot::numeric(k as u32)
 }
 
+/// Diagnostic encoding overrides, read once from the environment. These are pure
+/// experiment knobs for understanding *what* inflates the seen-egraph (see
+/// `docs/slotted_seen_set.html`); both off by default so normal runs use the
+/// real encoding. They deliberately change dedup semantics, so they're for
+/// measurement only, never production.
+struct EncodingMode {
+    /// `SEEN_NO_FROZEN`: encode frozen metavars as ordinary free vars (drop the
+    /// `fpv` head), to measure how much the frozen/free split inflates the egraph.
+    no_frozen: bool,
+    /// `SEEN_UNIFY_VARS`: encode every metavar as the *same* slot `$0`, collapsing
+    /// all variable identity (and reuse distinctions), to measure how much slot
+    /// diversity costs. Over-merges by design.
+    unify_vars: bool,
+    /// `SEEN_VARS_AS_CONST`: encode metavar `?#k` as a *distinct nullary operator*
+    /// `vK` (or `fvK` if frozen) carrying **no slot**, mimicking the old egg
+    /// encoding where `Var(k)` was a plain constant leaf. With no slots, slotted
+    /// alpha-equivalence folds *nothing*, so variable permutations a rewrite
+    /// generates stay distinct e-nodes. Comparing egraph size against the real
+    /// (slot-bearing) encoding measures exactly how much slotted's native alpha
+    /// folds *during saturation* — the win that only shows once rules run.
+    vars_as_const: bool,
+}
+
+/// The active diagnostic encoding mode, read once from the environment.
+fn encoding_mode() -> &'static EncodingMode {
+    use std::sync::OnceLock;
+    static MODE: OnceLock<EncodingMode> = OnceLock::new();
+    MODE.get_or_init(|| EncodingMode {
+        no_frozen: std::env::var_os("SEEN_NO_FROZEN").is_some(),
+        unify_vars: std::env::var_os("SEEN_UNIFY_VARS").is_some(),
+        vars_as_const: std::env::var_os("SEEN_VARS_AS_CONST").is_some(),
+    })
+}
+
 /// A node of `Op` with `arity` placeholder children, ready for `RecExpr`
 /// (`add_expr`/`lookup_rec_expr` overwrite the placeholders from the children).
 fn op_node(name: &str, arity: usize) -> SeenLang {
@@ -206,7 +240,19 @@ fn build_seen<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], 
     let disc = node.discriminant();
     if let Some(v) = disc.as_var() {
         let k = var_to_k[&v];
-        let leaf = if frozen[k] { SeenLang::FVar(var_slot(k)) } else { SeenLang::Var(var_slot(k)) };
+        // Diagnostic overrides (off by default): `vars_as_const` drops slots
+        // entirely (egg-style constants, so alpha folds nothing); `unify_vars`
+        // maps every var to one slot; `no_frozen` drops the frozen/free
+        // distinction. See [`EncodingMode`].
+        let mode = encoding_mode();
+        let frozen_here = frozen[k] && !mode.no_frozen;
+        if mode.vars_as_const {
+            let idx = if mode.unify_vars { 0 } else { k };
+            let name = if frozen_here { format!("fv{idx}") } else { format!("v{idx}") };
+            return SlottedRecExpr { node: op_node(&name, 0), children: vec![] };
+        }
+        let slot = if mode.unify_vars { var_slot(0) } else { var_slot(k) };
+        let leaf = if frozen_here { SeenLang::FVar(slot) } else { SeenLang::Var(slot) };
         return SlottedRecExpr { node: leaf, children: vec![] };
     }
     let name = disc.to_string();

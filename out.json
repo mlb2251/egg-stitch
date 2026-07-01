@@ -1,9 +1,9 @@
 {
-  "timestamp": 1782597586.542928,
+  "timestamp": 1782605747.358484,
   "search": "best-first",
   "input_file": "data/domains/comm-demo/sums.json",
   "rules_file": "data/domains/comm-demo/sums.rewrites",
-  "elapsed_secs": 0.212872584,
+  "elapsed_secs": 0.21555125,
   "initial_cost": 99,
   "cost_after_rewrites": 99,
   "cost_at_end_of_each_iter": [
@@ -61,25 +61,25 @@
       "best_history": [
         {
           "expansion": 9,
-          "elapsed_secs": 0.000335625,
+          "elapsed_secs": 0.000996209,
           "cost": 94,
           "pattern": "(+ a ?#0)"
         },
         {
           "expansion": 9,
-          "elapsed_secs": 0.000369042,
+          "elapsed_secs": 0.001030042,
           "cost": 90,
           "pattern": "(+ (+ ?#0 ?#1) ?#2)"
         },
         {
           "expansion": 10,
-          "elapsed_secs": 0.000788292,
+          "elapsed_secs": 0.001450459,
           "cost": 88,
           "pattern": "(+ (+ d ?#0) ?#1)"
         },
         {
           "expansion": 10,
-          "elapsed_secs": 0.000804667,
+          "elapsed_secs": 0.001469834,
           "cost": 78,
           "pattern": "(+ (+ (+ ?#0 ?#1) ?#2) ?#3)"
         }
@@ -87,6 +87,6 @@
     }
   ],
   "iteration_times": [
-    0.21284775
+    0.215528625
   ]
 }

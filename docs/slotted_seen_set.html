@@ -445,5 +445,341 @@ cargo test --release --lib seen_slotted</pre>
 <p class="small muted">The slotted e-graph library was cloned to <code>../slotted-egraphs</code> for study; the build uses the
 published <code>slotted-egraphs 0.0.36</code> crate.</p>
 
+<h2 id="molecules">12. Investigation — why <code>molecules/glycol</code> takes ~21&nbsp;s (and why slotted doesn't save it)</h2>
+
+<details class="request" open>
+<summary><strong>The investigation request (verbatim)</strong></summary>
+<blockquote>i havea command that takes around 11 seconds to run that i wanna debug because i know most of that time is being spent in saturation - in fact even the saturation that happens during printing of stats takes a few seconds. … each saturation gets longer and longer it feels exponential. i had hoped slotted egraphs would solve this but it seems like not … the egraphs do look qutie big and maybe there are lots of matches. but yeah lets try to understand why this blows up and the other example we've run doesnt despite running for many more steps. one thought is it could be worth tracking the egraph sizes and various other stats over time. Another thought is it could be worth making versions of the egraph that dont have the Frozen distinction … and even have versions that just treat every var as identical … also worth checking what about the egraph is being so slow.</blockquote>
+<p class="small muted">Command under test:
+<code>cargo run --release -- --input data/domains/molecules/scramble/glycol.scram.json -r data/domains/molecules/molecules.rewrites --search best-first --num-abstractions 1 --num-steps 500</code></p>
+</details>
+
+<div class="callout bad">
+<strong>TL;DR.</strong> The ~21&nbsp;s is almost entirely <strong>DSR saturation of the seen-egraph</strong>:
+12.5&nbsp;s during search (11.9&nbsp;s of it in saturation) + ~7.7&nbsp;s in the end-of-run stats audit. Turning
+saturation off (<code>--no-seen-egraph-saturate</code>) makes the search <strong>23× faster (0.53&nbsp;s) and finds
+the identical answer</strong> (cost 1133, 2.63×). The "exponential feel" is real and measured: each flush
+re-saturates the <em>whole accumulated egraph</em>, so per-flush time climbs <strong>0.14&nbsp;ms → 5727&nbsp;ms</strong>
+across the run. And the crucial part: <strong>slotted e-graphs cannot help this domain.</strong> Its redundancy is
+<em>structural</em> (re-rooting + commutativity over structured subtrees), not <em>alpha-equivalence</em> (bare-variable
+permutation). Pure alpha-canonicalisation scores <strong>0 dedup hits</strong> here; every hit comes from the DSRs,
+which is exactly what's expensive.</div>
+
+<h3>12.1 The symptom: saturation is the whole cost, and it buys nothing within budget</h3>
+<p>Same command, three seen-set settings (<code>--num-steps 500</code>, so all three do exactly 500 expansions; the
+seen-set only changes <em>which</em> successors get pushed). Timings on this machine, indicative.</p>
+<table>
+<thead><tr><th>seen-set config</th><th>search time</th><th>total wall</th><th>egraph dedup hits</th><th>best found</th><th>ratio</th></tr></thead>
+<tbody>
+<tr><td>saturation <strong>on</strong> (default)</td><td>12.46&nbsp;s</td><td>~21&nbsp;s</td><td>613</td><td>1133 @ exp 23</td><td>2.63×</td></tr>
+<tr class="hi"><td>saturation <strong>off</strong> (<code>--no-seen-egraph-saturate</code>)</td><td><strong>0.53&nbsp;s</strong></td><td>6.59&nbsp;s</td><td><strong>0</strong></td><td>1133 @ exp 27</td><td>2.63×</td></tr>
+<tr><td>no seen-set (<code>--no-opt-seen</code>)</td><td>0.13&nbsp;s</td><td>1.47&nbsp;s</td><td>—</td><td>1133 @ exp 27</td><td>2.63×</td></tr>
+</tbody>
+</table>
+<p>Three reads, each important:</p>
+<ul>
+<li><strong>Saturation is ~all of the search cost.</strong> 11.9&nbsp;s of the 12.5&nbsp;s search is per-insert
+saturation. Switch it off and search drops to 0.53&nbsp;s.</li>
+<li><strong>Pure alpha-equivalence catches nothing here:</strong> saturation-off gets <strong>0 egraph hits</strong>.
+The slotted backend's free win — folding variable permutations — simply never fires on this domain (see §12.4).</li>
+<li><strong>The 12&nbsp;s buys no better answer at this budget.</strong> All three settings find the same abstraction
+at the same cost, at expansion 23–27. The dedup is an <em>asymptotic</em> optimisation; on glycol the good
+abstraction is found early no matter what.</li>
+</ul>
+<p>The remaining "few seconds" the request mentions — <em>"the saturation that happens during printing of stats"</em>
+— is the end-of-run audit. In the saturation-off run it is the dominant remaining cost: the audit saturates the
+accumulated 11717-enode egraph <em>from scratch</em> to report DSR-class counts, ~5&nbsp;s (the 6.59&nbsp;s total minus
+the 0.53&nbsp;s search and ~1&nbsp;s of load/startup). In the default run the audit's saturation is a no-op (already
+saturated) but the distinct-root-class recount still re-looks-up every inserted term twice.</p>
+
+<h3>12.2 Tracking egraph size over time: the per-flush growth curve</h3>
+<p>Per the request, I instrumented every saturation flush (new <code>SeenTracker::flush_log</code>, printed in the
+audit). Each row is one flush: it re-saturates the <em>entire</em> egraph as it stands, so watching the columns climb
+shows the cost growth directly. Default run (dynamic batching, which doubles the batch on each no-effect flush, so
+flushes land at cumulative inserts 1, 3, 7, … 2047):</p>
+<pre>cum_inserts | enodes before→after | eclasses before→after | iters |  time
+  @1            2 → 2                 2 → 2          it=0       0.143 ms
+  @3            6 → 6                 6 → 6          it=0       0.463 ms
+  @7           14 → 14               14 → 14         it=1       3.478 ms
+  @15          30 → 30               30 → 30         it=1       7.037 ms
+  @31          65 → 67               65 → 65         it=2      25.110 ms
+  @63         163 → 225             161 → 161        it=2      92.233 ms
+  @127        454 → 654             390 → 390        it=2     243.771 ms
+  @255       1195 → 1743            931 → 931        it=2     826.044 ms
+  @511       3300 → 3915           2488 → 2009       it=2    1793.787 ms
+  @1023      6071 → 6220           4165 → 3234       it=2    3190.286 ms
+  @2047      9465 → 11687          6479 → 6439       it=2    5726.939 ms   ← +2222 enodes, −40 classes</pre>
+<p>Per-flush time is roughly <strong>linear in egraph size</strong> (~0.5–0.7&nbsp;ms/enode), and the egraph grows
+~linearly with inserts, so each flush is <em>O(N)</em> in the current size. Because flushes here land at doubling
+intervals, the cumulative is geometric and dominated by the last flush (5.7&nbsp;s) — total ≈ 11.9&nbsp;s. The dynamic
+batcher is what keeps this merely-bad rather than catastrophic: with <code>--seen-egraph-saturate-every 1</code> (flush
+every insert) the same work becomes <em>O(N²)</em>.</p>
+<div class="callout warn">
+<strong>This is the "exponential feel," precisely.</strong> Saturation is <em>not</em> incremental: every flush
+re-runs all 70 rules against all classes, re-deriving the equivalences it already derived last flush plus the new
+batch's. As the search runs longer the egraph only grows, so each flush is strictly more expensive than the last. The
+last flush alone re-saturates a 9465-enode egraph (5.7&nbsp;s) — and look at its effect: it <em>adds 2222 enodes</em>
+(the rules generating equivalent forms) while <em>merging only 40 classes</em>. Almost pure inflation.</div>
+
+<h3 id="mol-why-slotted">12.3 Why slotted e-graphs can't save this domain</h3>
+<p>The hope was that slotted's native alpha-equivalence would absorb the blow-up. It can't, and the reason is in the
+rules. The molecule DSRs are two structural families, neither of which is variable-permutation:</p>
+<pre>reroot_s_1_2: (m1 ?e (s2 ?f ?y0)) <=> (m2 ?f ?y0 (s1 ?e))    // re-root the tree at a neighbour
+comm_m2:      (m2 ?e ?n0 ?n1)      =>  (m2 ?e ?n1 ?n0)         // swap two neighbour SUBTREES
+comm_s4_dup:  (s4 ?e ?n0 ?n1 ?n1)  =>  (s4 ?e ?n1 ?n0 ?n1)
+rot_m4_a:     (m4 ?e ?n0 ?n1 ?n2 ?n3) => (m4 ?e ?n1 ?n2 ?n0 ?n3)</pre>
+<ul>
+<li><strong>Re-rooting</strong> rewrites the whole tree shape (a different atom becomes the root). That is not an
+alpha-renaming of slots under any encoding — it must be a DSR.</li>
+<li><strong>Commutativity/rotation here is over <em>structured arguments</em>.</strong> The slotted free win folds
+<code>(s4 ?#0 ?#1 ?#2)</code> ≡ <code>(s4 ?#1 ?#0 ?#2)</code> — permuting <em>bare slots</em>. But the patterns the
+search actually inserts have structured children, e.g. <code>(s4 C (s1 H) (s1 H) ?#0)</code>; commuting the two
+<code>(s1 H)</code> subtrees is a rewrite over <em>subterms</em>, which slotted does <strong>not</strong> canonicalise.
+It needs the <code>comm</code> DSR.</li>
+</ul>
+<p class="verdict">This is exactly why the saturation-off run scores <strong>0 alpha hits</strong>: on molecules the
+redundancy lives in re-rooting and subtree-commutativity, the precise things slotted folds <em>not</em> for free. The
+slotted backend therefore offers no shortcut here — it falls back on running the same DSRs the egg backend would have,
+and those DSRs are what explode.</p>
+
+<div class="callout warn">
+<strong>The sharper version (revises the §<a href="#sharing">6½</a> interpretation).</strong> "Slotted folds
+commutativity for free" is only true for commuting <em>bare variables</em> — that case is literally a slot renaming
+(<code>(+ ?x ?y)</code> ≡ <code>(+ ?y ?x)</code>; the <code>commutativity_reordering_folds_via_alpha</code> test is
+real). But in <em>this search</em> that capability is <strong>redundant with the search's own canonical variable
+numbering</strong>: <code>Pattern::expand</code> assigns metavar indices positionally, so the search never emits
+<code>(+ ?#1 ?#0)</code> as a state distinct from <code>(+ ?#0 ?#1)</code> — the cheap pattern <code>map</code>
+collapses them before the e-graph is consulted. So slotted's free alpha never gets two alpha-equivalent-but-distinct
+patterns to fold. I confirmed this with a control on the comm-demo (§<a href="#sharing">6½</a>) itself:
+<table>
+<thead><tr><th>comm-demo config</th><th>expansions</th><th>egraph hits</th></tr></thead>
+<tbody>
+<tr><td>slotted, saturation <strong>off</strong> (alpha only, no DSR)</td><td>311</td><td><strong>0</strong></td></tr>
+<tr><td>map / no seen-set</td><td>311</td><td>—</td></tr>
+<tr class="hi"><td>slotted, saturation <strong>on</strong> (alpha + DSR)</td><td>82</td><td>(many)</td></tr>
+</tbody>
+</table>
+With alpha alone the commutativity demo is back to <strong>311 expansions, 0 hits</strong> — identical to no-seen.
+At <em>insertion time</em> the search's canonical numbering has already subsumed bare-variable permutation, so alpha
+folds nothing extra. The 311→82 win needs the comm/assoc DSRs to fire.</div>
+
+<div class="callout good">
+<strong>But — alpha <em>does</em> fire once the rules run (a correction).</strong> The "0 hits" above is the
+<em>no-rules</em> case. The moment saturation runs, the rewrites <em>generate</em> new terms, and when a comm/rot rule
+fires on a position holding free metavariables it produces genuine alpha-variants (permuted slots) — which slotted
+folds for free, whereas the old egg encoding (a distinct <em>constant</em> <code>Var(k)</code> per index, no slots)
+keeps them as distinct e-nodes. To measure this I added a third diagnostic, <code>SEEN_VARS_AS_CONST</code> (encode
+<code>?#k</code> as a nullary op <code>vK</code> — egg-style, no slot, so alpha folds nothing), and ran it against the
+real encoding on the <em>identical</em> search walk (<code>--no-seen-egraph-decides</code>, so the map drives the
+search and the egraph is a shadow seeing the same 2586 calls):
+<table>
+<thead><tr><th>encoding (identical walk)</th><th>egraph dedup hits</th><th>genuine inserts</th><th>enodes after sat</th><th>distinct root classes</th></tr></thead>
+<tbody>
+<tr class="hi"><td>real (slot-bearing; alpha active)</td><td><strong>1563</strong></td><td>1023</td><td><strong>5786</strong></td><td><strong>653</strong></td></tr>
+<tr><td><code>SEEN_VARS_AS_CONST</code> (egg-style; no alpha)</td><td>1369</td><td>1217</td><td>11013</td><td>1052</td></tr>
+</tbody>
+</table>
+So slotted's native alpha is <strong>genuinely pulling weight during saturation</strong>: +194 dedup hits and a
+<strong>~1.9× smaller egraph</strong> (5786 vs 11013 enodes; 653 vs 1052 root classes) than the egg encoding would
+produce on the same inserts. This is exactly the "once we run rewrite rules we <em>will</em> see them" effect — the
+rules manufacture the alpha-variants, and slots fold them for free.</div>
+
+<div class="callout warn">
+<strong>…it just isn't enough, and doesn't even pay off in wall-clock.</strong> Two reasons it doesn't rescue molecules:
+<ol>
+<li><strong>The structural orbit dwarfs the alpha-foldable part.</strong> Alpha folds ~2× of the nodes, but the
+dominant blow-up is re-rooting (and comm over <em>concrete</em> atoms), which produces structurally-distinct terms
+alpha can't touch. After folding 2×, the egraph is still 5786 enodes and saturation still ~6&nbsp;s.</li>
+<li><strong>The 2× size win is eaten by slot overhead.</strong> Saturation here is <strong>6.16&nbsp;s (real) vs
+5.88&nbsp;s (egg-style)</strong> — essentially equal despite the real egraph having half the nodes. Slotted's
+slot-canonicalising e-matching/rebuild costs more per operation, so the smaller graph and the heavier per-node cost
+roughly cancel.</li>
+</ol></div>
+
+<p>So the answer to "did we encode the rule wrong?" is <strong>no</strong>, and the answer to "does slotted help at
+all here?" is "<strong>yes, ~2× on egraph size via alpha during saturation — but it's swamped by the structural
+explosion and cancelled by slot overhead.</strong>" There is no encoding that turns "swap two concrete sub-molecules"
+or "re-root the tree" into "rename a variable"; those are what dominate, and only the DSRs address them — and on
+molecules those DSRs explode regardless of how the variables are encoded.</p>
+
+<h3>12.4 What actually drives the size: the reroot × comm interaction</h3>
+<p>Splitting the ruleset isolates the source. (Heavy caveat: <code>--seen-egraph-decides</code> means the seen-set
+steers the search, so changing the rules changes the <em>trajectory</em> and hence the insert counts — these rows are
+not the same walk. The signal that survives the confound is per-flush/relative cost, not absolute inserts.)</p>
+<table>
+<thead><tr><th>ruleset</th><th># rules</th><th>saturation time</th><th>genuine inserts</th><th>best</th><th>ratio</th></tr></thead>
+<tbody>
+<tr><td>full (reroot + comm + rot)</td><td>70</td><td><strong>11.9&nbsp;s</strong></td><td>2290</td><td>1133</td><td>2.63×</td></tr>
+<tr><td>comm/rot only (reroot removed)</td><td>16</td><td>2.37&nbsp;s</td><td>2935</td><td>1429</td><td>2.08×</td></tr>
+<tr><td>reroot only</td><td>54</td><td>0.23&nbsp;s</td><td>622</td><td>2130</td><td>1.40×</td></tr>
+</tbody>
+</table>
+<p>The full set is <strong>5× slower than comm-only</strong> (despite <em>fewer</em> inserts) and <strong>~50× slower
+than reroot-only</strong>. Neither family alone explodes; the cost is the <strong>interaction</strong>: re-rooting
+crossed with neighbour-permutation generates a large equivalence orbit per molecular pattern — every rooting × every
+neighbour ordering — and saturation materialises that whole orbit as e-nodes (the "+2222 enodes" we saw). Note also
+that <strong>reroot is what earns the good answer</strong> (2.63× vs comm-only's 2.08×): you can't simply drop it. The
+expense and the quality come from the same rules.</p>
+
+<h3>12.5 Encoding diagnostics: frozen costs nothing, variable-diversity costs ~3×</h3>
+<p>Per the request I added two diagnostic encoding toggles (env vars, read once; off by default — they change dedup
+semantics, so measurement-only). <code>SEEN_NO_FROZEN</code> drops the <code>fpv</code> head (frozen vars encoded like
+free ones); <code>SEEN_UNIFY_VARS</code> maps every metavar to the <em>same</em> slot <code>$0</code>, collapsing all
+variable identity. Default command, saturation on:</p>
+<table>
+<thead><tr><th>encoding</th><th>saturation time</th><th>enodes (after)</th><th>eclasses</th><th>egraph hits</th><th>best</th></tr></thead>
+<tbody>
+<tr><td>baseline</td><td>11.9&nbsp;s</td><td>12883</td><td>7139</td><td>613</td><td>1133</td></tr>
+<tr><td><code>SEEN_NO_FROZEN</code></td><td>12.7&nbsp;s</td><td>12982</td><td>7480</td><td>645</td><td>1133</td></tr>
+<tr class="hi"><td><code>SEEN_UNIFY_VARS</code></td><td><strong>3.7&nbsp;s</strong></td><td>11296</td><td>6268</td><td>773</td><td>1133</td></tr>
+<tr><td>both</td><td>3.7&nbsp;s</td><td>9273</td><td>5779</td><td>1039</td><td>1133</td></tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The frozen distinction is not the culprit.</strong> Removing it is slightly <em>worse</em> (12.7&nbsp;s) —
+collapsing frozen/free changes the search trajectory more than it shrinks the egraph. The <code>fpv</code> heads are
+not what's inflating things.</li>
+<li><strong>Variable diversity is a real ~3× factor.</strong> Unifying all vars to one slot cuts saturation 11.9&nbsp;s
+→ 3.7&nbsp;s: fewer distinct leaves ⇒ more subterm sharing ⇒ smaller egraph and cheaper e-matching, and the search
+dedups more aggressively (773 vs 613 hits, by over-merging). It keeps the same answer <em>here</em>, but it is
+unsound in general (it equates <code>(T ?#0 ?#1)</code> with <code>(T ?#0 ?#0)</code>), so it's a diagnostic, not a fix.</li>
+<li>Both toggles together don't beat unify alone on time — variable diversity, not frozenness, is the size lever — and
+neither addresses the root cause (the reroot × comm orbit + whole-egraph re-saturation).</li>
+</ul>
+
+<h3>12.6 Why <code>nuts-bolts</code> doesn't blow up despite far more steps</h3>
+<p>The contrast is entirely in the rules. <code>nuts-bolts</code> has <strong>7 scale-1 identities</strong> (§5) —
+each generates a tiny per-pattern orbit, so the seen-egraph stays small and its saturation totalled <strong>0.012&nbsp;s</strong>
+across the run. <code>molecules</code> has <strong>70 reroot/comm/rot rules</strong> whose orbits are combinatorially
+large (§12.4). Same machinery, same whole-egraph re-saturation; the difference is how many equivalent forms the rules
+manufacture per inserted pattern. Step count is a red herring — it's orbit size per class.</p>
+
+<h3>12.7 Levers (none applied — this is a diagnosis)</h3>
+<ul>
+<li><strong>Incremental saturation</strong> is the structural fix the per-flush curve points at: don't re-saturate the
+whole egraph each flush, only propagate from the newly inserted classes. This is what
+<code>docs/seen_egraph_incremental_plan.html</code> targets, and it's the one change that attacks the <em>O(N)</em>-per-flush
+re-derivation directly.</li>
+<li><strong>Recognise when slotted has nothing to add and skip saturation.</strong> On molecules the DSRs aren't
+alpha-equivalence, alpha hits are 0, and at this budget the answer is unchanged with saturation off — so
+<code>--no-seen-egraph-saturate</code> is 23× faster for the same result. (Budget-specific: at much larger budgets the
+DSR dedup may start to matter; the honest fix is making it cheap, not removing it.)</li>
+<li><strong>Make the stats audit cheap.</strong> ~7.7&nbsp;s of the wall-clock is the end-of-run audit (a from-scratch
+saturation in the saturate-off case, a double distinct-root-class recount otherwise). It's pure reporting and could be
+gated behind a verbose flag.</li>
+<li><strong>Variable unification</strong> gives a free ~3× but is unsound in general; not a real option, only a measurement.</li>
+</ul>
+
+<h3>12.8 Instrumentation added (kept in the tree)</h3>
+<table>
+<thead><tr><th>where</th><th>what</th></tr></thead>
+<tbody>
+<tr><td><code>src/search.rs</code></td><td><code>FlushStat</code> + <code>SeenTracker::flush_log</code>: per-flush egraph size before/after, iterations, and wall-clock. Recorded in <code>check_and_insert</code>, printed in the audit.</td></tr>
+<tr><td><code>src/best_first.rs</code></td><td>Audit now prints the per-flush growth table (the curve in §12.2).</td></tr>
+<tr><td><code>src/seen_slotted.rs</code></td><td><code>EncodingMode</code> read once from env: <code>SEEN_NO_FROZEN</code>, <code>SEEN_UNIFY_VARS</code> (§12.5), and <code>SEEN_VARS_AS_CONST</code> (egg-style no-slot encoding, to isolate slotted's alpha win during saturation; §12.3). All off by default.</td></tr>
+</tbody>
+</table>
+<pre># reproduce the headline (saturation is the cost; same answer 23× faster):
+cargo run --release -- --input data/domains/molecules/scramble/glycol.scram.json \
+  -r data/domains/molecules/molecules.rewrites --search best-first \
+  --num-abstractions 1 --num-steps 500                          # ~21 s, prints the per-flush curve
+cargo run --release -- … --num-steps 500 --no-seen-egraph-saturate   # ~6.6 s (search 0.53 s), 0 alpha hits, same 1133
+cargo run --release -- … --num-steps 500 --no-opt-seen              # ~1.5 s, same 1133
+
+# encoding diagnostics (§12.5):
+SEEN_UNIFY_VARS=1 cargo run --release -- … --num-steps 500          # saturation 11.9 s → 3.7 s
+SEEN_NO_FROZEN=1  cargo run --release -- … --num-steps 500          # no help</pre>
+
+<h2 id="paper-audit">13. Sanity-check against the slotted e-graphs paper</h2>
+
+<details class="request" open>
+<summary><strong>The request (verbatim)</strong></summary>
+<blockquote>would you mind going and reading the slotted egraphs paper and making sure that what we've done here makes sense with respect to how these should actually be used? … i mean like everything weve done here.</blockquote>
+</details>
+
+<p>I read the PLDI&nbsp;2025 paper <em>"Slotted E-Graphs: First-Class Support for (Bound) Variables in E-Graphs"</em>
+(Schneider, Rossel, Shaikhha, Goens, Kœhler, Steuwer;
+<a href="https://doi.org/10.1145/3729326">10.1145/3729326</a>,
+<a href="https://steuwer.info/files/publications/2025/PLDI-Slotted-E-Graphs.pdf">open&nbsp;PDF</a>) end-to-end, plus the
+library source we actually call (<code>../slotted-egraphs/src/lang.rs</code>, <code>rewrite/mod.rs</code>,
+<code>run/runner.rs</code>). Verdict up front: <strong>our implementation is a correct and idiomatic use of the
+library — every encoding decision lines up with the paper's model, and the API is used as intended. The honest caveat
+is not that we misused slotted, but that the library's <em>signature strength</em> (first-class bound variables) is
+largely orthogonal to where this seen-set's redundancy lives — which is exactly why §12 found it doesn't tame
+molecules.</strong></p>
+
+<h3>13.1 What the paper says slotted e-graphs are <em>for</em></h3>
+<ul>
+<li><strong>The whole point is (bound) variables.</strong> Title and thesis: conventional e-graphs break sharing
+because "sub-terms that differ only in the names of their variables are represented separately," and the headline
+wins are avoiding <em>de-Bruijn shifting / name-renaming duplication</em>. Their big numbers are a λ-calculus
+fission benchmark where de-Bruijn encodings explode (egg-db: 1827k e-nodes, 5.1&nbsp;GB) and slotted stays flat
+(214 e-nodes, 6&nbsp;MB) — and two Mathlib theorems egg can't prove (one hits 2.6M e-nodes / 40&nbsp;GB) that
+slotted proves in &lt;1&nbsp;s. <em>All</em> of that advantage is binder/α-driven.</li>
+<li><strong>Free slots without binders are first-class</strong> (Fig. 1): the e-class for <code>a+b</code> simply
+carries slots <code>(e,f)</code> with no binder. "e-classes are parameterized by the free variables of the terms
+they represent." So our "metavariables as bare free slots, no binders" encoding is <em>exactly</em> the supported
+model, not a hack.</li>
+<li><strong>Variable-commutativity is folded by a per-e-class <em>symmetry group</em></strong> (Fig. 4), stored
+compactly via Schreier–Sims. <code>a+b ≡ b+a</code> becomes a slot permutation <code>{(a,b),(b,a)}</code> recorded on
+the class — <em>not</em> a duplicated e-node. Crucially this group is over <strong>slots</strong> (variables).</li>
+<li><strong>Redundant slots are dropped</strong> (Fig. 3): when <code>y·0 = 0</code>, slot <code>y</code> stops
+mattering and leaves the e-class's parameter list — handled automatically.</li>
+<li><strong>Slot overhead is intrinsic and acknowledged.</strong> §4.1: the same de-Bruijn encoding in slotted vs egg
+(<code>slotted-db</code> vs <code>egg-db</code>) is "2.7× more memory, and runs 7.8× slower … Part of this overhead is
+intrinsic to slots," plus the library is deliberately unoptimised ("we did not consider cache-friendliness, deferred
+rebuilding or compiled e-matching").</li>
+</ul>
+
+<h3>13.2 Our decisions vs. the paper — point by point</h3>
+<table>
+<thead><tr><th>What we did</th><th>Paper / library says</th><th>Verdict</th></tr></thead>
+<tbody>
+<tr><td>Metavariables → bare free slots, <strong>no binders</strong>, passed through a <code>$root$</code> op</td><td>Free slots are first-class; an e-class just exposes its free variables as slots (Fig. 1c/1d)</td><td><span class="tag t-good">idiomatic</span></td></tr>
+<tr><td>Frozen var → <code>(fpv $k)</code>: distinct head, <em>same</em> slot</td><td>Slots carry variable identity; a different function symbol over the same slot is just a different e-node shape — no special status</td><td><span class="tag t-good">sound</span></td></tr>
+<tr><td>One variable-arity <code>Op(Symbol, Vec&lt;AppliedId&gt;)</code>, hand-written <code>Language</code></td><td>Children are <em>renamed ids</em> <code>m∗a</code> (= <code>AppliedId</code>); the trait just needs slot/applied-id occurrences + shape. <code>define_language!</code> is a convenience, not required</td><td><span class="tag t-good">correct</span></td></tr>
+<tr><td>All slots reported <em>public</em> (<code>public_slot_occurrences = all</code>)</td><td>Public = visible outside the e-node; only binders make slots private. We have no binders, so public = all. The trait's <code>check()</code> asserts public⊎private = all, public∩private = ∅ — both hold trivially</td><td><span class="tag t-good">correct</span></td></tr>
+<tr><td><code>weak_shape_inplace</code> delegates to children's <code>weak_shape_impl</code> in occurrence order, returns the inverse bijection</td><td>This is exactly the canonical "shape = lexicographically-lowest renaming" the library computes (and what <code>define_language!</code> generates)</td><td><span class="tag t-good">matches</span></td></tr>
+<tr><td>Dedup via <code>lookup_rec_expr</code> membership, never <code>eg.eq</code> on applied-ids</td><td>Equivalence is between <em>invocations</em> of e-classes, so two applied-ids of one class with slots bound in different orders are not "equal"; membership of the canonical shape is the right query (paper §2.3 (b))</td><td><span class="tag t-good">correct (this was bug&nbsp;#2)</span></td></tr>
+<tr><td>Saturation = manual <code>apply_rewrites</code> loop until it reports no change</td><td><code>apply_rewrites</code> = "apply each rule once, return whether the e-graph changed"; the built-in <code>Runner</code>/<code>run_eqsat</code> is the same loop plus limits/reporting. <code>ProgressMeasure</code> unchanged ⇒ <code>Saturated</code></td><td><span class="tag t-good">equivalent to Runner</span></td></tr>
+</tbody>
+</table>
+
+<h3>13.3 Is the saturation cost our fault or the library's model?</h3>
+<p>The §12.2 finding — every flush re-saturates the <em>whole</em> egraph — is <strong>inherent to the library, not
+our loop</strong>. Each <code>apply_rewrites</code> pass runs <code>ematch_all(eg, lhs)</code> for every rule, i.e.
+e-matches the full e-graph from scratch; there is no incremental "only the new classes" e-matching (the paper lists
+compiled e-matching among the optimisations it skipped). The <code>Runner</code> we could have used instead calls the
+identical core. So we are not leaving an incremental-saturation feature unused — the library doesn't have one. (An
+incremental seen-egraph would have to be built on top, which is what <code>docs/seen_egraph_incremental_plan.html</code>
+contemplates.)</p>
+
+<h3>13.4 The one real caveat: right tool, wrong axis of redundancy</h3>
+<p>Everything checks out mechanically, so the substantive question is whether a slotted e-graph is the right structure
+for <em>this</em> job at all. Reading the paper sharpens the §12 answer:</p>
+<ul>
+<li><strong>Slotted's superpower is α-equivalence of variables</strong> — folding terms that differ only by
+(bound/free) variable names, and folding variable-commutativity via the slot <em>symmetry group</em>. Its dramatic
+wins are all on binder-heavy, shift-heavy λ-calculus / theorem-proving workloads.</li>
+<li><strong>This seen-set has no binders and few metavariables per pattern, and the search already canonical-numbers
+them.</strong> So the regime where slotted shines (lots of variable renaming/shifting) barely occurs. The measured
+benefit is the narrow slice in §12.3: alpha folding rule-generated variants, ~1.9× on egraph size — real, but small,
+and cancelled by the intrinsic slot overhead the paper quantifies (2.7×/7.8×).</li>
+<li><strong>The molecules blow-up is on an axis slotted fundamentally can't address.</strong> Re-rooting reshapes the
+tree and commutativity is over <em>structured subterms</em>; neither is a slot permutation, so neither the
+congruence-modulo-renaming nor the symmetry-group machinery applies. The paper's model makes this crisp: symmetry
+groups permute <em>slots</em>, not subterm children — so there is <strong>no encoding within slotted's model</strong>
+that turns "swap two sub-molecules" or "re-root" into "rename a variable." (The sort-children canonicalisation floated
+earlier lives <em>outside</em> the e-graph, precisely because slotted can't express it.)</li>
+</ul>
+<div class="callout good">
+<strong>Bottom line.</strong> We built the slotted seen-set the way the paper and library intend: free slots for
+metavariables, no binders, a hand-written variable-arity <code>Language</code> whose shape/slot methods match the
+contract, membership-based dedup, and idiomatic saturation. Nothing here is a misuse. The reason it under-delivers on
+molecules is not a wrong encoding — it's that slotted e-graphs are built to make <em>bound variables</em> first-class,
+and this domain's redundancy is structural rewriting (re-rooting) plus commutativity over concrete subterms, which is
+orthogonal to what slotted accelerates. Where the domain's redundancy <em>is</em> α-shaped, our usage does capture it
+(§12.3); it's simply not the dominant cost here.</div>
+
 </body>
 </html>

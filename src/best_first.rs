@@ -459,6 +459,28 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             format!("{} genuine inserts → {} true DSR-classes", audit.unique_inserted, audit.root_classes_after).bold(),
             if deferred == 0 { "✓ fully deduped".green().to_string() } else { format!("(Δ{deferred} not deduped: batch/off)").yellow().to_string() },
         );
+        // Per-flush growth curve: each row re-saturated the *whole* accumulated
+        // egraph, so watching nodes/time climb across flushes shows the
+        // super-linear cost directly. Diagnostics only.
+        if !s.flush_log.is_empty() {
+            println!("{}", "  per-flush growth (cum_inserts | enodes before→after | eclasses before→after | iters | time):".dimmed());
+            for fl in &s.flush_log {
+                println!(
+                    "    {}",
+                    format!(
+                        "@{:<5} {:>7}→{:<7} {:>6}→{:<6} it={:<2} {:>8.3}ms",
+                        fl.cumulative_inserts,
+                        fl.nodes_before,
+                        fl.nodes_after,
+                        fl.classes_before,
+                        fl.classes_after,
+                        fl.iters,
+                        fl.elapsed.as_secs_f64() * 1000.0
+                    )
+                    .dimmed(),
+                );
+            }
+        }
     }
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();

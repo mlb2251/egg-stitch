@@ -120,6 +120,28 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     /// Wall-clock spent building the `$root$`-wrapped `SeenLang` `RecExpr` for each
     /// lookup. Also excluded from `time` so the costs report disjointly.
     pub recexpr_time: Duration,
+    /// Per-flush trace of the seen-egraph (pure diagnostics — nothing the search
+    /// reads). One entry per saturation flush, recording the egraph size before
+    /// and after and the wall-clock it took, so the super-linear growth of
+    /// re-saturating the whole accumulated egraph each flush is visible.
+    pub flush_log: Vec<FlushStat>,
+}
+
+/// One saturation flush's diagnostics (see [`SeenTracker::flush_log`]). The
+/// `*_before`/`*_after` pairs bracket a single `saturate` call; `elapsed` is its
+/// wall-clock. Plotting `elapsed` (or `nodes_before`) against `cumulative_inserts`
+/// shows how the per-flush cost grows as the egraph accumulates.
+pub struct FlushStat {
+    /// Genuine inserts so far when this flush ran (the x-axis of the growth curve).
+    pub cumulative_inserts: usize,
+    pub nodes_before: usize,
+    pub nodes_after: usize,
+    pub classes_before: usize,
+    pub classes_after: usize,
+    /// Fixpoint iterations this flush ran.
+    pub iters: usize,
+    /// Wall-clock of this single `saturate` call.
+    pub elapsed: Duration,
 }
 
 /// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
@@ -152,6 +174,7 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
             egraph_time: Duration::ZERO,
             saturate_calls: 0,
             recexpr_time: Duration::ZERO,
+            flush_log: Vec::new(),
         }
     }
 }
@@ -245,11 +268,24 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
                 // Flush the batch: the new terms' fresh nodes may unlock new
                 // rewrite matches, so re-saturate so later lookups dedup modulo
                 // DSR-equivalence. Timed separately from the map bookkeeping.
+                // Snapshot size before/after so the flush_log shows how the cost
+                // of re-saturating the whole accumulated egraph grows over time.
+                let nodes_before = self.seen.num_nodes();
+                let classes_before = self.seen.num_classes();
                 let st = Instant::now();
-                self.seen.saturate(self.iter_limit);
+                let (_changed, iters) = self.seen.saturate(self.iter_limit);
                 saturate_elapsed = st.elapsed();
                 self.egraph_time += saturate_elapsed;
                 self.saturate_calls += 1;
+                self.flush_log.push(FlushStat {
+                    cumulative_inserts: self.inserted,
+                    nodes_before,
+                    nodes_after: self.seen.num_nodes(),
+                    classes_before,
+                    classes_after: self.seen.num_classes(),
+                    iters,
+                    elapsed: saturate_elapsed,
+                });
                 if self.saturate_dynamic {
                     self.adjust_saturate_every();
                 }
