@@ -253,6 +253,7 @@ fn rebuild_matches(parent_matches: &[MatchAtEClass], mut transform: impl FnMut(&
             }
         }
         new_factors.extend(replacement);
+        new_factors.retain(|f| !f.slots.is_empty());
         out.push(MatchAtEClass { root_eclass: m.root_eclass, factors: new_factors });
     }
     let num = total_substs(&out);
