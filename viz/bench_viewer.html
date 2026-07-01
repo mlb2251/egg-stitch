@@ -9,6 +9,8 @@
     --bg: #f6f7f9; --panel: #ffffff; --ink: #1a1d21; --muted: #6b7280;
     --line: #e3e6ea; --accent: #2563eb; --accent-soft: #eaf0fe;
     --good: #16794a; --bad: #b42318; --chip: #f0f2f5;
+    --a: #2563eb; --b: #d97706;               /* run-A / run-B identity colors */
+    --a-soft: #eaf0fe; --b-soft: #fdf1e0;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
@@ -30,11 +32,20 @@
   button { cursor: pointer; }
   button:hover { border-color: var(--accent); }
   .spacer { flex: 1; }
+  .grp { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .grp[hidden] { display: none; }
+  .modes { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .modes .mode { border: 0; border-radius: 0; padding: 5px 10px; background: var(--panel); }
+  .modes .mode.on { background: var(--accent); color: #fff; }
+  .run-a { color: var(--a); font-weight: 700; }
+  .run-b { color: var(--b); font-weight: 700; }
+
   main { flex: 1; display: flex; min-height: 0; }
   #sidebar {
     width: 340px; flex: none; border-right: 1px solid var(--line);
     background: var(--panel); display: flex; flex-direction: column; min-height: 0;
   }
+  #sidebar.compare { width: clamp(560px, 52vw, 900px); }
   #filter { margin: 8px; }
   #cells { overflow: auto; flex: 1; }
   .cell {
@@ -55,6 +66,23 @@
   .chip b { color: var(--ink); font-weight: 600; }
   .chip.good b { color: var(--good); } .chip.bad b { color: var(--bad); }
   .strip.pending { color: var(--muted); font-size: 10.5px; font-family: var(--mono); }
+
+  /* ── compare grid: three columns in one scroll container ─────────────── */
+  .cmp-grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr; }
+  .cmp-grid .hdr {
+    position: sticky; top: 0; z-index: 2; background: var(--panel);
+    font-family: var(--mono); font-size: 11px; padding: 6px 10px;
+    border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+  }
+  .cmp-cell {
+    padding: 6px 10px; min-height: 34px; cursor: pointer;
+    border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+  }
+  .cmp-cell:hover { background: var(--accent-soft); }
+  .cmp-cell.sel { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+  .cmp-cell.empty { cursor: default; color: var(--muted); }
+  .cmp-cell .dom { font-weight: 650; display: block; margin-bottom: 3px; }
+
   #detail { flex: 1; overflow: auto; padding: 16px 20px; }
   .hint { color: var(--muted); padding: 40px; text-align: center; }
   .hint code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
@@ -87,6 +115,8 @@
   table.kv td.k { color: var(--muted); width: 240px; white-space: nowrap; }
   table.kv td.k[title] { cursor: help; text-decoration: underline dotted var(--line); text-underline-offset: 3px; }
   table.kv td.v { font-family: var(--mono); }
+  table.cmp-kv td.v { width: auto; }
+  table.cmp-kv td.v.good { color: var(--good); } table.cmp-kv td.v.bad { color: var(--bad); }
   .nested { margin: 2px 0 2px; border-left: 2px solid var(--line); padding-left: 4px; }
   .subhdr { font-family: var(--mono); font-weight: 650; color: var(--ink); margin: 2px 0; }
 
@@ -101,29 +131,53 @@
     overflow: auto; max-height: 420px; font-family: var(--mono); font-size: 12px;
   }
   details > summary { cursor: pointer; color: var(--accent); }
-  .spark { display: inline-block; vertical-align: middle; margin-left: 6px; }
+
+  /* ── charts ──────────────────────────────────────────────────────────── */
+  .charts { display: flex; flex-wrap: wrap; gap: 18px; }
+  .chartcard { }
+  .chartcard h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  svg.chart { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  svg.chart .gl { stroke: var(--line); stroke-width: 1; }
+  svg.chart .glx { stroke: var(--line); stroke-width: 1; opacity: .5; }
+  svg.chart .axl { font-size: 10px; fill: var(--muted); font-family: var(--mono); }
+  svg.chart .axt { font-size: 11px; fill: var(--muted); }
+  .legend { display: flex; gap: 14px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+  .lg { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 </style>
 </head>
 <body>
 <header>
   <h1>bench_pr viewer</h1>
-  <span class="sub">session</span>
-  <select id="session"></select>
+  <div class="modes">
+    <button id="mode-single" class="mode on">single</button>
+    <button id="mode-compare" class="mode">compare</button>
+  </div>
+  <span class="grp" id="grp-single">
+    <span class="sub">session</span>
+    <select id="session"></select>
+  </span>
+  <span class="grp" id="grp-compare" hidden>
+    <span class="sub run-a">A</span>
+    <select id="sessionA"></select>
+    <span class="sub run-b">B</span>
+    <select id="sessionB"></select>
+  </span>
   <button id="reload" title="Re-scan the results tree">↻</button>
   <span class="sub" id="status"></span>
   <div class="spacer"></div>
   <details style="position:relative">
     <summary>legend</summary>
-    <div style="position:absolute; right:0; top:22px; z-index:5; width:420px; background:var(--panel);
+    <div style="position:absolute; right:0; top:22px; z-index:5; width:440px; background:var(--panel);
                 border:1px solid var(--line); border-radius:8px; padding:12px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
       <div class="subhdr">what you're looking at</div>
       <p style="margin:6px 0; color:var(--muted)">
-        Each cell is one <code>(branch / dsr-condition / method / domain)</code> run. The
-        <b>Result</b> block is the runner's uniformly-recomputed cost/compression; the
-        <b>egg-stitch run stats</b> block is the full output JSON — per-abstraction
-        <code>search_stats</code> (expansions, cost calls, dominance/useless/lower-bound
-        hits) and the nested <code>seen</code> seen-set + seen-egraph saturation audit.
-        Hover a key for its meaning.
+        Each cell is one <code>(branch / dsr / method / domain)</code> run. In <b>compare</b>
+        mode pick two sessions: the left column is <span class="run-a">session A</span>, the
+        middle is <span class="run-b">session B</span>, and the right shows the per-cell diff —
+        green when B improves on A, red when it regresses. Cells align by their full path. Click
+        an A or B cell for the individual view, the Δ cell for the side-by-side comparison. The
+        <b>cost trajectory</b> charts come from each abstraction's <code>best_history</code>.
       </p>
     </div>
   </details>
@@ -138,6 +192,7 @@
 
 <script>
 const BASE = "results/bench_pr/";
+const CA = "#2563eb", CB = "#d97706";  // run-A / run-B line colors (green/red reserved for diffs)
 
 // ── short docs shown as hover tooltips on known stat keys ────────────────────
 const KEY_DOCS = {
@@ -195,7 +250,7 @@ const KEY_DOCS = {
 const RESULT_KEYS = ["initial_cost", "final_cost", "compression_ratio",
                      "elapsed_secs", "egraph_min_term_size", "timed_out"];
 
-// ── tiny DOM helper ──────────────────────────────────────────────────────────
+// ── tiny DOM helpers ─────────────────────────────────────────────────────────
 function el(tag, attrs = {}, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -210,6 +265,17 @@ function el(tag, attrs = {}, ...kids) {
   }
   return n;
 }
+// SVG needs the SVG namespace; separate helper so charts render as real graphics.
+function svgEl(tag, attrs = {}, ...kids) {
+  const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) if (v != null) n.setAttribute(k, v);
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return n;
+}
+const asArray = (d) => (Array.isArray(d) ? d : [d]);
 
 // ── directory crawling over the stdlib server's HTML listings ────────────────
 async function listDir(url) {
@@ -244,10 +310,36 @@ async function crawlReps(sessionUrl) {
   return files;
 }
 
+// Crawl a session once and group its rep files into per-domain cells, keyed by
+// the full branch/dsr/method/domain path. Each cell carries a `runKey`
+// (branch/dsr/method) so the compare view can slice a session into runs.
+const SESSION_CELLS = new Map(); // sessionUrl -> Promise<cell[]>
+function getCells(url) {
+  if (!SESSION_CELLS.has(url)) SESSION_CELLS.set(url, crawlAndGroup(url));
+  return SESSION_CELLS.get(url);
+}
+async function crawlAndGroup(url) {
+  const files = await crawlReps(url);
+  const byCell = new Map();
+  for (const f of files) {
+    if (f.rel.length < 4) continue; // [branch, dsr, method, domain]
+    const [branch, dsr, method, domain] = f.rel;
+    const id = f.rel.join("/");
+    if (!byCell.has(id))
+      byCell.set(id, { id, branch, dsr, method, domain,
+                       runKey: `${branch}/${dsr}/${method}`, reps: [], summary: undefined });
+    byCell.get(id).reps.push(f);
+  }
+  const cells = [...byCell.values()].sort((a, b) =>
+    (a.branch + a.dsr + a.method + a.domain).localeCompare(b.branch + b.dsr + b.method + b.domain));
+  for (const c of cells) c.reps.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  return cells;
+}
+
 // ── value formatting ─────────────────────────────────────────────────────────
-const fmtInt = (n) => n.toLocaleString();
+const fmtInt = (n) => Math.round(n).toLocaleString();
 const fmtSecs = (n) => (n < 1 ? `${(n * 1000).toFixed(1)} ms` : `${n.toFixed(3)} s`);
-function fmtFloat(n) { return Number.isInteger(n) ? fmtInt(n) : n.toFixed(4); }
+function fmtFloat(n) { return Number.isInteger(n) ? n.toLocaleString() : n.toFixed(4); }
 
 function scalar(key, v) {
   if (v === null || v === undefined) return el("span", { class: "null" }, "—");
@@ -298,12 +390,13 @@ function fetchRep(url) {
 }
 
 // Roll a cell's rep records up into the handful of numbers shown inline in the
-// sidebar. Compression is meaned over files; the search-stats counters are
-// summed over every file and every abstraction iteration.
+// sidebar. Compression is meaned over files; the search-stats counters and the
+// final cost are summed over every file and every abstraction iteration.
 function cellSummary(records) {
-  let crs = [], expansions = 0, egraphHits = 0, deferred = 0, elapsed = 0, haveStats = false;
+  let crs = [], expansions = 0, egraphHits = 0, deferred = 0, elapsed = 0, finalCost = 0, haveStats = false;
   for (const rec of records) {
     if (rec.compression_ratio != null) crs.push(rec.compression_ratio);
+    if (rec.final_cost != null) finalCost += rec.final_cost;
     elapsed += rec.elapsed_secs || 0;
     for (const a of (rec.stats && rec.stats.library) || []) {
       const s = a.search_stats;
@@ -314,41 +407,169 @@ function cellSummary(records) {
     }
   }
   const cr = crs.length ? crs.reduce((a, b) => a + b, 0) / crs.length : null;
-  return { cr, expansions, egraphHits, deferred, elapsed, haveStats };
+  return { cr, expansions, egraphHits, deferred, elapsed, finalCost, haveStats };
+}
+
+// Latest-rep summary for a list of cells; cached on each cell (no DOM effects).
+async function ensureSummaries(cells) {
+  await mapPool(cells, 8, async (cell) => {
+    if (cell.summary !== undefined) return;
+    const latest = cell.reps[cell.reps.length - 1];
+    try {
+      const data = await fetchRep(latest.url);
+      cell.summary = cellSummary(asArray(data));
+    } catch { cell.summary = null; }
+  });
 }
 
 function chip(label, value, cls) {
   return el("span", { class: "chip " + (cls || ""), title: KEY_DOCS[label] || null }, label + " ", el("b", {}, value));
 }
 
+// Individual chip strip — deliberately NEUTRAL (no good/bad tint): green/red are
+// reserved for the compare-mode diff column so improvement vs regression reads.
 function stripEl(sum) {
   const chips = [];
-  if (sum.cr != null) chips.push(chip("cr", sum.cr.toFixed(2) + "×", sum.cr >= 1 ? "good" : "bad"));
+  if (sum.cr != null) chips.push(chip("cr", sum.cr.toFixed(2) + "×"));
   if (sum.haveStats) {
     chips.push(chip("exp", fmtInt(sum.expansions)));
     chips.push(chip("egraph_hits", fmtInt(sum.egraphHits)));
-    if (sum.deferred) chips.push(chip("deferred", fmtInt(sum.deferred), "bad"));
+    if (sum.deferred) chips.push(chip("deferred", fmtInt(sum.deferred)));
   }
   chips.push(chip("t", fmtSecs(sum.elapsed)));
   return el("div", { class: "strip" }, ...chips);
 }
 
-// Load each cell's latest rep in the background (bounded concurrency) and drop
-// its chip strip in as each resolves.
-async function hydrateSummaries() {
-  await mapPool(CELLS, 8, async (cell) => {
-    const latest = cell.reps[cell.reps.length - 1];
-    try {
-      const data = await fetchRep(latest.url);
-      cell.summary = cellSummary(Array.isArray(data) ? data : [data]);
-    } catch { cell.summary = null; }
-    if (cell._node && cell._node.isConnected) {
-      cell._node.querySelector(".strip")?.remove();
-      if (cell.summary) cell._node.append(stripEl(cell.summary));
-    }
-  });
+// ── compare diffs (B − A) ─────────────────────────────────────────────────────
+// A signed value; `good` decides the green/red tint (null = no change / n/a).
+function fmtSigned(delta, fmt) {
+  const sign = delta > 0 ? "+" : delta < 0 ? "−" : "±";
+  return sign + fmt(Math.abs(delta));
+}
+function diffChip(label, a, b, lowerBetter, fmt) {
+  if (a == null || b == null) return chip(label, "—");
+  const d = b - a;
+  const cls = d === 0 ? "" : ((lowerBetter ? d < 0 : d > 0) ? "good" : "bad");
+  return chip(label, fmtSigned(d, fmt), cls);
+}
+function diffStripEl(sa, sb) {
+  const chips = [diffChip("Δcr", sa.cr, sb.cr, false, (v) => v.toFixed(2) + "×")];
+  if (sa.haveStats && sb.haveStats) {
+    chips.push(diffChip("Δexp", sa.expansions, sb.expansions, true, fmtInt));
+    if (sa.deferred || sb.deferred) chips.push(diffChip("Δdef", sa.deferred, sb.deferred, true, fmtInt));
+  }
+  chips.push(diffChip("Δt", sa.elapsed, sb.elapsed, true, fmtSecs));
+  return el("div", { class: "strip" }, ...chips);
 }
 
+// metrics shown in the comparison detail table (and which direction is "better")
+const CMP_METRICS = [
+  { label: "compression", get: (s) => s.cr,                          fmt: (v) => v.toFixed(3) + "×", dfmt: (v) => v.toFixed(3) + "×", lowerBetter: false },
+  { label: "final cost",  get: (s) => s.finalCost || null,           fmt: fmtInt,  dfmt: fmtInt,  lowerBetter: true },
+  { label: "expansions",  get: (s) => (s.haveStats ? s.expansions : null), fmt: fmtInt, dfmt: fmtInt, lowerBetter: true },
+  { label: "egraph_hits", get: (s) => (s.haveStats ? s.egraphHits : null), fmt: fmtInt, dfmt: fmtInt, lowerBetter: false },
+  { label: "deferred",    get: (s) => (s.haveStats ? s.deferred : null),   fmt: fmtInt, dfmt: fmtInt, lowerBetter: true },
+  { label: "elapsed",     get: (s) => s.elapsed,                     fmt: fmtSecs, dfmt: fmtSecs, lowerBetter: true },
+];
+function cmpTable(sumA, sumB) {
+  const t = el("table", { class: "kv cmp-kv" });
+  t.append(el("tr", {},
+    el("td", { class: "k" }, "metric"),
+    el("td", { class: "v" }, el("span", { class: "run-a" }, "A")),
+    el("td", { class: "v" }, el("span", { class: "run-b" }, "B")),
+    el("td", { class: "v" }, "Δ")));
+  for (const m of CMP_METRICS) {
+    const a = m.get(sumA), b = m.get(sumB);
+    const d = (a == null || b == null) ? null : b - a;
+    const good = d == null || d === 0 ? null : (m.lowerBetter ? d < 0 : d > 0);
+    t.append(el("tr", {},
+      el("td", { class: "k" }, m.label),
+      el("td", { class: "v" }, a == null ? "—" : m.fmt(a)),
+      el("td", { class: "v" }, b == null ? "—" : m.fmt(b)),
+      el("td", { class: "v " + (good == null ? "" : good ? "good" : "bad") }, d == null ? "—" : fmtSigned(d, m.dfmt))));
+  }
+  return t;
+}
+
+// ── charts (dependency-free SVG line charts) ─────────────────────────────────
+// Flatten each record's per-abstraction best_history into one cost trajectory,
+// offsetting successive abstractions so the x-axis stays continuous.
+function bestHistorySeries(records) {
+  const expPts = [], secPts = [];
+  let expOff = 0, secOff = 0;
+  for (const rec of records) {
+    for (const a of (rec.stats && rec.stats.library) || []) {
+      const bh = a.best_history;
+      if (!bh || !bh.length) continue;
+      for (const h of bh) {
+        expPts.push({ x: expOff + h.expansion, y: h.cost, label: h.pattern });
+        secPts.push({ x: secOff + h.elapsed_secs, y: h.cost, label: h.pattern });
+      }
+      expOff += bh[bh.length - 1].expansion;
+      secOff += bh[bh.length - 1].elapsed_secs;
+    }
+  }
+  return expPts.length ? { expansion: expPts, seconds: secPts } : null;
+}
+
+// series: [{ name, color, points:[{x,y,label?}] }]
+function lineChart(series, { xfmt = fmtInt, yfmt = fmtInt, xlabel = "", ylabel = "", w = 440, h = 250 } = {}) {
+  series = series.filter((s) => s && s.points && s.points.length);
+  const all = series.flatMap((s) => s.points);
+  if (!all.length) return el("div", { class: "hint", style: "padding:12px" }, "no best_history");
+  const m = { l: 60, r: 12, t: 12, b: 38 };
+  let xmin = Math.min(...all.map((p) => p.x)), xmax = Math.max(...all.map((p) => p.x));
+  let ymin = Math.min(...all.map((p) => p.y)), ymax = Math.max(...all.map((p) => p.y));
+  if (xmin === xmax) { xmin -= 1; xmax += 1; }
+  if (ymin === ymax) { ymin -= 1; ymax += 1; }
+  const ypad = (ymax - ymin) * 0.06; ymin -= ypad; ymax += ypad;
+  const iw = w - m.l - m.r, ih = h - m.t - m.b;
+  const sx = (x) => m.l + (x - xmin) / (xmax - xmin) * iw;
+  const sy = (y) => m.t + (1 - (y - ymin) / (ymax - ymin)) * ih;
+  const svg = svgEl("svg", { class: "chart", width: w, height: h, viewBox: `0 0 ${w} ${h}` });
+  const N = 5;
+  for (let i = 0; i <= N; i++) {
+    const yy = ymin + (ymax - ymin) * i / N, py = sy(yy);
+    svg.append(svgEl("line", { class: "gl", x1: m.l, y1: py, x2: w - m.r, y2: py }));
+    svg.append(svgEl("text", { class: "axl", x: m.l - 6, y: py + 3, "text-anchor": "end" }, yfmt(yy)));
+    const xx = xmin + (xmax - xmin) * i / N, px = sx(xx);
+    svg.append(svgEl("line", { class: "glx", x1: px, y1: m.t, x2: px, y2: h - m.b }));
+    svg.append(svgEl("text", { class: "axl", x: px, y: h - m.b + 16, "text-anchor": "middle" }, xfmt(xx)));
+  }
+  if (ylabel) svg.append(svgEl("text", { class: "axt", x: 13, y: m.t + ih / 2,
+    "text-anchor": "middle", transform: `rotate(-90 13 ${m.t + ih / 2})` }, ylabel));
+  if (xlabel) svg.append(svgEl("text", { class: "axt", x: m.l + iw / 2, y: h - 4, "text-anchor": "middle" }, xlabel));
+  for (const s of series) {
+    svg.append(svgEl("polyline", { points: s.points.map((p) => `${sx(p.x)},${sy(p.y)}`).join(" "),
+      fill: "none", stroke: s.color, "stroke-width": 2 }));
+    for (const p of s.points) {
+      const c = svgEl("circle", { cx: sx(p.x), cy: sy(p.y), r: 2.5, fill: s.color });
+      c.append(svgEl("title", {}, `${yfmt(p.y)} @ ${xfmt(p.x)}${p.label ? "\n" + p.label : ""}`));
+      svg.append(c);
+    }
+  }
+  const leg = el("div", { class: "legend" }, ...series.map((s) =>
+    el("span", { class: "lg" }, el("span", { class: "sw", style: `background:${s.color}` }), s.name)));
+  return el("div", { class: "chartwrap" }, svg, series.length > 1 ? leg : null);
+}
+function chartCard(title, chartEl) {
+  return el("div", { class: "chartcard" }, el("h4", {}, title), chartEl);
+}
+// The two trajectory charts for one or more series.
+function trajectoryCharts(seriesList) {
+  // seriesList: [{ name, color, s: bestHistorySeries(...) }]
+  const usable = seriesList.filter((x) => x.s);
+  if (!usable.length) return null;
+  return el("div", { class: "charts" },
+    chartCard("cost vs expansion", lineChart(
+      usable.map((x) => ({ name: x.name, color: x.color, points: x.s.expansion })),
+      { xfmt: fmtInt, yfmt: fmtInt, xlabel: "expansion", ylabel: "cost" })),
+    chartCard("cost vs seconds", lineChart(
+      usable.map((x) => ({ name: x.name, color: x.color, points: x.s.seconds })),
+      { xfmt: fmtSecs, yfmt: fmtInt, xlabel: "seconds", ylabel: "cost" })));
+}
+
+// ── generic object rendering ─────────────────────────────────────────────────
 function renderVal(key, v) {
   if (Array.isArray(v)) {
     if (v.length === 0) return el("span", { class: "null" }, "[]");
@@ -381,17 +602,19 @@ function metric(k, v, cls) {
 
 function renderFile(rec) {
   const wrap = el("div");
-  // headline metrics
+  // headline metrics — compression is NEUTRAL here (green/red reserved for compare)
   const cards = el("div", { class: "cards" });
   cards.append(metric("initial", rec.initial_cost != null ? fmtInt(rec.initial_cost) : "—"));
   cards.append(metric("final", rec.final_cost != null ? fmtInt(rec.final_cost) : "—"));
-  if (rec.compression_ratio != null) {
-    const good = rec.compression_ratio >= 1;
-    cards.append(metric("compression", rec.compression_ratio.toFixed(3) + "×", good ? "good" : "bad"));
-  }
+  if (rec.compression_ratio != null)
+    cards.append(metric("compression", rec.compression_ratio.toFixed(3) + "×"));
   cards.append(metric("elapsed", fmtSecs(rec.elapsed_secs)));
   if (rec.timed_out) cards.append(metric("status", "TIMED OUT", "bad"));
   wrap.append(cards);
+
+  // cost trajectory charts (best_history)
+  const traj = trajectoryCharts([{ name: "best", color: CA, s: bestHistorySeries([rec]) }]);
+  if (traj) wrap.append(el("section", { class: "block" }, el("h3", {}, "cost trajectory (best_history)"), traj));
 
   // library
   if (rec.library && rec.library.length) {
@@ -426,25 +649,29 @@ function renderFile(rec) {
   return wrap;
 }
 
+// A rep <select> for the detail views.
+function repSelect(reps, chosen, onpick) {
+  const sel = el("select");
+  reps.forEach((r, i) => {
+    const label = r.name.replace(/\.json$/, "") + (r.name.startsWith("rep0") ? " (warmup)" : "");
+    sel.append(el("option", { value: i, selected: i === chosen ? "" : null }, label));
+  });
+  sel.onchange = () => onpick(+sel.value);
+  return sel;
+}
+
+// individual detail (single cell) — same as before, now with trajectory charts
 async function showCell(cell, repIdx) {
   const detail = document.getElementById("detail");
   detail.innerHTML = "";
-  const reps = cell.reps;
-  const chosen = reps[repIdx] || reps[reps.length - 1];
+  const chosen = cell.reps[repIdx] ?? cell.reps[cell.reps.length - 1];
+  const idx = cell.reps.indexOf(chosen);
 
   detail.append(el("h2", { class: "title" }, cell.domain));
   detail.append(el("div", { class: "crumbs" }, cell.branch + " / " + cell.dsr + " / " + cell.method));
 
-  // rep selector
-  const row = el("div", { class: "filerow" });
-  row.append(el("span", { class: "sub" }, "rep"));
-  const sel = el("select");
-  reps.forEach((r, i) => {
-    const label = r.name.replace(/\.json$/, "") + (r.name.startsWith("rep0") ? " (warmup)" : "");
-    sel.append(el("option", { value: i, selected: r === chosen ? "" : null }, label));
-  });
-  sel.onchange = () => showCell(cell, +sel.value);
-  row.append(sel);
+  const row = el("div", { class: "filerow" }, el("span", { class: "sub" }, "rep"),
+    repSelect(cell.reps, idx, (i) => showCell(cell, i)));
   detail.append(row);
 
   let data;
@@ -454,14 +681,67 @@ async function showCell(cell, repIdx) {
     detail.append(el("div", { class: "hint" }, "failed to load: " + e.message));
     return;
   }
-  const files = Array.isArray(data) ? data : [data];
+  const files = asArray(data);
   files.forEach((rec, i) => {
     if (files.length > 1) detail.append(el("h3", { style: "margin:18px 0 4px" }, `file: ${rec.file || i}`));
     detail.append(renderFile(rec));
   });
 }
 
-// ── sidebar / sessions ───────────────────────────────────────────────────────
+// comparison detail (A vs B for one domain) — side-by-side metrics + dual charts
+async function showComparison(cellA, cellB, idxA, idxB) {
+  const detail = document.getElementById("detail");
+  detail.innerHTML = "";
+  const repA = cellA.reps[idxA] ?? cellA.reps[cellA.reps.length - 1];
+  const repB = cellB.reps[idxB] ?? cellB.reps[cellB.reps.length - 1];
+  const iA = cellA.reps.indexOf(repA), iB = cellB.reps.indexOf(repB);
+
+  detail.append(el("h2", { class: "title" }, cellA.domain));
+  detail.append(el("div", { class: "crumbs" }, cellA.branch + " / " + cellA.dsr + " / " + cellA.method));
+  detail.append(el("div", { class: "crumbs" },
+    el("span", { class: "run-a" }, "A · " + COMPARE.nameA), " vs ",
+    el("span", { class: "run-b" }, "B · " + COMPARE.nameB)));
+
+  detail.append(el("div", { class: "filerow" },
+    el("span", { class: "sub run-a" }, "A rep"), repSelect(cellA.reps, iA, (i) => showComparison(cellA, cellB, i, iB)),
+    el("span", { class: "sub run-b" }, "B rep"), repSelect(cellB.reps, iB, (i) => showComparison(cellA, cellB, iA, i))));
+
+  let dataA, dataB;
+  try {
+    [dataA, dataB] = await Promise.all([fetchRep(repA.url), fetchRep(repB.url)]);
+  } catch (e) {
+    detail.append(el("div", { class: "hint" }, "failed to load: " + e.message));
+    return;
+  }
+  const recsA = asArray(dataA), recsB = asArray(dataB);
+
+  detail.append(el("section", { class: "block" },
+    el("h3", {}, "comparison (Δ = B − A)"),
+    cmpTable(cellSummary(recsA), cellSummary(recsB))));
+
+  const traj = trajectoryCharts([
+    { name: "A · " + COMPARE.nameA, color: CA, s: bestHistorySeries(recsA) },
+    { name: "B · " + COMPARE.nameB, color: CB, s: bestHistorySeries(recsB) },
+  ]);
+  if (traj) detail.append(el("section", { class: "block" }, el("h3", {}, "cost trajectory (best_history)"), traj));
+
+  // libraries side by side
+  const libRow = el("div", { style: "display:flex; gap:24px; flex-wrap:wrap" });
+  for (const [label, cls, recs] of [["A", "run-a", recsA], ["B", "run-b", recsB]]) {
+    const lib = recs.flatMap((r) => r.library || []);
+    libRow.append(el("div", {},
+      el("div", { class: "subhdr " + cls }, label + " library"),
+      lib.length
+        ? el("ul", { class: "lib" }, ...lib.map((s) => {
+            const [name, ...rest] = String(s).split(": ");
+            return el("li", {}, el("span", { class: "name" }, name), ": " + rest.join(": "));
+          }))
+        : el("div", { class: "null" }, "—")));
+  }
+  detail.append(el("section", { class: "block" }, el("h3", {}, "libraries"), libRow));
+}
+
+// ── single-mode sidebar ───────────────────────────────────────────────────────
 let CELLS = [];
 
 function renderCellList(filter) {
@@ -478,11 +758,10 @@ function renderCellList(filter) {
         el("span", { class: "dom" }, cell.domain),
         el("span", { class: "path" }, `${cell.branch}·${cell.dsr}·${cell.method}`),
         el("span", { class: "reps" }, cell.reps.length + "×")));
-    // Strip: rendered now if already hydrated, else a placeholder hydrate fills.
     if (cell.summary) node.append(stripEl(cell.summary));
     else node.append(el("div", { class: "strip pending" }, "…"));
     node.onclick = () => {
-      document.querySelectorAll(".cell.sel").forEach((n) => n.classList.remove("sel"));
+      document.querySelectorAll(".cell.sel, .cmp-cell.sel").forEach((n) => n.classList.remove("sel"));
       node.classList.add("sel");
       showCell(cell, cell.reps.length - 1);
     };
@@ -492,33 +771,133 @@ function renderCellList(filter) {
   document.getElementById("status").textContent = `${shown} cell${shown === 1 ? "" : "s"}`;
 }
 
+// Fill in per-cell chip strips in the background as each latest rep resolves.
+async function hydrateSummaries() {
+  await mapPool(CELLS, 8, async (cell) => {
+    if (cell.summary === undefined) {
+      const latest = cell.reps[cell.reps.length - 1];
+      try { cell.summary = cellSummary(asArray(await fetchRep(latest.url))); }
+      catch { cell.summary = null; }
+    }
+    if (cell._node && cell._node.isConnected) {
+      cell._node.querySelector(".strip")?.remove();
+      if (cell.summary) cell._node.append(stripEl(cell.summary));
+    }
+  });
+}
+
 async function loadSession(url) {
   document.getElementById("status").textContent = "scanning…";
   document.getElementById("cells").innerHTML = "";
   document.getElementById("detail").innerHTML = '<div class="hint">Pick a cell on the left.</div>';
-  const files = await crawlReps(url);
-  // group rep files into cells keyed by branch/dsr/method/domain
-  const byCell = new Map();
-  for (const f of files) {
-    // rel = [branch, dsr, method, domain]; name = repN.json
-    if (f.rel.length < 4) continue;
-    const [branch, dsr, method, domain] = f.rel;
-    const id = f.rel.join("/");
-    if (!byCell.has(id)) byCell.set(id, { id, branch, dsr, method, domain, reps: [] });
-    byCell.get(id).reps.push(f);
-  }
-  CELLS = [...byCell.values()].sort((a, b) =>
-    (a.branch + a.dsr + a.method + a.domain).localeCompare(b.branch + b.dsr + b.method + b.domain));
-  for (const c of CELLS) c.reps.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  CELLS = await getCells(url);
   renderCellList(document.getElementById("filter").value);
-  hydrateSummaries(); // fills in per-cell chip strips in the background
+  hydrateSummaries();
+}
+
+// ── compare-mode sidebar ──────────────────────────────────────────────────────
+let COMPARE = { byA: new Map(), byB: new Map(), ids: [], nameA: "", nameB: "" };
+
+function selectCmp(node, fn) {
+  document.querySelectorAll(".cell.sel, .cmp-cell.sel").forEach((n) => n.classList.remove("sel"));
+  node.classList.add("sel");
+  fn();
+}
+
+// Draw the three aligned columns from the already-hydrated COMPARE state.
+function drawCompareGrid(filter) {
+  const box = document.getElementById("cells");
+  box.innerHTML = "";
+  const grid = el("div", { class: "cmp-grid" });
+  grid.append(
+    el("div", { class: "hdr" }, el("span", { class: "run-a" }, "A · " + COMPARE.nameA)),
+    el("div", { class: "hdr" }, el("span", { class: "run-b" }, "B · " + COMPARE.nameB)),
+    el("div", { class: "hdr" }, "Δ  diff (B − A)"));
+  const f = filter.trim().toLowerCase();
+  let shown = 0;
+  for (const id of COMPARE.ids) {
+    if (f && !id.toLowerCase().includes(f)) continue;
+    shown++;
+    const a = COMPARE.byA.get(id), b = COMPARE.byB.get(id), ref = a || b;
+
+    const aCell = el("div", { class: "cmp-cell" + (a ? "" : " empty") },
+      el("div", { class: "cell-top" },
+        el("span", { class: "dom" }, ref.domain),
+        el("span", { class: "path" }, `${ref.branch}·${ref.dsr}·${ref.method}`)));
+    if (a) {
+      aCell.append(a.summary ? stripEl(a.summary) : el("div", { class: "strip pending" }, "…"));
+      aCell.onclick = () => selectCmp(aCell, () => showCell(a, a.reps.length - 1));
+    } else aCell.append(el("span", { class: "sub" }, "not in A"));
+
+    const bCell = el("div", { class: "cmp-cell" + (b ? "" : " empty") });
+    if (b) {
+      bCell.append(b.summary ? stripEl(b.summary) : el("div", { class: "strip pending" }, "…"));
+      bCell.onclick = () => selectCmp(bCell, () => showCell(b, b.reps.length - 1));
+    } else bCell.append(el("span", { class: "sub" }, "not in B"));
+
+    const dCell = el("div", { class: "cmp-cell" + (a && b ? "" : " empty") });
+    if (a && b && a.summary && b.summary) {
+      dCell.append(diffStripEl(a.summary, b.summary));
+      dCell.onclick = () => selectCmp(dCell, () => showComparison(a, b, a.reps.length - 1, b.reps.length - 1));
+    } else dCell.append(el("span", { class: "sub" }, "—"));
+
+    grid.append(aCell, bCell, dCell);
+  }
+  box.append(grid);
+  document.getElementById("status").textContent = `${shown} row${shown === 1 ? "" : "s"}`;
+}
+
+// Compare two whole sessions, aligning their cells by full branch/dsr/method/
+// domain path — the same flat cell list as single mode, shown for both sessions
+// side by side with a diff column.
+async function renderCompare() {
+  document.getElementById("status").textContent = "scanning…";
+  const selA = document.getElementById("sessionA"), selB = document.getElementById("sessionB");
+  const sessA = selA.value, sessB = selB.value;
+  if (!sessA || !sessB) return;
+  const [cA, cB] = await Promise.all([getCells(sessA), getCells(sessB)]);
+  await Promise.all([ensureSummaries(cA), ensureSummaries(cB)]);
+  COMPARE = {
+    byA: new Map(cA.map((c) => [c.id, c])),
+    byB: new Map(cB.map((c) => [c.id, c])),
+    ids: [...new Set([...cA, ...cB].map((c) => c.id))].sort(),
+    nameA: selA.selectedOptions[0]?.textContent || "A",
+    nameB: selB.selectedOptions[0]?.textContent || "B",
+  };
+  drawCompareGrid(document.getElementById("filter").value);
+}
+
+// ── mode switching / init ─────────────────────────────────────────────────────
+let MODE = "single";
+let COMPARE_DEFAULTED = false;
+
+async function setMode(m) {
+  MODE = m;
+  document.getElementById("grp-single").hidden = m !== "single";
+  document.getElementById("grp-compare").hidden = m !== "compare";
+  document.getElementById("mode-single").classList.toggle("on", m === "single");
+  document.getElementById("mode-compare").classList.toggle("on", m === "compare");
+  document.getElementById("sidebar").classList.toggle("compare", m === "compare");
+  document.getElementById("detail").innerHTML = '<div class="hint">' +
+    (m === "single" ? "Pick a cell on the left."
+                    : "Click an A or B cell for the individual view, the Δ cell for the comparison.") +
+    "</div>";
+  if (m === "single") loadSession(document.getElementById("session").value);
+  else {
+    // First time in: default B to the next session so the diff isn't trivially empty.
+    if (!COMPARE_DEFAULTED) {
+      const sb = document.getElementById("sessionB");
+      if (sb.options.length > 1) sb.selectedIndex = 1;
+      COMPARE_DEFAULTED = true;
+    }
+    renderCompare();
+  }
 }
 
 async function init() {
-  const sessionSel = document.getElementById("session");
   let sessions;
   try {
-    sessions = (await listDir(BASE)).filter((e) => e.isDir).map((e) => e);
+    sessions = (await listDir(BASE)).filter((e) => e.isDir);
   } catch (e) {
     document.getElementById("detail").innerHTML =
       `<div class="hint">Couldn't list <code>${BASE}</code> (${e.message}).<br><br>` +
@@ -527,11 +906,25 @@ async function init() {
     return;
   }
   sessions.sort((a, b) => b.name.localeCompare(a.name)); // newest first
-  sessionSel.innerHTML = "";
-  for (const s of sessions) sessionSel.append(el("option", { value: s.url }, s.name));
-  sessionSel.onchange = () => loadSession(sessionSel.value);
-  document.getElementById("reload").onclick = () => loadSession(sessionSel.value);
-  document.getElementById("filter").oninput = (e) => renderCellList(e.target.value);
+  for (const id of ["session", "sessionA", "sessionB"]) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = "";
+    for (const s of sessions) sel.append(el("option", { value: s.url }, s.name));
+  }
+
+  document.getElementById("session").onchange = (e) => loadSession(e.target.value);
+  document.getElementById("sessionA").onchange = renderCompare;
+  document.getElementById("sessionB").onchange = renderCompare;
+  document.getElementById("mode-single").onclick = () => setMode("single");
+  document.getElementById("mode-compare").onclick = () => setMode("compare");
+  document.getElementById("reload").onclick = () => {
+    SESSION_CELLS.clear(); REP_CACHE.clear();
+    if (MODE === "single") loadSession(document.getElementById("session").value);
+    else renderCompare();
+  };
+  document.getElementById("filter").oninput = (e) =>
+    (MODE === "single" ? renderCellList : drawCompareGrid)(e.target.value);
+
   if (sessions.length) await loadSession(sessions[0].url);
   else document.getElementById("detail").innerHTML = '<div class="hint">No sessions under ' + BASE + ' yet.</div>';
 }

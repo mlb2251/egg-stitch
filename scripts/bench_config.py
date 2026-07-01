@@ -10,7 +10,7 @@ MOLECULE_STEPS = 500 # 5000
 
 # Forward --no-opt-seen (disable the best-first seen-set dedup) on every BF cell.
 # Flip to False to benchmark with the seen-set on. See OursBf / src/lib.rs.
-NO_OPT_SEEN = True
+NO_OPT_SEEN = False
 
 BF_RUNNERS = {
     # max_forced_expansion tuned so each target's with-DSRs best-first run takes
