@@ -61,6 +61,16 @@ impl LowerBoundPruner {
         }
     }
 
+    /// Number of states pruned by the lower bound (0 when disabled).
+    pub fn hits(&self) -> usize {
+        self.hits
+    }
+
+    /// Wall-clock spent computing lower bounds.
+    pub fn time(&self) -> Duration {
+        self.time
+    }
+
     /// Prints the stats line shown in the `STATS` block of each search driver.
     pub fn print_stats(&self) {
         println!("{} {} {}", "lower-bound hits:".dimmed(), self.hits.to_string().bold(), format!("(time: {:.3}s)", self.time.as_secs_f64()).dimmed());

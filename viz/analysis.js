@@ -24,6 +24,20 @@ function extractLinks(html) {
   return { files, dirs };
 }
 
+/** Run `fn` over `items` at most `limit` at a time — a bounded worker pool.
+ * Without this, loading a large results history opens hundreds of concurrent
+ * fetches and the browser throws net::ERR_INSUFFICIENT_RESOURCES. */
+async function mapPool(items, limit, fn) {
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
 /** Fetch + parse one JSON result file, tagging it with its folder. */
 async function loadRun(folder, file) {
   const path = folder ? `results/${folder}/${file}` : `results/${file}`;
@@ -48,23 +62,26 @@ async function load() {
       groupMap.get(folder).push(row);
     };
 
-    // Top-level (ungrouped / legacy) runs.
-    const topPromises = topFiles
-      .filter(f => !f.endsWith('_debug.json'))
-      .map(f => loadRun('', f).then(r => add('', r)));
+    // bench_pr/ has its own viewer (bench_viewer.html) and its results are
+    // nested several levels deeper than this flat loader reaches, so skip it.
+    const subDirs = dirs.filter(d => d !== 'bench_pr');
 
-    // One pass per subfolder, in parallel.
-    const subPromises = dirs.map(async d => {
+    // Phase 1: discover every (folder, file) pair. The per-folder listing
+    // fetches are pooled so a large history doesn't flood the connection pool.
+    const work = topFiles.filter(f => !f.endsWith('_debug.json')).map(f => ['', f]);
+    await mapPool(subDirs, 8, async d => {
       const sub = await fetch(`results/${d}/`).then(r => r.text());
-      const { files } = extractLinks(sub);
-      await Promise.all(
-        files
-          .filter(f => !f.endsWith('_debug.json'))
-          .map(f => loadRun(d, f).then(r => add(d, r)))
-      );
+      for (const f of extractLinks(sub).files) {
+        if (!f.endsWith('_debug.json')) work.push([d, f]);
+      }
     });
 
-    await Promise.all([...topPromises, ...subPromises]);
+    // Phase 2: load every file, also pooled. A single unreadable file is
+    // skipped rather than aborting the whole view.
+    await mapPool(work, 8, async ([folder, file]) => {
+      try { add(folder, await loadRun(folder, file)); }
+      catch (e) { console.warn('skip', folder, file, e); }
+    });
 
     groups = [...groupMap.entries()].map(([folder, rows]) => ({ folder, rows }));
     // Newest folder first; ungrouped ('') pinned to the bottom.

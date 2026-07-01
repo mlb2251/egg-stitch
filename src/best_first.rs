@@ -107,6 +107,9 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
     /// (the search converged); a non-zero value means it hit the `num_steps` cap.
     pub heap_size_at_end: usize,
     pub data: crate::shared::SharedData<F, O>,
+    /// Rich search diagnostics (seen-set/dominance/lower-bound/cost-call stats),
+    /// serialized into the run's JSON output. See [`crate::results::SearchStats`].
+    pub stats: crate::results::SearchStats,
 }
 
 /// One node in the in-memory search tree.
@@ -411,6 +414,8 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         format!("(egraph hits: {egraph_hits}, exact hits: {exact_hits}, full-dom hits: {full_dom_hits})"),
         format!("(time: {:.3}s)", seen_secs).dimmed(),
     );
+    // Populated below when the seen-set is on; folded into `SearchStats` at the end.
+    let mut seen_stats: Option<crate::results::SeenStats> = None;
     if let Some(s) = seen.as_mut() {
         let saturate_each = s.saturate_each_on();
         let every = if s.saturate_dynamic_on() {
@@ -463,6 +468,39 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             format!("{} genuine inserts → {} true DSR-classes", audit.unique_inserted, audit.root_classes_after).bold(),
             if deferred == 0 { "✓ fully deduped".green().to_string() } else { format!("(Δ{deferred} not deduped: batch/off)").yellow().to_string() },
         );
+        seen_stats = Some(crate::results::SeenStats {
+            size: seen_len,
+            hits: seen_hits,
+            egraph_hits,
+            exact_hits,
+            full_dom_hits,
+            map_secs: seen_secs,
+            num_rules: audit.num_rules,
+            saturate_each,
+            saturate_every: s.saturate_every(),
+            saturate_dynamic: s.saturate_dynamic_on(),
+            dynamic_effects: s.dynamic_effects,
+            dynamic_noeffects: s.dynamic_noeffects,
+            decider: decider.to_string(),
+            per_insert_saturate_secs: per_insert_secs,
+            saturate_calls: sat_calls,
+            egraph_search_secs: search_secs,
+            egraph_apply_secs: apply_secs,
+            egraph_rebuild_secs: rebuild_secs,
+            recexpr_secs,
+            audit_iterations: audit.iterations,
+            audit_applications: audit.applications,
+            audit_stop_reason: audit.stop_reason.clone(),
+            nodes_before: audit.nodes_before,
+            classes_before: audit.classes_before,
+            root_classes_before: audit.root_classes_before,
+            nodes_after: audit.nodes_after,
+            classes_after: audit.classes_after,
+            root_classes_after: audit.root_classes_after,
+            unique_inserted: audit.unique_inserted,
+            total_inserted: audit.total_inserted,
+            deferred,
+        });
     }
     let (fp_len, fp_hits, fp_skips, fp_capped, fp_secs) = footprints.as_ref().map_or((0, 0, 0, 0, 0.0), |f| (f.len(), f.hits, f.proxy_skips, f.capped, f.time.as_secs_f64()));
     println!("{} {}", "footprint-set size:".dimmed(), fp_len.to_string().bold());
@@ -490,6 +528,21 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         println!("{} {}", "compression ratio:".dimmed(), format!("{:.2}x", original_size as f64 / *cost as f64).green().bold());
     }
 
+    let stats = crate::results::SearchStats {
+        expansions: num_expansions,
+        nodes_created: nodes.len(),
+        heap_size_at_end: heap.len(),
+        cost_calls,
+        cost_secs: cost_time.as_secs_f64(),
+        dominance_hits,
+        useless_frozen_hits,
+        useless_inline_hits,
+        lower_bound_hits: lower_bound_pruner.hits(),
+        lower_bound_secs: lower_bound_pruner.time().as_secs_f64(),
+        total_search_secs: total_elapsed.as_secs_f64(),
+        seen: seen_stats,
+    };
+
     BestFirstResult {
         best: best_pair,
         original_size,
@@ -498,5 +551,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         num_expansions,
         heap_size_at_end: heap.len(),
         data: shared.into_data(),
+        stats,
     }
 }

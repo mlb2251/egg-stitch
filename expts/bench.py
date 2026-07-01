@@ -58,6 +58,11 @@ class BenchResult:
     # egg-stitch fills this; other tools leave it None. Used by the scramble
     # renderer to draw the step-by-step compression trajectory.
     cost_at_end_of_each_iter: list[int] | None = field(default=None)
+    # The whole parsed egg-stitch output JSON, verbatim — a freeform firehose so
+    # richer diagnostics (per-abstraction search_stats, iteration_times, heap
+    # sizes, …) flow downstream without threading each field through by hand.
+    # Empty for tools that don't emit our JSON schema.
+    raw: dict = field(default_factory=dict)
 
 
 # Maximum arity of learned abstractions — set the same across all tools so the
