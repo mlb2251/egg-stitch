@@ -350,14 +350,14 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let fn_name_base = first_free_fn_index::<F::Apply<O>>(&data.egraph);
 
     for abstraction_idx in 0..args.num_abstractions {
-        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history, iter_heap_size) = match args.search {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history, iter_heap_size, search_stats) = match args.search {
             SearchKind::Smc => {
                 let r = smc::smc::<F, O>(data, args, &mut rng);
-                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None, None)
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None, None, None)
             }
             SearchKind::BestFirst => {
                 let r = best_first::best_first(data, args);
-                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history), Some(r.heap_size_at_end))
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history), Some(r.heap_size_at_end), Some(r.stats))
             }
         };
 
@@ -418,6 +418,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                     num_expansions: best_found_at.map(|n| n + 1),
                     best_iteration: best_found_at,
                     best_history,
+                    search_stats,
                 });
                 search_ends.push(Instant::now());
 

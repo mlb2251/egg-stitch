@@ -275,6 +275,11 @@ def run_method(
             continue
         ic, fc = _bench_cost(b, weighting)
         assert fc > 0, f"{domain}/{f.name}: final_cost=0 would make compression_ratio undefined"
+        # Freeform firehose: the whole egg-stitch JSON minus the bulky program
+        # arrays (already captured as the corpus). Empty dict -> None so non-ours
+        # tools and older outputs stay null.
+        stats = {k: v for k, v in b.raw.items()
+                 if k not in ("original_programs", "rewritten_programs")} or None
         out.append(PerFileResult(
             method=str(runner),
             domain=domain,
@@ -286,5 +291,6 @@ def run_method(
             library=[f"{a.name}: {a.body}" for a in b.abstractions],
             egraph_min_term_size=egraph_min_from_bench(b.cost_after_rewrites),
             cost_at_end_of_each_iter=b.cost_at_end_of_each_iter,
+            stats=stats,
         ))
     return out

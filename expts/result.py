@@ -55,6 +55,13 @@ class PerFileResult:
     folded in), one entry per learned abstraction. None for other tools or a
     timed-out run. The scramble renderer uses it for the step trajectory."""
 
+    stats: dict | None = None
+    """Freeform firehose of egg-stitch's full output JSON (minus the bulky
+    program arrays) — per-abstraction ``search_stats`` (seen-set/dominance/
+    lower-bound/cost-call diagnostics), ``iteration_times``, ``heap_sizes_at_end``,
+    etc. None for other tools or a timed-out run. Not surfaced in summary tables;
+    it's here so the raw numbers are queryable from the cached JSON."""
+
     @classmethod
     def timed_out_result(cls, *, method: str, domain: str, file: str,
                          initial_cost: int, timeout: float) -> "PerFileResult":

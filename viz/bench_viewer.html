@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bench_pr viewer</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1a1d21; --muted: #6b7280;
+    --line: #e3e6ea; --accent: #2563eb; --accent-soft: #eaf0fe;
+    --good: #16794a; --bad: #b42318; --chip: #f0f2f5;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink); background: var(--bg); display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 14px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  select, input, button {
+    font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .spacer { flex: 1; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #sidebar {
+    width: 340px; flex: none; border-right: 1px solid var(--line);
+    background: var(--panel); display: flex; flex-direction: column; min-height: 0;
+  }
+  #filter { margin: 8px; }
+  #cells { overflow: auto; flex: 1; }
+  .cell {
+    padding: 6px 12px; border-bottom: 1px solid var(--line); cursor: pointer;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .cell:hover { background: var(--accent-soft); }
+  .cell.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .cell-top { display: flex; gap: 8px; align-items: baseline; }
+  .cell .dom { font-weight: 600; }
+  .cell .path { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .cell .reps { margin-left: auto; color: var(--muted); font-size: 11px; }
+  .strip { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    font-family: var(--mono); font-size: 10.5px; line-height: 1.5;
+    padding: 0 5px; border-radius: 4px; background: var(--chip); color: var(--muted); white-space: nowrap;
+  }
+  .chip b { color: var(--ink); font-weight: 600; }
+  .chip.good b { color: var(--good); } .chip.bad b { color: var(--bad); }
+  .strip.pending { color: var(--muted); font-size: 10.5px; font-family: var(--mono); }
+  #detail { flex: 1; overflow: auto; padding: 16px 20px; }
+  .hint { color: var(--muted); padding: 40px; text-align: center; }
+  .hint code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+
+  .filerow { display: flex; gap: 10px; align-items: center; margin: 4px 0 14px; flex-wrap: wrap; }
+  h2.title { font-size: 15px; margin: 0 0 2px; }
+  .crumbs { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 18px; }
+  .metric {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 12px; min-width: 110px;
+  }
+  .metric .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .metric .v { font-size: 18px; font-weight: 650; font-family: var(--mono); margin-top: 2px; }
+  .metric .v.good { color: var(--good); } .metric .v.bad { color: var(--bad); }
+
+  section.block { margin: 0 0 20px; }
+  section.block > h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+    margin: 0 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px;
+  }
+
+  .lib { list-style: none; margin: 0; padding: 0; }
+  .lib li { font-family: var(--mono); padding: 3px 0; }
+  .lib .name { color: var(--accent); font-weight: 650; }
+
+  table.kv { border-collapse: collapse; width: 100%; max-width: 780px; }
+  table.kv td { padding: 3px 8px; vertical-align: top; border-bottom: 1px solid var(--line); }
+  table.kv td.k { color: var(--muted); width: 240px; white-space: nowrap; }
+  table.kv td.k[title] { cursor: help; text-decoration: underline dotted var(--line); text-underline-offset: 3px; }
+  table.kv td.v { font-family: var(--mono); }
+  .nested { margin: 2px 0 2px; border-left: 2px solid var(--line); padding-left: 4px; }
+  .subhdr { font-family: var(--mono); font-weight: 650; color: var(--ink); margin: 2px 0; }
+
+  .badge { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--chip); }
+  .badge.t { color: var(--good); background: #e7f4ec; } .badge.f { color: var(--bad); background: #fbecea; }
+  .null { color: var(--muted); }
+  .num { color: #0b4a8f; }
+  .arr-sum { color: var(--muted); }
+  details.raw { margin-top: 6px; }
+  details.raw pre {
+    background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px;
+    overflow: auto; max-height: 420px; font-family: var(--mono); font-size: 12px;
+  }
+  details > summary { cursor: pointer; color: var(--accent); }
+  .spark { display: inline-block; vertical-align: middle; margin-left: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>bench_pr viewer</h1>
+  <span class="sub">session</span>
+  <select id="session"></select>
+  <button id="reload" title="Re-scan the results tree">↻</button>
+  <span class="sub" id="status"></span>
+  <div class="spacer"></div>
+  <details style="position:relative">
+    <summary>legend</summary>
+    <div style="position:absolute; right:0; top:22px; z-index:5; width:420px; background:var(--panel);
+                border:1px solid var(--line); border-radius:8px; padding:12px; box-shadow:0 8px 24px rgba(0,0,0,.12);">
+      <div class="subhdr">what you're looking at</div>
+      <p style="margin:6px 0; color:var(--muted)">
+        Each cell is one <code>(branch / dsr-condition / method / domain)</code> run. The
+        <b>Result</b> block is the runner's uniformly-recomputed cost/compression; the
+        <b>egg-stitch run stats</b> block is the full output JSON — per-abstraction
+        <code>search_stats</code> (expansions, cost calls, dominance/useless/lower-bound
+        hits) and the nested <code>seen</code> seen-set + seen-egraph saturation audit.
+        Hover a key for its meaning.
+      </p>
+    </div>
+  </details>
+</header>
+<main>
+  <aside id="sidebar">
+    <input id="filter" placeholder="filter cells (branch / dsr / method / domain)…">
+    <div id="cells"></div>
+  </aside>
+  <div id="detail"><div class="hint">Pick a session, then a cell on the left.</div></div>
+</main>
+
+<script>
+const BASE = "results/bench_pr/";
+
+// ── short docs shown as hover tooltips on known stat keys ────────────────────
+const KEY_DOCS = {
+  expansions: "heap pops performed (num_expansions)",
+  nodes_created: "total search-tree nodes created",
+  heap_size_at_end: "frontier size at stop — 0 = converged, else hit a cutoff",
+  cost_calls: "compute_cost_and_select calls",
+  cost_secs: "wall-clock in cost calls",
+  dominance_hits: "reuse-dominance short-circuit fires",
+  useless_frozen_hits: "frozen-var argument-capture prunes",
+  useless_inline_hits: "useless-non-frozen inline short-circuits",
+  lower_bound_hits: "states pruned by the lower bound",
+  lower_bound_secs: "wall-clock computing lower bounds",
+  total_search_secs: "total search-loop wall-clock",
+  seen: "seen-set dedup: map side + shadow seen-egraph",
+  size: "distinct patterns recorded in the seen map",
+  hits: "map-side subset-domination skips",
+  egraph_hits: "seen-egraph membership skips (modulo DSR-equivalence)",
+  exact_hits: "skips under exact-mask matching (shadow)",
+  full_dom_hits: "skips a never-evicted domination map would catch",
+  map_secs: "map/lookup bookkeeping time",
+  num_rules: "lifted DSRs run on the seen-egraph",
+  saturate_each: "saturate the seen-egraph after each insert batch",
+  saturate_every: "insert-batch size between saturations (dynamic = live value)",
+  saturate_dynamic: "auto-tune the saturate-every batch",
+  dynamic_effects: "flushes that deduped a fresh Root term",
+  dynamic_noeffects: "flushes with no cross-state merge",
+  decider: "which side drives the skip decision: egraph or map",
+  per_insert_saturate_secs: "total per-insert saturation wall-clock",
+  saturate_calls: "number of per-insert saturation runs",
+  egraph_search_secs: "egg e-matching time during saturation",
+  egraph_apply_secs: "egg rule-application time during saturation",
+  egraph_rebuild_secs: "egg congruence-rebuild time during saturation",
+  recexpr_secs: "time building the frozen-var Root-wrapped terms",
+  audit_iterations: "iterations of the end-of-run audit saturation",
+  audit_applications: "rule firings in the audit saturation",
+  audit_stop_reason: "why the audit saturation stopped",
+  nodes_before: "seen-egraph enodes before the audit saturation",
+  classes_before: "seen-egraph e-classes before the audit",
+  root_classes_before: "distinct top-level (Root) classes before",
+  nodes_after: "seen-egraph enodes after full saturation",
+  classes_after: "seen-egraph e-classes after",
+  root_classes_after: "distinct DSR-classes after full saturation",
+  unique_inserted: "genuine top-level inserts",
+  total_inserted: "insert calls total (inserted + egraph_hits)",
+  deferred: "inserts not deduped by batching/off — precision loss, never unsound",
+  cost_at_end_of_each_iter: "best cost after each abstraction (native units)",
+  iteration_times: "wall-clock per abstraction iteration",
+  heap_sizes_at_end: "best-first frontier size at each iteration's stop",
+  cost_after_rewrites: "min corpus AST size after DSRs, before search",
+  best_history: "successive 'new best' events during best-first",
+};
+
+// keys of the flat PerFileResult record we surface as headline metrics
+const RESULT_KEYS = ["initial_cost", "final_cost", "compression_ratio",
+                     "elapsed_secs", "egraph_min_term_size", "timed_out"];
+
+// ── tiny DOM helper ──────────────────────────────────────────────────────────
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null) continue;
+    if (k === "class") n.className = v;
+    else if (k === "onclick") n.onclick = v;
+    else n.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return n;
+}
+
+// ── directory crawling over the stdlib server's HTML listings ────────────────
+async function listDir(url) {
+  // Resolve to an absolute base so `new URL(href, base)` works even when `url`
+  // is passed relative (e.g. the initial BASE). Browsers reject a relative base.
+  const abs = new URL(url, document.baseURI);
+  const res = await fetch(abs);
+  if (!res.ok) throw new Error(`${res.status} for ${url}`);
+  const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+  const out = [];
+  for (const a of doc.querySelectorAll("a")) {
+    const href = a.getAttribute("href");
+    if (!href || href.startsWith("?") || href.startsWith("/") || href === "../") continue;
+    out.push({ name: decodeURIComponent(href.replace(/\/$/, "")),
+               url: new URL(href, abs).href, isDir: href.endsWith("/") });
+  }
+  return out;
+}
+
+// Recursively collect rep*.json files beneath a session directory.
+async function crawlReps(sessionUrl) {
+  const files = [];
+  async function walk(url, rel) {
+    let entries;
+    try { entries = await listDir(url); } catch { return; }
+    for (const e of entries) {
+      if (e.isDir) await walk(e.url, rel.concat(e.name));
+      else if (/\.json$/.test(e.name)) files.push({ url: e.url, rel, name: e.name });
+    }
+  }
+  await walk(sessionUrl, []);
+  return files;
+}
+
+// ── value formatting ─────────────────────────────────────────────────────────
+const fmtInt = (n) => n.toLocaleString();
+const fmtSecs = (n) => (n < 1 ? `${(n * 1000).toFixed(1)} ms` : `${n.toFixed(3)} s`);
+function fmtFloat(n) { return Number.isInteger(n) ? fmtInt(n) : n.toFixed(4); }
+
+function scalar(key, v) {
+  if (v === null || v === undefined) return el("span", { class: "null" }, "—");
+  if (typeof v === "boolean") return el("span", { class: "badge " + (v ? "t" : "f") }, String(v));
+  if (typeof v === "number") {
+    if (key === "timestamp") return el("span", {}, new Date(v * 1000).toLocaleString());
+    if (/_secs$/.test(key)) return el("span", { class: "num" }, fmtSecs(v));
+    if (key === "compression_ratio") return el("span", { class: "num" }, v.toFixed(4) + "×");
+    return el("span", { class: "num" }, fmtFloat(v));
+  }
+  return el("span", {}, v);
+}
+
+// numeric arrays → compact summary + collapsible full list
+function numericArray(key, arr) {
+  const min = Math.min(...arr), max = Math.max(...arr), last = arr[arr.length - 1];
+  const sum = el("span", { class: "arr-sum" },
+    `n=${arr.length}  ·  first ${fmtFloat(arr[0])} → last ${fmtFloat(last)}  ·  min ${fmtFloat(min)} / max ${fmtFloat(max)}`);
+  const det = el("details", {},
+    el("summary", {}, "values"),
+    el("div", { class: "v" }, arr.map(fmtFloat).join(", ")));
+  return el("div", {}, sum, det);
+}
+
+// Run `fn` over `items` at most `limit` at a time — a bounded worker pool so we
+// never open hundreds of concurrent fetches (browsers cap sockets and throw
+// net::ERR_INSUFFICIENT_RESOURCES past ~a few hundred in flight).
+async function mapPool(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+// fetch + parse a rep file once; shared by the sidebar strip and the detail view
+const REP_CACHE = new Map();
+function fetchRep(url) {
+  if (!REP_CACHE.has(url)) {
+    REP_CACHE.set(url, fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }));
+  }
+  return REP_CACHE.get(url);
+}
+
+// Roll a cell's rep records up into the handful of numbers shown inline in the
+// sidebar. Compression is meaned over files; the search-stats counters are
+// summed over every file and every abstraction iteration.
+function cellSummary(records) {
+  let crs = [], expansions = 0, egraphHits = 0, deferred = 0, elapsed = 0, haveStats = false;
+  for (const rec of records) {
+    if (rec.compression_ratio != null) crs.push(rec.compression_ratio);
+    elapsed += rec.elapsed_secs || 0;
+    for (const a of (rec.stats && rec.stats.library) || []) {
+      const s = a.search_stats;
+      if (!s) continue;
+      haveStats = true;
+      expansions += s.expansions || 0;
+      if (s.seen) { egraphHits += s.seen.egraph_hits || 0; deferred += s.seen.deferred || 0; }
+    }
+  }
+  const cr = crs.length ? crs.reduce((a, b) => a + b, 0) / crs.length : null;
+  return { cr, expansions, egraphHits, deferred, elapsed, haveStats };
+}
+
+function chip(label, value, cls) {
+  return el("span", { class: "chip " + (cls || ""), title: KEY_DOCS[label] || null }, label + " ", el("b", {}, value));
+}
+
+function stripEl(sum) {
+  const chips = [];
+  if (sum.cr != null) chips.push(chip("cr", sum.cr.toFixed(2) + "×", sum.cr >= 1 ? "good" : "bad"));
+  if (sum.haveStats) {
+    chips.push(chip("exp", fmtInt(sum.expansions)));
+    chips.push(chip("egraph_hits", fmtInt(sum.egraphHits)));
+    if (sum.deferred) chips.push(chip("deferred", fmtInt(sum.deferred), "bad"));
+  }
+  chips.push(chip("t", fmtSecs(sum.elapsed)));
+  return el("div", { class: "strip" }, ...chips);
+}
+
+// Load each cell's latest rep in the background (bounded concurrency) and drop
+// its chip strip in as each resolves.
+async function hydrateSummaries() {
+  await mapPool(CELLS, 8, async (cell) => {
+    const latest = cell.reps[cell.reps.length - 1];
+    try {
+      const data = await fetchRep(latest.url);
+      cell.summary = cellSummary(Array.isArray(data) ? data : [data]);
+    } catch { cell.summary = null; }
+    if (cell._node && cell._node.isConnected) {
+      cell._node.querySelector(".strip")?.remove();
+      if (cell.summary) cell._node.append(stripEl(cell.summary));
+    }
+  });
+}
+
+function renderVal(key, v) {
+  if (Array.isArray(v)) {
+    if (v.length === 0) return el("span", { class: "null" }, "[]");
+    if (v.every((x) => typeof x === "number")) return numericArray(key, v);
+    // array of objects (library, best_history): a card per item
+    return el("div", { class: "nested" }, v.map((item, i) => {
+      const label = (item && (item.pattern || item.name)) ? (item.pattern || item.name) : `[${i}]`;
+      return el("div", {}, el("div", { class: "subhdr" }, label), renderVal(key, item));
+    }));
+  }
+  if (v && typeof v === "object") return kvTable(v);
+  return scalar(key, v);
+}
+
+// object → key/value table; nested objects/arrays recurse in the value cell
+function kvTable(obj) {
+  const t = el("table", { class: "kv" });
+  for (const [k, v] of Object.entries(obj)) {
+    const kcell = el("td", { class: "k" }, k);
+    if (KEY_DOCS[k]) kcell.title = KEY_DOCS[k];
+    t.append(el("tr", {}, kcell, el("td", { class: "v" }, renderVal(k, v))));
+  }
+  return t;
+}
+
+// ── detail panel ─────────────────────────────────────────────────────────────
+function metric(k, v, cls) {
+  return el("div", { class: "metric" }, el("div", { class: "k" }, k), el("div", { class: "v " + (cls || "") }, v));
+}
+
+function renderFile(rec) {
+  const wrap = el("div");
+  // headline metrics
+  const cards = el("div", { class: "cards" });
+  cards.append(metric("initial", rec.initial_cost != null ? fmtInt(rec.initial_cost) : "—"));
+  cards.append(metric("final", rec.final_cost != null ? fmtInt(rec.final_cost) : "—"));
+  if (rec.compression_ratio != null) {
+    const good = rec.compression_ratio >= 1;
+    cards.append(metric("compression", rec.compression_ratio.toFixed(3) + "×", good ? "good" : "bad"));
+  }
+  cards.append(metric("elapsed", fmtSecs(rec.elapsed_secs)));
+  if (rec.timed_out) cards.append(metric("status", "TIMED OUT", "bad"));
+  wrap.append(cards);
+
+  // library
+  if (rec.library && rec.library.length) {
+    const ul = el("ul", { class: "lib" });
+    for (const s of rec.library) {
+      const [name, ...rest] = String(s).split(": ");
+      ul.append(el("li", {}, el("span", { class: "name" }, name), ": " + rest.join(": ")));
+    }
+    wrap.append(el("section", { class: "block" }, el("h3", {}, "library"), ul));
+  }
+
+  // flat result record (the runner's recomputed numbers)
+  const resObj = {};
+  for (const k of RESULT_KEYS) if (k in rec) resObj[k] = rec[k];
+  if (rec.cost_at_end_of_each_iter) resObj.cost_at_end_of_each_iter = rec.cost_at_end_of_each_iter;
+  wrap.append(el("section", { class: "block" }, el("h3", {}, "result (runner-recomputed)"), kvTable(resObj)));
+
+  // the firehose
+  if (rec.stats) {
+    wrap.append(el("section", { class: "block" }, el("h3", {}, "egg-stitch run stats"), kvTable(rec.stats)));
+  } else {
+    wrap.append(el("section", { class: "block" },
+      el("h3", {}, "egg-stitch run stats"),
+      el("div", { class: "hint", style: "padding:12px;text-align:left" },
+        "No stats in this record (older run, non-ours tool, or a timed-out cell).")));
+  }
+
+  // raw
+  wrap.append(el("details", { class: "raw" },
+    el("summary", {}, "raw JSON"),
+    el("pre", {}, JSON.stringify(rec, null, 2))));
+  return wrap;
+}
+
+async function showCell(cell, repIdx) {
+  const detail = document.getElementById("detail");
+  detail.innerHTML = "";
+  const reps = cell.reps;
+  const chosen = reps[repIdx] || reps[reps.length - 1];
+
+  detail.append(el("h2", { class: "title" }, cell.domain));
+  detail.append(el("div", { class: "crumbs" }, cell.branch + " / " + cell.dsr + " / " + cell.method));
+
+  // rep selector
+  const row = el("div", { class: "filerow" });
+  row.append(el("span", { class: "sub" }, "rep"));
+  const sel = el("select");
+  reps.forEach((r, i) => {
+    const label = r.name.replace(/\.json$/, "") + (r.name.startsWith("rep0") ? " (warmup)" : "");
+    sel.append(el("option", { value: i, selected: r === chosen ? "" : null }, label));
+  });
+  sel.onchange = () => showCell(cell, +sel.value);
+  row.append(sel);
+  detail.append(row);
+
+  let data;
+  try {
+    data = await fetchRep(chosen.url);
+  } catch (e) {
+    detail.append(el("div", { class: "hint" }, "failed to load: " + e.message));
+    return;
+  }
+  const files = Array.isArray(data) ? data : [data];
+  files.forEach((rec, i) => {
+    if (files.length > 1) detail.append(el("h3", { style: "margin:18px 0 4px" }, `file: ${rec.file || i}`));
+    detail.append(renderFile(rec));
+  });
+}
+
+// ── sidebar / sessions ───────────────────────────────────────────────────────
+let CELLS = [];
+
+function renderCellList(filter) {
+  const box = document.getElementById("cells");
+  box.innerHTML = "";
+  const f = filter.trim().toLowerCase();
+  let shown = 0;
+  for (const cell of CELLS) {
+    const hay = `${cell.branch} ${cell.dsr} ${cell.method} ${cell.domain}`.toLowerCase();
+    if (f && !hay.includes(f)) continue;
+    shown++;
+    const node = el("div", { class: "cell", "data-id": cell.id },
+      el("div", { class: "cell-top" },
+        el("span", { class: "dom" }, cell.domain),
+        el("span", { class: "path" }, `${cell.branch}·${cell.dsr}·${cell.method}`),
+        el("span", { class: "reps" }, cell.reps.length + "×")));
+    // Strip: rendered now if already hydrated, else a placeholder hydrate fills.
+    if (cell.summary) node.append(stripEl(cell.summary));
+    else node.append(el("div", { class: "strip pending" }, "…"));
+    node.onclick = () => {
+      document.querySelectorAll(".cell.sel").forEach((n) => n.classList.remove("sel"));
+      node.classList.add("sel");
+      showCell(cell, cell.reps.length - 1);
+    };
+    cell._node = node;
+    box.append(node);
+  }
+  document.getElementById("status").textContent = `${shown} cell${shown === 1 ? "" : "s"}`;
+}
+
+async function loadSession(url) {
+  document.getElementById("status").textContent = "scanning…";
+  document.getElementById("cells").innerHTML = "";
+  document.getElementById("detail").innerHTML = '<div class="hint">Pick a cell on the left.</div>';
+  const files = await crawlReps(url);
+  // group rep files into cells keyed by branch/dsr/method/domain
+  const byCell = new Map();
+  for (const f of files) {
+    // rel = [branch, dsr, method, domain]; name = repN.json
+    if (f.rel.length < 4) continue;
+    const [branch, dsr, method, domain] = f.rel;
+    const id = f.rel.join("/");
+    if (!byCell.has(id)) byCell.set(id, { id, branch, dsr, method, domain, reps: [] });
+    byCell.get(id).reps.push(f);
+  }
+  CELLS = [...byCell.values()].sort((a, b) =>
+    (a.branch + a.dsr + a.method + a.domain).localeCompare(b.branch + b.dsr + b.method + b.domain));
+  for (const c of CELLS) c.reps.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  renderCellList(document.getElementById("filter").value);
+  hydrateSummaries(); // fills in per-cell chip strips in the background
+}
+
+async function init() {
+  const sessionSel = document.getElementById("session");
+  let sessions;
+  try {
+    sessions = (await listDir(BASE)).filter((e) => e.isDir).map((e) => e);
+  } catch (e) {
+    document.getElementById("detail").innerHTML =
+      `<div class="hint">Couldn't list <code>${BASE}</code> (${e.message}).<br><br>` +
+      `This viewer needs the dev server — run <code>make server</code> and open ` +
+      `<code>http://localhost:8066/viz/bench_viewer.html</code> (it won't work over file://).</div>`;
+    return;
+  }
+  sessions.sort((a, b) => b.name.localeCompare(a.name)); // newest first
+  sessionSel.innerHTML = "";
+  for (const s of sessions) sessionSel.append(el("option", { value: s.url }, s.name));
+  sessionSel.onchange = () => loadSession(sessionSel.value);
+  document.getElementById("reload").onclick = () => loadSession(sessionSel.value);
+  document.getElementById("filter").oninput = (e) => renderCellList(e.target.value);
+  if (sessions.length) await loadSession(sessions[0].url);
+  else document.getElementById("detail").innerHTML = '<div class="hint">No sessions under ' + BASE + ' yet.</div>';
+}
+
+init();
+</script>
+</body>
+</html>
