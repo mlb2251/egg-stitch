@@ -604,6 +604,28 @@ pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
     },
 }
 
+/// Run-wide tallies for the pruning/short-circuits that fire while
+/// [`SearchState::enumerate_successor_actions`] builds a state's successor
+/// actions. Bundled into one `&mut` so the enumerator doesn't grow a param per
+/// counter. The `*_hits` fields below the two short-circuits count *candidate
+/// actions dropped* (one per would-be `Reuse`, `shapes.len()` per suppressed
+/// expand var), so they measure search-space reduction, not just fire events.
+#[derive(Default)]
+pub struct EnumStats {
+    /// Reuse-dominance short-circuit fires (a full-support reuse collapses the set).
+    pub dominance_hits: usize,
+    /// Useless-non-frozen inline short-circuits.
+    pub useless_inline_hits: usize,
+    /// Expand actions dropped because the var's rank exceeds `max_arity`.
+    pub max_arity_hits: usize,
+    /// Expand actions dropped because the var is frozen (best-first freeze rule).
+    pub frozen_var_hits: usize,
+    /// Reuse actions dropped because the pair isn't in the canonical reuse order.
+    pub reuse_order_hits: usize,
+    /// Reuse actions dropped because no substitution supports the pair.
+    pub zero_support_hits: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     pub pattern: Pattern<F, O>,
@@ -1227,13 +1249,13 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `--no-opt-dominance-reuse`. Expand actions are emitted whenever
     /// `support > 0`; `subset_matches` then guarantees the child's match set is
     /// non-empty.
-    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, opt_useless_inline: bool, max_arity: usize, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> SuccessorEnum<F, O> {
+    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, opt_useless_inline: bool, max_arity: usize, stats: &mut EnumStats) -> SuccessorEnum<F, O> {
         // Useless-non-frozen inlining is a strictly dominating short-circuit:
         // a constant arg adds no compression, so specialising the body by
         // inlining its size-minimal extraction can only improve cost. Runs
         // before reuse/expand enumeration in the canonical order.
         if opt_useless_inline && let Some(child) = self.inline_useless_nonfrozen(shared) {
-            *useless_inline_hits += 1;
+            stats.useless_inline_hits += 1;
             let support = child.num_substs;
             return SuccessorEnum::Dominant { child, support };
         }
@@ -1269,6 +1291,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // Skip unless this pair is still allowed by the canonical
                 // reuse order (see `reuse_pairs` above).
                 if enforce_reusable && !self.pattern.reuse_pairs.contains(&(i, j)) {
+                    stats.reuse_order_hits += 1;
                     continue;
                 }
                 // Count full substs with `shift_equal(vars[i], vars[j])` per
@@ -1300,10 +1323,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     (s + usage(m.root_eclass) * c, r + c)
                 });
                 if support == 0 {
+                    stats.zero_support_hits += 1;
                     continue;
                 }
                 if opt_dominance_reuse && raw_count == self.num_substs {
-                    *dominance_hits += 1;
+                    stats.dominance_hits += 1;
                     let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared, false, Some(&rank));
                     return SuccessorEnum::Dominant { child, support };
                 }
@@ -1316,9 +1340,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // usize::MAX).
         for &var_idx in &order {
             if rank[var_idx] > max_arity {
+                stats.max_arity_hits += shapes[var_idx].len();
                 continue;
             }
             if self.freeze_rule && self.pattern.var_frozen[var_idx] {
+                stats.frozen_var_hits += shapes[var_idx].len();
                 continue;
             }
             // Emit from the shapes `shape_pass` already computed (via

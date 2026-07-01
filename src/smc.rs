@@ -6,7 +6,7 @@ use crate::logging::{apply_follow_constraint, print_top_particles};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::math::logaddexp;
 use crate::pattern::Pattern;
-use crate::search::{Action, SearchState, SharedSearchData, SuccessorEnum, setup_search};
+use crate::search::{Action, EnumStats, SearchState, SharedSearchData, SuccessorEnum, setup_search};
 use rand::Rng;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
@@ -101,14 +101,14 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     /// `clone + expand` work for successors that win zero samples. Children over
     /// the match-set cap are dropped. Resulting patterns are deduped globally
     /// across groups, so the returned vecs hold one entry per unique pattern.
-    /// `dominance_hits` / `useless_inline_hits` accumulate the run-wide pruning
-    /// stats reported at the end.
+    /// `enum_stats` accumulates the run-wide enumeration-stage pruning tallies
+    /// reported at the end (see [`EnumStats`]).
     ///
     /// Returns `(states, mults, props)`: alongside each unique child `t_j'` it
     /// reports the realized child multiplicity `C_j'` (`mults`) and the proposal
     /// mass `Σ_l C_l · K_n(t_l, t_j')` (`props`) — the denominator the optimal-
     /// backward-kernel weight in [`Self::reweight`] divides by.
-    fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, dominance_hits: &mut usize, useless_inline_hits: &mut usize) -> (Vec<SearchState<F, O>>, Vec<usize>, Vec<f64>) {
+    fn expand_particles(&mut self, particles: Vec<(SearchState<F, O>, usize)>, enum_stats: &mut EnumStats) -> (Vec<SearchState<F, O>>, Vec<usize>, Vec<f64>) {
         let max_match_set = self.args.max_match_set;
         let mut expanded: Vec<SearchState<F, O>> = Vec::new();
         // Per-unique-pattern child multiplicities `C_j'` (the multinomial outcome
@@ -119,7 +119,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         let mut props: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles {
-            let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
+            let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, enum_stats) {
                 SuccessorEnum::Dominant { child, .. } => {
                     // Deterministic successor: K_n(t_l, t_j') = 1, so the proposal
                     // mass routed here is C_l · 1 = mult.
@@ -348,12 +348,11 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&search.shared, false), num_particles)];
     let mut scratch = CostScratch::new(&search.shared.egraph);
-    let mut dominance_hits: usize = 0;
-    let mut useless_inline_hits: usize = 0;
+    let mut enum_stats = EnumStats::default();
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
 
     for step in 0..num_steps {
-        let (expanded, mults, props) = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
+        let (expanded, mults, props) = search.expand_particles(std::mem::take(&mut particles), &mut enum_stats);
 
         let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
 
@@ -419,8 +418,11 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     }
 
     println!("\n{}", "═══ STATS ═══".blue().bold());
-    println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
-    println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
+    println!("{} {}", "dominance hits:".dimmed(), enum_stats.dominance_hits.to_string().bold());
+    println!("{} {}", "useless-inline hits:".dimmed(), enum_stats.useless_inline_hits.to_string().bold());
+    // max-arity / frozen-var / reuse-order are inert under SMC (max_arity = MAX,
+    // freeze_rule = false); zero-support can still fire.
+    println!("{} {}", "zero-support hits:".dimmed(), enum_stats.zero_support_hits.to_string().bold());
     lower_bound_pruner.print_stats();
 
     // Canonicalize the winner's var numbering (DFS first-appearance) before

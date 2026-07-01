@@ -9,7 +9,7 @@ use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, comp
 use crate::footprint::FootprintTracker;
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchOp};
 use crate::lower_bound::{LowerBoundPruner, PruneResult};
-use crate::search::{SearchState, SeenTracker, SharedSearchData, SuccessorEnum, setup_search};
+use crate::search::{EnumStats, SearchState, SeenTracker, SharedSearchData, SuccessorEnum, setup_search};
 use egg::Language;
 
 /// How to order the best-first search heap.
@@ -205,10 +205,16 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut num_expansions: usize = 0;
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
-    let mut dominance_hits: usize = 0;
+    // Enumeration-stage pruning/short-circuit tallies (dominance, useless-inline,
+    // max-arity, frozen-var, canonical-reuse-order, zero-support).
+    let mut enum_stats = EnumStats::default();
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
     let mut useless_frozen_hits: usize = 0;
-    let mut useless_inline_hits: usize = 0;
+    // Successors dropped by the two `retain` caps and the follow-prefix filter —
+    // pruning forms that would otherwise silently vanish from the stats.
+    let mut forced_cap_hits: usize = 0;
+    let mut match_set_cap_hits: usize = 0;
+    let mut follow_hits: usize = 0;
     let search_start = Instant::now();
 
     'search: loop {
@@ -256,7 +262,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         // The parent's forced-expansion is a monotone lower bound on each child's,
         // so it early-exits the children's forced scans (the hot path on DSRs).
         let parent_forced = nodes[node_id].forced;
-        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
+        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut enum_stats) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All { actions, rank } => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared, true, Some(&rank))).collect(),
         };
@@ -270,15 +276,20 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             //
             // The cap is given in symbols; scale to the family's cost units.
             let cap = k as i64 * F::symbol_cost(&shared.egraph.analysis.weights) as i64;
+            let before = successors.len();
             successors.retain(|c| c.within_forced_expansion_cap(&shared, cap));
+            forced_cap_hits += before - successors.len();
         }
 
+        let before = successors.len();
         successors.retain(|c| c.within_match_set_cap(args.max_match_set));
+        match_set_cap_hits += before - successors.len();
 
         for child_state in successors {
             if let Some(ref follow) = shared.follow
                 && !child_state.matches_follow(follow)
             {
+                follow_hits += 1;
                 continue;
             }
             if let Some(s) = seen.as_mut()
@@ -505,10 +516,17 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let (fp_len, fp_hits, fp_skips, fp_capped, fp_secs) = footprints.as_ref().map_or((0, 0, 0, 0, 0.0), |f| (f.len(), f.hits, f.proxy_skips, f.capped, f.time.as_secs_f64()));
     println!("{} {}", "footprint-set size:".dimmed(), fp_len.to_string().bold());
     println!("{} {} {}", "footprint-set hits:".dimmed(), fp_hits.to_string().bold(), format!("(proxy-skips: {}, capped: {}, time: {:.3}s)", fp_skips, fp_capped, fp_secs).dimmed());
-    println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
+    println!("{} {}", "dominance hits:".dimmed(), enum_stats.dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
-    println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
+    println!("{} {}", "useless-inline hits:".dimmed(), enum_stats.useless_inline_hits.to_string().bold());
+    println!("{} {}", "max-arity hits:".dimmed(), enum_stats.max_arity_hits.to_string().bold());
+    println!("{} {}", "frozen-var hits:".dimmed(), enum_stats.frozen_var_hits.to_string().bold());
+    println!("{} {}", "reuse-order hits:".dimmed(), enum_stats.reuse_order_hits.to_string().bold());
+    println!("{} {}", "zero-support hits:".dimmed(), enum_stats.zero_support_hits.to_string().bold());
+    println!("{} {}", "forced-expansion-cap hits:".dimmed(), forced_cap_hits.to_string().bold());
+    println!("{} {}", "match-set-cap hits:".dimmed(), match_set_cap_hits.to_string().bold());
+    println!("{} {}", "follow-filter hits:".dimmed(), follow_hits.to_string().bold());
     println!("{} {} {}", "compute_cost calls:".dimmed(), cost_calls.to_string().bold(), format!("(time: {:.3}s)", cost_time.as_secs_f64()).dimmed());
     println!("{} {}", "total search time:".dimmed(), format!("{:.3}s", total_elapsed.as_secs_f64()).bold());
 
@@ -534,9 +552,16 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         heap_size_at_end: heap.len(),
         cost_calls,
         cost_secs: cost_time.as_secs_f64(),
-        dominance_hits,
+        dominance_hits: enum_stats.dominance_hits,
         useless_frozen_hits,
-        useless_inline_hits,
+        useless_inline_hits: enum_stats.useless_inline_hits,
+        max_arity_hits: enum_stats.max_arity_hits,
+        frozen_var_hits: enum_stats.frozen_var_hits,
+        reuse_order_hits: enum_stats.reuse_order_hits,
+        zero_support_hits: enum_stats.zero_support_hits,
+        forced_cap_hits,
+        match_set_cap_hits,
+        follow_hits,
         lower_bound_hits: lower_bound_pruner.hits(),
         lower_bound_secs: lower_bound_pruner.time().as_secs_f64(),
         total_search_secs: total_elapsed.as_secs_f64(),

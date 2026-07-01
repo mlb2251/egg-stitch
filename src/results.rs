@@ -47,6 +47,19 @@ pub struct SearchStats {
     /// Useless-frozen prunes and useless-non-frozen inline short-circuits.
     pub useless_frozen_hits: usize,
     pub useless_inline_hits: usize,
+    /// Enumeration-stage actions dropped before they became successors: expand
+    /// actions over the `max_arity` cap or on a frozen var, and reuse actions
+    /// skipped for canonical-order or zero-support (see [`crate::search::EnumStats`]).
+    pub max_arity_hits: usize,
+    pub frozen_var_hits: usize,
+    pub reuse_order_hits: usize,
+    pub zero_support_hits: usize,
+    /// Successors dropped by the `--max-forced-expansion` cap.
+    pub forced_cap_hits: usize,
+    /// Successors dropped by the `--max-match-set` row cap.
+    pub match_set_cap_hits: usize,
+    /// Children dropped in `--follow` mode for not matching the target prefix.
+    pub follow_hits: usize,
     /// Lower-bound pruner prunes and their summed wall-clock.
     pub lower_bound_hits: usize,
     pub lower_bound_secs: f64,
