@@ -23,14 +23,17 @@
 //!   `(+ (- 0) (* (/ x 2) (/ x 2)))`. A plain rule-free search finds `f0`. A is
 //!   deliberately *not* minimal — that `(+ (- 0) ..)` collapses to `(* ..)`.
 //! * `corpus_b.json` is the size-minimal form: the last program is the bare
-//!   `(* (/ x 2) (/ x 2))`, and the `f0` programs are commutatively scrambled
-//!   (half put the square first). Because *both* operands of each `+` are
-//!   per-program subterms (no shared anchor leaf), the left one is parsed first
-//!   and gets the smaller e-class id, so egg's min-term extractor keeps each `+`
-//!   in its written orientation — it does *not* re-align them. So a search over
-//!   the minimal corpus falls back to the weak `(* ?1 ?1)` squaring. Live
-//!   rewriting re-aligns every `+` and `add_zero`/`neg_zero`-expands the bare
-//!   square, recovering the full `f0`.
+//!   `(* (/ x 2) (/ x 2))`, and one `f0` program is commutatively swapped to put
+//!   the square first (the `sqrt`-wrapped one). Because *both* operands of each
+//!   `+` are per-program subterms (no shared anchor leaf), the left one is parsed
+//!   first and gets the smaller e-class id, so egg's min-term extractor keeps each
+//!   `+` in its written orientation — it does *not* re-align them. One swap is
+//!   enough: an arity-2 abstraction body costs 6 nodes and saves only ~3 per use,
+//!   so it needs *three* aligned uses to pay for itself; the swap leaves at most
+//!   two programs sharing any one orientation, so a search over the minimal corpus
+//!   falls back to the weak `(* ?1 ?1)` squaring. Live rewriting re-aligns every
+//!   `+` and `add_zero`/`neg_zero`-expands the bare square, lifting `f0` to four
+//!   aligned uses and recovering it.
 //!
 //! This is the paper's point that the abstraction-exposing corpus is *not* the
 //! minimal one: rule-free A (cost 24) beats abstracting B's minimal term
