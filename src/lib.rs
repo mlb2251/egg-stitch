@@ -194,6 +194,13 @@ pub struct Args {
     #[arg(long = "no-opt-useless-inline", action = clap::ArgAction::SetFalse)]
     pub opt_useless_inline: bool,
 
+    /// Allow "useless" pattern variables in the returned abstraction, that is
+    /// variables bound to the same e-class in every subst. Off by default,
+    /// matching stitch. Forces `opt_useless_frozen`, `opt_useless_inline`,
+    /// and `opt_dominance_reuse` off when it is set.
+    #[arg(long, default_value_t = false)]
+    pub allow_useless_vars: bool,
+
     /// Disable lower-bound pruning of best-first children (on by default).
     /// Each child gets a `compute_lower_bound` estimate; if it already
     /// exceeds the current best, skip the full cost call. Bounds are also
@@ -255,6 +262,17 @@ pub struct Args {
     /// Cost weights applied per enode kind.
     #[command(flatten)]
     pub weights: Weights,
+}
+
+impl Args {
+    /// Resolves flag interactions after parsing.
+    pub fn normalize(&mut self) {
+        if self.allow_useless_vars {
+            self.opt_useless_frozen = false;
+            self.opt_useless_inline = false;
+            self.opt_dominance_reuse = false;
+        }
+    }
 }
 
 /// Which language family `multiple_step_search` runs over.
