@@ -6,22 +6,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 31.94827389717102,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 75.76102352142334,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -31,22 +31,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 32.21228003501892,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 75.24038410186768,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -56,22 +56,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 32.19741249084473,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 75.1101245880127,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -81,22 +81,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 31.988558530807495,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 75.44389033317566,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -106,22 +106,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 32.000632762908936,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 75.08377146720886,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -131,22 +131,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 31.992441415786743,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 74.42384815216064,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -156,22 +156,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 31.85572910308838,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 75.00887370109558,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -181,22 +181,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 31.77716851234436,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 74.9525089263916,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -206,22 +206,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 31.981683015823364,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 75.09329771995544,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ],
@@ -231,22 +231,22 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 894,
-        "compression_ratio": 4.888143176733781,
-        "elapsed_secs": 32.16045618057251,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 74.69086408615112,
         "library": [
-          "fn_0: (m1 H (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))) ?#1))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C ?#0 (d1 O))"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          2431,
-          1178,
-          986,
-          895
+          1418,
+          1102,
+          928,
+          816
         ]
       }
     ]
@@ -260,7 +260,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.716402530670166,
+        "elapsed_secs": 1.788032054901123,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -285,7 +285,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.66469407081604,
+        "elapsed_secs": 1.7894768714904785,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -310,7 +310,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.664268493652344,
+        "elapsed_secs": 1.795628547668457,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -335,7 +335,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.667781352996826,
+        "elapsed_secs": 1.801649808883667,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -360,7 +360,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.7427978515625,
+        "elapsed_secs": 1.8039448261260986,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -385,7 +385,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.66221284866333,
+        "elapsed_secs": 1.8025434017181396,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -410,7 +410,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.755856275558472,
+        "elapsed_secs": 1.8027102947235107,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -435,7 +435,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.771952390670776,
+        "elapsed_secs": 1.8137872219085693,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -460,7 +460,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.740038871765137,
+        "elapsed_secs": 1.8190038204193115,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -485,7 +485,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 15.689722299575806,
+        "elapsed_secs": 1.8083500862121582,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
@@ -512,7 +512,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.168209552764893,
+        "elapsed_secs": 7.275434970855713,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -537,7 +537,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.249057054519653,
+        "elapsed_secs": 7.2813451290130615,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -562,7 +562,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.12147283554077,
+        "elapsed_secs": 7.215594530105591,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -587,7 +587,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.15625786781311,
+        "elapsed_secs": 7.261211395263672,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -612,7 +612,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.155062198638916,
+        "elapsed_secs": 7.204130172729492,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -637,7 +637,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.122520685195923,
+        "elapsed_secs": 7.262125015258789,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -662,7 +662,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.212257623672485,
+        "elapsed_secs": 7.1990861892700195,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -687,7 +687,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.236916542053223,
+        "elapsed_secs": 7.197489261627197,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -712,7 +712,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.106452703475952,
+        "elapsed_secs": 7.179657220840454,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
@@ -737,7 +737,7 @@
         "initial_cost": 2976,
         "final_cost": 621,
         "compression_ratio": 4.792270531400966,
-        "elapsed_secs": 19.120572090148926,
+        "elapsed_secs": 7.189533710479736,
         "library": [
           "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) (s1 H) ?#0)",

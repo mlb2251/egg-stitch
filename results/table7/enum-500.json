@@ -6,22 +6,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.742074966430664,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.046790361404419,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -31,22 +31,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.7095630168914795,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.069165945053101,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -56,22 +56,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.744804620742798,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.064143896102905,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -81,22 +81,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.76348614692688,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.062555313110352,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -106,22 +106,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.7607686519622803,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.091837406158447,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -131,22 +131,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.9095640182495117,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.057106971740723,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -156,22 +156,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.750598430633545,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.066909551620483,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -181,22 +181,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.7607951164245605,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.076750755310059,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -206,22 +206,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.709778070449829,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.062459468841553,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ],
@@ -231,22 +231,22 @@
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8784,
-        "compression_ratio": 2.5563524590163933,
-        "elapsed_secs": 3.7525861263275146,
+        "final_cost": 8965,
+        "compression_ratio": 2.5047406581148914,
+        "elapsed_secs": 4.073614597320557,
         "library": [
-          "fn_0: (not (or (and (or (not ?#0) ?#1) ?#2) (and ?#0 (not (or ?#1 ?#2)))))",
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (or $1 $0)",
-          "fn_3: (and $0 $1)"
+          "fn_2: (fn_0 (not ?#0) ?#1 ?#1)",
+          "fn_3: (or $1 $0)"
         ],
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11441,
-          10029,
-          9352,
-          8785
+          11425,
+          10341,
+          9435,
+          8966
         ]
       }
     ]
@@ -258,22 +258,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.93662714958191,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.34400510787964,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -283,22 +283,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.985496520996094,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.37238836288452,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -308,22 +308,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.996878862380981,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.25510835647583,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -333,22 +333,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.992746829986572,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.469871997833252,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -358,22 +358,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.917045831680298,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.267788887023926,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -383,22 +383,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.952588558197021,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.476940155029297,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -408,22 +408,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.930154800415039,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.43408179283142,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -433,22 +433,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.9420907497406,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.50791835784912,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -458,22 +458,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 12.980857610702515,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.582600831985474,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ],
@@ -483,22 +483,22 @@
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 10110,
-        "compression_ratio": 2.942433234421365,
-        "elapsed_secs": 13.067530632019043,
+        "final_cost": 9698,
+        "compression_ratio": 3.0674365848628584,
+        "elapsed_secs": 17.441444873809814,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#2) ?#0)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
-          "fn_2: (and (fn_0 ?#0 ?#1 ?#1) ?#2)",
-          "fn_3: (not (or $5 (or $4 ?#0)))"
+          "fn_2: (fn_0 ?#0 ?#1 ?#1)",
+          "fn_3: (and (and $0 (and (and $2 $3) $4)) (and ?#0 ?#1))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11907,
           10985,
-          10357,
-          10111
+          10071,
+          9699
         ]
       }
     ]
@@ -510,22 +510,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 20.94107699394226,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.442332983016968,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -535,22 +535,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 20.98424196243286,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.61434817314148,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -560,22 +560,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 21.138303995132446,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.630802392959595,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -585,22 +585,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 21.07553005218506,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.473122596740723,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -610,22 +610,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 21.0277841091156,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.574186086654663,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -635,22 +635,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 20.98466968536377,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.61253595352173,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -660,22 +660,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 20.99918532371521,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.59894108772278,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -685,22 +685,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 20.9725604057312,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.545791387557983,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -710,22 +710,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 20.95055055618286,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.62833309173584,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ],
@@ -735,22 +735,22 @@
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8794,
-        "compression_ratio": 4.12792813281783,
-        "elapsed_secs": 21.112966537475586,
+        "final_cost": 8564,
+        "compression_ratio": 4.238790284913592,
+        "elapsed_secs": 22.35422158241272,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (not (or (not ?#0) ?#1))",
-          "fn_3: (and (or (not $4) (and $2 (fn_1 $3))) (not (and $2 (fn_1 $3))))"
+          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10964,
           9765,
-          9334,
-          8795
+          9131,
+          8565
         ]
       }
     ]
@@ -762,12 +762,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.03940391540527,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.4040789604187,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -775,9 +775,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -787,12 +787,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.047333002090454,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.30669283866882,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -800,9 +800,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -812,12 +812,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.17819690704346,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.45564913749695,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -825,9 +825,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -837,12 +837,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.14021372795105,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.48960852622986,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -850,9 +850,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -862,12 +862,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.11330461502075,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.3839156627655,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -875,9 +875,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -887,12 +887,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.00692892074585,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.837087869644165,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -900,9 +900,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -912,12 +912,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.28440761566162,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.462701082229614,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -925,9 +925,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -937,12 +937,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.01325559616089,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.35262703895569,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -950,9 +950,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -962,12 +962,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.15887665748596,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.56424283981323,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -975,9 +975,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ],
@@ -987,12 +987,12 @@
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 9177,
-        "compression_ratio": 3.3759398496240602,
-        "elapsed_secs": 40.23066806793213,
+        "final_cost": 9108,
+        "compression_ratio": 3.4015151515151514,
+        "elapsed_secs": 61.35868048667908,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#2)))",
-          "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
+          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
           "fn_2: (fn_0 ?#0 ?#1 ?#1)",
           "fn_3: (or $1 $0)"
         ],
@@ -1000,9 +1000,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11572,
-          10718,
-          9863,
-          9178
+          10689,
+          9834,
+          9109
         ]
       }
     ]
@@ -1014,22 +1014,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.950455665588379,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.953061103820801,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1039,22 +1039,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.9618101119995117,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.9671590328216553,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1064,22 +1064,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.9704267978668213,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.948608636856079,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1089,22 +1089,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.9744479656219482,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.9571244716644287,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1114,22 +1114,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.977266550064087,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.967993974685669,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1139,22 +1139,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.9664545059204102,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.9789490699768066,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1164,22 +1164,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.9727544784545898,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.959549903869629,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1189,22 +1189,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.9646546840667725,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.9536759853363037,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1214,22 +1214,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.9764039516448975,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.9960579872131348,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ],
@@ -1239,22 +1239,22 @@
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
-        "final_cost": 8761,
-        "compression_ratio": 2.967469466955827,
-        "elapsed_secs": 1.9613878726959229,
+        "final_cost": 8204,
+        "compression_ratio": 3.1689419795221845,
+        "elapsed_secs": 2.985132932662964,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 ?#2)))",
-          "fn_1: (and (or ?#0 ?#1) (not ?#2))",
-          "fn_2: (fn_0 ?#0 ?#1 (not ?#1))",
-          "fn_3: (fn_0 ?#0 (not ?#1) ?#1)"
+          "fn_0: (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#2))))",
+          "fn_1: (or $1 $0)",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 ?#0 ?#1 ?#1)"
         ],
         "egraph_min_term_size": 17271.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11767,
-          10532,
-          9543,
-          8762
+          11334,
+          10169,
+          9147,
+          8205
         ]
       }
     ]

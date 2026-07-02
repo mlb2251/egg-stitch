@@ -6,69 +6,94 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 822,
-        "compression_ratio": 5.316301703163017,
-        "elapsed_secs": 0.9164669513702393,
+        "final_cost": 815,
+        "compression_ratio": 5.361963190184049,
+        "elapsed_secs": 0.9072208404541016,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_1: (s1 H)",
-          "fn_2: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
+          "fn_2: (s1 H)",
+          "fn_3: (s3 C (d1 O) ?#0)"
+        ],
+        "egraph_min_term_size": 4371.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1418,
+          1102,
+          928,
+          816
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:hexyl",
+        "file": "hexyl.scram",
+        "initial_cost": 4370,
+        "final_cost": 822,
+        "compression_ratio": 5.316301703163017,
+        "elapsed_secs": 0.8894023895263672,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
+          "fn_2: (s1 H)",
+          "fn_3: (m1 O (d3 C ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 4371.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1418,
+          1102,
+          928,
+          823
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:hexyl",
+        "file": "hexyl.scram",
+        "initial_cost": 4370,
+        "final_cost": 822,
+        "compression_ratio": 5.316301703163017,
+        "elapsed_secs": 0.9056837558746338,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
+          "fn_2: (s1 H)",
+          "fn_3: (m1 O (d3 C ?#0 ?#1))"
+        ],
+        "egraph_min_term_size": 4371.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1418,
+          1102,
+          928,
+          823
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:hexyl",
+        "file": "hexyl.scram",
+        "initial_cost": 4370,
+        "final_cost": 822,
+        "compression_ratio": 5.316301703163017,
+        "elapsed_secs": 0.9004175662994385,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
+          "fn_2: (s1 H)",
           "fn_3: (m3 C (d1 O) ?#0 ?#1)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1418,
-          1244,
-          928,
-          823
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:hexyl",
-        "file": "hexyl.scram",
-        "initial_cost": 4370,
-        "final_cost": 822,
-        "compression_ratio": 5.316301703163017,
-        "elapsed_secs": 0.899573802947998,
-        "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
-          "fn_2: (s1 H)",
-          "fn_3: (m1 O (d3 C ?#0 ?#1))"
-        ],
-        "egraph_min_term_size": 4371.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1418,
-          1102,
-          928,
-          823
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:hexyl",
-        "file": "hexyl.scram",
-        "initial_cost": 4370,
-        "final_cost": 822,
-        "compression_ratio": 5.316301703163017,
-        "elapsed_secs": 0.891345739364624,
-        "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
-          "fn_2: (s1 H)",
-          "fn_3: (m1 O (d3 C ?#0 ?#1))"
-        ],
-        "egraph_min_term_size": 4371.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1418,
           1102,
           928,
           823
@@ -83,9 +108,9 @@
         "initial_cost": 4370,
         "final_cost": 815,
         "compression_ratio": 5.361963190184049,
-        "elapsed_secs": 0.924412727355957,
+        "elapsed_secs": 0.9403557777404785,
         "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) ?#0 (s1 H))",
           "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
           "fn_3: (s3 C (d1 O) ?#0)"
@@ -106,14 +131,14 @@
         "domain": "molecules:hexyl",
         "file": "hexyl.scram",
         "initial_cost": 4370,
-        "final_cost": 815,
-        "compression_ratio": 5.361963190184049,
-        "elapsed_secs": 0.9093172550201416,
+        "final_cost": 822,
+        "compression_ratio": 5.316301703163017,
+        "elapsed_secs": 0.8916158676147461,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
-          "fn_3: (s3 C (d1 O) ?#0)"
+          "fn_3: (m3 C (d1 O) ?#0 ?#1)"
         ],
         "egraph_min_term_size": 4371.0,
         "timed_out": false,
@@ -121,7 +146,7 @@
           1418,
           1102,
           928,
-          816
+          823
         ]
       }
     ],
@@ -133,7 +158,7 @@
         "initial_cost": 4370,
         "final_cost": 815,
         "compression_ratio": 5.361963190184049,
-        "elapsed_secs": 0.8934125900268555,
+        "elapsed_secs": 0.9227585792541504,
         "library": [
           "fn_0: (s4 C (s1 H) ?#0 (s1 H))",
           "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
@@ -158,7 +183,7 @@
         "initial_cost": 4370,
         "final_cost": 815,
         "compression_ratio": 5.361963190184049,
-        "elapsed_secs": 0.9156301021575928,
+        "elapsed_secs": 0.9191436767578125,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
@@ -172,31 +197,6 @@
           1102,
           928,
           816
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:hexyl",
-        "file": "hexyl.scram",
-        "initial_cost": 4370,
-        "final_cost": 822,
-        "compression_ratio": 5.316301703163017,
-        "elapsed_secs": 0.9107630252838135,
-        "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
-          "fn_2: (s1 H)",
-          "fn_3: (m1 O (d3 C ?#0 ?#1))"
-        ],
-        "egraph_min_term_size": 4371.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1418,
-          1102,
-          928,
-          823
         ]
       }
     ],
@@ -208,7 +208,7 @@
         "initial_cost": 4370,
         "final_cost": 815,
         "compression_ratio": 5.361963190184049,
-        "elapsed_secs": 0.9155237674713135,
+        "elapsed_secs": 0.9026601314544678,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
@@ -233,9 +233,9 @@
         "initial_cost": 4370,
         "final_cost": 822,
         "compression_ratio": 5.316301703163017,
-        "elapsed_secs": 0.9187164306640625,
+        "elapsed_secs": 0.930769681930542,
         "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_0: (s4 C (s1 H) ?#0 (s1 H))",
           "fn_1: (fn_0 (fn_0 (fn_0 (fn_0 ?#0))))",
           "fn_2: (s1 H)",
           "fn_3: (m1 O (d3 C ?#0 ?#1))"
@@ -258,22 +258,22 @@
         "domain": "molecules:ester",
         "file": "ester.scram",
         "initial_cost": 3556,
-        "final_cost": 855,
-        "compression_ratio": 4.15906432748538,
-        "elapsed_secs": 0.6825239658355713,
+        "final_cost": 856,
+        "compression_ratio": 4.154205607476635,
+        "elapsed_secs": 0.6638681888580322,
         "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_1: (m2 O (fn_0 ?#0) (s3 C (d1 O) ?#1))",
-          "fn_2: (s1 H)",
-          "fn_3: (fn_0 fn_2)"
+          "fn_0: (s4 C (s1 H) ?#0 (s1 H))",
+          "fn_1: (m1 O (d3 C ?#0 (s2 O (fn_0 ?#1))))",
+          "fn_2: (fn_0 (s1 H))",
+          "fn_3: (s1 H)"
         ],
         "egraph_min_term_size": 3557.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1629,
           1248,
-          1000,
-          856
+          959,
+          857
         ]
       }
     ],
@@ -285,9 +285,9 @@
         "initial_cost": 3556,
         "final_cost": 856,
         "compression_ratio": 4.154205607476635,
-        "elapsed_secs": 0.6688823699951172,
+        "elapsed_secs": 0.678358793258667,
         "library": [
-          "fn_0: (s4 C ?#0 (s1 H) (s1 H))",
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
           "fn_2: (fn_0 (s1 H))",
           "fn_3: (s1 H)"
@@ -308,22 +308,22 @@
         "domain": "molecules:ester",
         "file": "ester.scram",
         "initial_cost": 3556,
-        "final_cost": 855,
-        "compression_ratio": 4.15906432748538,
-        "elapsed_secs": 0.6782429218292236,
+        "final_cost": 856,
+        "compression_ratio": 4.154205607476635,
+        "elapsed_secs": 0.6688878536224365,
         "library": [
-          "fn_0: (s4 C (s1 H) ?#0 (s1 H))",
-          "fn_1: (m2 O (fn_0 ?#0) (s3 C (d1 O) ?#1))",
-          "fn_2: (s1 H)",
-          "fn_3: (fn_0 fn_2)"
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (m2 O (s3 C ?#0 (d1 O)) (fn_0 ?#1))",
+          "fn_2: (fn_0 (s1 H))",
+          "fn_3: (s1 H)"
         ],
         "egraph_min_term_size": 3557.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1629,
           1248,
-          1000,
-          856
+          959,
+          857
         ]
       }
     ],
@@ -335,60 +335,10 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 0.6769998073577881,
+        "elapsed_secs": 0.6816854476928711,
         "library": [
           "fn_0: (s4 C (s1 H) ?#0 (s1 H))",
-          "fn_1: (m2 O (s3 C ?#0 (d1 O)) (fn_0 ?#1))",
-          "fn_2: (fn_0 (s1 H))",
-          "fn_3: (d3 C (s1 H) (s1 H))"
-        ],
-        "egraph_min_term_size": 3557.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1629,
-          1248,
-          959,
-          850
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:ester",
-        "file": "ester.scram",
-        "initial_cost": 3556,
-        "final_cost": 855,
-        "compression_ratio": 4.15906432748538,
-        "elapsed_secs": 0.6891264915466309,
-        "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m2 O (s3 C (d1 O) ?#0) (fn_0 ?#1))",
-          "fn_2: (s1 H)",
-          "fn_3: (fn_0 fn_2)"
-        ],
-        "egraph_min_term_size": 3557.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1629,
-          1248,
-          1000,
-          856
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:ester",
-        "file": "ester.scram",
-        "initial_cost": 3556,
-        "final_cost": 849,
-        "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 0.6803436279296875,
-        "library": [
-          "fn_0: (s4 C (s1 H) ?#0 (s1 H))",
-          "fn_1: (m2 O (s3 C ?#0 (d1 O)) (fn_0 ?#1))",
           "fn_2: (fn_0 (s1 H))",
           "fn_3: (d3 C (s1 H) (s1 H))"
         ],
@@ -410,32 +360,7 @@
         "initial_cost": 3556,
         "final_cost": 849,
         "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 0.6858634948730469,
-        "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_1: (m2 O (fn_0 ?#0) (s3 C (d1 O) ?#1))",
-          "fn_2: (fn_0 (s1 H))",
-          "fn_3: (d3 C (s1 H) (s1 H))"
-        ],
-        "egraph_min_term_size": 3557.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1629,
-          1248,
-          959,
-          850
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:ester",
-        "file": "ester.scram",
-        "initial_cost": 3556,
-        "final_cost": 849,
-        "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 0.6770503520965576,
+        "elapsed_secs": 0.672161340713501,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m2 O (s3 C (d1 O) ?#0) (fn_0 ?#1))",
@@ -458,9 +383,59 @@
         "domain": "molecules:ester",
         "file": "ester.scram",
         "initial_cost": 3556,
+        "final_cost": 849,
+        "compression_ratio": 4.188457008244994,
+        "elapsed_secs": 0.6734097003936768,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
+          "fn_2: (fn_0 (s1 H))",
+          "fn_3: (d3 C (s1 H) (s1 H))"
+        ],
+        "egraph_min_term_size": 3557.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1629,
+          1248,
+          959,
+          850
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:ester",
+        "file": "ester.scram",
+        "initial_cost": 3556,
+        "final_cost": 900,
+        "compression_ratio": 3.951111111111111,
+        "elapsed_secs": 0.6690483093261719,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
+          "fn_2: (s1 H)",
+          "fn_3: (fn_0 (fn_0 fn_2))"
+        ],
+        "egraph_min_term_size": 3557.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1629,
+          1248,
+          1000,
+          901
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:ester",
+        "file": "ester.scram",
+        "initial_cost": 3556,
         "final_cost": 856,
         "compression_ratio": 4.154205607476635,
-        "elapsed_secs": 0.686652421951294,
+        "elapsed_secs": 0.6821539402008057,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m2 O (fn_0 ?#0) (s3 C (d1 O) ?#1))",
@@ -483,12 +458,37 @@
         "domain": "molecules:ester",
         "file": "ester.scram",
         "initial_cost": 3556,
-        "final_cost": 849,
-        "compression_ratio": 4.188457008244994,
-        "elapsed_secs": 0.6946980953216553,
+        "final_cost": 856,
+        "compression_ratio": 4.154205607476635,
+        "elapsed_secs": 0.6750898361206055,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_1: (m1 O (d3 C (s2 O (fn_0 ?#0)) ?#1))",
+          "fn_1: (m1 O (d3 C ?#0 (s2 O (fn_0 ?#1))))",
+          "fn_2: (fn_0 (s1 H))",
+          "fn_3: (s1 H)"
+        ],
+        "egraph_min_term_size": 3557.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1629,
+          1248,
+          959,
+          857
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:ester",
+        "file": "ester.scram",
+        "initial_cost": 3556,
+        "final_cost": 849,
+        "compression_ratio": 4.188457008244994,
+        "elapsed_secs": 0.6857180595397949,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_1: (m2 O (s3 C (d1 O) ?#0) (fn_0 ?#1))",
           "fn_2: (fn_0 (s1 H))",
           "fn_3: (d3 C (s1 H) (s1 H))"
         ],
@@ -510,14 +510,14 @@
         "domain": "molecules:glycol",
         "file": "glycol.scram",
         "initial_cost": 2976,
-        "final_cost": 633,
-        "compression_ratio": 4.701421800947867,
-        "elapsed_secs": 0.5083961486816406,
+        "final_cost": 629,
+        "compression_ratio": 4.731319554848967,
+        "elapsed_secs": 0.4973881244659424,
         "library": [
-          "fn_0: (s4 C (s1 H) (s4 C (s1 H) (s2 O ?#0) (s1 H)) (s1 H))",
+          "fn_0: (s4 C (s1 H) (s1 H) (s4 C (s2 O ?#0) (s1 H) (s1 H)))",
           "fn_1: (s1 H)",
           "fn_2: (s4 C fn_1 fn_1 ?#0)",
-          "fn_3: (m2 O (fn_0 (fn_0 ?#0)) ?#1)"
+          "fn_3: (s3 C (d1 O) ?#0)"
         ],
         "egraph_min_term_size": 2977.0,
         "timed_out": false,
@@ -525,7 +525,7 @@
           1133,
           866,
           691,
-          634
+          630
         ]
       }
     ],
@@ -535,63 +535,13 @@
         "domain": "molecules:glycol",
         "file": "glycol.scram",
         "initial_cost": 2976,
-        "final_cost": 625,
-        "compression_ratio": 4.7616,
-        "elapsed_secs": 0.5167031288146973,
+        "final_cost": 672,
+        "compression_ratio": 4.428571428571429,
+        "elapsed_secs": 0.4903097152709961,
         "library": [
-          "fn_0: (s4 C (s4 C (s1 H) (s2 O ?#0) (s1 H)) (s1 H) (s1 H))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_2: (s1 H)",
-          "fn_3: (m2 O (fn_0 ?#0) ?#1)"
-        ],
-        "egraph_min_term_size": 2977.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1133,
-          800,
-          677,
-          626
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:glycol",
-        "file": "glycol.scram",
-        "initial_cost": 2976,
-        "final_cost": 609,
-        "compression_ratio": 4.886699507389163,
-        "elapsed_secs": 0.5116534233093262,
-        "library": [
-          "fn_0: (s4 C (s1 H) (s4 C (s1 H) (s2 O ?#0) (s1 H)) (s1 H))",
-          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
-          "fn_2: (s1 H)",
-          "fn_3: (s3 C (d1 O) ?#0)"
-        ],
-        "egraph_min_term_size": 2977.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1133,
-          800,
-          677,
-          610
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:glycol",
-        "file": "glycol.scram",
-        "initial_cost": 2976,
-        "final_cost": 637,
-        "compression_ratio": 4.671899529042387,
-        "elapsed_secs": 0.5156652927398682,
-        "library": [
-          "fn_0: (s4 C (s4 C (s2 O ?#0) (s1 H) (s1 H)) (s1 H) (s1 H))",
+          "fn_0: (s4 C (s4 C (s1 H) (s1 H) (s2 O ?#0)) (s1 H) (s1 H))",
           "fn_1: (s1 H)",
-          "fn_2: (m2 O ?#0 (fn_0 ?#1))",
+          "fn_2: (m4 C fn_1 ?#0 fn_1 ?#1)",
           "fn_3: (s4 C fn_1 ?#0 fn_1)"
         ],
         "egraph_min_term_size": 2977.0,
@@ -599,8 +549,8 @@
         "cost_at_end_of_each_iter": [
           1133,
           866,
-          813,
-          638
+          800,
+          673
         ]
       }
     ],
@@ -612,9 +562,9 @@
         "initial_cost": 2976,
         "final_cost": 629,
         "compression_ratio": 4.731319554848967,
-        "elapsed_secs": 0.5320703983306885,
+        "elapsed_secs": 0.5166761875152588,
         "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s2 O ?#0) (s1 H)))",
+          "fn_0: (s4 C (s1 H) (s4 C (s2 O ?#0) (s1 H) (s1 H)) (s1 H))",
           "fn_1: (s1 H)",
           "fn_2: (s4 C fn_1 fn_1 ?#0)",
           "fn_3: (s3 C (d1 O) ?#0)"
@@ -637,9 +587,109 @@
         "initial_cost": 2976,
         "final_cost": 609,
         "compression_ratio": 4.886699507389163,
-        "elapsed_secs": 0.49248671531677246,
+        "elapsed_secs": 0.4879608154296875,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s2 O ?#0)) (s1 H))",
+          "fn_1: (s4 C ?#0 (s1 H) (s1 H))",
+          "fn_2: (s1 H)",
+          "fn_3: (s3 C (d1 O) ?#0)"
+        ],
+        "egraph_min_term_size": 2977.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1133,
+          800,
+          677,
+          610
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:glycol",
+        "file": "glycol.scram",
+        "initial_cost": 2976,
+        "final_cost": 637,
+        "compression_ratio": 4.671899529042387,
+        "elapsed_secs": 0.5085961818695068,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s2 O ?#0)))",
+          "fn_1: (s1 H)",
+          "fn_2: (s4 C fn_1 fn_1 ?#0)",
+          "fn_3: (fn_0 (fn_0 (fn_0 fn_1)))"
+        ],
+        "egraph_min_term_size": 2977.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1133,
+          866,
+          691,
+          638
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:glycol",
+        "file": "glycol.scram",
+        "initial_cost": 2976,
+        "final_cost": 614,
+        "compression_ratio": 4.846905537459284,
+        "elapsed_secs": 0.48426318168640137,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s1 H) (s4 C (s2 O ?#0) (s1 H) (s1 H)))",
+          "fn_1: (s4 C (s1 H) (s1 H) ?#0)",
+          "fn_2: (s1 H)",
+          "fn_3: (fn_1 (s3 C (d1 O) (s2 O fn_2)))"
+        ],
+        "egraph_min_term_size": 2977.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1133,
+          800,
+          677,
+          615
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:glycol",
+        "file": "glycol.scram",
+        "initial_cost": 2976,
+        "final_cost": 745,
+        "compression_ratio": 3.9946308724832216,
+        "elapsed_secs": 0.5134220123291016,
+        "library": [
+          "fn_0: (s4 C (s4 C (s2 O ?#0) (s1 H) (s1 H)) (s1 H) (s1 H))",
+          "fn_1: (s1 H)",
+          "fn_2: (m2 O (fn_0 ?#0) (s4 C fn_1 ?#1 fn_1))",
+          "fn_3: (s4 C (s3 C (d1 O) (s2 O fn_1)) fn_1 fn_1)"
+        ],
+        "egraph_min_term_size": 2977.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1133,
+          866,
+          815,
+          746
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
+        "domain": "molecules:glycol",
+        "file": "glycol.scram",
+        "initial_cost": 2976,
+        "final_cost": 609,
+        "compression_ratio": 4.886699507389163,
+        "elapsed_secs": 0.4772627353668213,
+        "library": [
+          "fn_0: (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s2 O ?#0) (s1 H)))",
           "fn_1: (s4 C (s1 H) ?#0 (s1 H))",
           "fn_2: (s1 H)",
           "fn_3: (s3 C (d1 O) ?#0)"
@@ -660,47 +710,22 @@
         "domain": "molecules:glycol",
         "file": "glycol.scram",
         "initial_cost": 2976,
-        "final_cost": 623,
-        "compression_ratio": 4.776886035313002,
-        "elapsed_secs": 0.503002405166626,
+        "final_cost": 621,
+        "compression_ratio": 4.792270531400966,
+        "elapsed_secs": 0.48856616020202637,
         "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s2 O ?#0) (s1 H)))",
-          "fn_1: (s4 C ?#0 (s1 H) (s1 H))",
-          "fn_2: (s1 H)",
-          "fn_3: (fn_0 (fn_0 (fn_0 fn_2)))"
-        ],
-        "egraph_min_term_size": 2977.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1133,
-          800,
-          677,
-          624
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:glycol",
-        "file": "glycol.scram",
-        "initial_cost": 2976,
-        "final_cost": 614,
-        "compression_ratio": 4.846905537459284,
-        "elapsed_secs": 0.5080013275146484,
-        "library": [
-          "fn_0: (s4 C (s1 H) (s1 H) (s4 C (s2 O ?#0) (s1 H) (s1 H)))",
+          "fn_0: (s2 O (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) ?#0)))",
           "fn_1: (s4 C (s1 H) ?#0 (s1 H))",
           "fn_2: (s1 H)",
-          "fn_3: (fn_1 (s3 C (d1 O) (s2 O fn_2)))"
+          "fn_3: (fn_0 (fn_0 (s2 O ?#0)))"
         ],
         "egraph_min_term_size": 2977.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1133,
-          800,
-          677,
-          615
+          805,
+          692,
+          622
         ]
       }
     ],
@@ -710,39 +735,14 @@
         "domain": "molecules:glycol",
         "file": "glycol.scram",
         "initial_cost": 2976,
-        "final_cost": 638,
-        "compression_ratio": 4.664576802507837,
-        "elapsed_secs": 0.5138678550720215,
-        "library": [
-          "fn_0: (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s2 O ?#0)) (s1 H))",
-          "fn_1: (s1 H)",
-          "fn_2: (s4 C fn_1 fn_1 ?#0)",
-          "fn_3: (fn_0 (fn_0 (fn_0 ?#0)))"
-        ],
-        "egraph_min_term_size": 2977.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          1133,
-          866,
-          691,
-          639
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=2)",
-        "domain": "molecules:glycol",
-        "file": "glycol.scram",
-        "initial_cost": 2976,
-        "final_cost": 640,
-        "compression_ratio": 4.65,
-        "elapsed_secs": 0.5176784992218018,
+        "final_cost": 633,
+        "compression_ratio": 4.701421800947867,
+        "elapsed_secs": 0.4963226318359375,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) (s4 C (s1 H) (s1 H) (s2 O ?#0)))",
           "fn_1: (s1 H)",
           "fn_2: (s4 C fn_1 fn_1 ?#0)",
-          "fn_3: (fn_0 (fn_0 ?#0))"
+          "fn_3: (m2 O (fn_0 (fn_0 ?#0)) ?#1)"
         ],
         "egraph_min_term_size": 2977.0,
         "timed_out": false,
@@ -750,7 +750,7 @@
           1133,
           866,
           691,
-          641
+          634
         ]
       }
     ]
