@@ -14,17 +14,20 @@
 //! square `(* ?1 ?1)` — so bare `(* ?1 ?1)` squaring is a much weaker fallback
 //! (it misses the `-` and the `+`). Slots are filled with varied per-program
 //! subterms (bare symbols, `(* ..)` / `(/ ..)` terms) and one program is wrapped
-//! in `sqrt`. The last program is a *square with no `+`*, which fits `f0` only
-//! through the two identities: `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e.
-//! `(f0 0 d)`.
+//! in `sqrt`. The last program buries a *square with no `+`* inside a larger
+//! `(exp ..)` term, so the abstraction appears deep in a general program;
+//! that square fits `f0` only through the two identities:
+//! `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e. `(f0 0 d)`.
 //!
 //! * `corpus_a.json` is the *expanded* corpus matching `f0` syntactically: the
-//!   `f0` programs put `(- ?0)` first, and the last is written
-//!   `(+ (- 0) (* (/ x 2) (/ x 2)))`. A plain rule-free search finds `f0`. A is
-//!   deliberately *not* minimal — that `(+ (- 0) ..)` collapses to `(* ..)`.
-//! * `corpus_b.json` is the size-minimal form: the last program is the bare
-//!   `(* (/ x 2) (/ x 2))`, and one `f0` program is commutatively swapped to put
-//!   the square first (the `sqrt`-wrapped one). Because *both* operands of each
+//!   `f0` programs put `(- ?0)` first, and the last buries
+//!   `(+ (- 0) (* (/ x 2) (/ x 2)))` inside `(exp ..)`. A plain rule-free
+//!   search finds `f0`. A is deliberately *not* minimal — that `(+ (- 0) ..)`
+//!   collapses to `(* ..)`.
+//! * `corpus_b.json` is the size-minimal form: the last program buries the bare
+//!   square `(* (/ x 2) (/ x 2))` inside `(exp ..)`, and one `f0` program
+//!   (the `sqrt`-wrapped one) is commutatively swapped to put the square first.
+//!   Because *both* operands of each
 //!   `+` are per-program subterms (no shared anchor leaf), the left one is parsed
 //!   first and gets the smaller e-class id, so egg's min-term extractor keeps each
 //!   `+` in its written orientation — it does *not* re-align them. One swap is
@@ -36,14 +39,14 @@
 //!   aligned uses and recovering it.
 //!
 //! This is the paper's point that the abstraction-exposing corpus is *not* the
-//! minimal one: rule-free A (cost 24) beats abstracting B's minimal term
-//! (at-start, cost 26); live rewriting recovers A's cost (24) from B.
+//! minimal one: rule-free A (cost 25) beats abstracting B's minimal term
+//! (at-start, cost 27); live rewriting recovers A's cost (25) from B.
 //!
 //! Measured (best-first, `--max-arity 2`, four programs):
 //! | corpus | rule-free         | at-start | live             |
 //! |--------|-------------------|----------|------------------|
-//! | A      | ~1.33x (full f0)  | —        | —                |
-//! | B      | ~1.12x (squaring) | ~1.12x   | ~1.21x (full f0) |
+//! | A      | ~1.32x (full f0)  | —        | —                |
+//! | B      | ~1.11x (squaring) | ~1.11x   | ~1.20x (full f0) |
 
 use egg::Language;
 use egg_stitch::{

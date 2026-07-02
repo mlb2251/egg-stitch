@@ -24,17 +24,20 @@ Both operands of the `+` are structured — a negation `(- ?0)` and a square
 `(* ?1 ?1)` — so bare `(* ?1 ?1)` squaring is a much weaker fallback (it misses
 the `-` and the `+`). Slots are filled with varied per-program subterms (bare
 symbols, `(* ..)` / `(/ ..)` terms) and one program is wrapped in `sqrt`. The
-last program is a square with no `+`, which fits `f0` only through the two
-identities: `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e. `(f0 0 d)`.
+last program buries a square with no `+` inside a larger `(exp ..)` term,
+so the abstraction appears deep in a general program; that square fits `f0` only
+through the two identities: `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e.
+`(f0 0 d)`.
 
 - **`corpus_a.json`** — the *expanded* corpus, written to match `f0`
-  syntactically: the `f0` programs put `(- ?0)` first, and the last is
-  `(+ (- 0) (* (/ x 2) (/ x 2)))`. A plain rule-free search finds `f0`. A is
-  deliberately **not** minimal — that `(+ (- 0) ..)` collapses to `(* ..)`.
+  syntactically: the `f0` programs put `(- ?0)` first, and the last buries
+  `(+ (- 0) (* (/ x 2) (/ x 2)))` inside `(exp ..)`. A plain rule-free
+  search finds `f0`. A is deliberately **not** minimal — that `(+ (- 0) ..)`
+  collapses to `(* ..)`.
 
-- **`corpus_b.json`** — the size-minimal form: the last program is the bare
-  `(* (/ x 2) (/ x 2))`, and one `f0` program (the `sqrt`-wrapped one) is
-  commutatively swapped to put the square first. Because *both* operands of each
+- **`corpus_b.json`** — the size-minimal form: the last program buries the bare
+  square `(* (/ x 2) (/ x 2))` inside `(exp ..)`, and one `f0` program (the
+  `sqrt`-wrapped one) is commutatively swapped to put the square first. Because *both* operands of each
   `+` are per-program subterms (no shared anchor leaf), the left operand is parsed
   first and gets the smaller e-class id, so egg's min-term extractor keeps each `+`
   in its written orientation — it does **not** re-align them. One swap is enough:
@@ -46,15 +49,15 @@ identities: `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e. `(f0 0 d)`.
   and recovering it.
 
 This is the paper's point that the abstraction-exposing corpus is not the minimal
-one: rule-free A (cost 24) beats abstracting B's minimal term (at-start, cost
-26), and live rewriting recovers A's cost (24) from B.
+one: rule-free A (cost 25) beats abstracting B's minimal term (at-start, cost
+27), and live rewriting recovers A's cost (25) from B.
 
 Measured with best-first, `--max-arity 2` (four programs):
 
 | corpus | rule-free | `--only-use-dsrs-at-start` | live |
 |--------|-----------|----------------------------|------|
-| A      | ~1.33× (`(+ (- ?0) (* ?1 ?1))`) | — | — |
-| B      | ~1.12× (`(* ?1 ?1)`)            | ~1.12× | ~1.21× (`(+ (- ?0) (* ?1 ?1))`) |
+| A      | ~1.32× (`(+ (- ?0) (* ?1 ?1))`) | — | — |
+| B      | ~1.11× (`(* ?1 ?1)`)            | ~1.11× | ~1.20× (`(+ (- ?0) (* ?1 ?1))`) |
 
 `tests/example_paper_test.rs` pins this: A ≡ B under the rewrites, B is minimal
 while A is expanded, syntactic search finds `f0` on A but only squaring on B, and
