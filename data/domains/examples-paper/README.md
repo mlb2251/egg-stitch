@@ -1,11 +1,9 @@
-# examples-paper
+Worked example for use as e-stitch figure-1.
 
-Worked example (e-stitch figure-1 shape): the abstraction-exposing corpus is
-**not** the minimal one, so learning with **live** rewrites beats "minimize
-first, then abstract" (`--only-use-dsrs-at-start`).
+In this case, the abstraction-exposing corpus is
+not the minimal term.
 
-Shared abstraction `f0 = (+ (- ?0) (* ?1 ?1))` (arity 2). Rewrites in
-`rules.rewrites`: `plus_comm`, `add_zero`, `neg_zero`.
+Shared abstraction `f0 = (+ (- ?0) (* ?1 ?1))` (arity 2).
 
 - **`corpus_a.json`** — expanded: every `f0` written `(- ?0)`-first, so a
   rule-free search finds `f0`. Not minimal.
