@@ -63,7 +63,7 @@ impl std::str::FromStr for MaxForcedExpansion {
 #[command(version)]
 pub struct Args {
     /// Search algorithm to use.
-    #[arg(long, value_enum, default_value_t = SearchKind::Smc)]
+    #[arg(long, value_enum)]
     pub search: SearchKind,
 
     /// Path to the input JSON file containing programs.
