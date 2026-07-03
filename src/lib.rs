@@ -116,9 +116,9 @@ pub struct Args {
     #[arg(long)]
     pub time_limit: Option<f64>,
 
-    /// Softmax temperature for resampling weights.
-    #[arg(long, default_value_t = 100.0)]
-    pub temperature: f64,
+    /// Softmax temperature for resampling weights. Required for SMC search.
+    #[arg(long)]
+    pub temperature: Option<f64>,
 
     /// Stop after this many steps with no improvement.
     #[arg(long, default_value_t = 50)]

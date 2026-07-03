@@ -68,7 +68,7 @@ def build_corpus(aig):
 def no_rules_compression(corpus_path):
     """initial/final cost from a no-DSR egg-stitch SMC run (seed 1, deterministic).
     Uses `op-children-db` so `$n` is a real free variable (banned from abstraction
-    bodies); sym=1 keeps the cost scale matched to the default temperature."""
+    bodies); sym=1 keeps the cost scale matched to the temperature used below."""
     out = corpus_path + ".out"
     subprocess.run(
         [BIN, "-i", corpus_path, "--output", out, "--search", "smc", "--language", "op-children-db",
