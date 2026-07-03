@@ -166,8 +166,8 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     /// tighter `cost_to_beat`. Returns parallel `(costs, pruned)` vecs: `pruned[i]`
     /// marks particles killed by the lower bound (no descendant can beat the
     /// current best), whose `costs[i]` is the bound they failed rather than a
-    /// real cost. In `--follow` mode the best update is skipped — only the
-    /// exact-match exit promotes a particle.
+    /// real cost. In `--follow` mode only particles that are prefixes of the
+    /// target are eligible to become best (the exact-match exit still overwrites).
     fn compute_costs(&mut self, expanded: &[SearchState<F, O>], step: usize, cost_cache: &CostCache, scratch: &mut CostScratch, lower_bound_pruner: &mut LowerBoundPruner) -> (Vec<usize>, Vec<bool>) {
         let max_arity = self.args.max_arity;
         let no_zero_arity = self.args.no_zero_arity;
@@ -183,10 +183,19 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
             let selection = compute_cost_and_select(&self.shared.egraph, self.shared.root, cost_cache, scratch, s, self.shared.check_slow);
             let cost = selection.cost;
             let arity = s.pattern.vars.len();
-            // In `--follow` mode the prefix filter lets cheaper non-matching
-            // particles through, so skip the prefix-best update — only the
-            // exact-match exit promotes a particle to `best`.
-            if self.shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && (self.args.allow_useless_vars || !s.has_useless_var(&self.shared)) {
+            // In `--follow` mode record the cheapest matching *prefix* of the
+            // target as best — a reachability check, not a compression search.
+            // `follow_ok` keeps only genuine prefixes eligible (the exact-match
+            // exit still overwrites when it fires). The floor drops from
+            // `original_size` to "no floor" while no best exists: variable
+            // ordering makes a *compressing* prefix stochastically hard to reach,
+            // so gating on `cost < original_size` could report `None` even though
+            // the search did reach prefixes of the target. Recording the closest
+            // prefix (cheaper ones overwrite) reports what was reached; outside
+            // follow mode the floor stays `original_size` via `cost_to_beat`.
+            let follow_ok = self.shared.follow.as_ref().is_none_or(|f| s.matches_follow(f));
+            let record_floor = if self.shared.follow.is_some() && self.best().is_none() { usize::MAX } else { cost_to_beat };
+            if follow_ok && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < record_floor && (self.args.allow_useless_vars || !s.has_useless_var(&self.shared)) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
                 self.record_best(step, cost, SearchStateWithCostSelection { state: s.clone(), selection });
             }
