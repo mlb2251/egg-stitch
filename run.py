@@ -12,6 +12,7 @@ def dials_compress():
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         num_steps=10,
         num_particles=100,
+        temperature=100,
     )
 
 
@@ -21,6 +22,7 @@ def dials_follow():
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         num_steps=10,
         num_particles=100,
+        temperature=100,
         follow="(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))",
     )
 
