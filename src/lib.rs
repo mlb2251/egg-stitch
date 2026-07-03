@@ -145,6 +145,16 @@ pub struct Args {
     #[arg(long, default_value_t = 1.0)]
     pub boost_reuse_weight: f64,
 
+    /// Apply best-first's canonical variable-ordering (freeze) rule during SMC
+    /// expansion. Ranks each var by how little expanding it explodes the match
+    /// set, then expanding a var freezes every lower-ranked one (and enforces the
+    /// canonical reuse-pair order), so a given abstraction is proposed via one
+    /// canonical action sequence instead of every permutation. On by default;
+    /// pass `--no-smc-variable-ordering` to keep creation order and leave all
+    /// vars expandable.
+    #[arg(long = "no-smc-variable-ordering", action = clap::ArgAction::SetFalse)]
+    pub smc_variable_ordering: bool,
+
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]
     pub check_slow: bool,
