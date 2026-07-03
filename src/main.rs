@@ -20,7 +20,8 @@ struct RunOutput {
 }
 
 fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    args.normalize();
     let start = std::time::Instant::now();
 
     // Pick the language family AND its leaf-Op at the boundary. LambdaCalc and

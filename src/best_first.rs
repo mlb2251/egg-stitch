@@ -317,7 +317,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // is intentionally left as-is: follow mode is a reachability check
             // and none of the follow tests depend on which backend's
             // budget-exhaustion behaviour is used.
-            if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat && !child_state.has_useless_var(&shared) {
+            if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat && (args.allow_useless_vars || !child_state.has_useless_var(&shared)) {
                 let elapsed = search_start.elapsed().as_secs_f64();
                 println!(
                     "{} {} {} {}",

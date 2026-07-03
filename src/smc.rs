@@ -184,7 +184,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
             // In `--follow` mode the prefix filter lets cheaper non-matching
             // particles through, so skip the prefix-best update — only the
             // exact-match exit promotes a particle to `best`.
-            if self.shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && !s.has_useless_var(&self.shared) {
+            if self.shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && (self.args.allow_useless_vars || !s.has_useless_var(&self.shared)) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
                 self.record_best(step, cost, SearchStateWithCostSelection { state: s.clone(), selection });
             }
