@@ -1,52 +1,22 @@
-//! Worked example for the paper (e-stitch figure-1 shape): a corpus whose
-//! abstraction-exposing form is neither the minimal one nor a canonical
-//! commutative ordering, so live rewriting beats `--only-use-dsrs-at-start`.
+//! Worked example (e-stitch figure-1 shape): the abstraction-exposing corpus is
+//! not the minimal one, so live rewriting beats `--only-use-dsrs-at-start`.
 //!
-//! The rewrites (`data/domains/examples-paper/rules.rewrites`) are:
-//! ```text
-//! plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
-//! add_zero:  ?x       <=> (+ 0 ?x)
-//! neg_zero:  (- 0)    <=> 0
-//! ```
+//! Shared abstraction `f0 = (+ (- ?0) (* ?1 ?1))` (arity 2); bare `(* ?1 ?1)`
+//! squaring is the weak fallback. Rewrites in `rules.rewrites`: `plus_comm`,
+//! `add_zero`, `neg_zero`.
 //!
-//! The shared abstraction is `f0 = (+ (- ?0) (* ?1 ?1))` (i.e. `-x + y²`,
-//! arity 2). Both operands of the `+` are structured — a negation `(- ?0)` and a
-//! square `(* ?1 ?1)` — so bare `(* ?1 ?1)` squaring is a much weaker fallback
-//! (it misses the `-` and the `+`). Slots are filled with varied per-program
-//! subterms (bare symbols, `(* ..)` / `(/ ..)` terms) and one program is wrapped
-//! in `sqrt`. The last program buries a *square with no `+`* inside a larger
-//! `(exp ..)` term, so the abstraction appears deep in a general program;
-//! that square fits `f0` only through the two identities:
-//! `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e. `(f0 0 d)`.
+//! * `corpus_a.json` — expanded: every `f0` written `(- ?0)`-first, so rule-free
+//!   search finds `f0`. Not minimal (its `(+ (- 0) ..)` collapses to `(* ..)`).
+//! * `corpus_b.json` — the size-minimal `a`: one `f0` commutatively swapped and
+//!   the last a bare square. egg's extractor keeps each `+` as written, so
+//!   rule-free/at-start only reach squaring; live re-aligns the `+`s and expands
+//!   the bare square, recovering `f0`.
 //!
-//! * `corpus_a.json` is the *expanded* corpus matching `f0` syntactically: the
-//!   `f0` programs put `(- ?0)` first, and the last buries
-//!   `(+ (- 0) (* (/ y 2) (/ y 2)))` inside `(exp ..)`. A plain rule-free
-//!   search finds `f0`. A is deliberately *not* minimal — that `(+ (- 0) ..)`
-//!   collapses to `(* ..)`.
-//! * `corpus_b.json` is the size-minimal form: the last program buries the bare
-//!   square `(* (/ y 2) (/ y 2))` inside `(exp ..)`, and one `f0` program
-//!   (the `sqrt`-wrapped one) is commutatively swapped to put the square first.
-//!   Because *both* operands of each
-//!   `+` are per-program subterms (no shared anchor leaf), the left one is parsed
-//!   first and gets the smaller e-class id, so egg's min-term extractor keeps each
-//!   `+` in its written orientation — it does *not* re-align them. One swap is
-//!   enough: an arity-2 abstraction body costs 6 nodes and saves only ~3 per use,
-//!   so it needs *three* aligned uses to pay for itself; the swap leaves at most
-//!   two programs sharing any one orientation, so a search over the minimal corpus
-//!   falls back to the weak `(* ?1 ?1)` squaring. Live rewriting re-aligns every
-//!   `+` and `add_zero`/`neg_zero`-expands the bare square, lifting `f0` to four
-//!   aligned uses and recovering it.
-//!
-//! This is the paper's point that the abstraction-exposing corpus is *not* the
-//! minimal one: rule-free A (cost 25) beats abstracting B's minimal term
-//! (at-start, cost 27); live rewriting recovers A's cost (25) from B.
-//!
-//! Measured (best-first, `--max-arity 2`, four programs):
+//! Measured (best-first, `--max-arity 2`):
 //! | corpus | rule-free         | at-start | live             |
 //! |--------|-------------------|----------|------------------|
-//! | A      | ~1.32x (full f0)  | —        | —                |
-//! | B      | ~1.11x (squaring) | ~1.11x   | ~1.20x (full f0) |
+//! | A      | ~1.32x (f0)       | —        | —                |
+//! | B      | ~1.11x (squaring) | ~1.11x   | ~1.20x (f0)      |
 
 use egg::Language;
 use egg_stitch::{
