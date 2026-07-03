@@ -21,11 +21,11 @@
 //!
 //! * `corpus_a.json` is the *expanded* corpus matching `f0` syntactically: the
 //!   `f0` programs put `(- ?0)` first, and the last buries
-//!   `(+ (- 0) (* (/ x 2) (/ x 2)))` inside `(exp ..)`. A plain rule-free
+//!   `(+ (- 0) (* (/ y 2) (/ y 2)))` inside `(exp ..)`. A plain rule-free
 //!   search finds `f0`. A is deliberately *not* minimal — that `(+ (- 0) ..)`
 //!   collapses to `(* ..)`.
 //! * `corpus_b.json` is the size-minimal form: the last program buries the bare
-//!   square `(* (/ x 2) (/ x 2))` inside `(exp ..)`, and one `f0` program
+//!   square `(* (/ y 2) (/ y 2))` inside `(exp ..)`, and one `f0` program
 //!   (the `sqrt`-wrapped one) is commutatively swapped to put the square first.
 //!   Because *both* operands of each
 //!   `+` are per-program subterms (no shared anchor leaf), the left one is parsed

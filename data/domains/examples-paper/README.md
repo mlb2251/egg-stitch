@@ -31,12 +31,12 @@ through the two identities: `(* d d) = (+ 0 (* d d)) = (+ (- 0) (* d d))`, i.e.
 
 - **`corpus_a.json`** — the *expanded* corpus, written to match `f0`
   syntactically: the `f0` programs put `(- ?0)` first, and the last buries
-  `(+ (- 0) (* (/ x 2) (/ x 2)))` inside `(exp ..)`. A plain rule-free
+  `(+ (- 0) (* (/ y 2) (/ y 2)))` inside `(exp ..)`. A plain rule-free
   search finds `f0`. A is deliberately **not** minimal — that `(+ (- 0) ..)`
   collapses to `(* ..)`.
 
 - **`corpus_b.json`** — the size-minimal form: the last program buries the bare
-  square `(* (/ x 2) (/ x 2))` inside `(exp ..)`, and one `f0` program (the
+  square `(* (/ y 2) (/ y 2))` inside `(exp ..)`, and one `f0` program (the
   `sqrt`-wrapped one) is commutatively swapped to put the square first. Because *both* operands of each
   `+` are per-program subterms (no shared anchor leaf), the left operand is parsed
   first and gets the smaller e-class id, so egg's min-term extractor keeps each `+`
