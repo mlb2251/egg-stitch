@@ -1,22 +1,4 @@
-//! Worked example (e-stitch figure-1 shape): the abstraction-exposing corpus is
-//! not the minimal one, so live rewriting beats `--only-use-dsrs-at-start`.
-//!
-//! Shared abstraction `f0 = (+ (- ?0) (* ?1 ?1))` (arity 2); bare `(* ?1 ?1)`
-//! squaring is the weak fallback. Rewrites in `rules.rewrites`: `plus_comm`,
-//! `add_zero`, `neg_zero`.
-//!
-//! * `corpus_a.json` — expanded: every `f0` written `(- ?0)`-first, so rule-free
-//!   search finds `f0`. Not minimal (its `(+ (- 0) ..)` collapses to `(* ..)`).
-//! * `corpus_b.json` — the size-minimal `a`: one `f0` commutatively swapped and
-//!   the last a bare square. egg's extractor keeps each `+` as written, so
-//!   rule-free/at-start only reach squaring; live re-aligns the `+`s and expands
-//!   the bare square, recovering `f0`.
-//!
-//! Measured (best-first, `--max-arity 2`):
-//! | corpus | rule-free         | at-start | live             |
-//! |--------|-------------------|----------|------------------|
-//! | A      | ~1.32x (f0)       | —        | —                |
-//! | B      | ~1.11x (squaring) | ~1.11x   | ~1.20x (f0)      |
+//! See data/domains/examples-paper/README.md for context.
 
 use egg::Language;
 use egg_stitch::{
