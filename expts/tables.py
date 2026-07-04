@@ -74,8 +74,9 @@ def _sweep_runners(
 BASELINE_BFS_STEPS = 10_000_000
 
 # Runner rosters — Table 2/4 share the with-Stitch roster; Table 1/3 (DSRs,
-# no Stitch) add a "dsrs-only-at-start" baseline: best-first that canonicalises
-# with the DSRs once instead of keeping them live (the BFS@start column).
+# no Stitch) add two best-first baselines: "dsrs-only-at-start" (BFS/MT), which
+# canonicalises with the DSRs once instead of keeping them live, and
+# "enum-baseline" (BFS/NR), which turns the DSRs off entirely.
 BASE_RUNNERS: tuple[tuple[str, object], ...] = _sweep_runners() + (
     ("babble", Babble()),
 )
@@ -84,6 +85,7 @@ RUNNERS_WITH_STITCH: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
 )
 DSR_RUNNERS: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
     ("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True)),
+    ("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True)),
 )
 
 
@@ -183,8 +185,8 @@ def _run_table(
 
 
 def table1() -> Path:
-    """Run Enum, SMC, babble, and the dsrs-only-at-start baseline on the
-    Table 1 domains with DSRs."""
+    """Run Enum, SMC, babble, and the dsrs-only-at-start (BFS/MT) and no-rules
+    (BFS/NR) baselines on the Table 1 domains with DSRs."""
     return _run_table(
         domains=TABLE1_DOMAINS,
         runners=DSR_RUNNERS,

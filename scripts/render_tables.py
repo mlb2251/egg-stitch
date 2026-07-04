@@ -58,8 +58,8 @@ def methods_for_table(table: int) -> list[str]:
     and have no baseline.
     """
     if table in TABLES_WITH_EGRAPH_MIN:
-        # babble follows SMC; the BFS/MT baseline is kept rightmost.
-        return ["enum", "smc", "babble", BASELINE_METHOD]
+        # babble follows SMC; the BFS/MT and BFS/NR baselines are kept rightmost.
+        return ["enum", "smc", "babble", BASELINE_METHOD, NO_RULES_METHOD]
     return ["enum", "smc", "babble", "stitch"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
@@ -77,16 +77,21 @@ METHODS = ["enum", "smc", "babble", "stitch"]
 # "dsrs-only-at-start" baseline: best-first that canonicalises with the DSRs
 # once instead of keeping them live (the "BFS@start" column, same as table5).
 BASELINE_METHOD = "enum-dsrs-at-start"
+# No-rules Enum baseline (BFS/NR): best-first with the DSRs turned off entirely,
+# the direct-babble-comparison reference on the DSR tables (1 & 3) and table5/7.
+NO_RULES_METHOD = "enum-baseline"
 # Table cells use the bare search-strategy name; plot legends spell out the
 # E-Stitch prefix so each series is unambiguous standalone.
 METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble",
-                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT"}
+                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT",
+                 NO_RULES_METHOD: "BFS/NR"}
 METHOD_PLOT_LABELS = {
     "enum": "E-Stitch: BFS",
     "smc": "E-Stitch: SMC",
     "babble": "babble",
     "stitch": "Stitch",
     BASELINE_METHOD: "E-Stitch: BFS (DSRs at start)",
+    NO_RULES_METHOD: "E-Stitch: BFS (no rules)",
 }
 # The single sweep point each base method contributes to the table cells.
 # Plots use the full sweep regardless.
@@ -98,6 +103,7 @@ TABLE_DATA_KEYS = {
     "babble": "babble",
     "stitch": "stitch",
     BASELINE_METHOD: BASELINE_METHOD,
+    NO_RULES_METHOD: NO_RULES_METHOD,
 }
 TABLE_TITLES = {
     1: "Compression Using Rewrites",
@@ -149,6 +155,7 @@ def line_color(i: int):
 # gets its own color past the four base series.
 METHOD_COLORS = {m: line_color(i) for i, m in enumerate(METHODS)}
 METHOD_COLORS[BASELINE_METHOD] = line_color(4)
+METHOD_COLORS[NO_RULES_METHOD] = line_color(5)
 DOMAIN_PLOT_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -270,8 +277,9 @@ PRESENTATION_COLORS = {
     "smc": "estitchHighlight",
     "babble": "ecorange",
     "stitch": "ecblue",
-    # The dsrs-only-at-start baseline is an E-Stitch search variant too.
+    # The dsrs-only-at-start and no-rules baselines are E-Stitch search variants too.
     BASELINE_METHOD: "estitchHighlight",
+    NO_RULES_METHOD: "estitchHighlight",
 }
 
 
