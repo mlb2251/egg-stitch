@@ -58,7 +58,8 @@ def methods_for_table(table: int) -> list[str]:
     and have no baseline.
     """
     if table in TABLES_WITH_EGRAPH_MIN:
-        return ["enum", "smc", BASELINE_METHOD, "babble"]
+        # babble follows SMC; the BFS/MT baseline is kept rightmost.
+        return ["enum", "smc", "babble", BASELINE_METHOD]
     return ["enum", "smc", "babble", "stitch"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
@@ -621,6 +622,13 @@ class FamilySpec:
         # Base methods take color slots 0/1/3; extras fill 2 then 4, 5, ... so a
         # single-extra roster (table7) keeps its original slot-2 color.
         extra_slots = [2, 4, 5][: len(extras)]
+        # Table columns keep the BFS/MT and BFS/NR baselines rightmost (babble,
+        # a real method, follows SMC). Plots are unaffected — they have no
+        # left-to-right ranking, so their series order stays as built above.
+        baselines = ("enum-dsrs-at-start", "enum-baseline")
+        table_methods = [m for m in methods if m not in baselines] + [
+            m for m in methods if m in baselines
+        ]
         return cls(
             title=title,
             fig_subdir=fig_subdir,
@@ -629,7 +637,7 @@ class FamilySpec:
             # The two sweeps, then the single-point methods. Each single-point
             # method keys on its own data label so plot_cr_vs_time finds it directly.
             plot_methods=methods,
-            table_methods=methods,
+            table_methods=table_methods,
             data_keys={
                 "enum": f"enum-{enum_point}",
                 "smc": f"smc-{TABLE_SMC_PARTICLES}",
