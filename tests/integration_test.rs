@@ -50,7 +50,25 @@ fn follow_dials_full_baseline() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "1000", "--num-particles", "1000", "--temperature", "100", "--follow", DIALS_FULL_FOLLOW, "--max-arity", "2"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        INPUT,
+        "--rules",
+        RULES,
+        "--num-steps",
+        "1000",
+        "--num-particles",
+        "1000",
+        "--temperature",
+        "100",
+        "--follow",
+        DIALS_FULL_FOLLOW,
+        "--max-arity",
+        "2",
+    ]);
     let result = run(&args);
     assert_best_matches_follow(&result, DIALS_FULL_FOLLOW);
 }
@@ -62,7 +80,7 @@ fn follow_shallow_no_placeholders() {
         return;
     }
     let follow = "(T l (M 1 0 -0.5 0))";
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "30", "--num-particles", "200", "--follow", follow, "--max-arity", "2"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "30", "--num-particles", "200", "--follow", follow, "--max-arity", "2"]);
     let result = run(&args);
     assert_best_matches_follow(&result, follow);
 }
@@ -74,7 +92,25 @@ fn follow_single_placeholder() {
         return;
     }
     let follow = "(T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0))";
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "1000", "--num-particles", "1000", "--temperature", "100", "--follow", follow, "--max-arity", "2"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        INPUT,
+        "--rules",
+        RULES,
+        "--num-steps",
+        "1000",
+        "--num-particles",
+        "1000",
+        "--temperature",
+        "100",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+    ]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -85,7 +121,7 @@ fn no_follow_still_produces_best() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -96,7 +132,7 @@ fn check_slow_matches_fast() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -107,7 +143,7 @@ fn check_slow_no_rules() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -122,7 +158,7 @@ fn check_slow_furniture() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -134,7 +170,7 @@ fn check_slow_nuts_bolts() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -146,7 +182,7 @@ fn check_slow_wheels() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -157,7 +193,7 @@ fn check_slow_high_arity() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -168,7 +204,7 @@ fn check_slow_high_arity_multi_abstr() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--num-abstractions", "2"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--num-abstractions", "2"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -181,7 +217,24 @@ fn check_slow_lambda_calc_fast_slow_mismatch() {
     if !std::path::Path::new(input).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "100", "--check-slow", "--language", "lambda-calc", "--seed", "145514431571737541"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        input,
+        "--num-steps",
+        "50",
+        "--num-particles",
+        "20",
+        "--temperature",
+        "100",
+        "--check-slow",
+        "--language",
+        "lambda-calc",
+        "--seed",
+        "145514431571737541",
+    ]);
     let _ = run_lambda_calc(&args);
 }
 
@@ -194,7 +247,24 @@ fn check_slow_intermediate_propagation() {
     if !std::path::Path::new(input).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "100", "--check-slow", "--language", "lambda-calc", "--seed", "888315200261588942"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        input,
+        "--num-steps",
+        "50",
+        "--num-particles",
+        "20",
+        "--temperature",
+        "100",
+        "--check-slow",
+        "--language",
+        "lambda-calc",
+        "--seed",
+        "888315200261588942",
+    ]);
     let _ = run_lambda_calc(&args);
 }
 
@@ -205,7 +275,7 @@ fn check_slow_physics(name: &str) {
     if !std::path::Path::new(&input).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "100", "--language", "lambda-calc", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "100", "--language", "lambda-calc", "--check-slow"]);
     let _ = run_lambda_calc(&args);
 }
 
@@ -271,6 +341,8 @@ fn follow_exact_match_exits_early_smc() {
     let budget = 2000;
     let args = Args::parse_from([
         "egg-stitch",
+        "--search",
+        "smc",
         "--input",
         input,
         "--num-steps",
@@ -299,7 +371,25 @@ fn follow_lambda_calc_flat_nary_app() {
         return;
     }
     let follow = "(lam (app (?#0 $0) (app (?#0 $0) empty)))";
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "200", "--num-particles", "500", "--temperature", "100", "--follow", follow, "--max-arity", "2", "--language", "lambda-calc"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        input,
+        "--num-steps",
+        "200",
+        "--num-particles",
+        "500",
+        "--temperature",
+        "100",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+        "--language",
+        "lambda-calc",
+    ]);
     let result = run_lambda_calc(&args);
     assert_best_matches_follow_lambda(&result, follow);
 }
@@ -316,7 +406,25 @@ fn follow_lambda_calc_var_headed_smoke() {
         return;
     }
     let follow = "(?#0 (lam (?#0 ?#0)))";
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "100", "--num-particles", "200", "--temperature", "100", "--follow", follow, "--max-arity", "2", "--language", "lambda-calc"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        input,
+        "--num-steps",
+        "100",
+        "--num-particles",
+        "200",
+        "--temperature",
+        "100",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+        "--language",
+        "lambda-calc",
+    ]);
     let result = run_lambda_calc(&args);
     if result.best.is_some() {
         assert_best_matches_follow_lambda(&result, follow);
