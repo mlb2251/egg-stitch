@@ -2,15 +2,15 @@
   "epfl-circuits:hyp": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8133,
-        "compression_ratio": 2.760973810402066,
-        "elapsed_secs": 35.75476121902466,
+        "final_cost": 8134,
+        "compression_ratio": 2.7606343742316204,
+        "elapsed_secs": 19.630309581756592,
         "library": [
-          "fn_0: (not (or (and ?#0 (not (not ?#1))) (not (or ?#0 ?#1))))",
+          "fn_0: (not (or (and (not ?#0) (not ?#1)) (and ?#1 (not (not ?#0)))))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (and $0 $1)"
@@ -18,97 +18,22 @@
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          10265,
-          9078,
-          8515,
-          8134
+          10266,
+          9079,
+          8516,
+          8135
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:hyp",
-        "file": "hyp",
-        "initial_cost": 22455,
-        "final_cost": 8130,
-        "compression_ratio": 2.761992619926199,
-        "elapsed_secs": 33.64679169654846,
-        "library": [
-          "fn_0: (and (not (and ?#0 ?#1)) (or ?#1 ?#0))",
-          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (or $0 $1)",
-          "fn_3: (and $0 $1)"
-        ],
-        "egraph_min_term_size": 15728.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10262,
-          9075,
-          8512,
-          8131
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:hyp",
-        "file": "hyp",
-        "initial_cost": 22455,
-        "final_cost": 8132,
-        "compression_ratio": 2.761313330054107,
-        "elapsed_secs": 35.96767783164978,
-        "library": [
-          "fn_0: (and (not (and ?#0 ?#1)) (or (not (not ?#1)) ?#0))",
-          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (or $0 $1)",
-          "fn_3: (and $0 $1)"
-        ],
-        "egraph_min_term_size": 15728.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10264,
-          9077,
-          8514,
-          8133
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
         "final_cost": 8131,
         "compression_ratio": 2.761652933218546,
-        "elapsed_secs": 35.964375019073486,
-        "library": [
-          "fn_0: (not (or (not (or ?#0 ?#1)) (and ?#0 ?#1)))",
-          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (or $0 $1)",
-          "fn_3: (and $0 $1)"
-        ],
-        "egraph_min_term_size": 15728.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10263,
-          9076,
-          8513,
-          8132
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:hyp",
-        "file": "hyp",
-        "initial_cost": 22455,
-        "final_cost": 8131,
-        "compression_ratio": 2.761652933218546,
-        "elapsed_secs": 35.23186659812927,
+        "elapsed_secs": 16.111504793167114,
         "library": [
           "fn_0: (and (or (not ?#0) (not ?#1)) (or ?#1 ?#0))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
@@ -127,40 +52,15 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:hyp",
-        "file": "hyp",
-        "initial_cost": 22455,
-        "final_cost": 8133,
-        "compression_ratio": 2.760973810402066,
-        "elapsed_secs": 37.42756676673889,
-        "library": [
-          "fn_0: (not (or (not (or (not (not ?#0)) ?#1)) (and ?#1 ?#0)))",
-          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (or $0 $1)",
-          "fn_3: (and $0 $1)"
-        ],
-        "egraph_min_term_size": 15728.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10265,
-          9078,
-          8515,
-          8134
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
         "final_cost": 8131,
         "compression_ratio": 2.761652933218546,
-        "elapsed_secs": 36.038273096084595,
+        "elapsed_secs": 15.53339433670044,
         "library": [
-          "fn_0: (not (or (and ?#0 ?#1) (not (or ?#1 ?#0))))",
+          "fn_0: (and (or ?#0 ?#1) (or (not ?#1) (not ?#0)))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (and $0 $1)"
@@ -177,15 +77,15 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
-        "final_cost": 8130,
-        "compression_ratio": 2.761992619926199,
-        "elapsed_secs": 34.7442672252655,
+        "final_cost": 8134,
+        "compression_ratio": 2.7606343742316204,
+        "elapsed_secs": 19.90634059906006,
         "library": [
-          "fn_0: (and (not (and ?#0 ?#1)) (or ?#0 ?#1))",
+          "fn_0: (not (or (and (not ?#0) (not ?#1)) (and ?#1 (not (not ?#0)))))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (and $0 $1)"
@@ -193,24 +93,149 @@
         "egraph_min_term_size": 15728.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          10262,
-          9075,
-          8512,
-          8131
+          10266,
+          9079,
+          8516,
+          8135
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 8135,
+        "compression_ratio": 2.7602950215119852,
+        "elapsed_secs": 16.71670126914978,
+        "library": [
+          "fn_0: (and (or (not (not ?#0)) ?#1) (or (not (not (not ?#0))) (not ?#1)))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (and $0 $1)"
+        ],
+        "egraph_min_term_size": 15728.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10267,
+          9080,
+          8517,
+          8136
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 8132,
+        "compression_ratio": 2.761313330054107,
+        "elapsed_secs": 19.94515037536621,
+        "library": [
+          "fn_0: (and (or ?#0 (not (not ?#1))) (not (and ?#1 ?#0)))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (and $0 $1)"
+        ],
+        "egraph_min_term_size": 15728.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10264,
+          9077,
+          8514,
+          8133
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 8138,
+        "compression_ratio": 2.759277463750307,
+        "elapsed_secs": 20.570583820343018,
+        "library": [
+          "fn_0: (and (or (not (not (not ?#0))) (not ?#1)) (not (not (not (and (not ?#1) (not ?#0))))))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (and $0 $1)"
+        ],
+        "egraph_min_term_size": 15728.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10270,
+          9083,
+          8520,
+          8139
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 8676,
+        "compression_ratio": 2.5881742738589213,
+        "elapsed_secs": 30.936370134353638,
+        "library": [
+          "fn_0: (and (or ?#0 (not (or ?#1 ?#2))) (or (or ?#1 (not ?#0)) ?#2))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (or $1 $0)",
+          "fn_3: (and $0 $1)"
+        ],
+        "egraph_min_term_size": 15728.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11327,
+          9845,
+          9250,
+          8677
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:hyp",
+        "file": "hyp",
+        "initial_cost": 22455,
+        "final_cost": 8132,
+        "compression_ratio": 2.761313330054107,
+        "elapsed_secs": 19.331183195114136,
+        "library": [
+          "fn_0: (not (or (and ?#0 ?#1) (and (not ?#1) (not ?#0))))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (and $0 $1)"
+        ],
+        "egraph_min_term_size": 15728.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10264,
+          9077,
+          8514,
+          8133
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:hyp",
         "file": "hyp",
         "initial_cost": 22455,
         "final_cost": 8133,
         "compression_ratio": 2.760973810402066,
-        "elapsed_secs": 38.08950710296631,
+        "elapsed_secs": 17.54733371734619,
         "library": [
-          "fn_0: (not (or (not (or ?#0 (not (not ?#1)))) (and ?#1 ?#0)))",
+          "fn_0: (and (or (not (not ?#0)) ?#1) (or (not ?#0) (not ?#1)))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (and $0 $1)"
@@ -222,31 +247,6 @@
           9078,
           8515,
           8134
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:hyp",
-        "file": "hyp",
-        "initial_cost": 22455,
-        "final_cost": 8131,
-        "compression_ratio": 2.761652933218546,
-        "elapsed_secs": 35.83838486671448,
-        "library": [
-          "fn_0: (and (or ?#0 ?#1) (or (not ?#0) (not ?#1)))",
-          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (or $0 $1)",
-          "fn_3: (and $0 $1)"
-        ],
-        "egraph_min_term_size": 15728.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10263,
-          9076,
-          8513,
-          8132
         ]
       }
     ]
@@ -254,92 +254,117 @@
   "epfl-circuits:log2": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 9301,
-        "compression_ratio": 3.198365767121815,
-        "elapsed_secs": 170.35882306098938,
+        "final_cost": 9298,
+        "compression_ratio": 3.199397719939772,
+        "elapsed_secs": 29.030117511749268,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
-          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
-          "fn_2: (and $4 (and (and $0 $2) (and $3 (and ?#0 ?#1))))",
-          "fn_3: (fn_1 $1 (not $0) ?#0)"
+          "fn_0: (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (and (not (or ?#0 ?#1)) ?#2)",
+          "fn_3: (and $2 (and (and (and $4 $0) $3) (and ?#0 ?#1)))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11015,
-          10023,
-          9651,
-          9302
+          11055,
+          10069,
+          9664,
+          9299
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 9302,
-        "compression_ratio": 3.198021930767577,
-        "elapsed_secs": 169.6785011291504,
+        "final_cost": 9300,
+        "compression_ratio": 3.198709677419355,
+        "elapsed_secs": 40.014182806015015,
         "library": [
-          "fn_0: (and (or (not (not ?#0)) (not ?#1)) (or ?#1 (not ?#0)))",
+          "fn_0: (and (or ?#0 (not ?#1)) (or ?#1 (not ?#0)))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (and $0 (and (and (and ?#0 (and $3 ?#1)) $2) $4))",
+          "fn_2: (and (and (and (and $3 (and ?#0 $0)) $4) $2) ?#1)",
           "fn_3: (fn_1 ?#0 $1 (not $0))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11016,
-          10024,
-          9652,
-          9303
+          11014,
+          10022,
+          9650,
+          9301
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
-        "final_cost": 9226,
-        "compression_ratio": 3.2243659223932366,
-        "elapsed_secs": 163.9708869457245,
+        "final_cost": 9298,
+        "compression_ratio": 3.199397719939772,
+        "elapsed_secs": 27.245024919509888,
         "library": [
-          "fn_0: (and (or ?#0 (not ?#1)) (not (and (not ?#1) ?#0)))",
-          "fn_1: (and (not ?#0) (or ?#1 (not ?#2)))",
-          "fn_2: (fn_1 ?#0 (not $0) $1)",
-          "fn_3: (and (and (and $3 $2) (and $4 $0)) (and ?#0 ?#1))"
+          "fn_0: (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (and (not (or ?#0 ?#1)) ?#2)",
+          "fn_3: (and $2 (and (and ?#0 (and $3 (and $4 ?#1))) $0))"
         ],
         "egraph_min_term_size": 17565.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11015,
-          10023,
-          9599,
-          9227
+          11055,
+          10069,
+          9664,
+          9299
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 9299,
+        "compression_ratio": 3.199053661684052,
+        "elapsed_secs": 25.839223623275757,
+        "library": [
+          "fn_0: (or (not (or (not ?#0) ?#1)) (and (not ?#0) ?#1))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (and (not (or ?#0 ?#1)) ?#2)",
+          "fn_3: (and $2 (and (and (and (and $3 ?#0) $4) ?#1) $0))"
+        ],
+        "egraph_min_term_size": 17565.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11056,
+          10070,
+          9665,
+          9300
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
         "final_cost": 9304,
         "compression_ratio": 3.197334479793637,
-        "elapsed_secs": 162.06345748901367,
+        "elapsed_secs": 30.419678449630737,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (and (and $0 (and $3 $4)) (and ?#0 (and ?#1 $2)))",
+          "fn_2: (and (and (and (and (and $4 ?#0) $3) $2) $0) ?#1)",
           "fn_3: (and ?#0 (not (or $5 ?#1)))"
         ],
         "egraph_min_term_size": 17565.0,
@@ -354,142 +379,17 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:log2",
-        "file": "log2",
-        "initial_cost": 29748,
-        "final_cost": 9311,
-        "compression_ratio": 3.194930727096982,
-        "elapsed_secs": 158.34014081954956,
-        "library": [
-          "fn_0: (and (not (and (not ?#0) ?#1)) (or (not ?#0) ?#1))",
-          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (and (and (and $0 (and ?#0 ?#1)) $3) (and $4 $2))",
-          "fn_3: (or $4 $5)"
-        ],
-        "egraph_min_term_size": 17565.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          11015,
-          10025,
-          9653,
-          9312
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:log2",
-        "file": "log2",
-        "initial_cost": 29748,
-        "final_cost": 9306,
-        "compression_ratio": 3.1966473243068987,
-        "elapsed_secs": 168.91062331199646,
-        "library": [
-          "fn_0: (and (or (not ?#0) ?#1) (not (not (or ?#0 (not ?#1)))))",
-          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (and (and (and (and $0 (and ?#0 $2)) $3) $4) ?#1)",
-          "fn_3: (and (not (or ?#0 $5)) ?#1)"
-        ],
-        "egraph_min_term_size": 17565.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          11016,
-          10026,
-          9654,
-          9307
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:log2",
-        "file": "log2",
-        "initial_cost": 29748,
-        "final_cost": 9311,
-        "compression_ratio": 3.194930727096982,
-        "elapsed_secs": 182.25634026527405,
-        "library": [
-          "fn_0: (not (or (not (not (and (not ?#0) ?#1))) (and ?#0 (not ?#1))))",
-          "fn_1: (and (or (not ?#0) ?#1) (not ?#2))",
-          "fn_2: (and (and (and $4 (and (and ?#0 ?#1) $0)) $2) $3)",
-          "fn_3: (and (and (not ?#0) (not $5)) ?#1)"
-        ],
-        "egraph_min_term_size": 17565.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          11017,
-          10027,
-          9655,
-          9312
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:log2",
-        "file": "log2",
-        "initial_cost": 29748,
-        "final_cost": 9226,
-        "compression_ratio": 3.2243659223932366,
-        "elapsed_secs": 165.72064971923828,
-        "library": [
-          "fn_0: (and (or ?#0 (not ?#1)) (not (and (not ?#1) ?#0)))",
-          "fn_1: (and (not ?#0) (or ?#1 (not ?#2)))",
-          "fn_2: (fn_1 ?#0 (not $0) $1)",
-          "fn_3: (and (and (and (and $3 $2) (and $0 $4)) ?#0) ?#1)"
-        ],
-        "egraph_min_term_size": 17565.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          11015,
-          10023,
-          9599,
-          9227
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:log2",
-        "file": "log2",
-        "initial_cost": 29748,
-        "final_cost": 9307,
-        "compression_ratio": 3.196303857311701,
-        "elapsed_secs": 173.4333679676056,
-        "library": [
-          "fn_0: (not (not (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))))",
-          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (and (and (and (and (and $2 ?#0) $3) $4) $0) ?#1)",
-          "fn_3: (and (and (not $5) (not ?#0)) ?#1)"
-        ],
-        "egraph_min_term_size": 17565.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          11016,
-          10026,
-          9654,
-          9308
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:log2",
         "file": "log2",
         "initial_cost": 29748,
         "final_cost": 9300,
         "compression_ratio": 3.198709677419355,
-        "elapsed_secs": 167.36388874053955,
+        "elapsed_secs": 41.50054335594177,
         "library": [
           "fn_0: (and (or ?#0 (not ?#1)) (or ?#1 (not ?#0)))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_2: (and $2 (and (and $3 $0) (and (and ?#0 ?#1) $4)))",
+          "fn_2: (and $0 (and (and $3 ?#0) (and (and $4 ?#1) $2)))",
           "fn_3: (fn_1 ?#0 $1 (not $0))"
         ],
         "egraph_min_term_size": 17565.0,
@@ -501,43 +401,268 @@
           9301
         ]
       }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 9304,
+        "compression_ratio": 3.197334479793637,
+        "elapsed_secs": 32.2074408531189,
+        "library": [
+          "fn_0: (and (or ?#0 (not ?#1)) (or (not ?#0) ?#1))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (and (and (and (and (and $0 ?#0) $3) $2) $4) ?#1)",
+          "fn_3: (and ?#0 (not (or $5 ?#1)))"
+        ],
+        "egraph_min_term_size": 17565.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11014,
+          10024,
+          9652,
+          9305
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 9227,
+        "compression_ratio": 3.224016473393302,
+        "elapsed_secs": 37.925504207611084,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
+          "fn_1: (and (not ?#0) (or ?#1 (not ?#2)))",
+          "fn_2: (fn_1 ?#0 (not $0) $1)",
+          "fn_3: (and (and (and (and $3 $2) (and $4 $0)) ?#0) ?#1)"
+        ],
+        "egraph_min_term_size": 17565.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11014,
+          10024,
+          9600,
+          9228
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 9300,
+        "compression_ratio": 3.198709677419355,
+        "elapsed_secs": 30.172938346862793,
+        "library": [
+          "fn_0: (or (and ?#0 (not ?#1)) (and (not (not ?#1)) (not ?#0)))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (and (not (or ?#0 ?#1)) ?#2)",
+          "fn_3: (and $2 (and $4 (and $0 (and ?#0 (and $3 ?#1)))))"
+        ],
+        "egraph_min_term_size": 17565.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11057,
+          10071,
+          9666,
+          9301
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:log2",
+        "file": "log2",
+        "initial_cost": 29748,
+        "final_cost": 9304,
+        "compression_ratio": 3.197334479793637,
+        "elapsed_secs": 35.43899416923523,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (and (and (and $4 (and (and $3 $0) $2)) ?#0) ?#1)",
+          "fn_3: (and (not (or $5 ?#0)) ?#1)"
+        ],
+        "egraph_min_term_size": 17565.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11014,
+          10024,
+          9652,
+          9305
+        ]
+      }
     ]
   ],
   "epfl-circuits:multiplier": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
-        "final_cost": 8565,
-        "compression_ratio": 4.238295388207822,
-        "elapsed_secs": 64.91561436653137,
+        "final_cost": 8563,
+        "compression_ratio": 4.239285297208922,
+        "elapsed_secs": 11.716901540756226,
         "library": [
-          "fn_0: (and (not (and ?#0 (not ?#1))) (or ?#0 (not ?#1)))",
-          "fn_1: (and (not (and $1 $0)) (not ?#0))",
+          "fn_0: (and (or ?#0 (not ?#1)) (or (not ?#0) ?#1))",
+          "fn_1: (not (or (and $1 $0) ?#0))",
           "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
           "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          10964,
-          9766,
-          9132,
-          8566
+          10963,
+          9764,
+          9130,
+          8564
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 8558,
+        "compression_ratio": 4.241762093947184,
+        "elapsed_secs": 12.589991331100464,
+        "library": [
+          "fn_0: (or (and (not ?#0) ?#1) (and ?#0 (not ?#1)))",
+          "fn_1: (not (or (and $1 $0) ?#0))",
+          "fn_2: (and (not ?#0) (or ?#1 ?#0))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
+        ],
+        "egraph_min_term_size": 20612.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11026,
+          9828,
+          9105,
+          8559
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 8558,
+        "compression_ratio": 4.241762093947184,
+        "elapsed_secs": 15.13103699684143,
+        "library": [
+          "fn_0: (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1))",
+          "fn_1: (not (or (and $0 $1) ?#0))",
+          "fn_2: (and (not ?#0) (or ?#0 ?#1))",
+          "fn_3: (fn_0 $2 (and ?#0 (not $0)))"
+        ],
+        "egraph_min_term_size": 20612.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11026,
+          9828,
+          9105,
+          8559
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 8558,
+        "compression_ratio": 4.241762093947184,
+        "elapsed_secs": 18.4491925239563,
+        "library": [
+          "fn_0: (or (and (not ?#0) ?#1) (and ?#0 (not ?#1)))",
+          "fn_1: (not (or (and $0 $1) ?#0))",
+          "fn_2: (and (not ?#0) (or ?#1 ?#0))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
+        ],
+        "egraph_min_term_size": 20612.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11026,
+          9828,
+          9105,
+          8559
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
         "final_cost": 8563,
         "compression_ratio": 4.239285297208922,
-        "elapsed_secs": 70.51495790481567,
+        "elapsed_secs": 13.196938753128052,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",
+          "fn_1: (not (or (and $1 $0) ?#0))",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
+        ],
+        "egraph_min_term_size": 20612.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10963,
+          9764,
+          9130,
+          8564
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 8563,
+        "compression_ratio": 4.239285297208922,
+        "elapsed_secs": 16.730980157852173,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",
+          "fn_1: (not (or (and $1 $0) ?#0))",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
+        ],
+        "egraph_min_term_size": 20612.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10963,
+          9764,
+          9130,
+          8564
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 8563,
+        "compression_ratio": 4.239285297208922,
+        "elapsed_secs": 8.900115251541138,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
           "fn_1: (not (or (and $1 $0) ?#0))",
@@ -556,193 +681,68 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:multiplier",
-        "file": "multiplier",
-        "initial_cost": 36301,
-        "final_cost": 8564,
-        "compression_ratio": 4.238790284913592,
-        "elapsed_secs": 80.44898629188538,
-        "library": [
-          "fn_0: (and (or ?#0 (not ?#1)) (not (and (not ?#1) ?#0)))",
-          "fn_1: (not (or ?#0 (and $1 $0)))",
-          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
-        ],
-        "egraph_min_term_size": 20612.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10964,
-          9765,
-          9131,
-          8565
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:multiplier",
-        "file": "multiplier",
-        "initial_cost": 36301,
-        "final_cost": 8565,
-        "compression_ratio": 4.238295388207822,
-        "elapsed_secs": 88.74798250198364,
-        "library": [
-          "fn_0: (and (or ?#0 (not ?#1)) (or (not (not ?#1)) (not ?#0)))",
-          "fn_1: (not (or (and $1 $0) ?#0))",
-          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
-        ],
-        "egraph_min_term_size": 20612.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10965,
-          9766,
-          9132,
-          8566
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:multiplier",
-        "file": "multiplier",
-        "initial_cost": 36301,
-        "final_cost": 8565,
-        "compression_ratio": 4.238295388207822,
-        "elapsed_secs": 65.15463852882385,
-        "library": [
-          "fn_0: (and (or (not ?#0) ?#1) (not (and ?#1 (not ?#0))))",
-          "fn_1: (and (not (and $1 $0)) (not ?#0))",
-          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_3: (fn_0 $2 (and ?#0 (not $0)))"
-        ],
-        "egraph_min_term_size": 20612.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10964,
-          9766,
-          9132,
-          8566
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:multiplier",
-        "file": "multiplier",
-        "initial_cost": 36301,
-        "final_cost": 8566,
-        "compression_ratio": 4.237800607051132,
-        "elapsed_secs": 97.39306545257568,
-        "library": [
-          "fn_0: (not (or (and ?#0 (not (not (not ?#1)))) (and (not ?#0) ?#1)))",
-          "fn_1: (not (or ?#0 (and $1 $0)))",
-          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
-        ],
-        "egraph_min_term_size": 20612.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10966,
-          9767,
-          9133,
-          8567
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:multiplier",
-        "file": "multiplier",
-        "initial_cost": 36301,
-        "final_cost": 8564,
-        "compression_ratio": 4.238790284913592,
-        "elapsed_secs": 77.8115599155426,
-        "library": [
-          "fn_0: (not (or (and ?#0 (not ?#1)) (and ?#1 (not ?#0))))",
-          "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
-        ],
-        "egraph_min_term_size": 20612.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10964,
-          9765,
-          9131,
-          8565
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:multiplier",
-        "file": "multiplier",
-        "initial_cost": 36301,
-        "final_cost": 8565,
-        "compression_ratio": 4.238295388207822,
-        "elapsed_secs": 87.73586368560791,
-        "library": [
-          "fn_0: (and (not (and (not ?#0) ?#1)) (not (and (not ?#1) ?#0)))",
-          "fn_1: (not (or (and $1 $0) ?#0))",
-          "fn_2: (and (not ?#0) (or ?#1 (not ?#2)))",
-          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
-        ],
-        "egraph_min_term_size": 20612.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10965,
-          9766,
-          9132,
-          8566
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:multiplier",
-        "file": "multiplier",
-        "initial_cost": 36301,
-        "final_cost": 8564,
-        "compression_ratio": 4.238790284913592,
-        "elapsed_secs": 74.96521592140198,
-        "library": [
-          "fn_0: (and (not (and (not ?#0) ?#1)) (or (not ?#0) ?#1))",
-          "fn_1: (not (or (and $0 $1) ?#0))",
-          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
-          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
-        ],
-        "egraph_min_term_size": 20612.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10964,
-          9765,
-          9131,
-          8565
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:multiplier",
         "file": "multiplier",
         "initial_cost": 36301,
         "final_cost": 8563,
         "compression_ratio": 4.239285297208922,
-        "elapsed_secs": 69.76406908035278,
+        "elapsed_secs": 14.101813077926636,
+        "library": [
+          "fn_0: (and (or ?#0 (not ?#1)) (or ?#1 (not ?#0)))",
+          "fn_1: (not (or (and $1 $0) ?#0))",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
+        ],
+        "egraph_min_term_size": 20612.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10963,
+          9764,
+          9130,
+          8564
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 8563,
+        "compression_ratio": 4.239285297208922,
+        "elapsed_secs": 13.15050458908081,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",
+          "fn_1: (not (or (and $1 $0) ?#0))",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
+        ],
+        "egraph_min_term_size": 20612.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10963,
+          9764,
+          9130,
+          8564
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:multiplier",
+        "file": "multiplier",
+        "initial_cost": 36301,
+        "final_cost": 8563,
+        "compression_ratio": 4.239285297208922,
+        "elapsed_secs": 16.30889320373535,
         "library": [
           "fn_0: (and (or ?#0 (not ?#1)) (or (not ?#0) ?#1))",
-          "fn_1: (not (or ?#0 (and $1 $0)))",
-          "fn_2: (and (or (not ?#0) ?#1) (not ?#2))",
-          "fn_3: (fn_0 $2 (and ?#0 (not $0)))"
+          "fn_1: (not (or (and $1 $0) ?#0))",
+          "fn_2: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_3: (fn_0 $2 (and (not $0) ?#0))"
         ],
         "egraph_min_term_size": 20612.0,
         "timed_out": false,
@@ -758,15 +758,15 @@
   "epfl-circuits:square": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 8434,
-        "compression_ratio": 3.6733459805548967,
-        "elapsed_secs": 136.8454568386078,
+        "final_cost": 8435,
+        "compression_ratio": 3.6729104919976288,
+        "elapsed_secs": 18.60286855697632,
         "library": [
-          "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",
+          "fn_0: (and (or (not ?#0) ?#1) (not (and (not ?#0) ?#1)))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (and $0 $1)"
@@ -774,24 +774,74 @@
         "egraph_min_term_size": 18246.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          10760,
-          9795,
-          9072,
-          8435
+          10761,
+          9796,
+          9073,
+          8436
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": 8434,
-        "compression_ratio": 3.6733459805548967,
-        "elapsed_secs": 146.0714259147644,
+        "final_cost": 9288,
+        "compression_ratio": 3.335594315245478,
+        "elapsed_secs": 50.906883239746094,
         "library": [
-          "fn_0: (and (or ?#0 (not ?#1)) (or (not ?#0) ?#1))",
+          "fn_0: (and (or ?#0 (or ?#1 (not ?#2))) (not (and (or ?#0 ?#1) (not ?#2))))",
+          "fn_1: (and (or (not ?#0) (not ?#1)) ?#1)",
+          "fn_2: (and $1 $0)",
+          "fn_3: (and (not ?#0) (or ?#1 ?#2))"
+        ],
+        "egraph_min_term_size": 18246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11671,
+          10562,
+          9910,
+          9289
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 9288,
+        "compression_ratio": 3.335594315245478,
+        "elapsed_secs": 55.6072473526001,
+        "library": [
+          "fn_0: (and (or ?#0 (or (not ?#1) ?#2)) (not (and (or ?#2 ?#0) (not ?#1))))",
+          "fn_1: (and (or (not ?#0) (not ?#1)) ?#1)",
+          "fn_2: (and $1 $0)",
+          "fn_3: (and (not ?#0) (or ?#1 ?#2))"
+        ],
+        "egraph_min_term_size": 18246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11671,
+          10562,
+          9910,
+          9289
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 8435,
+        "compression_ratio": 3.6729104919976288,
+        "elapsed_secs": 17.931571006774902,
+        "library": [
+          "fn_0: (and (not (and (not ?#0) ?#1)) (or ?#1 (not ?#0)))",
           "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (and $0 $1)"
@@ -799,41 +849,176 @@
         "egraph_min_term_size": 18246.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          10760,
-          9795,
-          9072,
-          8435
+          10761,
+          9796,
+          9073,
+          8436
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:square",
         "file": "square",
         "initial_cost": 30981,
-        "final_cost": null,
-        "compression_ratio": null,
-        "elapsed_secs": 300.0,
-        "library": [],
-        "egraph_min_term_size": null,
-        "timed_out": true,
-        "cost_at_end_of_each_iter": null
+        "final_cost": 9211,
+        "compression_ratio": 3.363478449679731,
+        "elapsed_secs": 44.81487417221069,
+        "library": [
+          "fn_0: (and (or ?#0 (not (or ?#1 ?#2))) (or ?#1 (or ?#2 (not ?#0))))",
+          "fn_1: (and ?#0 (not (and ?#0 ?#1)))",
+          "fn_2: (and $0 $1)",
+          "fn_3: (fn_0 (not ?#0) (and (not ?#1) ?#2) (and ?#1 (not ?#2)))"
+        ],
+        "egraph_min_term_size": 18246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11670,
+          10561,
+          9907,
+          9212
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 9287,
+        "compression_ratio": 3.335953483363842,
+        "elapsed_secs": 53.273961782455444,
+        "library": [
+          "fn_0: (and (or ?#0 (or ?#1 (not ?#2))) (not (and (or ?#1 ?#0) (not ?#2))))",
+          "fn_1: (and ?#0 (not (and ?#0 ?#1)))",
+          "fn_2: (and $1 $0)",
+          "fn_3: (and (not ?#0) (or ?#1 ?#2))"
+        ],
+        "egraph_min_term_size": 18246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11671,
+          10561,
+          9909,
+          9288
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 9280,
+        "compression_ratio": 3.338469827586207,
+        "elapsed_secs": 49.69545221328735,
+        "library": [
+          "fn_0: (and (or ?#0 (not (or ?#1 ?#2))) (or ?#1 (not (and (not ?#2) ?#0))))",
+          "fn_1: (and (or (not ?#0) (not ?#1)) ?#1)",
+          "fn_2: (and $0 $1)",
+          "fn_3: (and (not ?#0) (or ?#1 ?#2))"
+        ],
+        "egraph_min_term_size": 18246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11671,
+          10563,
+          9909,
+          9281
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 8435,
+        "compression_ratio": 3.6729104919976288,
+        "elapsed_secs": 18.342435359954834,
+        "library": [
+          "fn_0: (and (not (and (not ?#0) ?#1)) (or ?#1 (not ?#0)))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (and $0 $1)"
+        ],
+        "egraph_min_term_size": 18246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10761,
+          9796,
+          9073,
+          8436
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 9288,
+        "compression_ratio": 3.335594315245478,
+        "elapsed_secs": 54.56766152381897,
+        "library": [
+          "fn_0: (and (not (and (or ?#0 ?#1) (not ?#2))) (or ?#0 (or (not ?#2) ?#1)))",
+          "fn_1: (and ?#0 (or (not ?#0) (not ?#1)))",
+          "fn_2: (and $1 $0)",
+          "fn_3: (and (not ?#0) (or ?#1 ?#2))"
+        ],
+        "egraph_min_term_size": 18246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11671,
+          10562,
+          9910,
+          9289
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:square",
+        "file": "square",
+        "initial_cost": 30981,
+        "final_cost": 8435,
+        "compression_ratio": 3.6729104919976288,
+        "elapsed_secs": 22.271164178848267,
+        "library": [
+          "fn_0: (and (not (and ?#0 (not ?#1))) (or ?#0 (not ?#1)))",
+          "fn_1: (and (not ?#0) (or (not ?#1) ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (and $0 $1)"
+        ],
+        "egraph_min_term_size": 18246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10761,
+          9796,
+          9073,
+          8436
+        ]
       }
     ]
   ],
   "epfl-circuits:voter": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
         "final_cost": 8000,
         "compression_ratio": 3.24975,
-        "elapsed_secs": 28.915095567703247,
+        "elapsed_secs": 14.632274389266968,
         "library": [
-          "fn_0: (and (or ?#0 (not ?#1)) (or ?#1 (not ?#0)))",
+          "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
           "fn_1: (and (not ?#0) (or ?#1 ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (fn_0 $0 $1)"
@@ -850,15 +1035,90 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:voter",
+        "file": "voter",
+        "initial_cost": 25998,
+        "final_cost": 8000,
+        "compression_ratio": 3.24975,
+        "elapsed_secs": 13.089150667190552,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",
+          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (fn_0 $0 $1)"
+        ],
+        "egraph_min_term_size": 17271.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10432,
+          9065,
+          8472,
+          8001
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:voter",
+        "file": "voter",
+        "initial_cost": 25998,
+        "final_cost": 8000,
+        "compression_ratio": 3.24975,
+        "elapsed_secs": 14.276836633682251,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
+          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (fn_0 $0 $1)"
+        ],
+        "egraph_min_term_size": 17271.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10432,
+          9065,
+          8472,
+          8001
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
+        "domain": "epfl-circuits:voter",
+        "file": "voter",
+        "initial_cost": 25998,
+        "final_cost": 8000,
+        "compression_ratio": 3.24975,
+        "elapsed_secs": 13.572820901870728,
+        "library": [
+          "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",
+          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
+          "fn_2: (or $0 $1)",
+          "fn_3: (fn_0 $0 $1)"
+        ],
+        "egraph_min_term_size": 17271.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10432,
+          9065,
+          8472,
+          8001
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
         "final_cost": 8001,
         "compression_ratio": 3.2493438320209975,
-        "elapsed_secs": 28.53019094467163,
+        "elapsed_secs": 12.427368879318237,
         "library": [
-          "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
+          "fn_0: (and (not (and (not ?#0) ?#1)) (or (not ?#0) ?#1))",
           "fn_1: (and (not ?#0) (or ?#1 ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (fn_0 $0 $1)"
@@ -875,13 +1135,13 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
         "final_cost": 8000,
         "compression_ratio": 3.24975,
-        "elapsed_secs": 28.96661639213562,
+        "elapsed_secs": 13.923913955688477,
         "library": [
           "fn_0: (and (or ?#0 (not ?#1)) (or ?#1 (not ?#0)))",
           "fn_1: (and (not ?#0) (or ?#1 ?#2))",
@@ -900,38 +1160,13 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
         "final_cost": 8000,
         "compression_ratio": 3.24975,
-        "elapsed_secs": 28.048185110092163,
-        "library": [
-          "fn_0: (and (or ?#0 (not ?#1)) (or ?#1 (not ?#0)))",
-          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
-          "fn_2: (or $0 $1)",
-          "fn_3: (fn_0 $0 $1)"
-        ],
-        "egraph_min_term_size": 17271.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10432,
-          9065,
-          8472,
-          8001
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:voter",
-        "file": "voter",
-        "initial_cost": 25998,
-        "final_cost": 8000,
-        "compression_ratio": 3.24975,
-        "elapsed_secs": 28.5531644821167,
+        "elapsed_secs": 15.183435916900635,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
           "fn_1: (and (not ?#0) (or ?#1 ?#2))",
@@ -950,40 +1185,15 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:voter",
-        "file": "voter",
-        "initial_cost": 25998,
-        "final_cost": 8001,
-        "compression_ratio": 3.2493438320209975,
-        "elapsed_secs": 31.58599090576172,
-        "library": [
-          "fn_0: (and (not (and ?#0 (not ?#1))) (or (not ?#1) ?#0))",
-          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
-          "fn_2: (or $0 $1)",
-          "fn_3: (fn_0 $0 $1)"
-        ],
-        "egraph_min_term_size": 17271.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10433,
-          9066,
-          8473,
-          8002
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
         "final_cost": 8000,
         "compression_ratio": 3.24975,
-        "elapsed_secs": 27.961339950561523,
+        "elapsed_secs": 13.877000331878662,
         "library": [
-          "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
+          "fn_0: (and (or ?#0 (not ?#1)) (or (not ?#0) ?#1))",
           "fn_1: (and (not ?#0) (or ?#1 ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (fn_0 $0 $1)"
@@ -1000,15 +1210,15 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
         "final_cost": 8000,
         "compression_ratio": 3.24975,
-        "elapsed_secs": 29.278736352920532,
+        "elapsed_secs": 13.694056034088135,
         "library": [
-          "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
+          "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#0))",
           "fn_1: (and (not ?#0) (or ?#1 ?#2))",
           "fn_2: (or $0 $1)",
           "fn_3: (fn_0 $0 $1)"
@@ -1025,38 +1235,13 @@
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=100.0, max_arity=4)",
         "domain": "epfl-circuits:voter",
         "file": "voter",
         "initial_cost": 25998,
         "final_cost": 8000,
         "compression_ratio": 3.24975,
-        "elapsed_secs": 28.616387367248535,
-        "library": [
-          "fn_0: (and (or ?#0 (not ?#1)) (or ?#1 (not ?#0)))",
-          "fn_1: (and (not ?#0) (or ?#1 ?#2))",
-          "fn_2: (or $0 $1)",
-          "fn_3: (fn_0 $0 $1)"
-        ],
-        "egraph_min_term_size": 17271.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10432,
-          9065,
-          8472,
-          8001
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=2000, temperature=1000.0, max_arity=4)",
-        "domain": "epfl-circuits:voter",
-        "file": "voter",
-        "initial_cost": 25998,
-        "final_cost": 8000,
-        "compression_ratio": 3.24975,
-        "elapsed_secs": 27.847275257110596,
+        "elapsed_secs": 13.85026216506958,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) (or ?#0 (not ?#1)))",
           "fn_1: (and (not ?#0) (or ?#1 ?#2))",

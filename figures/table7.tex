@@ -1,17 +1,17 @@
 % source: /home/kavi/mit/egg-stitch/results/table7.json
 % EPFL Circuit Compression (Factoring DSRs): generated from results JSON
-\begin{tabular}{l r rrrr rrrr}
+\begin{tabular}{l r rrrrr rrrrr}
 \toprule
-& \multicolumn{1}{c}{Size} & \multicolumn{4}{c}{Compression Ratio} & \multicolumn{4}{c}{Time (s)} \\
-\cmidrule(lr){2-2} \cmidrule(lr){3-6} \cmidrule(lr){7-10}
-Family & Original & BFS & SMC & BFS/MT & BFS/NR & BFS & SMC & BFS/MT & BFS/NR \\
+& \multicolumn{1}{c}{Size} & \multicolumn{5}{c}{Compression Ratio} & \multicolumn{5}{c}{Time (s)} \\
+\cmidrule(lr){2-2} \cmidrule(lr){3-7} \cmidrule(lr){8-12}
+Family & Original & BFS & SMC & babble & BFS/MT & BFS/NR & BFS & SMC & babble & BFS/MT & BFS/NR \\
 \midrule
-Hypotenuse & 22455 & 2.56 & \textbf{2.76} & 1.82 & 2.01 & 7.81 & 17.96 & 0.20 & \textbf{0.08} \\
-Log2 & 29748 & 2.94 & \textbf{3.20} & 2.05 & 1.93 & 25.56 & 83.11 & 0.25 & \textbf{0.15} \\
-Multiplier & 36301 & \textbf{4.24} & \textbf{4.24} & 2.51 & 2.69 & 45.16 & 37.16 & 0.21 & \textbf{0.11} \\
-Square & 30981 & 3.44 & \textbf{3.64} & 2.16 & 2.21 & 96.68 & 104.39 & 0.23 & \textbf{0.15} \\
-Voter & 25998 & 2.97 & \textbf{3.25} & 1.96 & 2.33 & 3.79 & 14.67 & 0.18 & \textbf{0.07} \\
+Hypotenuse & 22455 & \textbf{2.76} & 2.75 & DNF & 1.82 & 2.01 & 8.51 & 11.55 & DNF & 0.19 & \textbf{0.07} \\
+Log2 & 29748 & 3.07 & \textbf{3.20} & DNF & 2.05 & 1.93 & 29.67 & 19.14 & DNF & 0.25 & \textbf{0.14} \\
+Multiplier & 36301 & \textbf{4.24} & \textbf{4.24} & DNF & 2.51 & 2.69 & 48.60 & 8.49 & DNF & 0.20 & \textbf{0.11} \\
+Square & 30981 & \textbf{3.40} & 3.39 & DNF & 2.16 & 2.21 & 171.18 & 24.25 & DNF & 0.23 & \textbf{0.14} \\
+Voter & 25998 & \textbf{3.26} & 3.25 & DNF & 1.96 & 2.33 & 5.03 & 7.85 & DNF & 0.18 & \textbf{0.07} \\
 \midrule
-Geo. mean &  & 3.18 & \textbf{3.38} & 2.09 & 2.22 & 20.13 & 38.53 & 0.21 & \textbf{0.11} \\
+Geo. mean &  & 3.31 & \textbf{3.33} &  & 2.09 & 2.22 & 25.39 & 12.90 &  & 0.21 & \textbf{0.10} \\
 \bottomrule
 \end{tabular}

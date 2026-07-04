@@ -253,6 +253,7 @@ fn rebuild_matches(parent_matches: &[MatchAtEClass], mut transform: impl FnMut(&
             }
         }
         new_factors.extend(replacement);
+        new_factors.retain(|f| !f.slots.is_empty());
         out.push(MatchAtEClass { root_eclass: m.root_eclass, factors: new_factors });
     }
     let num = total_substs(&out);
@@ -645,13 +646,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// [`Self::forced_expansion_at`]) and early-exits at the first `r` with `≤ cap`
     /// (one match's work for a valid `p`).
     ///
+    /// Only roots that appear in the corpus's size-minimal extraction
+    /// (`usage_counts != 0`) are considered.
+    ///
     /// Sound to prune on: `ForcedExpansion(p)` is monotone non-decreasing under
     /// expand/reuse — committing a hole swaps a `Cost(r)`-minimal arg for `≥`-cost
     /// structure (`Cost(r | p)` rises, `Cost(r)` fixed) and substs only shrink — so
     /// `ForcedExpansion(p) > cap` ⇒ every descendant `> cap`.
     pub fn within_forced_expansion_cap(&self, shared: &SharedSearchData<F, O>, cap: i64) -> bool {
         let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
-        self.matches.iter().any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
+        self.matches.iter().filter(|m| shared.usage_counts.get(&m.root_eclass).is_some_and(|&u| u != 0)).any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
     }
 
     /// Whether this state is within the `--max-match-set` row cap (`true` when
@@ -687,6 +691,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
         let mut best: Option<(i64, Id)> = None;
         for m in &self.matches {
+            if shared.usage_counts.get(&m.root_eclass).is_none_or(|&u| u == 0) {
+                continue;
+            }
             let forced = self.forced_expansion_at(shared, skel, m);
             if best.is_none_or(|(b, _)| forced < b) {
                 best = Some((forced, m.root_eclass));

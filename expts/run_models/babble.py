@@ -1,11 +1,12 @@
 """Wrappers around the external babble compressor.
 
-babble has two binaries: ``drawings`` (cogsci, flat s-exprs) and
-``benchmark`` (dreamcoder, curried lambda-calc). The :class:`Babble` runner
-dispatches between them based on ``weighting`` so the rest of the pipeline
-sees a single tool.
+babble has four binaries: ``drawings`` (cogsci, flat s-exprs), ``benchmark``
+(dreamcoder, curried lambda-calc), ``molecules`` (molecule op-children graphs),
+and ``circuits`` (EPFL boolean-circuit op-children graphs). The :class:`Babble`
+runner dispatches between them based on ``weighting`` and the input path so the
+rest of the pipeline sees a single tool.
 
-Both binaries expose ``--dump-json`` for a uniform output format. The
+All binaries expose ``--dump-json`` for a uniform output format. The
 ``benchmark`` binary auto-loads its DSRs from ``<DSR_PATH>/<domain>.rewrites``
 by domain name (it has no flag for an arbitrary location), so the runner
 recovers the domain from the input file's parent directory.
@@ -66,6 +67,14 @@ def babble_molecules_bin() -> Path:
     return cargo_build(BABBLE_DIR, "molecules")
 
 
+@cache
+def babble_circuits_bin() -> Path:
+    """Build (if needed) and return the path to babble's ``circuits`` binary
+    — the op-children boolean-circuit (and/or/not over ``$N`` inputs) runner."""
+    _babble_ready()
+    return cargo_build(BABBLE_DIR, "circuits")
+
+
 def _expand_bidir_rewrites(text: str) -> str:
     """Rewrite egg-stitch's ``<=>`` rules into the directed ``=>`` form babble
     parses: each ``name: lhs <=> rhs`` becomes ``name`` (forward) and
@@ -112,21 +121,26 @@ class Babble:
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         if weighting == "no-apps":
-            # Molecule corpora are op-children s-exprs like cogsci, but use the
-            # molecule grammar/DSRs, so they get their own binary.
+            # Molecule and EPFL-circuit corpora are op-children s-exprs like
+            # cogsci, but each uses its own grammar/DSRs, so each gets its own
+            # babble binary; plain cogsci drawings use the drawings binary.
             if "molecules" in input_path.parts:
-                return self._run_molecules(rounds, input_path, rewrites_path)
+                return self._run_op_children(rounds, input_path, rewrites_path, babble_molecules_bin())
+            if "epfl-circuits" in input_path.parts:
+                return self._run_op_children(rounds, input_path, rewrites_path, babble_circuits_bin())
             return self._run_drawings(rounds, input_path, rewrites_path)
         assert weighting == "apps-equal"
         return self._run_benchmark(rounds, input_path, rewrites_path)
 
-    def _run_molecules(self, rounds: int, input_path: Path, rewrites_path: str | None) -> BenchResult:
-        """Run babble's ``molecules`` binary on a molecule scramble corpus.
+    def _run_op_children(self, rounds: int, input_path: Path, rewrites_path: str | None, binary: Path) -> BenchResult:
+        """Run an op-children babble binary (``molecules``/``circuits``) on a
+        single family corpus.
 
         The corpus JSON (a flat array of s-exprs) is written out as the
         one-per-line ``.bab`` format the binary reads, and the egg-stitch
         ``<=>`` DSR file is expanded to babble's directed form. Both derived
-        files land in the current results folder.
+        files land in the current results folder. ``binary`` selects the
+        grammar-specific runner.
         """
         with open(input_path) as f:
             programs = json.load(f)
@@ -136,7 +150,7 @@ class Babble:
         json_dump = unique_path(current_folder_path() / f"{input_path.stem}_babble.json")
         csv_out = unique_path(current_folder_path() / f"{input_path.stem}_babble.csv")
         cmd = [
-            str(babble_molecules_bin()),
+            str(binary),
             str(bab),
             f"--beams={self.beams}",
             f"--lps={self.lps}",

@@ -68,12 +68,12 @@ def build_corpus(aig):
 def no_rules_compression(corpus_path):
     """initial/final cost from a no-DSR egg-stitch SMC run (seed 1, deterministic).
     Uses `op-children-db` so `$n` is a real free variable (banned from abstraction
-    bodies); sym=1 keeps the cost scale matched to the default temperature."""
+    bodies); sym=1 keeps the cost scale matched to the temperature used below."""
     out = corpus_path + ".out"
     subprocess.run(
         [BIN, "-i", corpus_path, "--output", out, "--search", "smc", "--language", "op-children-db",
          "--max-arity", "4", "--num-abstractions", "4", "--num-particles", "500", "--num-steps", "100",
-         "--temperature", "1000", "--seed", "1", "--iter-limit", "30"],
+         "--temperature", "100", "--seed", "1", "--iter-limit", "30"],
         check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     d = json.load(open(out))
     return d["initial_cost"] / d["final_cost"]
