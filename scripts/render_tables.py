@@ -688,10 +688,11 @@ TABLE5_SPEC = FamilySpec.estitch_roster(
     ],
 )
 
-# table7: EPFL circuits with the factoring DSRs. Same as table5 but babble (no
-# boolean theory) is swapped for a no-rules Enum baseline ("enum-baseline") -- so
-# the three-way baseline/live/at-start contrast shows. Enum DNFs here (best-first
-# can't search the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
+# table7: EPFL circuits with the factoring DSRs. Same roster as table5 (babble +
+# a no-rules Enum baseline "enum-baseline"), so the three-way baseline/live/
+# at-start contrast plus babble all show. babble runs via its ``circuits`` binary
+# (boolean and/or/not over ``$N`` inputs). Enum DNFs here (best-first can't search
+# the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
 TABLE7_SPEC = FamilySpec.estitch_roster(
     title="EPFL Circuit Compression (Factoring DSRs)",
     fig_subdir="table7",
@@ -706,7 +707,10 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     enum_point=TABLE_BFS_STEPS,
     enum_sweep=TABLE7_BFS_SWEEP,
     smc_sweep=TABLE7_SMC_SWEEP,
-    extras=[("enum-baseline", "BFS/NR", "E-Stitch: BFS (no rules)")],
+    extras=[
+        ("babble", "babble", "babble"),
+        ("enum-baseline", "BFS/NR", "E-Stitch: BFS (no rules)"),
+    ],
 )
 
 

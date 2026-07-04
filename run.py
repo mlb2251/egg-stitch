@@ -10,8 +10,10 @@ def dials_compress():
     egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        search="smc",
         num_steps=10,
         num_particles=100,
+        temperature=100,
     )
 
 
@@ -19,8 +21,10 @@ def dials_follow():
     egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        search="smc",
         num_steps=10,
         num_particles=100,
+        temperature=100,
         follow="(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))",
     )
 
@@ -33,7 +37,7 @@ def temp_sweep():
     for t in [1, 10, 100, 1000, 10000]:
         rows.append(dict(
             name=f"T{t}",
-            config=dict(num_steps=100, num_particles=1000, temperature=t, max_arity=2, ),
+            config=dict(search="smc", num_steps=100, num_particles=1000, temperature=t, max_arity=2, ),
             output=None
         ))
 

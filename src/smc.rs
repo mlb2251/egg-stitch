@@ -207,7 +207,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
     /// get `-inf`. Returns probabilities summing to 1, or an all-zero vector if
     /// every particle is dead (the caller treats that as "all particles died").
     fn reweight(&self, mults: &[usize], props: &[f64], costs: &[usize], pruned: &[bool]) -> Vec<f64> {
-        let temperature = self.args.temperature;
+        let temperature = self.args.temperature.expect("--temperature is required for SMC search");
         let log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { (mults[i] as f64).ln() - (*c as f64) / temperature - props[i].ln() }).collect();
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
         if total_weight.is_finite() { log_weights.iter().map(|lw| (lw - total_weight).exp()).collect() } else { vec![0.0; log_weights.len()] }
@@ -328,7 +328,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     let num_particles = args.num_particles;
     let num_steps = args.num_steps.expect("--num-steps is required for SMC search");
-    let temperature = args.temperature;
+    let temperature = args.temperature.expect("--temperature is required for SMC search");
     // A non-positive temperature makes every weight `-cost/T` non-finite
     // (`-inf`, or `NaN` for a zero-cost particle), collapsing the whole run to
     // "all particles died"; a negative one would silently invert the objective.
