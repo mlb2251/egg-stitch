@@ -4,15 +4,15 @@
 \toprule
 & \multicolumn{2}{c}{Size} & \multicolumn{4}{c}{Compression Ratio} & \multicolumn{4}{c}{Time (s)} \\
 \cmidrule(lr){2-3} \cmidrule(lr){4-7} \cmidrule(lr){8-11}
-Domain & Original & E-graph min & BFS & SMC & BFS/MT & babble & BFS & SMC & BFS/MT & babble \\
+Domain & Original & E-graph min & BFS & SMC & babble & BFS/MT & BFS & SMC & babble & BFS/MT \\
 \midrule
-Nuts \& Bolts & 19008 & 19008 & \textbf{1.77} & 1.58 & \textbf{1.77} & 1.75 & 0.134 & \textbf{0.015} & 0.036 & 19.357 \\
-Dials & 35712 & 20582 & 2.09 & 2.05 & 2.09 & \textbf{2.17} & 0.177 & \textbf{0.025} & 0.035 & 48.199 \\
-Wheels & 35426 & 30256 & \textbf{1.45} & \textbf{1.45} & \textbf{1.45} & 1.36 & 0.082 & \textbf{0.031} & 0.062 & 16.805 \\
-Furniture & 42935 & 37027 & \textbf{1.70} & \textbf{1.70} & \textbf{1.70} & 1.39 & 0.151 & \textbf{0.033} & 0.122 & 26.241 \\
-List & 523 & 522 & \textbf{1.06} & \textbf{1.06} & \textbf{1.06} & 1.03 & 0.506 & 1.628 & \textbf{0.468} & 12.575 \\
-Physics & 518 & 518 & \textbf{1.10} & \textbf{1.10} & 1.09 & 1.05 & 0.145 & 0.258 & \textbf{0.113} & 2.056 \\
+Nuts \& Bolts & 19008 & 19008 & \textbf{1.77} & 1.58 & 1.75 & \textbf{1.77} & 0.134 & \textbf{0.015} & 19.357 & 0.036 \\
+Dials & 35712 & 20582 & 2.09 & 2.05 & \textbf{2.17} & 2.09 & 0.177 & \textbf{0.025} & 48.199 & 0.035 \\
+Wheels & 35426 & 30256 & \textbf{1.45} & \textbf{1.45} & 1.36 & \textbf{1.45} & 0.082 & \textbf{0.031} & 16.805 & 0.062 \\
+Furniture & 42935 & 37027 & \textbf{1.70} & \textbf{1.70} & 1.39 & \textbf{1.70} & 0.151 & \textbf{0.033} & 26.241 & 0.122 \\
+List & 523 & 522 & \textbf{1.06} & \textbf{1.06} & 1.03 & \textbf{1.06} & 0.506 & 1.628 & 12.575 & \textbf{0.468} \\
+Physics & 518 & 518 & \textbf{1.10} & \textbf{1.10} & 1.05 & 1.09 & 0.145 & 0.258 & 2.056 & \textbf{0.113} \\
 \midrule
-Geo. mean &  &  & \textbf{1.48} & 1.45 & \textbf{1.48} & 1.41 & 0.166 & \textbf{0.073} & 0.089 & 14.830 \\
+Geo. mean &  &  & \textbf{1.48} & 1.45 & 1.41 & \textbf{1.48} & 0.166 & \textbf{0.073} & 14.830 & 0.089 \\
 \bottomrule
 \end{tabular}
