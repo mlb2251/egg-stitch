@@ -2,251 +2,251 @@
   "drawings:nuts-bolts": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:nuts-bolts",
         "file": "nuts-bolts",
         "initial_cost": 19008,
-        "final_cost": 2688,
-        "compression_ratio": 7.071428571428571,
-        "elapsed_secs": 0.19617295265197754,
+        "final_cost": 3064,
+        "compression_ratio": 6.203655352480418,
+        "elapsed_secs": 0.8156864643096924,
         "library": [
-          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6.0 (M 1.0 (/ (* 2.0 pi) 6.0) 0 0)) (M ?#0 0 0 0))",
-          "fn_1: (C (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 8))))) 8 (M 1.0 0.785398 0 0)) (M 4 0 0 0)) (C ?#0 (repeat (T ?#1 (M 0.5 0 ?#2 ?#2)) ?#3 (M 1.0 (/ (* 2.0 pi) ?#3) 0 0))))",
-          "fn_2: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
-          "fn_3: (C ?#0 (T ?#1 (M ?#2 0 0 0)))"
+          "fn_0: (C (T ?#0 (M (* 1.0 (* (* 1.0 (* (* 2.0 (* 1 (* 1.0 (* 1.0 2.0)))) 1)) 1.0)) 0 0.0 0.0)) (repeat (T ?#1 (M (* (* (* 1.0 1) 0.5) 1) 0 ?#2 ?#2)) ?#3 (M 1.0 (/ (* 2.0 pi) ?#3) 0 0)))",
+          "fn_1: (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6.0 (M 1.0 (/ (* 2.0 pi) 6.0) 0 0))",
+          "fn_2: (M ?#0 0 0 0)",
+          "fn_3: (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 8)))))"
         ],
         "egraph_min_term_size": 13441.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          6822,
-          5092,
-          3550,
-          2689
+          10311,
+          4614,
+          3713,
+          3065
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:nuts-bolts",
         "file": "nuts-bolts",
         "initial_cost": 19008,
-        "final_cost": 3318,
-        "compression_ratio": 5.72875226039783,
-        "elapsed_secs": 1.0815725326538086,
+        "final_cost": 3496,
+        "compression_ratio": 5.437070938215103,
+        "elapsed_secs": 0.08551287651062012,
         "library": [
-          "fn_0: (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0)))))",
-          "fn_1: (T (repeat (fn_0 ?#0) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M ?#1 0 0 0))",
-          "fn_2: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) (fn_1 ?#3 4.0))",
-          "fn_3: (C (T ?#0 (M ?#1 0 0 0)) ?#2)"
-        ],
-        "egraph_min_term_size": 13441.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          10253,
-          6244,
-          4280,
-          3319
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:nuts-bolts",
-        "file": "nuts-bolts",
-        "initial_cost": 19008,
-        "final_cost": 2511,
-        "compression_ratio": 7.56989247311828,
-        "elapsed_secs": 0.48790669441223145,
-        "library": [
-          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6 (M 1.0 (/ (* 2.0 pi) 6.0) 0 0)) (M (* (cos 0) ?#0) (sin (* -1.0 (+ 0.0 0))) 0 (sin (sin (sin 0)))))",
-          "fn_1: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
-          "fn_2: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 8))))) 8 (M 1.0 0.785398 0 0)) (M ?#0 0 0 0))",
-          "fn_3: (C (T ?#0 (M ?#1 0 0 0)) ?#2)"
-        ],
-        "egraph_min_term_size": 13441.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          6833,
-          4763,
-          3468,
-          2512
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:nuts-bolts",
-        "file": "nuts-bolts",
-        "initial_cost": 19008,
-        "final_cost": 2499,
-        "compression_ratio": 7.606242496998799,
-        "elapsed_secs": 0.4344663619995117,
-        "library": [
-          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6 (M 1.0 (/ (* 2.0 pi) 6.0) 0 0)) (M (* ?#0 1) (sin pi) (- 0 0) (- 0 0)))",
-          "fn_1: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
-          "fn_2: (C ?#0 (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 8))))) 8 (M 1.0 0.785398 0 0)) (M ?#1 0 0 0)))",
-          "fn_3: (C (T ?#0 (M ?#1 0 0 0)) ?#2)"
-        ],
-        "egraph_min_term_size": 13441.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          6829,
-          4759,
-          3406,
-          2500
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:nuts-bolts",
-        "file": "nuts-bolts",
-        "initial_cost": 19008,
-        "final_cost": 3342,
-        "compression_ratio": 5.687612208258527,
-        "elapsed_secs": 0.1914658546447754,
-        "library": [
-          "fn_0: (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6.0 (M 1.0 (/ (* 2.0 pi) 6.0) 0 0))",
-          "fn_1: (T ?#0 (M ?#1 0 0 0))",
-          "fn_2: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
-          "fn_3: (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 8))))"
-        ],
-        "egraph_min_term_size": 13441.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          7744,
-          5943,
-          3873,
-          3343
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:nuts-bolts",
-        "file": "nuts-bolts",
-        "initial_cost": 19008,
-        "final_cost": 3607,
-        "compression_ratio": 5.269753257554755,
-        "elapsed_secs": 0.1820669174194336,
-        "library": [
-          "fn_0: (M 1.0 (/ (* 2.0 pi) ?#0) -0.0 0)",
-          "fn_1: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (fn_0 ?#0)) (M ?#1 0 0 0))",
-          "fn_2: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (fn_0 ?#2)) (C (fn_1 6.0 4.0) ?#3))",
-          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#2))"
+          "fn_0: (M 1.0 (/ (* 2.0 pi) ?#0) 0.0 0.0)",
+          "fn_1: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (fn_0 ?#0)) (M ?#1 0 0.0 0.0))",
+          "fn_2: (T ?#0 (M ?#1 0 ?#2 ?#2))",
+          "fn_3: (C ?#0 (repeat (fn_2 ?#1 0.5 ?#2) ?#3 (fn_0 ?#3)))"
         ],
         "egraph_min_term_size": 13441.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10692,
           5612,
-          4501,
-          3608
+          4437,
+          3497
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:nuts-bolts",
         "file": "nuts-bolts",
         "initial_cost": 19008,
-        "final_cost": 3128,
-        "compression_ratio": 6.076726342710997,
-        "elapsed_secs": 0.2711796760559082,
+        "final_cost": 4018,
+        "compression_ratio": 4.730711796913887,
+        "elapsed_secs": 0.07801604270935059,
         "library": [
-          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6 (M 1.0 (/ (* 2.0 pi) 6.0) 0 0)) (M (* 2.0 (* 1 ?#0)) 0 (sin -0.0) 0))",
-          "fn_1: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
-          "fn_2: (C (T ?#0 (M ?#1 0 0 0)) ?#2)",
-          "fn_3: (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 8))))"
+          "fn_0: (T l (M 1.0 -0.0 -0.5 (/ 0.5 (tan (/ pi ?#0)))))",
+          "fn_1: (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)",
+          "fn_2: (T (repeat (fn_0 ?#0) ?#0 (fn_1 ?#0)) (M ?#1 0 0.0 0.0))",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#2))"
         ],
         "egraph_min_term_size": 13441.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          7205,
-          5135,
-          3659,
-          3129
+          10253,
+          7504,
+          5194,
+          4019
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:nuts-bolts",
         "file": "nuts-bolts",
         "initial_cost": 19008,
-        "final_cost": 2474,
-        "compression_ratio": 7.683104284559418,
-        "elapsed_secs": 0.16316008567810059,
+        "final_cost": 3557,
+        "compression_ratio": 5.34382906944054,
+        "elapsed_secs": 0.07575535774230957,
         "library": [
-          "fn_0: (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0))",
-          "fn_1: (C ?#0 (T ?#1 (M ?#2 0 0 0)))",
-          "fn_2: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
-          "fn_3: (fn_1 ?#0 (fn_0 6.0) ?#1)"
-        ],
-        "egraph_min_term_size": 13441.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          6984,
-          4908,
-          2838,
-          2475
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:nuts-bolts",
-        "file": "nuts-bolts",
-        "initial_cost": 19008,
-        "final_cost": 2579,
-        "compression_ratio": 7.370298565335402,
-        "elapsed_secs": 0.15075325965881348,
-        "library": [
-          "fn_0: (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0))",
-          "fn_1: (C (T ?#0 (M ?#1 0 0 0)) ?#2)",
-          "fn_2: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
-          "fn_3: (fn_0 6.0)"
-        ],
-        "egraph_min_term_size": 13441.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          6984,
-          4908,
-          2838,
-          2580
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:nuts-bolts",
-        "file": "nuts-bolts",
-        "initial_cost": 19008,
-        "final_cost": 3464,
-        "compression_ratio": 5.48729792147806,
-        "elapsed_secs": 0.23529505729675293,
-        "library": [
-          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6 (M 1.0 (/ (* 2.0 pi) 6.0) 0 0)) (M ?#0 -0.0 0 0))",
-          "fn_1: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
+          "fn_0: (M 1 (/ (* 2.0 pi) ?#0) -0.0 0)",
+          "fn_1: (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (fn_0 ?#0))",
           "fn_2: (M ?#0 0 0 0)",
-          "fn_3: (M 1.0 0.0 -0.5 (/ 0.5 (tan (/ pi 8))))"
+          "fn_3: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (fn_0 ?#2))"
         ],
         "egraph_min_term_size": 13441.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          6822,
-          4752,
-          3995,
-          3465
+          10692,
+          6228,
+          4877,
+          3558
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 3565,
+        "compression_ratio": 5.331837307152875,
+        "elapsed_secs": 0.1274874210357666,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6.0 (M 1.0 (/ (* 2.0 pi) 6.0) 0 0)) (M (* (* ?#0 1.0) 1) 0.0 -0.0 -0.0))",
+          "fn_1: (T ?#0 (M ?#1 0 ?#2 ?#2))",
+          "fn_2: (C (repeat (fn_1 ?#0 0.5 ?#1) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) (fn_1 c ?#3 0))",
+          "fn_3: (C (repeat (fn_1 ?#0 0.5 ?#1) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) ?#3)"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          6826,
+          5501,
+          4465,
+          3566
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 3788,
+        "compression_ratio": 5.017951425554382,
+        "elapsed_secs": 0.07193851470947266,
+        "library": [
+          "fn_0: (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0)))))",
+          "fn_1: (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)",
+          "fn_2: (T (repeat (fn_0 ?#0) ?#0 (fn_1 ?#0)) (M ?#1 0 0 0))",
+          "fn_3: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (fn_1 ?#2)) (fn_2 ?#3 4.0))"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10253,
+          7504,
+          5194,
+          3789
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2700,
+        "compression_ratio": 7.04,
+        "elapsed_secs": 0.12470364570617676,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M (* (cos 0) ?#1) 0.0 0.0 0.0))",
+          "fn_1: (C (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0)) (C (fn_0 6.0 4) ?#3))",
+          "fn_2: (T ?#0 (M ?#1 0 ?#2 ?#2))",
+          "fn_3: (repeat (fn_2 ?#0 0.5 ?#1) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5825,
+          4347,
+          3454,
+          2701
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2691,
+        "compression_ratio": 7.063545150501672,
+        "elapsed_secs": 0.12664318084716797,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 6.0))))) 6.0 (M 1.0 (/ (* 2.0 pi) 6) 0 0)) (M (* (* ?#0 1) (cos 0)) 0.0 0.0 0.0))",
+          "fn_1: (repeat (T ?#0 (M 0.5 0 ?#1 ?#1)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
+          "fn_2: (C (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi 8))))) 8 (M 1.0 0.785398 0 0)) (M 4.0 0 0 0)) (C (fn_1 ?#0 ?#1 ?#2) ?#3))",
+          "fn_3: (T ?#0 (M ?#1 0 0 0))"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          6827,
+          4757,
+          3541,
+          2692
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 2646,
+        "compression_ratio": 7.183673469387755,
+        "elapsed_secs": 0.12464785575866699,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (M (* 1.0 ?#1) 0.0 0 0.0))",
+          "fn_1: (T ?#0 (M ?#1 0 ?#2 ?#2))",
+          "fn_2: (repeat (fn_1 ?#0 0.5 ?#1) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 0))",
+          "fn_3: (C ?#0 (fn_0 6.0 ?#1))"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          5824,
+          4649,
+          3146,
+          2647
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 4858,
+        "compression_ratio": 3.9127212844792094,
+        "elapsed_secs": 0.1315152645111084,
+        "library": [
+          "fn_0: (M ?#0 -0.0 0.0 0)",
+          "fn_1: (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)",
+          "fn_2: (T l (M 1.0 0 -0.5 (/ 0.5 (tan (/ pi ?#0)))))",
+          "fn_3: (repeat (fn_2 6.0) 6.0 (fn_1 6.0))"
+        ],
+        "egraph_min_term_size": 13441.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          12090,
+          9341,
+          6153,
+          4859
         ]
       }
     ]
@@ -254,193 +254,143 @@
   "drawings:dials": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:dials",
         "file": "dials",
         "initial_cost": 35712,
-        "final_cost": 8952,
-        "compression_ratio": 3.9892761394101877,
-        "elapsed_secs": 1.0447816848754883,
+        "final_cost": 8925,
+        "compression_ratio": 4.001344537815126,
+        "elapsed_secs": 0.7333076000213623,
         "library": [
-          "fn_0: (C (T ?#0 (M 1.0 0.0 ?#1 ?#2)) ?#3)",
+          "fn_0: (C ?#0 (T ?#1 (M 1.0 (sin 0) ?#2 ?#3)))",
           "fn_1: (T l (M ?#0 ?#1 ?#2 ?#3))",
-          "fn_2: (fn_0 l -0.5 0 (C (fn_1 3.0 1.5708 0 -2) (fn_1 2.0 0 -1.0 1.0)))",
-          "fn_3: (fn_0 ?#0 ?#1 0 (fn_0 (r_s ?#2 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))) (r_s ?#3 4.5)))"
+          "fn_2: (fn_1 2.0 0 -1.0 ?#0)",
+          "fn_3: (fn_0 (r_s ?#0 4.5) (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          11571,
+          10334,
+          9607,
+          8926
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 8622,
+        "compression_ratio": 4.1419624217118995,
+        "elapsed_secs": 0.5990145206451416,
+        "library": [
+          "fn_0: (M ?#0 -0.0 -0.0 ?#1)",
+          "fn_1: (C (T l (M (* (* (* (* 2.0 1.0) 1.0) 1.0) 1.0) (sin 0) -1.0 (+ (+ 0.0 (- 0 0)) (+ 0 (+ 0 (+ 0 1.0)))))) (T l (M (* (* (* (* 3.0 1.0) 1.0) 1.0) 1.0) (+ 1.5708 (+ 0.0 (+ (* 0.0 1.0) (+ (* 0 -2) (+ 0 (+ 0 (+ -0.0 (+ (sin 0) (+ 0.0 (+ 0 (+ -0.0 (+ -0.0 -0.0)))))))))))) 0 -2)))",
+          "fn_2: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_3: (C (T l (M 1.0 ?#0 0 0.0)) (C c (T ?#1 (fn_0 1.5 0))))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          13466,
+          11355,
+          9604,
+          8623
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 8449,
+        "compression_ratio": 4.2267723991004855,
+        "elapsed_secs": 0.18932414054870605,
+        "library": [
+          "fn_0: (M 1.0 0.0 ?#0 ?#1)",
+          "fn_1: (C (T l (M 3.0 1.5708 0.0 -2.0)) (T l (M 2.0 0 -1.0 1.0)))",
+          "fn_2: (C ?#0 (T ?#1 (fn_0 ?#2 ?#3)))",
+          "fn_3: (repeat (C (T l (M 1.0 ?#0 0 0)) (C (T ?#1 (M 1.5 0 0 0)) c)) ?#2 (fn_0 ?#3 0))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          12640,
+          10471,
+          9176,
+          8450
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 8856,
+        "compression_ratio": 4.032520325203252,
+        "elapsed_secs": 0.5504295825958252,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (T l (M ?#0 ?#1 ?#2 ?#3))",
+          "fn_2: (fn_1 3.0 1.5708 0.0 -2)",
+          "fn_3: (fn_0 ?#0 1.5 1.0 (fn_0 ?#0 -1.5 1.0 (C (fn_1 2.0 0 -1.0 1.0) ?#1)))"
         ],
         "egraph_min_term_size": 14305.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           11570,
           10333,
-          9508,
-          8953
+          9658,
+          8857
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:dials",
         "file": "dials",
         "initial_cost": 35712,
-        "final_cost": 9045,
-        "compression_ratio": 3.9482587064676617,
-        "elapsed_secs": 1.6768929958343506,
+        "final_cost": 10318,
+        "compression_ratio": 3.461135879046327,
+        "elapsed_secs": 1.6365530490875244,
         "library": [
-          "fn_0: (C (T ?#0 (M (+ (cos (* 0.0 2)) -0.0) -0.0 ?#1 ?#2)) ?#3)",
+          "fn_0: (matmul (matmul (matmul (M 1.0 0 0 0) (matmul (M 1.0 0 0 0) (matmul (M 1.0 0 0 0) (M 1.0 0 0 0)))) (matmul (matmul (matmul (matmul (M 1.0 0 0 0) (matmul (matmul (M 1.0 0 0 0) (matmul (M 1.0 0 0 0) (M 1.0 0 0 0))) (M 1.0 0 0 0))) (M 1.0 0 0 0)) (M 1.0 0 0 0)) (matmul (matmul (M 1.0 0 0 0) (matmul (M 1.0 0 0 0) (M 1.0 0 -0.5 0))) (matmul (matmul (M 1.0 0 0 0) (M 1.0 0 0 0)) (matmul (M 1.0 0 0 0) (M 1.0 0 0 0)))))) (M 2 -0.0 (* 1.5 0) (cos (* 0.0 1.5))))",
+          "fn_1: (C (T ?#0 (M ?#1 (sin 0) ?#2 0)) ?#3)",
+          "fn_2: (C (C ?#0 (T ?#1 (M 1.0 -0.0 -0.0 ?#2))) ?#3)",
+          "fn_3: (T l (M ?#0 ?#1 0 ?#2))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          13715,
+          12137,
+          11446,
+          10319
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 8930,
+        "compression_ratio": 3.999104143337066,
+        "elapsed_secs": 0.631568431854248,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
           "fn_1: (T l (M ?#0 ?#1 ?#2 ?#3))",
-          "fn_2: (fn_0 l -0.5 0 (C (fn_1 3.0 1.5708 0 -2) (fn_1 2.0 0 -1.0 1.0)))",
-          "fn_3: (M ?#0 0 ?#1 0)"
-        ],
-        "egraph_min_term_size": 14305.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          11575,
-          10338,
-          9513,
-          9046
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:dials",
-        "file": "dials",
-        "initial_cost": 35712,
-        "final_cost": 8713,
-        "compression_ratio": 4.0987030873407555,
-        "elapsed_secs": 1.661001443862915,
-        "library": [
-          "fn_0: (C (T ?#0 ?#1) ?#2)",
-          "fn_1: (M 1.0 0 ?#0 ?#1)",
-          "fn_2: (fn_0 l (M 2.0 0 -1.0 0.0) (fn_0 l (M 3.0 1.5708 0 -2) (T l (M 2.0 0 -1.0 1.0))))",
-          "fn_3: (fn_0 l (M 3.0 1.5708 0 -2) (fn_0 l (M 2.0 0 -1.0 1.0) (T ?#0 (fn_1 ?#1 ?#2))))"
-        ],
-        "egraph_min_term_size": 14305.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          13042,
-          11439,
-          10120,
-          8714
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:dials",
-        "file": "dials",
-        "initial_cost": 35712,
-        "final_cost": 7986,
-        "compression_ratio": 4.471825694966191,
-        "elapsed_secs": 2.148765802383423,
-        "library": [
-          "fn_0: (repeat (repeat (repeat (repeat (T (repeat (C (repeat c 1.0 (M (- 1.5 0) 0 0 0)) (T l (M ?#0 0.785398 0 0))) 1.0 (matmul (M 1.0 0 0 0) (M 1.0 0 2.5 (cos 1.5708)))) (M 1.0 0 0 0)) 1.0 (M 1.0 0 0 2.5)) (+ 0 1) (M 1.0 0 0 2.5)) (cos 0) (M 1.0 0 0 2.5)) (+ 1 0) (M 1.0 0 0 2.5))",
-          "fn_1: (C (T l (M 3.0 (/ pi 2) 0 (+ ?#0 (* (cos 0) -2.0)))) (T l (M 2.0 0 -1.0 (+ ?#0 (* (cos 0) 1.0)))))",
-          "fn_2: (C ?#0 (T ?#1 (M 1.0 0.0 ?#2 ?#3)))",
-          "fn_3: (C (T l (M ?#0 ?#1 0 0)) (T ?#2 (M ?#3 -0.0 (* (cos -1.5708) 0.0) (sin 0))))"
-        ],
-        "egraph_min_term_size": 14305.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          14138,
-          11441,
-          9178,
-          7987
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:dials",
-        "file": "dials",
-        "initial_cost": 35712,
-        "final_cost": 7866,
-        "compression_ratio": 4.540045766590389,
-        "elapsed_secs": 2.348618745803833,
-        "library": [
-          "fn_0: (C (T ?#0 (M (* (* 1 1.0) 1.0) 0 ?#1 (sin ?#2))) (T ?#0 (M (+ 1 0.0) -0.0 ?#3 (sin ?#2))))",
-          "fn_1: (C (T l (M (* 3.0 (* 1.0 1.0)) (+ 1.5708 (* -0.0 (* -0.0 0))) (- -0.0 -0.0) -2.0)) (T l (M 2 0 -1.0 1.0)))",
-          "fn_2: (C ?#0 (T ?#1 (M ?#2 -0.0 (sin 0) ?#3)))",
-          "fn_3: (C (T ?#0 (M 1.0 ?#1 ?#2 (sin 0))) ?#3)"
-        ],
-        "egraph_min_term_size": 14305.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          12346,
-          9895,
-          8541,
-          7867
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:dials",
-        "file": "dials",
-        "initial_cost": 35712,
-        "final_cost": 7434,
-        "compression_ratio": 4.803874092009686,
-        "elapsed_secs": 1.8297529220581055,
-        "library": [
-          "fn_0: (C ?#0 (T l (M ?#1 (sin 0) ?#2 ?#3)))",
-          "fn_1: (C ?#0 (T ?#1 (M 1.0 -0.0 ?#2 ?#3)))",
-          "fn_2: (fn_0 (T l (M 3.0 1.5708 0 -2)) 2.0 -1.0 1.0)",
-          "fn_3: (C (C (T ?#0 (M 1.5 0 0 0)) (T l (M 1.0 ?#1 0 0))) c)"
-        ],
-        "egraph_min_term_size": 14305.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          12894,
-          10423,
-          8664,
-          7435
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:dials",
-        "file": "dials",
-        "initial_cost": 35712,
-        "final_cost": 7843,
-        "compression_ratio": 4.553359683794467,
-        "elapsed_secs": 2.3851871490478516,
-        "library": [
-          "fn_0: (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0.0 (+ 0.0 (- (- (+ -1 0) 0) 0)) 1)))",
-          "fn_1: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
-          "fn_2: (C (T ?#0 (M ?#1 0 0.0 0)) (T l (M ?#2 ?#3 0 0)))",
-          "fn_3: (C ?#0 (fn_1 (r_s ?#1 2.25) 0.0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))) ?#2))"
-        ],
-        "egraph_min_term_size": 14305.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          11850,
-          9623,
-          8418,
-          7844
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:dials",
-        "file": "dials",
-        "initial_cost": 35712,
-        "final_cost": 8908,
-        "compression_ratio": 4.008980691513247,
-        "elapsed_secs": 1.7935740947723389,
-        "library": [
-          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
-          "fn_1: (T l (M ?#0 ?#1 ?#2 ?#3))",
-          "fn_2: (fn_1 2.0 0.0 -1.0 ?#0)",
-          "fn_3: (fn_0 (C (fn_1 3.0 1.5708 0 -2) ?#0) ?#1 ?#2 ?#3)"
+          "fn_2: (fn_1 2.0 0 -1.0 ?#0)",
+          "fn_3: (fn_1 3.0 1.5708 0 -2)"
         ],
         "egraph_min_term_size": 14305.0,
         "timed_out": false,
@@ -448,57 +398,107 @@
           11570,
           10333,
           9606,
-          8909
+          8931
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:dials",
         "file": "dials",
         "initial_cost": 35712,
-        "final_cost": 9528,
-        "compression_ratio": 3.748110831234257,
-        "elapsed_secs": 3.30537748336792,
+        "final_cost": 7969,
+        "compression_ratio": 4.48136529050069,
+        "elapsed_secs": 0.527961015701294,
         "library": [
-          "fn_0: (matmul (matmul (matmul (M 1.0 0 0 0) (matmul (M 1.0 0 (* -0.5 1.0) 0) (M 1.0 0 0 0))) (matmul (M 1.0 0 0 0) (M 1.0 0 0 0))) (matmul (M 1.0 0 0 0) (M 2 (+ 0 0) (cos 1.5708) 1)))",
-          "fn_1: (C (T ?#0 (M 1.0 (* (- 0 0) -0.0) ?#1 ?#2)) ?#3)",
-          "fn_2: (C ?#0 (T l (M ?#1 ?#2 (sin 0) ?#3)))",
-          "fn_3: (M ?#0 -0.0 ?#1 0)"
+          "fn_0: (C (T ?#0 (M 1 0 ?#1 (cos ?#2))) ?#3)",
+          "fn_1: (C (T l (M 2.0 0 (- (* 1.0 -1.0) 0) 1.0)) (T l (M 3.0 1.5708 0 (* 1 -2))))",
+          "fn_2: (T ?#0 (M ?#1 0 0.0 ?#2))",
+          "fn_3: (C (C c (fn_2 ?#0 1.5 0)) (T l (M 1.0 ?#1 0 0)))"
         ],
         "egraph_min_term_size": 14305.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          13643,
-          11468,
-          10222,
-          9529
+          12415,
+          9958,
+          8891,
+          7970
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:dials",
         "file": "dials",
         "initial_cost": 35712,
-        "final_cost": 8488,
-        "compression_ratio": 4.207351555136664,
-        "elapsed_secs": 1.899893045425415,
+        "final_cost": 9035,
+        "compression_ratio": 3.952628666297731,
+        "elapsed_secs": 0.4241023063659668,
         "library": [
-          "fn_0: (C (T l (M (* (+ (+ (+ 0.5 -0.5) 1.0) (+ 0.5 -0.5)) (* ?#0 1.0)) 0 (* 1 (+ 0 (* (* ?#0 1.0) -0.5))) 0)) (C (T l (M 3.0 1.5708 0 -2)) (T (T l (M (* (+ (+ (+ 0.5 -0.5) 1.0) (+ 0.5 -0.5)) (* ?#0 1.0)) 0 (* 1 (+ 0 (* (* ?#0 1.0) -0.5))) 0)) (M (* ?#1 0.5) (* (+ (cos 1.5708) 1) 0.0) 0 (sin 1.5708)))))",
-          "fn_1: (T ?#0 (M 1.0 -0.0 ?#1 ?#2))",
+          "fn_0: (C ?#0 (T ?#1 (M (cos -0.0) 0.0 ?#2 ?#3)))",
+          "fn_1: (M 2.0 0 -1.0 ?#0)",
           "fn_2: (T l (M ?#0 ?#1 0 ?#2))",
-          "fn_3: (C (fn_1 (r_s ?#0 2.25) 0.0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0))))) (C ?#1 ?#2))"
+          "fn_3: (fn_0 (r_s ?#0 4.5) (r_s ?#1 2.25) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))"
         ],
         "egraph_min_term_size": 14305.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          11873,
-          9879,
-          9133,
-          8489
+          11571,
+          10844,
+          9717,
+          9036
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 8863,
+        "compression_ratio": 4.029335439467449,
+        "elapsed_secs": 0.5199220180511475,
+        "library": [
+          "fn_0: (repeat (C (C c (T ?#0 (M 1.5 0 0 0))) (T l (M (* 2.0 0.5) ?#1 0 0))) ?#2 (M (+ 1.0 0.0) 0 (+ ?#3 0.0) -0.0))",
+          "fn_1: (M (* 1 (* (+ 0 (* (cos 0) 1.0)) 1.0)) (- 0 0) 0 (* 0.5 (+ (* 4.5 (pow 0.5 1.0)) (* 4.5 (pow 0.5 0)))))",
+          "fn_2: (T ?#0 (M ?#1 0 ?#2 ?#3))",
+          "fn_3: (C (fn_2 ?#0 1.0 ?#1 ?#2) (fn_2 ?#0 1.0 ?#3 ?#2))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          12959,
+          11823,
+          10014,
+          8864
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 9077,
+        "compression_ratio": 3.934339539495428,
+        "elapsed_secs": 0.16365933418273926,
+        "library": [
+          "fn_0: (M 1 -0.0 ?#0 ?#1)",
+          "fn_1: (C (T l (M 2.0 0 -1.0 1.0)) (T l (M 3.0 1.5708 0 -2)))",
+          "fn_2: (C ?#0 (C (T ?#1 ?#2) ?#3))",
+          "fn_3: (fn_2 ?#0 l (M ?#1 0.785398 0 0) (T r (M ?#2 0 0 0)))"
+        ],
+        "egraph_min_term_size": 14305.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          12640,
+          10471,
+          9580,
+          9078
         ]
       }
     ]
@@ -506,270 +506,385 @@
   "drawings:wheels": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:wheels",
         "file": "wheels",
         "initial_cost": 35426,
-        "final_cost": 12658,
-        "compression_ratio": 2.79870437667878,
-        "elapsed_secs": 1.7711989879608154,
+        "final_cost": 13758,
+        "compression_ratio": 2.5749382177642097,
+        "elapsed_secs": 2.0107526779174805,
         "library": [
-          "fn_0: (C ?#0 (T ?#1 (M 1 -0.0 ?#2 ?#3)))",
-          "fn_1: (T c (M ?#0 (sin 0) ?#1 ?#1))",
-          "fn_2: (repeat (C (fn_1 ?#0 0) (C ?#1 (repeat (fn_1 0.25 0.53033) 8 (M 1.0 0.785398 0 0)))) ?#2 (M 1.0 0 ?#3 0))",
-          "fn_3: (repeat (C (C ?#0 (repeat (fn_1 0.25 0.53033) 4.0 (M 1.0 1.5708 0 0))) (fn_1 ?#1 0)) ?#2 (M 1.0 (+ 0 0) ?#3 (* (* 1.0 0) 0)))"
+          "fn_0: (C (T ?#0 (M 1.0 -0.0 ?#1 ?#2)) ?#3)",
+          "fn_1: (M ?#0 0 ?#1 0.0)",
+          "fn_2: (T c (M 0.25 0 0.53033 0.53033))",
+          "fn_3: (C (repeat fn_2 ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (T c (fn_1 ?#1 0)))"
         ],
         "egraph_min_term_size": 24070.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           19883,
-          16927,
-          14754,
-          12659
+          17862,
+          16381,
+          13759
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:wheels",
         "file": "wheels",
         "initial_cost": 35426,
-        "final_cost": 12136,
-        "compression_ratio": 2.9190837178642055,
-        "elapsed_secs": 1.1757547855377197,
+        "final_cost": 12994,
+        "compression_ratio": 2.7263352316453746,
+        "elapsed_secs": 0.42199087142944336,
         "library": [
-          "fn_0: (C (T ?#0 (M ?#1 0 0 (sin 0))) (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#2 (M 1.0 (/ (* 2.0 pi) ?#2) 0 (sin 0))))",
-          "fn_1: (T ?#0 (M 1.0 0.0 ?#1 ?#2))",
-          "fn_2: (C ?#0 (T c (M ?#1 0 0 0)))",
-          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0.0))"
+          "fn_0: (M 1.0 0.0 ?#0 ?#1)",
+          "fn_1: (C ?#0 (T ?#1 (fn_0 ?#2 ?#3)))",
+          "fn_2: (T c (M ?#0 0 ?#1 ?#1))",
+          "fn_3: (C (fn_2 ?#0 0) (repeat (fn_2 0.25 0.53033) ?#1 (M 1.0 (/ (* 2.0 pi) ?#1) 0 0)))"
         ],
         "egraph_min_term_size": 24070.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          19634,
-          15600,
-          13473,
-          12137
+          20767,
+          18662,
+          15705,
+          12995
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:wheels",
         "file": "wheels",
         "initial_cost": 35426,
-        "final_cost": 12919,
-        "compression_ratio": 2.742162706091803,
-        "elapsed_secs": 0.9854164123535156,
+        "final_cost": 13164,
+        "compression_ratio": 2.691127316924947,
+        "elapsed_secs": 0.5777592658996582,
         "library": [
-          "fn_0: (C (T ?#0 (M 1.0 0.0 ?#1 ?#2)) ?#3)",
-          "fn_1: (T c (M ?#0 0 ?#1 ?#1))",
-          "fn_2: (C (repeat (fn_1 0.25 0.53033) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (C (fn_1 ?#1 0) ?#2))",
-          "fn_3: (fn_0 ?#0 ?#1 0.0 (fn_0 (C (fn_0 l -0.5 0 (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0)))) (T l (M 0 0 0 -1.0))) 0 8 ?#2))"
+          "fn_0: (M 1 -0.0 ?#0 ?#1)",
+          "fn_1: (C ?#0 (T ?#1 (fn_0 ?#2 ?#3)))",
+          "fn_2: (T c (M ?#0 0 ?#1 ?#1))",
+          "fn_3: (C (fn_2 ?#0 0) (C (repeat (fn_2 0.25 0.53033) ?#1 (M 1.0 (/ (* 2.0 pi) ?#1) 0 0)) (fn_2 ?#2 0)))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          20767,
+          18662,
+          15705,
+          13165
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12793,
+        "compression_ratio": 2.769170640193856,
+        "elapsed_secs": 0.21822690963745117,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (M ?#0 0 0.0 0)",
+          "fn_2: (C (T c (fn_1 ?#0)) (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#1 (M 1.0 (/ (* 2.0 pi) ?#1) 0 0)))",
+          "fn_3: (M 1.0 0 ?#0 ?#1)"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          19883,
+          17896,
+          13951,
+          12794
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 12729,
+        "compression_ratio": 2.7830937229947366,
+        "elapsed_secs": 0.46658849716186523,
+        "library": [
+          "fn_0: (M 1.0 0 ?#0 ?#1)",
+          "fn_1: (C ?#0 (T ?#1 (fn_0 ?#2 ?#3)))",
+          "fn_2: (M ?#0 0 0 0)",
+          "fn_3: (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (T c (fn_2 ?#1)))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          20767,
+          18662,
+          16675,
+          12730
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 15130,
+        "compression_ratio": 2.341440846001322,
+        "elapsed_secs": 0.23857474327087402,
+        "library": [
+          "fn_0: (M ?#0 0 ?#1 -0.0)",
+          "fn_1: (T (r_s ?#0 ?#1) (M 1.0 0 ?#2 ?#3))",
+          "fn_2: (C (T c (fn_0 2.25 0.0)) (C (T ?#0 (fn_0 0.5 0.0)) (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#1 (M 1.0 (/ (* 2.0 pi) ?#1) 0 0))))",
+          "fn_3: (C (T ?#0 (fn_0 1.0 ?#1)) (C ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 24070.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          21215,
+          18080,
+          16270,
+          15131
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 14042,
+        "compression_ratio": 2.522859991454209,
+        "elapsed_secs": 0.319976806640625,
+        "library": [
+          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (T c (M ?#0 0.0 ?#1 ?#1))",
+          "fn_2: (M 1.0 0 ?#0 ?#1)",
+          "fn_3: (repeat (fn_1 0.25 0.53033) ?#0 (M 1.0 ?#1 0 0))"
         ],
         "egraph_min_term_size": 24070.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           19883,
           16926,
-          13970,
-          12920
+          15769,
+          14043
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:wheels",
         "file": "wheels",
         "initial_cost": 35426,
-        "final_cost": 11274,
-        "compression_ratio": 3.1422742593578143,
-        "elapsed_secs": 4.880199432373047,
+        "final_cost": 14043,
+        "compression_ratio": 2.522680338958912,
+        "elapsed_secs": 0.40503644943237305,
         "library": [
-          "fn_0: (C (T ?#0 (M 1 (- 0 0) ?#1 ?#2)) ?#3)",
-          "fn_1: (C (T c (M ?#0 0.0 0 0)) (C (T ?#1 (M ?#2 0 0 0)) (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#3 (M 1.0 (/ (* 2.0 pi) ?#3) 0 0))))",
-          "fn_2: (fn_0 (C (fn_0 l -0.5 0 (C (T l (M 3.0 1.5708 0 -2)) (T l (M 2.0 0 -1.0 1.0)))) (T l (M 0.0 (+ 0 0) 0 -1.0))) (* 1 0) 8 (fn_0 (r_s 12 1.0) 0 5 (fn_0 ?#0 ?#1 ?#2 (fn_0 ?#0 ?#3 ?#2 (T (r_s 16 4.5) (M 1.0 0 0 2.25))))))",
-          "fn_3: (M 1.0 0 ?#0 ?#1)"
-        ],
-        "egraph_min_term_size": 24070.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          19885,
-          13719,
-          12376,
-          11275
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:wheels",
-        "file": "wheels",
-        "initial_cost": 35426,
-        "final_cost": 14519,
-        "compression_ratio": 2.439975204903919,
-        "elapsed_secs": 1.1057603359222412,
-        "library": [
-          "fn_0: (r_s 7.0 5)",
-          "fn_1: (T ?#0 (M ?#1 0.0 ?#2 ?#3))",
-          "fn_2: (repeat (C (C (fn_1 c 2.25 0 0) ?#0) (repeat (fn_1 c 0.25 0.53033 0.53033) ?#1 (M 1.0 (/ (* 2.0 pi) ?#1) 0 0))) ?#2 (M 1.0 0 ?#3 0))",
-          "fn_3: (C ?#0 (fn_1 ?#1 1.0 ?#2 ?#3))"
-        ],
-        "egraph_min_term_size": 24070.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          23817,
-          18998,
-          16521,
-          14520
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:wheels",
-        "file": "wheels",
-        "initial_cost": 35426,
-        "final_cost": 13112,
-        "compression_ratio": 2.701799877974375,
-        "elapsed_secs": 0.9004790782928467,
-        "library": [
-          "fn_0: (C ?#0 (T ?#1 (M (cos 0) 0 ?#2 ?#3)))",
-          "fn_1: (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0))",
-          "fn_2: (T ?#0 (M ?#1 0.0 (* 0 0) 0))",
-          "fn_3: (C (C (fn_2 c ?#0) (fn_2 ?#1 ?#2)) (fn_1 ?#3))"
+          "fn_0: (C (T ?#0 (M 1 (sin 0) ?#1 ?#2)) ?#3)",
+          "fn_1: (T c (M ?#0 0 ?#1 ?#1))",
+          "fn_2: (M 1.0 0 ?#0 ?#1)",
+          "fn_3: (repeat (fn_1 0.25 0.53033) ?#0 (M 1.0 ?#1 0 0))"
         ],
         "egraph_min_term_size": 24070.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           19884,
-          16926,
-          14323,
-          13113
+          16927,
+          15770,
+          14044
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:wheels",
         "file": "wheels",
         "initial_cost": 35426,
-        "final_cost": 11534,
-        "compression_ratio": 3.071440957170106,
-        "elapsed_secs": 1.0832624435424805,
+        "final_cost": 14489,
+        "compression_ratio": 2.445027262060874,
+        "elapsed_secs": 0.24320101737976074,
         "library": [
-          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
-          "fn_1: (C (C (T c (M ?#0 0 0 0)) (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#1 (M 1.0 (/ (* 2.0 pi) ?#1) 0 0))) (T ?#2 (M ?#3 0.0 (+ (sin 0) 0) (+ 0 0))))",
-          "fn_2: (M 1 0 ?#0 ?#1)",
-          "fn_3: (repeat (C (T c (M ?#0 0 0 0)) ?#1) ?#2 (fn_2 ?#3 0))"
+          "fn_0: (C (T ?#0 (M 1.0 -0.0 ?#1 ?#2)) ?#3)",
+          "fn_1: (M ?#0 0 ?#1 0.0)",
+          "fn_2: (T c (fn_1 ?#0 0))",
+          "fn_3: (C (C (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) ?#1) (fn_2 ?#2)) (fn_2 ?#3))"
         ],
         "egraph_min_term_size": 24070.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           19883,
-          13722,
-          12565,
-          11535
+          17862,
+          16436,
+          14490
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:wheels",
         "file": "wheels",
         "initial_cost": 35426,
-        "final_cost": 12120,
-        "compression_ratio": 2.922937293729373,
-        "elapsed_secs": 1.2074127197265625,
-        "library": [
-          "fn_0: (C (T ?#0 (M 1.0 0 ?#1 ?#2)) ?#3)",
-          "fn_1: (C (T c (M ?#0 0 0.0 0)) (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#1 (M 1.0 (/ (* 2.0 pi) ?#1) 0 0)))",
-          "fn_2: (T ?#0 (M ?#1 0 0 ?#2))",
-          "fn_3: (repeat (C ?#0 (fn_2 c ?#1 0)) ?#2 (M 1.0 0 ?#3 0))"
-        ],
+        "final_cost": 35426,
+        "compression_ratio": 1.0,
+        "elapsed_secs": 0.025065183639526367,
+        "library": [],
         "egraph_min_term_size": 24070.0,
         "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          19883,
-          15197,
-          13524,
-          12121
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:wheels",
-        "file": "wheels",
-        "initial_cost": 35426,
-        "final_cost": 14316,
-        "compression_ratio": 2.474573903324951,
-        "elapsed_secs": 2.7503628730773926,
-        "library": [
-          "fn_0: (C (T ?#0 (M 1 0 ?#1 ?#2)) ?#3)",
-          "fn_1: (T c (M ?#0 0 ?#1 ?#1))",
-          "fn_2: (C (T r (M 0.5 (sin 0) (sin 0) 0.0)) (C (repeat (fn_1 0.25 0.53033) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (fn_1 2.25 0)))",
-          "fn_3: (M 1.0 0 ?#0 ?#1)"
-        ],
-        "egraph_min_term_size": 24070.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          19883,
-          16926,
-          15474,
-          14317
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:wheels",
-        "file": "wheels",
-        "initial_cost": 35426,
-        "final_cost": 13022,
-        "compression_ratio": 2.7204730456151127,
-        "elapsed_secs": 2.4191837310791016,
-        "library": [
-          "fn_0: (C (T ?#0 (M 1 0 ?#1 ?#2)) ?#3)",
-          "fn_1: (T ?#0 (M ?#1 0 0 0))",
-          "fn_2: (repeat (C (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#0 (M 1.0 (/ (* 2.0 pi) ?#0) 0 0)) (C (fn_1 c 2.25) ?#1)) ?#2 (M 1.0 0 ?#3 0))",
-          "fn_3: (C (fn_1 c 1.6875) (C (C (fn_1 ?#0 0.375) (fn_1 c 2.1875)) (repeat (T c (M 0.25 0 0.53033 0.53033)) ?#1 (M 1.0 (/ (* 2.0 pi) ?#1) 0 0))))"
-        ],
-        "egraph_min_term_size": 24070.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          19883,
-          17234,
-          14097,
-          13023
-        ]
+        "cost_at_end_of_each_iter": null
       }
     ]
   ],
   "drawings:furniture": [
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:furniture",
         "file": "furniture",
         "initial_cost": 42935,
-        "final_cost": 10513,
-        "compression_ratio": 4.083991248929896,
-        "elapsed_secs": 1.728292465209961,
+        "final_cost": 11254,
+        "compression_ratio": 3.815087968722232,
+        "elapsed_secs": 2.4964747428894043,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1 0 ?#2 ?#3)))",
+          "fn_1: (M ?#0 0.0 ?#1 0.0)",
+          "fn_2: (T ?#0 (M ?#1 0 ?#2 ?#3))",
+          "fn_3: (repeat (T ?#0 (fn_1 0.84375 0)) 2.0 (fn_1 1.0 ?#1))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          13369,
+          12372,
+          11255
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 11213,
+        "compression_ratio": 3.8290377240702758,
+        "elapsed_secs": 4.143465995788574,
+        "library": [
+          "fn_0: (T ?#0 (M 1.0 (+ -0.0 (sin 0)) ?#1 ?#2))",
+          "fn_1: (C (fn_0 (repeat (T ?#0 (M 0.84375 0 0 0)) 2 (M 1.0 0 6.375 0)) -3.1875 0) (C (r_s 15 3.0) (r_s 16.5 4.5)))",
+          "fn_2: (C (fn_0 ?#0 ?#1 ?#2) (fn_0 ?#0 ?#3 ?#2))",
+          "fn_3: (fn_0 (repeat (T ?#0 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#1 0)) ?#2 ?#3)"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14871,
+          13516,
+          12433,
+          11214
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 10542,
+        "compression_ratio": 4.072756592676911,
+        "elapsed_secs": 1.9083502292633057,
+        "library": [
+          "fn_0: (C (T (r_s ?#0 4.5) (M (+ 0 1.0) -0.0 -0.0 -2.25)) (T (C (r_s ?#1 3.0) ?#2) (M (+ 0 1.0) 0 (+ 0 -0.0) -2.25)))",
+          "fn_1: (M 1.0 0 ?#0 ?#1)",
+          "fn_2: (T (repeat (T ?#0 (M 0.84375 0.0 0 0)) 2.0 (fn_1 ?#1 0)) (fn_1 ?#2 ?#3))",
+          "fn_3: (C ?#0 (T ?#1 (fn_1 ?#2 ?#3)))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          16140,
+          13405,
+          11628,
+          10543
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 10744,
+        "compression_ratio": 3.9961839166046165,
+        "elapsed_secs": 2.48555064201355,
+        "library": [
+          "fn_0: (C ?#0 (T ?#1 (M 1 0 ?#2 ?#3)))",
+          "fn_1: (T ?#0 (M ?#1 (sin 0) ?#2 ?#3))",
+          "fn_2: (repeat (fn_1 ?#0 0.84375 0 0) 2.0 (M 1.0 0 ?#1 0))",
+          "fn_3: (fn_0 ?#0 (C (r_s ?#1 4.5) ?#2) 0 -2.25)"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14506,
+          13018,
+          11581,
+          10745
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 11477,
+        "compression_ratio": 3.7409601812320292,
+        "elapsed_secs": 3.5411176681518555,
+        "library": [
+          "fn_0: (T ?#0 (M 1.0 0 ?#1 ?#2))",
+          "fn_1: (T ?#0 (M ?#1 0.0 ?#2 ?#3))",
+          "fn_2: (C (fn_0 (repeat (fn_1 ?#0 0.84375 0 0) 2.0 (M 1.0 0 6.375 0)) -3.1875 0) (C (r_s 15 3.0) (r_s 16.5 4.5)))",
+          "fn_3: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14868,
+          13779,
+          12542,
+          11478
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 11089,
+        "compression_ratio": 3.8718549914329516,
+        "elapsed_secs": 0.8125660419464111,
         "library": [
           "fn_0: (T ?#0 (M ?#1 0 ?#2 ?#3))",
           "fn_1: (C (fn_0 ?#0 1.0 ?#1 ?#2) ?#3)",
           "fn_2: (C (fn_0 ?#0 0.84375 0.0 0) (fn_0 ?#0 0.84375 ?#1 0))",
-          "fn_3: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))"
+          "fn_3: (M 1.0 0 ?#0 0)"
         ],
         "egraph_min_term_size": 17972.0,
         "timed_out": false,
@@ -777,232 +892,107 @@
           14663,
           12964,
           11823,
-          10514
+          11090
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:furniture",
         "file": "furniture",
         "initial_cost": 42935,
-        "final_cost": 11056,
-        "compression_ratio": 3.8834117221418234,
-        "elapsed_secs": 2.047653913497925,
+        "final_cost": 9977,
+        "compression_ratio": 4.303397814974441,
+        "elapsed_secs": 2.1453962326049805,
+        "library": [
+          "fn_0: (C (T ?#0 (M (cos 0) 0 ?#1 ?#2)) ?#3)",
+          "fn_1: (T ?#0 (M ?#1 0 ?#2 ?#3))",
+          "fn_2: (fn_0 (repeat (fn_1 ?#0 0.84375 0 0) 2.0 (M 1.0 0 ?#1 0.0)) ?#2 0 ?#3)",
+          "fn_3: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          14513,
+          13020,
+          11287,
+          9978
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 10977,
+        "compression_ratio": 3.911360116607452,
+        "elapsed_secs": 0.547844648361206,
+        "library": [
+          "fn_0: (M 1.0 0 ?#0 ?#1)",
+          "fn_1: (C ?#0 (T (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (fn_0 ?#2 0.0)) (fn_0 ?#3 0)))",
+          "fn_2: (C (T ?#0 (fn_0 ?#1 ?#2)) ?#3)",
+          "fn_3: (T ?#0 (M ?#1 0 ?#2 ?#3))"
+        ],
+        "egraph_min_term_size": 17972.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          15059,
+          13140,
+          11765,
+          10978
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
+        "domain": "drawings:furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 10731,
+        "compression_ratio": 4.0010250675612715,
+        "elapsed_secs": 1.213137149810791,
         "library": [
           "fn_0: (T ?#0 (M ?#1 0.0 ?#2 ?#3))",
-          "fn_1: (fn_0 (C (r_s ?#0 4.5) (C (fn_0 ?#1 1.0 ?#2 0) (r_s ?#3 3.0))) 1.0 0.0 -2.25)",
-          "fn_2: (repeat ?#0 ?#1 (M 1.0 0 ?#2 0.0))",
-          "fn_3: (C ?#0 (fn_0 ?#1 1.0 ?#2 ?#3))"
+          "fn_1: (C ?#0 (fn_0 ?#1 1.0 ?#2 ?#3))",
+          "fn_2: (fn_1 (C (r_s ?#0 3.0) (r_s ?#1 4.5)) (C (fn_0 r 0.84375 0 0) (fn_0 r 0.84375 ?#2 0)) ?#3 0.0)",
+          "fn_3: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))"
         ],
         "egraph_min_term_size": 17972.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           14663,
-          13252,
-          12276,
-          11057
+          12964,
+          12041,
+          10732
         ]
       }
     ],
     [
       {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
+        "method": "OursSmc(num_steps=100, num_particles=50, temperature=100.0, max_arity=4)",
         "domain": "drawings:furniture",
         "file": "furniture",
         "initial_cost": 42935,
-        "final_cost": 11260,
-        "compression_ratio": 3.8130550621669625,
-        "elapsed_secs": 3.4459478855133057,
+        "final_cost": 10513,
+        "compression_ratio": 4.083991248929896,
+        "elapsed_secs": 1.9963104724884033,
         "library": [
-          "fn_0: (C ?#0 (T ?#1 (M (cos 0) 0 ?#2 ?#3)))",
-          "fn_1: (C (T ?#0 (matmul (M 0.84375 0 0 0) (M 1.0 0 ?#1 0))) (T ?#0 (M 0.84375 (* 1.0 0) 0 (* 0.0 0))))",
-          "fn_2: (M ?#0 0 ?#1 ?#2)",
-          "fn_3: (C (r_s ?#0 4.5) (fn_0 (r_s ?#1 3.0) ?#2 ?#3 0))"
-        ],
-        "egraph_min_term_size": 17972.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          14507,
-          12719,
-          11964,
-          11261
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:furniture",
-        "file": "furniture",
-        "initial_cost": 42935,
-        "final_cost": 11317,
-        "compression_ratio": 3.793849960236812,
-        "elapsed_secs": 9.35716438293457,
-        "library": [
-          "fn_0: (C ?#0 (T ?#1 (M 1.0 0 ?#2 ?#3)))",
-          "fn_1: (C (T ?#0 (M 0.84375 (+ 0 0) (- 0 0) (+ 0 0))) (T (T ?#0 (M 0.84375 0 0 0)) (M 1.0 0 ?#1 0)))",
-          "fn_2: (M ?#0 0 ?#1 ?#2)",
-          "fn_3: (C (fn_0 (r_s 15 3.0) (fn_1 ?#0 6.375) -3.1875 0) (r_s 16.5 4.5))"
-        ],
-        "egraph_min_term_size": 17972.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          14506,
-          12720,
-          11965,
-          11318
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:furniture",
-        "file": "furniture",
-        "initial_cost": 42935,
-        "final_cost": 10113,
-        "compression_ratio": 4.245525561158904,
-        "elapsed_secs": 12.286096572875977,
-        "library": [
-          "fn_0: (C (T (repeat (repeat ?#0 (* (* 1.0 1.0) 1) (M 1.0 0 0.0 0)) 1.0 (M 1.0 0 0 0)) (M 1.0 0 (- ?#1 0) -4.5)) (C ?#2 (T ?#3 (M (sin 1.5708) 0 (cos 1.5708) (+ 0.75 -3.0)))))",
-          "fn_1: (C ?#0 (T (repeat (T ?#1 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#2 0)) (M 1.0 0 ?#3 -0.0)))",
-          "fn_2: (T ?#0 (M ?#1 0 ?#2 ?#3))",
-          "fn_3: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0.0 ?#3 0.0))"
-        ],
-        "egraph_min_term_size": 17972.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          15985,
-          13234,
-          11423,
-          10114
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:furniture",
-        "file": "furniture",
-        "initial_cost": 42935,
-        "final_cost": 11190,
-        "compression_ratio": 3.8369079535299373,
-        "elapsed_secs": 7.423782825469971,
-        "library": [
-          "fn_0: (C (T ?#0 (M 1.0 0 (cos 1.5708) -2.25)) (C (T ?#1 ?#2) ?#3))",
-          "fn_1: (C ?#0 (T (repeat (T ?#1 (M 0.84375 -0.0 0 0.0)) 2.0 (M 1.0 0 ?#2 (- 0 0))) (M 1.0 0 ?#3 0.0)))",
-          "fn_2: (M 1.0 0.0 ?#0 ?#1)",
-          "fn_3: (T (repeat ?#0 2.0 (fn_2 ?#1 0)) (fn_2 ?#2 ?#3))"
-        ],
-        "egraph_min_term_size": 17972.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          16634,
-          13885,
-          11986,
-          11191
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:furniture",
-        "file": "furniture",
-        "initial_cost": 42935,
-        "final_cost": 11366,
-        "compression_ratio": 3.7774942811895125,
-        "elapsed_secs": 5.291783094406128,
-        "library": [
-          "fn_0: (T ?#0 (M (sin 1.5708) ?#1 ?#2 ?#3))",
-          "fn_1: (C (fn_0 ?#0 0 ?#1 ?#2) ?#3)",
-          "fn_2: (fn_1 (repeat (T ?#0 (M 0.84375 0.0 0 0)) 2.0 (M 1.0 0 ?#1 0)) ?#2 0 ?#3)",
-          "fn_3: (repeat ?#0 2.0 (M 1.0 0 ?#1 0.0))"
-        ],
-        "egraph_min_term_size": 17972.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          15778,
-          14083,
-          12164,
-          11367
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:furniture",
-        "file": "furniture",
-        "initial_cost": 42935,
-        "final_cost": 11234,
-        "compression_ratio": 3.821880007121239,
-        "elapsed_secs": 2.359074115753174,
-        "library": [
-          "fn_0: (C ?#0 (T ?#1 (M 1 0 ?#2 ?#3)))",
-          "fn_1: (M ?#0 0 ?#1 0.0)",
-          "fn_2: (repeat (T ?#0 (fn_1 0.84375 0)) 2 (fn_1 1.0 ?#1))",
-          "fn_3: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (fn_1 1.0 ?#3))"
-        ],
-        "egraph_min_term_size": 17972.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          14506,
-          13369,
-          12252,
-          11235
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:furniture",
-        "file": "furniture",
-        "initial_cost": 42935,
-        "final_cost": 10415,
-        "compression_ratio": 4.122419587133941,
-        "elapsed_secs": 1.873173475265503,
-        "library": [
-          "fn_0: (T ?#0 (M 1.0 0 ?#1 ?#2))",
-          "fn_1: (fn_0 (repeat (T ?#0 (M 0.84375 0 0 0)) 2.0 (M 1.0 0 ?#1 0)) ?#2 0)",
-          "fn_2: (C (fn_0 (C ?#0 (r_s 15.0 ?#1)) 0 -2.25) (C ?#2 ?#3))",
-          "fn_3: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0.0))"
-        ],
-        "egraph_min_term_size": 17972.0,
-        "timed_out": false,
-        "cost_at_end_of_each_iter": [
-          14868,
-          12896,
-          11725,
-          10416
-        ]
-      }
-    ],
-    [
-      {
-        "method": "OursSmc(num_steps=100, num_particles=50, temperature=1000.0, max_arity=4)",
-        "domain": "drawings:furniture",
-        "file": "furniture",
-        "initial_cost": 42935,
-        "final_cost": 10732,
-        "compression_ratio": 4.000652254938502,
-        "elapsed_secs": 2.0079615116119385,
-        "library": [
-          "fn_0: (T ?#0 (M ?#1 (cos 1.5708) ?#2 ?#3))",
-          "fn_1: (C ?#0 (fn_0 ?#1 1.0 ?#2 ?#3))",
+          "fn_0: (T ?#0 (M ?#1 0 ?#2 ?#3))",
+          "fn_1: (C (fn_0 ?#0 1.0 ?#1 ?#2) ?#3)",
           "fn_2: (repeat (T l (M ?#0 1.5708 0 ?#1)) ?#2 (M 1.0 0 ?#3 0))",
-          "fn_3: (fn_1 (C (r_s ?#0 4.5) (r_s ?#1 3.0)) (C (fn_0 r 0.84375 0 0) (fn_0 r 0.84375 ?#2 0)) ?#3 0.0)"
+          "fn_3: (C (fn_0 ?#0 0.84375 0 0) (fn_0 ?#0 0.84375 ?#1 0))"
         ],
         "egraph_min_term_size": 17972.0,
         "timed_out": false,
         "cost_at_end_of_each_iter": [
-          14664,
-          12965,
-          11656,
-          10733
+          14663,
+          12964,
+          11655,
+          10514
         ]
       }
     ]
