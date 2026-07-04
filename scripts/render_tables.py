@@ -61,7 +61,8 @@ def methods_for_table(table: int) -> list[str]:
     and have no baseline. (Tables 5-7 render via FamilySpec, not this path.)
     """
     if table in TABLES_WITH_EGRAPH_MIN:
-        return ["enum", "smc", BASELINE_METHOD, "babble"]
+        # babble follows SMC; the BFS/MT and BFS/NR baselines are kept rightmost.
+        return ["enum", "smc", "babble", BASELINE_METHOD, NO_RULES_METHOD]
     return ["enum", "smc", "babble", "stitch"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
@@ -79,16 +80,21 @@ METHODS = ["enum", "smc", "babble", "stitch"]
 # "dsrs-only-at-start" baseline: best-first that canonicalises with the DSRs
 # once instead of keeping them live (the "BFS@start" column, same as table5).
 BASELINE_METHOD = "enum-dsrs-at-start"
+# No-rules Enum baseline (BFS/NR): best-first with the DSRs turned off entirely,
+# the direct-babble-comparison reference on the DSR tables (1 & 3) and table5/7.
+NO_RULES_METHOD = "enum-baseline"
 # Table cells use the bare search-strategy name; plot legends spell out the
 # E-Stitch prefix so each series is unambiguous standalone.
 METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble",
-                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT"}
+                 "stitch": "Stitch", BASELINE_METHOD: "BFS/MT",
+                 NO_RULES_METHOD: "BFS/NR"}
 METHOD_PLOT_LABELS = {
     "enum": "E-Stitch: BFS",
     "smc": "E-Stitch: SMC",
     "babble": "babble",
     "stitch": "Stitch",
     BASELINE_METHOD: "E-Stitch: BFS (DSRs at start)",
+    NO_RULES_METHOD: "E-Stitch: BFS (no rules)",
 }
 # The single sweep point each base method contributes to the table cells.
 # Plots use the full sweep regardless.
@@ -100,6 +106,7 @@ TABLE_DATA_KEYS = {
     "babble": "babble",
     "stitch": "stitch",
     BASELINE_METHOD: BASELINE_METHOD,
+    NO_RULES_METHOD: NO_RULES_METHOD,
 }
 TABLE_TITLES = {
     1: "Compression Using Rewrites",
@@ -152,6 +159,7 @@ def line_color(i: int):
 # gets its own color past the four base series.
 METHOD_COLORS = {m: line_color(i) for i, m in enumerate(METHODS)}
 METHOD_COLORS[BASELINE_METHOD] = line_color(4)
+METHOD_COLORS[NO_RULES_METHOD] = line_color(5)
 DOMAIN_PLOT_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -277,8 +285,9 @@ PRESENTATION_COLORS = {
     "smc": "estitchHighlight",
     "babble": "ecorange",
     "stitch": "ecblue",
-    # The dsrs-only-at-start baseline is an E-Stitch search variant too.
+    # The dsrs-only-at-start and no-rules baselines are E-Stitch search variants too.
     BASELINE_METHOD: "estitchHighlight",
+    NO_RULES_METHOD: "estitchHighlight",
 }
 
 
@@ -630,6 +639,13 @@ class FamilySpec:
         # Base methods take color slots 0/1/3; extras fill 2 then 4, 5, ... so a
         # single-extra roster (table7) keeps its original slot-2 color.
         extra_slots = [2, 4, 5][: len(extras)]
+        # Table columns keep the BFS/MT and BFS/NR baselines rightmost (babble,
+        # a real method, follows SMC). Plots are unaffected — they have no
+        # left-to-right ranking, so their series order stays as built above.
+        baselines = ("enum-dsrs-at-start", "enum-baseline")
+        table_methods = [m for m in methods if m not in baselines] + [
+            m for m in methods if m in baselines
+        ]
         return cls(
             title=title,
             fig_subdir=fig_subdir,
@@ -638,7 +654,7 @@ class FamilySpec:
             # The two sweeps, then the single-point methods. Each single-point
             # method keys on its own data label so plot_cr_vs_time finds it directly.
             plot_methods=methods,
-            table_methods=methods,
+            table_methods=table_methods,
             data_keys={
                 "enum": f"enum-{enum_point}",
                 "smc": f"smc-{TABLE_SMC_PARTICLES}",
@@ -689,10 +705,11 @@ TABLE5_SPEC = FamilySpec.estitch_roster(
     ],
 )
 
-# table7: EPFL circuits with the factoring DSRs. Same as table5 but babble (no
-# boolean theory) is swapped for a no-rules Enum baseline ("enum-baseline") -- so
-# the three-way baseline/live/at-start contrast shows. Enum DNFs here (best-first
-# can't search the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
+# table7: EPFL circuits with the factoring DSRs. Same roster as table5 (babble +
+# a no-rules Enum baseline "enum-baseline"), so the three-way baseline/live/
+# at-start contrast plus babble all show. babble runs via its ``circuits`` binary
+# (boolean and/or/not over ``$N`` inputs). Enum DNFs here (best-first can't search
+# the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
 TABLE7_SPEC = FamilySpec.estitch_roster(
     title="EPFL Circuit Compression (Factoring DSRs)",
     fig_subdir="table7",
@@ -707,7 +724,10 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     enum_point=TABLE_BFS_STEPS,
     enum_sweep=TABLE7_BFS_SWEEP,
     smc_sweep=TABLE7_SMC_SWEEP,
-    extras=[("enum-baseline", "BFS/NR", "E-Stitch: BFS (no rules)")],
+    extras=[
+        ("babble", "babble", "babble"),
+        ("enum-baseline", "BFS/NR", "E-Stitch: BFS (no rules)"),
+    ],
 )
 
 # table6: cogsci drawing domains with our algebraic drawing DSRs. Same shape as

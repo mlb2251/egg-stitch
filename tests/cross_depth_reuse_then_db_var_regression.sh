@@ -36,7 +36,7 @@ for seed in $SEEDS; do
             --output "$out" \
             --search smc --language lambda-calc \
             --num-abstractions 1 \
-            --num-particles 1000 --num-steps 1000 --temperature 1000 \
+            --num-particles 1000 --num-steps 1000 --temperature 100 \
             --seed "$seed" >/dev/null 2>&1; then
         echo "FAIL seed=$seed: egg-stitch crashed"
         fail=$((fail + 1))

@@ -195,7 +195,7 @@ class OursSmc:
 
     num_steps: int = 100
     num_particles: int = 1000
-    temperature: float = 1000.0
+    temperature: float = 100.0
     max_arity: int = MAX_ARITY
     iter_limit: int | None = field(default=None, repr=False)
     # Per-factor abstraction match-set cap + its decompose floor (table6 sets

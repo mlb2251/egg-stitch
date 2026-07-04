@@ -2,10 +2,11 @@ pub mod best_first;
 pub mod candidates;
 pub mod constant_folding;
 pub mod cost;
-pub mod debug_log;
 pub mod egraph_util;
 pub mod factor;
 pub mod follow;
+pub mod footprint;
+pub mod hashing;
 pub mod io;
 pub mod lang;
 pub mod logging;
@@ -62,7 +63,7 @@ impl std::str::FromStr for MaxForcedExpansion {
 #[command(version)]
 pub struct Args {
     /// Search algorithm to use.
-    #[arg(long, value_enum, default_value_t = SearchKind::Smc)]
+    #[arg(long, value_enum)]
     pub search: SearchKind,
 
     /// Path to the input JSON file containing programs.
@@ -115,9 +116,9 @@ pub struct Args {
     #[arg(long)]
     pub time_limit: Option<f64>,
 
-    /// Softmax temperature for resampling weights.
-    #[arg(long, default_value_t = 100.0)]
-    pub temperature: f64,
+    /// Softmax temperature for resampling weights. Required for SMC search.
+    #[arg(long)]
+    pub temperature: Option<f64>,
 
     /// Stop after this many steps with no improvement.
     #[arg(long, default_value_t = 50)]
@@ -163,6 +164,16 @@ pub struct Args {
     #[arg(long = "opt-seen", default_value_t = false)]
     pub opt_seen: bool,
 
+    /// Disable dedup-by-match (on by default).
+    /// Prunes a successor when another candidate with the same set of matches
+    /// was already seen at an equal-or-more-flexible frozen set and equal-or-smaller
+    /// pattern size.
+    /// Treats patterns that match the same e-classes binding the same argument
+    /// multisets as identical. For example `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)`
+    /// are treated as identical.
+    #[arg(long = "no-opt-dedup-by-match", action = clap::ArgAction::SetFalse)]
+    pub opt_dedup_by_match: bool,
+
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
     /// reuse as a singleton successor (no cost check — sound by construction).
@@ -182,6 +193,13 @@ pub struct Args {
     /// and instead of pruning, it just inlines it with the min term.
     #[arg(long = "no-opt-useless-inline", action = clap::ArgAction::SetFalse)]
     pub opt_useless_inline: bool,
+
+    /// Allow "useless" pattern variables in the returned abstraction, that is
+    /// variables bound to the same e-class in every subst. Off by default,
+    /// matching stitch. Forces `opt_useless_frozen`, `opt_useless_inline`,
+    /// and `opt_dominance_reuse` off when it is set.
+    #[arg(long, default_value_t = false)]
+    pub allow_useless_vars: bool,
 
     /// Disable lower-bound pruning of best-first children (on by default).
     /// Each child gets a `compute_lower_bound` estimate; if it already
@@ -224,10 +242,6 @@ pub struct Args {
     #[arg(short, long)]
     pub output: Option<String>,
 
-    /// Enable detailed debug logging of all particles at each SMC step.
-    #[arg(long, default_value_t = false)]
-    pub debug_log: bool,
-
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
@@ -248,6 +262,17 @@ pub struct Args {
     /// Cost weights applied per enode kind.
     #[command(flatten)]
     pub weights: Weights,
+}
+
+impl Args {
+    /// Resolves flag interactions after parsing.
+    pub fn normalize(&mut self) {
+        if self.allow_useless_vars {
+            self.opt_useless_frozen = false;
+            self.opt_useless_inline = false;
+            self.opt_dominance_reuse = false;
+        }
+    }
 }
 
 /// Which language family `multiple_step_search` runs over.

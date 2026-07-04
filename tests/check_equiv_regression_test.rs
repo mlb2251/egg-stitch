@@ -38,7 +38,7 @@ fn run_and_check(input: &str, seed: u64) -> Result<(), String> {
             "--num-steps",
             "1000",
             "--temperature",
-            "1000",
+            "100",
             "--seed",
         ])
         .arg(seed.to_string())

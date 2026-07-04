@@ -56,7 +56,7 @@ fn run_smc(circuit: &str, rules: Option<&str>, at_start: bool, tag: &str) -> Val
         "--num-steps",
         "100",
         "--temperature",
-        "1000",
+        "100",
         "--seed",
         "1",
         "--iter-limit",
