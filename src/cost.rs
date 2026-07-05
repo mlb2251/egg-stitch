@@ -742,13 +742,11 @@ pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected:
     assert_eq!(actual, expected, "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", actual, expected,);
 }
 
-/// Asserts the extraction invariant `fv(c) = fv(MinTerm(c))` directly, for every
-/// eclass in the egraph: the analysis fv `data.fv` must equal the syntactic fv of
-/// the class's size-minimal enode (computed from its children's class fv). This
-/// replaces the load-time structural rule classifier — instead of proving that
-/// rules *preserve* the invariant, we verify it *holds* on the built egraph.
-/// Panics on the first offending class. Mirrors the size analogue in
-/// `best_first::cost_balanced` and the per-class check in `shift_free_egraph`.
+/// Asserts the invariant `fv(c) = fv(MinTerm(c))` for every eclass: the analysis
+/// fv `data.fv` must equal the syntactic fv of the class's size-minimal enode
+/// (computed from its children's class fv). Downstream capture decisions read
+/// `data.fv` and rely on it matching the extracted min term. Panics on the first
+/// offending class.
 pub fn assert_fv_matches_min_term<L: StitchLanguage>(egraph: &StitchEgraph<L>) {
     let weights = egraph.analysis.weights;
     for c in egraph.classes() {
