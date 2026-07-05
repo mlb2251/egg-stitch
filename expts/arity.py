@@ -13,8 +13,10 @@ exceeds the per-run wall-clock timeout, at which point that curve stops --
 Stitch blows up combinatorially long before BFS, which is the point of the
 plot. BFS is left free to keep climbing to :data:`ARITY_MAX`.
 
-The sweep is geometric-ish: ``1..9, 10,20..90, 100,200..900, 1000,2000..``.
-Runs are deterministic; the repeats only average out wall-clock noise.
+The sweep is every integer arity 1..20 (where the compression jumps happen),
+then a single effectively-unbounded ``1_000_000`` point that lifts the cap
+entirely to expose each tool's unbounded-arity search cost. Runs are
+deterministic; the repeats only average out wall-clock noise.
 """
 
 from __future__ import annotations
@@ -36,22 +38,11 @@ from .tables import BASELINE_BFS_STEPS
 ARITY_DOMAINS = ["wheels", "furniture"]
 ARITY_TIMEOUT = 300.0  # seconds, per run; a method stops climbing once it blows this
 ARITY_NUM_RUNS = 10    # deterministic; repeats only smooth timing noise
-ARITY_MAX = 500        # safety ceiling on the sweep (BFS should time out first)
 ARITY_NUM_ABSTRACTIONS = 1
 
-
-def geometric_arities(max_arity: int = ARITY_MAX) -> list[int]:
-    """The ``1..9, 10..90, 100..900, 1000..`` arity sweep up to ``max_arity``."""
-    out: list[int] = []
-    decade = 1
-    while decade <= max_arity:
-        for m in range(1, 10):
-            v = m * decade
-            if v > max_arity:
-                break
-            out.append(v)
-        decade *= 10
-    return out
+# Every integer 1..20 (the regime where the compression jumps live) plus one
+# effectively-unbounded point that removes the cap entirely.
+ARITIES = list(range(1, 21)) + [1_000_000]
 
 
 # ``(method, make_runner)`` pairs. ``make_runner(arity)`` builds a runner capped
@@ -99,7 +90,9 @@ def _run_arity_sweep(
     if cache_path.exists():
         with open(cache_path) as fh:
             done = json.load(fh)
-    stopped = any(_reps_have_dnf(reps) for reps in done.values())
+    # Only this sweep's arities count (the cache may hold stale keys from an
+    # earlier sweep); a cached DNF among them means the curve already stopped.
+    stopped = any(str(a) in done and _reps_have_dnf(done[str(a)]) for a in arities)
 
     for a in arities:
         key = str(a)
@@ -124,7 +117,8 @@ def _run_arity_sweep(
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         with open(cache_path, "w") as fh:
             json.dump(done, fh, indent=2)
-    return done
+    # Return only this sweep's arities so stale cache keys never reach the plot.
+    return {str(a): done[str(a)] for a in arities if str(a) in done}
 
 
 def arity_experiment(
@@ -132,12 +126,12 @@ def arity_experiment(
     domains: Sequence[str] = ARITY_DOMAINS,
     timeout: float = ARITY_TIMEOUT,
     num_runs: int = ARITY_NUM_RUNS,
-    max_arity: int = ARITY_MAX,
+    arities: Sequence[int] = ARITIES,
     mem_limit: int | None = MEM_LIMIT_BYTES,
 ) -> Path:
     """Run the arity-vs-time sweep for BFS and Stitch on ``domains`` and save
     ``results/arity.json`` (rendered by ``scripts/render_arity.py``)."""
-    arities = geometric_arities(max_arity)
+    arities = list(arities)
     methods = _arity_runners(timeout=timeout, mem_limit=mem_limit)
     set_folder(f"arity/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     cache_root = SUMMARY_RESULTS_DIR / "arity"
