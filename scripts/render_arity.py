@@ -27,7 +27,7 @@ FIGURES_DIR = PROJECT_ROOT / "figures"
 
 # Draw BFS first, Stitch on top; both keys exist in render_tables' maps.
 METHOD_ORDER = ["enum", "stitch"]
-DOMAIN_TITLES = {"wheels": "Wheels", "dials": "Dials"}
+DOMAIN_TITLES = {"wheels": "Wheels", "furniture": "Furniture"}
 
 
 def method_curve(arity_map: dict[str, list]) -> tuple[list, tuple | None]:
@@ -101,7 +101,7 @@ def plot_domain(ax, methods: dict[str, dict], title: str) -> None:
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("Max arity")
-    ax.set_ylabel("Time to convergence (s)")
+    ax.set_ylabel("Time (s)")
     ax.set_title(title)
     ax.grid(True, which="both", linewidth=0.3, alpha=0.5)
     ax.legend(title="Method", loc="upper left")
@@ -120,9 +120,11 @@ def main() -> None:
     (FIGURES_DIR / "arity").mkdir(parents=True, exist_ok=True)
 
     def _plain_axes(ax):
-        for axis in (ax.xaxis, ax.yaxis):
-            axis.set_major_formatter(ScalarFormatter())
-            axis.set_minor_formatter(NullFormatter())
+        # Plain integer ticks on the arity (x) axis; leave the time (y) axis on
+        # matplotlib's default log formatter so its sub-1 decades don't collapse
+        # to "0".
+        ax.xaxis.set_major_formatter(ScalarFormatter())
+        ax.xaxis.set_minor_formatter(NullFormatter())
 
     # Per-domain figures.
     for domain in domains:

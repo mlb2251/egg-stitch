@@ -33,7 +33,7 @@ from .tables import BASELINE_BFS_STEPS
 
 # Domains whose optimal single abstraction needs arity > 2 (so the arity cap is
 # the binding constraint). Restricting to these keeps the comparison clean.
-ARITY_DOMAINS = ["wheels", "dials"]
+ARITY_DOMAINS = ["wheels", "furniture"]
 ARITY_TIMEOUT = 300.0  # seconds, per run; a method stops climbing once it blows this
 ARITY_NUM_RUNS = 10    # deterministic; repeats only smooth timing noise
 ARITY_MAX = 500        # safety ceiling on the sweep (BFS should time out first)
