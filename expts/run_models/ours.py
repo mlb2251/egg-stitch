@@ -161,9 +161,6 @@ class OursBf:
     # max_match_set (the binary asserts it) so the row cap only prunes
     # already-decomposed factors (table6 pins it equal to the cap). Excluded from repr.
     decompose_min_rows: int | None = field(default=None, repr=False)
-    # Overrides the domain's default rewrites file with a specific ruleset
-    # (table6 pins drawings.rewrites). Excluded from repr.
-    rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
 
@@ -179,7 +176,7 @@ class OursBf:
             search_flags["decompose_min_rows"] = self.decompose_min_rows
         return _run(
             rounds=rounds, input_path=input_path,
-            rewrites_path=None if self.no_dsrs else (self.rewrites_override or rewrites_path),
+            rewrites_path=None if self.no_dsrs else rewrites_path,
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
             search_flags=search_flags,
@@ -203,8 +200,6 @@ class OursSmc:
     # repr so the method label is unchanged.
     max_match_set: int | None = field(default=None, repr=False)
     decompose_min_rows: int | None = field(default=None, repr=False)
-    # Overrides the domain's default rewrites file (table6 pins drawings.rewrites).
-    rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
 
@@ -220,7 +215,7 @@ class OursSmc:
             search_flags["decompose_min_rows"] = self.decompose_min_rows
         return _run(
             rounds=rounds, input_path=input_path,
-            rewrites_path=self.rewrites_override or rewrites_path,
+            rewrites_path=rewrites_path,
             weighting=weighting, search="smc",
             max_arity=self.max_arity,
             search_flags=search_flags,

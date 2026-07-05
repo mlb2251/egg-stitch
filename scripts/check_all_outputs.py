@@ -101,20 +101,6 @@ SKIP_RELS = {
 # skipped here -- `main` routes them to check_circuit_equiv.py instead.)
 SKIP_REL = {"test/op_children_db_free_var.plain.out.json"}
 
-# The cogsci `*.algebra` fixtures use our algebraic drawing rewrites
-# (drawings.rewrites), which are non-confluent and node-exploding (matmul,
-# overlay/arith commutativity, repeat-unroll) — the same blowup that forces
-# `--iter-limit` on the real search. `check_equiv` saturates without such a cap,
-# so it bails on the node limit (false negatives) and is brutally slow over the
-# 250-program corpus. These fixtures are instead pinned EXACTLY by the
-# `*_algebra` snapshot cases in `tests/cogsci_bfs_test.rs`.
-SKIP_RELS = {
-    "cogsci/dials.algebra.out.json",
-    "cogsci/furniture.algebra.out.json",
-    "cogsci/nuts-bolts.algebra.out.json",
-    "cogsci/wheels.algebra.out.json",
-}
-
 
 def is_circuit(rel):
     return rel.startswith("epfl-circuits/")
