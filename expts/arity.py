@@ -1,22 +1,14 @@
-"""Arity-scaling experiment: how BFS and Stitch search time grows with the
-abstraction-arity cap.
+"""Arity-scaling experiment: BFS and Stitch search time vs the abstraction-arity
+cap.
 
 Unlike tables 1-7 this varies ``max_arity`` (not steps/particles), learns a
-single abstraction, and runs each tool to convergence. It runs on the two
-cogsci domains whose optimal single abstraction has arity > 2 (wheels, dials),
-so raising the cap keeps unlocking better abstractions.
+single abstraction, and runs each tool to convergence. Runs without DSRs
+(Stitch can't take them; matches the no-DSR tables 2/4).
 
-No DSRs: Stitch can't take them, and dropping them isolates the pure
-search-cost-vs-arity effect (and matches the no-DSR tables 2/4 where Stitch
-participates). Each ``(method, domain)`` sweeps arities upward until a run
-exceeds the per-run wall-clock timeout, at which point that curve stops --
-Stitch blows up combinatorially long before BFS, which is the point of the
-plot. BFS is left free to keep climbing to :data:`ARITY_MAX`.
-
-The sweep is every integer arity 1..20 (where the compression jumps happen),
-then a single effectively-unbounded ``1_000_000`` point that lifts the cap
-entirely to expose each tool's unbounded-arity search cost. Runs are
-deterministic; the repeats only average out wall-clock noise.
+Each ``(method, domain)`` sweeps arities ascending, stopping once a run exceeds
+the per-run wall-clock timeout. The sweep is every integer 1..20 plus one
+effectively-unbounded ``1_000_000`` point that lifts the cap entirely. Runs are
+deterministic; the repeats only smooth wall-clock noise.
 """
 
 from __future__ import annotations
@@ -33,21 +25,19 @@ from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import OursBf, Stitch
 from .tables import BASELINE_BFS_STEPS
 
-# Domains whose optimal single abstraction needs arity > 2 (so the arity cap is
-# the binding constraint). Restricting to these keeps the comparison clean.
+# Cogsci domains swept here (each a single input file).
 ARITY_DOMAINS = ["wheels", "furniture"]
-ARITY_TIMEOUT = 500.0  # seconds, per run; a method stops climbing once it blows this
+ARITY_TIMEOUT = 500.0  # seconds, per run; the sweep stops once a run blows this
 ARITY_NUM_RUNS = 3     # deterministic; repeats only smooth timing noise
 ARITY_NUM_ABSTRACTIONS = 1
 
-# Every integer 1..20 (the regime where the compression jumps live) plus one
-# effectively-unbounded point that removes the cap entirely.
+# Every integer 1..20 plus one effectively-unbounded point that removes the cap.
 ARITIES = list(range(1, 21)) + [1_000_000]
 
 
 # ``(method, make_runner)`` pairs. ``make_runner(arity)`` builds a runner capped
-# at that arity. BFS uses a huge step budget so its heap drains (runs to
-# convergence) rather than being clipped; Stitch is exhaustive by construction.
+# at that arity. BFS uses a huge step budget so it runs to convergence rather
+# than being clipped; Stitch is exhaustive by construction.
 def _arity_runners(
     *, timeout: float, mem_limit: int | None
 ) -> list[tuple[str, Callable[[int], object]]]:

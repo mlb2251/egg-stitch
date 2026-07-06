@@ -154,17 +154,23 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
                     p.plot([la, first], [lt, budget], "--", color=color, linewidth=1.2, zorder=2)
 
 
-def _draw_optimal(ax, axb, methods: dict[str, dict]) -> None:
+def _draw_optimal(container, ax, axb, methods: dict[str, dict]) -> None:
     """Shade the arity range that reaches the unbounded optimum -- from the
-    smallest such arity onward (through the 10^6 cell) -- labelled "optimal
-    abstraction"."""
+    smallest such arity, across the axis-break gap, into the 10^6 cell. A
+    matching legend entry names it (no on-graph label)."""
+    from matplotlib.patches import Rectangle
+
     opt = optimal_arity(methods)
     if opt is None:
         return
     ax.axvspan(opt - 0.5, MAIN_ARITY_MAX + 0.5, facecolor=OPTIMAL_COLOR, alpha=0.35, zorder=0)
     axb.axvspan(LARGE_ARITY * 0.1, LARGE_ARITY * 10, facecolor=OPTIMAL_COLOR, alpha=0.35, zorder=0)
-    ax.text(opt - 0.25, 0.97, "optimal abstraction", transform=ax.get_xaxis_transform(),
-            rotation=90, va="top", ha="left", fontsize=8, color="#1a6a9c", zorder=1)
+    # Bridge the inter-panel break with a container-level patch (behind the axes,
+    # so only the otherwise-blank gap shows it).
+    p0, p1 = ax.get_position(), axb.get_position()
+    container.add_artist(Rectangle(
+        (p0.x1, p0.y0), p1.x0 - p0.x1, p0.height, transform=container.transSubfigure,
+        facecolor=OPTIMAL_COLOR, alpha=0.35, linewidth=0, zorder=0))
 
 
 def _break_marks(left, right) -> None:
@@ -190,7 +196,7 @@ def render_domain_panel(container, methods: dict[str, dict], title: str):
     ax = container.add_subplot(gs[0, 0])
     axb = container.add_subplot(gs[0, 1], sharey=ax)
 
-    _draw_optimal(ax, axb, methods)
+    _draw_optimal(container, ax, axb, methods)
     _draw_curves(ax, axb, methods)
 
     for a in (ax, axb):
@@ -208,7 +214,11 @@ def render_domain_panel(container, methods: dict[str, dict], title: str):
 
     _break_marks(ax, axb)
 
-    ax.legend(title="Method", loc="upper left")
+    from matplotlib.patches import Patch
+    handles, _ = ax.get_legend_handles_labels()
+    if optimal_arity(methods) is not None:
+        handles.append(Patch(facecolor=OPTIMAL_COLOR, alpha=0.35, label="optimal abstraction"))
+    ax.legend(handles=handles, loc="upper left")
     container.suptitle(title)
     container.supxlabel("Max arity")
     return ax, axb
