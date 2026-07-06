@@ -129,7 +129,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
                     continue;
                 }
                 // `rank` drives the freeze rule in `apply_action`. Under
-                // `--smc-variable-ordering` it is the f-value order; otherwise
+                // `--freeze-rule on` it is the f-value order; otherwise
                 // (`freeze_rule = false`) it is the identity and `apply_action`
                 // ignores it.
                 SuccessorEnum::All { actions, rank } => (actions, rank),
@@ -348,7 +348,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     // driver. All best-so-far access goes through its methods.
     let mut search = SmcSearchData::new(shared, args, rng, original_size);
 
-    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&search.shared, args.smc_variable_ordering), num_particles)];
+    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&search.shared, args.freeze_rule.resolve(false)), num_particles)];
     let mut scratch = CostScratch::new(&search.shared.egraph);
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;

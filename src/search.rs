@@ -569,8 +569,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // Commit to freezing every var of *lower rank*: expanding the
                 // var at rank `r` forbids ever expanding a lower-rank var. Set
                 // the parent's `var_frozen` (by rank) before `expand` shifts it
-                // into the child layout. Off when `freeze_rule` is false (SMC
-                // without `--smc-variable-ordering`).
+                // into the child layout. Off when `freeze_rule` is false (e.g.
+                // SMC by default, or `--freeze-rule off`).
                 if self.freeze_rule {
                     let rank = rank.expect("freeze_rule requires a rank");
                     let rv = rank[*var_idx];
@@ -761,9 +761,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank
     /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
     /// emission order so those act on `f` rather than creation order, *without*
-    /// renumbering the pattern. When `freeze_rule` is false (SMC without
-    /// `--smc-variable-ordering`) creation order is kept: `rank`/`order` are the
-    /// identity.
+    /// renumbering the pattern. When `freeze_rule` is false (e.g. SMC by
+    /// default, or `--freeze-rule off`) creation order is kept: `rank`/`order`
+    /// are the identity.
     fn shape_pass(&self, shared: &SharedSearchData<F, O>) -> (Vec<VarShapes<F, O>>, Vec<usize>, Vec<usize>) {
         let n = self.pattern.vars.len();
         let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
@@ -800,7 +800,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// rule: any frozen `var_idx` (`self.pattern.var_frozen[var_idx]`) or
     /// `var_idx > max_arity` is skipped before the action is even constructed.
     /// SMC passes `max_arity = usize::MAX`, so the arity cut is a no-op for it,
-    /// and the freeze cut only fires under `--smc-variable-ordering`.
+    /// and the freeze cut only fires when the freeze rule is on (`--freeze-rule`).
     ///
     /// `support` is the (m,s)-pair count feeding the SMC weighting; it equals
     /// the surviving subst count, so `support > 0` ⇒ non-empty child.
