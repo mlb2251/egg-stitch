@@ -6,8 +6,7 @@ For each domain, plots search time (y, log) against the abstraction-arity cap
 ends at an "x" at the timeout height. A shaded band marks the arities whose
 converged compression matches the unbounded (10^6) optimum.
 
-Writes ``figures/arity/<domain>.png`` per domain plus ``figures/arity.png``
-(both domains side by side).
+Writes ``figures/arity/<domain>.png`` per domain.
 """
 
 import json
