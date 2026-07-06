@@ -5,10 +5,10 @@ Unlike tables 1-7 this varies ``max_arity`` (not steps/particles), learns a
 single abstraction, and runs each tool to convergence. Runs without DSRs
 (Stitch can't take them; matches the no-DSR tables 2/4).
 
-Each ``(method, domain)`` sweeps arities ascending, stopping once a run exceeds
-the per-run wall-clock timeout. The sweep is every integer 1..20 plus one
-effectively-unbounded ``1_000_000`` point that lifts the cap entirely. Runs are
-deterministic; the repeats only smooth wall-clock noise.
+Each ``(method, domain)`` sweeps every arity independently: integers 1..20 plus
+one effectively-unbounded ``1_000_000`` point that lifts the cap entirely.
+
+Runs are deterministic; the repeats only smooth wall-clock noise.
 """
 
 from __future__ import annotations
@@ -22,12 +22,18 @@ from tqdm import tqdm
 
 from .bench import MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
+from .render_common import has_dnf
 from .run_models import OursBf, Stitch
 from .tables import BASELINE_BFS_STEPS
 
+__all__ = [
+    "arity_experiment", "ARITY_DOMAINS", "ARITY_TIMEOUT",
+    "ARITY_NUM_RUNS", "ARITY_NUM_ABSTRACTIONS", "ARITIES",
+]
+
 # Cogsci domains swept here (each a single input file).
 ARITY_DOMAINS = ["wheels", "furniture"]
-ARITY_TIMEOUT = 500.0  # seconds, per run; the sweep stops once a run blows this
+ARITY_TIMEOUT = 500.0  # seconds, per run; a run that blows this is a DNF
 ARITY_NUM_RUNS = 3     # deterministic; repeats only smooth timing noise
 ARITY_NUM_ABSTRACTIONS = 1
 
@@ -52,11 +58,6 @@ def _arity_runners(
     ]
 
 
-def _reps_have_dnf(reps: list[list[dict]]) -> bool:
-    """True if any per-file record in ``reps`` timed out / OOM'd."""
-    return any(r["compression_ratio"] is None for rep in reps for r in rep)
-
-
 def _run_arity_sweep(
     method: str,
     make_runner: Callable[[int], object],
@@ -67,12 +68,13 @@ def _run_arity_sweep(
     cache_path: Path,
     bar: tqdm,
 ) -> dict[str, list[list[dict]]]:
-    """Sweep ``arities`` (ascending) for one ``(method, domain)``, stopping once
-    a run DNFs. Returns ``{str(arity): [rep0_per_file, ...]}``.
+    """Sweep every ``arity`` for one ``(method, domain)``. Returns
+    ``{str(arity): [rep0_per_file, ...]}``.
 
     Cached incrementally to ``cache_path`` (one JSON per method/domain): each
-    completed arity is written immediately, so a killed run resumes where it
-    left off. A cached DNF arity means this curve already stopped there.
+    converged arity is written immediately and skipped on resume, so a killed
+    run picks up where it left off. A cached DNF arity is *not* skipped -- it's
+    recomputed, so rerunning under a larger timeout retries the timed-out point.
     """
     from .runner import run_method  # local import: runner pulls heavy deps
 
@@ -81,19 +83,12 @@ def _run_arity_sweep(
         with open(cache_path) as fh:
             done = json.load(fh)
 
-    # Iterate ascending so a timeout only stops *larger* arities. A cached DNF
-    # sets ``stopped`` when we reach it (not up front), so new arities below a
-    # stale high-arity DNF -- e.g. from an earlier, coarser sweep -- still get
-    # computed instead of being skipped.
-    stopped = False
     for a in sorted(arities):
         key = str(a)
-        if key in done:
-            if _reps_have_dnf(done[key]):
-                stopped = True
-            bar.update(num_runs)
-            continue
-        if stopped:
+        # Skip only cached *converged* arities; recompute cached DNFs so a rerun
+        # under a larger budget actually retries the timed-out point. Time isn't
+        # monotonic in arity, so a DNF at one arity says nothing about the rest.
+        if key in done and not has_dnf(done[key]):
             bar.update(num_runs)
             continue
         runner = make_runner(a)
@@ -104,10 +99,9 @@ def _run_arity_sweep(
             rep = [r.to_dict() for r in per_file]
             reps.append(rep)
             bar.update()
-            # A DNF at this arity ends the curve; the deterministic remaining
-            # repeats would only re-pay an expensive timeout, so skip them.
+            # A DNF ends this arity's repeats; the deterministic remainder would
+            # only re-pay an expensive timeout, so skip them.
             if any(r["compression_ratio"] is None for r in rep):
-                stopped = True
                 bar.update(num_runs - (i + 1))
                 break
         done[key] = reps
