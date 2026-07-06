@@ -129,7 +129,7 @@ struct Node<F: LanguageFamily, O: StitchOp> {
 /// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
 /// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
 /// improvement" just means we're grinding through a less promising branch.)
-pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> BestFirstResult<F, O> {
+pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, compression_stop: Option<&crate::CompressionStop>) -> BestFirstResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
@@ -187,6 +187,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
     let mut useless_frozen_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
+    // Set when a new best reaches the `--compression-limit` cumulative target;
+    // the search breaks after the child node is pushed (so `best`'s node id is valid).
+    let mut hit_compression_limit = false;
     let search_start = Instant::now();
 
     'search: loop {
@@ -334,6 +337,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                     cost: child_cost,
                     pattern: child_state.pattern.to_string(),
                 });
+                // Cumulative-compression early stop: this best already reaches the
+                // target, so no better one is needed. Break after pushing the node
+                // below (its id must be live for the winner extraction).
+                if compression_stop.is_some_and(|cs| cs.reached(original_size, child_cost)) {
+                    hit_compression_limit = true;
+                }
             }
 
             // Mirrors SMC's `follow exact match` exit (src/smc.rs:132): once
@@ -370,6 +379,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 );
                 best = Some((child_cost, child_id, child_selection));
                 best_found_at = Some(num_expansions);
+                num_expansions += 1;
+                break 'search;
+            }
+
+            if hit_compression_limit {
+                println!("{}", format!("reached compression limit {:.3}", compression_stop.map_or(0.0, |cs| cs.limit)).yellow());
                 num_expansions += 1;
                 break 'search;
             }
