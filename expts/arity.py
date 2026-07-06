@@ -90,13 +90,20 @@ def _run_arity_sweep(
     if cache_path.exists():
         with open(cache_path) as fh:
             done = json.load(fh)
-    # Only this sweep's arities count (the cache may hold stale keys from an
-    # earlier sweep); a cached DNF among them means the curve already stopped.
-    stopped = any(str(a) in done and _reps_have_dnf(done[str(a)]) for a in arities)
 
-    for a in arities:
+    # Iterate ascending so a timeout only stops *larger* arities. A cached DNF
+    # sets ``stopped`` when we reach it (not up front), so new arities below a
+    # stale high-arity DNF -- e.g. from an earlier, coarser sweep -- still get
+    # computed instead of being skipped.
+    stopped = False
+    for a in sorted(arities):
         key = str(a)
-        if key in done or stopped:
+        if key in done:
+            if _reps_have_dnf(done[key]):
+                stopped = True
+            bar.update(num_runs)
+            continue
+        if stopped:
             bar.update(num_runs)
             continue
         runner = make_runner(a)
