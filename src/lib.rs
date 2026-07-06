@@ -133,9 +133,8 @@ pub struct Args {
     pub no_zero_arity: bool,
 
     /// Heap priority for best-first search (only used when --search=best-first).
-    /// Default `forced-then-cost`: explore all patterns without a forced expansion,
-    /// ordered by cost, then move on to patterns with 1 forced expansion, and so on.
-    #[arg(long, value_enum, default_value_t = SearchPriority::ForcedThenCost)]
+    /// Default `cost`: explore patterns in order of cost.
+    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
 
     /// Multiplicative boost applied to reuse-action sampling weights in SMC.
