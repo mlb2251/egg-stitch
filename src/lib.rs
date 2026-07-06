@@ -138,6 +138,14 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = SearchPriority::ForcedThenCost)]
     pub priority: SearchPriority,
 
+    /// Which order the freeze rule ranks a pattern's metavars in.
+    /// `mean-nodes-per-class` (default) orders by how much expanding each var
+    /// explodes the match set; `left-to-right` keeps creation order. Independent
+    /// of *whether* the freeze rule is on (the freeze-rule flag) — this only
+    /// picks the order once it is, so a non-default value requires the rule on.
+    #[arg(long, value_enum, default_value_t = search::VarOrder::MeanNodesPerClass)]
+    pub var_order: search::VarOrder,
+
     /// Multiplicative boost applied to reuse-action sampling weights in SMC.
     /// Each successor is weighted by its `(match, subst)` support count;
     /// reuse-action weights are additionally multiplied by `boost_reuse_weight`,

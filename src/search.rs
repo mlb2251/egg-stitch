@@ -5,9 +5,28 @@ use crate::matching::{MatchAtEClass, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
+use clap::ValueEnum;
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
+
+/// Which order the freeze rule ranks a pattern's metavariables in.
+///
+/// Independent of *whether* the freeze rule is on (that's the `freeze_rule`
+/// flag / [`SearchState::freeze_rule`]): this only picks the ordering used once
+/// it is. It is a no-op when the freeze rule is off, and `shape_pass` asserts
+/// the rule is on whenever a non-default order is requested.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum VarOrder {
+    /// Rank vars by how much expanding them explodes the match set — each var's
+    /// most-exploding expansion's mean e-nodes per subst — least-exploding
+    /// first, so the freeze rule commits the cheap vars before the expensive
+    /// ones. The default (best-first's long-standing ordering).
+    #[default]
+    MeanNodesPerClass,
+    /// Keep left-to-right creation order (identity rank).
+    LeftToRight,
+}
 
 /// A candidate expansion shape: an enode's discriminant paired with its arity.
 type Shape<F, O> = (<F as LanguageFamily>::Discriminant<O>, usize);
@@ -157,6 +176,9 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// `--decompose-min-rows`: min factor rows before [`Factor::decompose`]
     /// splits. Held here so every decompose site reads one runtime value.
     pub decompose_min_rows: usize,
+    /// `--var-order`: which order the freeze rule ranks metavars in. Read by
+    /// [`SearchState::shape_pass`]; only meaningful when the freeze rule is on.
+    pub var_order: VarOrder,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -760,13 +782,20 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     ///
     /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank
     /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
-    /// emission order so those act on `f` rather than creation order, *without*
-    /// renumbering the pattern. SMC (`freeze_rule = false`) keeps creation order:
-    /// `rank`/`order` are the identity.
+    /// emission order so those act on the chosen order rather than creation
+    /// order, *without* renumbering the pattern. The order is selected by
+    /// [`SharedSearchData::var_order`], but only takes effect under the freeze
+    /// rule: with the rule off (e.g. SMC without `--smc-variable-ordering`)
+    /// `rank`/`order` are the identity, and [`VarOrder::LeftToRight`] is also
+    /// the identity. `--var-order` therefore requires the freeze rule; a
+    /// non-default order with the rule off is a misconfiguration (asserted).
     fn shape_pass(&self, shared: &SharedSearchData<F, O>) -> (Vec<VarShapes<F, O>>, Vec<usize>, Vec<usize>) {
         let n = self.pattern.vars.len();
         let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
-        let (rank, order) = if self.freeze_rule && n > 1 {
+        assert!(self.freeze_rule || shared.var_order == VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
+        // Only MeanNodesPerClass reorders; LeftToRight (and the rule-off case)
+        // keep creation order.
+        let (rank, order) = if self.freeze_rule && n > 1 && shared.var_order == VarOrder::MeanNodesPerClass {
             let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|s| s.expand_enodes as f64 / s.substs as f64).fold(-f64::INFINITY, f64::max)).collect();
             let mut order: Vec<usize> = (0..n).collect();
             order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
@@ -966,6 +995,7 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         shift_clamp,
         eclass_shapes,
         decompose_min_rows: args.decompose_min_rows,
+        var_order: args.var_order,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, false);
