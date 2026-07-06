@@ -80,7 +80,7 @@ fn follow_shallow_no_placeholders() {
         return;
     }
     let follow = "(T l (M 1 0 -0.5 0))";
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "30", "--num-particles", "200", "--follow", follow, "--max-arity", "2"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "30", "--num-particles", "200", "--follow", follow, "--max-arity", "2", "--temperature", "100"]);
     let result = run(&args);
     assert_best_matches_follow(&result, follow);
 }
@@ -121,7 +121,7 @@ fn no_follow_still_produces_best() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -132,7 +132,7 @@ fn check_slow_matches_fast() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -143,7 +143,7 @@ fn check_slow_no_rules() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -158,7 +158,7 @@ fn check_slow_furniture() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -170,7 +170,7 @@ fn check_slow_nuts_bolts() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -182,7 +182,7 @@ fn check_slow_wheels() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -193,7 +193,7 @@ fn check_slow_high_arity() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -204,7 +204,26 @@ fn check_slow_high_arity_multi_abstr() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--num-abstractions", "2"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        INPUT,
+        "--rules",
+        RULES,
+        "--num-steps",
+        "20",
+        "--num-particles",
+        "100",
+        "--max-arity",
+        "4",
+        "--check-slow",
+        "--num-abstractions",
+        "2",
+        "--temperature",
+        "100",
+    ]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
