@@ -168,11 +168,8 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = SearchPriority::ForcedThenCost)]
     pub priority: SearchPriority,
 
-    /// Which order the freeze rule ranks a pattern's metavars in.
-    /// `mean-nodes-per-class` (default) orders by how much expanding each var
-    /// explodes the match set; `left-to-right` keeps creation order. Independent
-    /// of *whether* the freeze rule is on (the freeze-rule flag) — this only
-    /// picks the order once it is, so a non-default value requires the rule on.
+    /// Metavar ordering used by the freeze rule (which `--freeze-rule` toggles).
+    /// A non-default value requires the rule on.
     #[arg(long, value_enum, default_value_t = search::VarOrder::MeanNodesPerClass)]
     pub var_order: search::VarOrder,
 
@@ -318,10 +315,8 @@ impl Args {
             self.opt_useless_inline = false;
             self.opt_dominance_reuse = false;
         }
-        // `--var-order` only selects the freeze rule's ordering, so it requires
-        // the freeze rule to be on. Resolve `--freeze-rule` the same way the
-        // search drivers do (best-first defaults on, SMC off); a non-default
-        // order with the rule off is a misconfiguration.
+        // Enforce that `--var-order` requires the freeze rule (see `VarOrder`).
+        // Resolve `--freeze-rule` as the search drivers do (best-first defaults on).
         let freeze_rule_on = self.freeze_rule.resolve(matches!(self.search, SearchKind::BestFirst));
         assert!(freeze_rule_on || self.var_order == search::VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
     }

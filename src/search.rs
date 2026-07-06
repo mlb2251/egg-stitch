@@ -10,12 +10,11 @@ use egg::{Id, Language};
 use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
 
-/// Which order the freeze rule ranks a pattern's metavariables in.
-///
-/// Independent of *whether* the freeze rule is on (that's the `freeze_rule`
-/// flag / [`SearchState::freeze_rule`]): this only picks the ordering used once
-/// it is. It is a no-op when the freeze rule is off, and `shape_pass` asserts
-/// the rule is on whenever a non-default order is requested.
+/// Which order the freeze rule ranks a pattern's metavariables in (applied by
+/// [`SearchState::compute_rank`]). Independent of *whether* the rule is on
+/// (the `freeze_rule` flag): it only picks the ordering used once it is, and is
+/// inert otherwise — so a non-default order requires the rule on, validated in
+/// [`crate::Args::normalize`].
 #[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum VarOrder {
     /// Rank vars by how much expanding them explodes the match set — each var's
@@ -176,8 +175,7 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// `--decompose-min-rows`: min factor rows before [`Factor::decompose`]
     /// splits. Held here so every decompose site reads one runtime value.
     pub decompose_min_rows: usize,
-    /// `--var-order`: which order the freeze rule ranks metavars in. Read by
-    /// [`SearchState::shape_pass`]; only meaningful when the freeze rule is on.
+    /// `--var-order`: the metavar ordering (see [`VarOrder`]).
     pub var_order: VarOrder,
 }
 
@@ -776,19 +774,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         shapes
     }
 
-    /// Non-expansive ordering over all vars, built from each var's [`Self::expand_shapes`].
-    /// `f(k)` = the mean enodes per *matching* subst of `k`'s most-exploding
-    /// (least-clean) expansion.
+    /// Computes each var's expansion shapes (via [`Self::expand_shapes`]) and the
+    /// `(rank, order)` the freeze rule, the `max_arity` skip, and the emission
+    /// order act on.
     ///
-    /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank
-    /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
-    /// emission order so those act on the chosen order rather than creation
-    /// order, *without* renumbering the pattern. The order is selected by
-    /// [`SharedSearchData::var_order`] via [`Self::compute_rank`], but only takes
-    /// effect under the freeze rule: with the rule off (e.g. SMC by default, or
-    /// `--freeze-rule off`) `rank`/`order` are the identity. `--var-order`
-    /// therefore requires the freeze rule; that a non-default order is only used
-    /// with the rule on is validated up front in [`crate::Args::normalize`].
+    /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank ->
+    /// var) act on the chosen order rather than creation order *without*
+    /// renumbering the pattern. Under the freeze rule the order comes from
+    /// [`Self::compute_rank`] (per [`SharedSearchData::var_order`]); otherwise it
+    /// is the identity.
     fn shape_pass(&self, shared: &SharedSearchData<F, O>) -> (Vec<VarShapes<F, O>>, Vec<usize>, Vec<usize>) {
         let n = self.pattern.vars.len();
         let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
@@ -807,15 +801,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             return ((0..n).collect(), (0..n).collect());
         }
         let order: Vec<usize> = match var_order {
-            // Rank by explosiveness: each var's most-exploding expansion's mean
-            // e-nodes per subst, least-exploding first (ties broken by index).
             VarOrder::MeanNodesPerClass => {
+                // `fval[k]` = k's most-exploding expansion's mean e-nodes per
+                // subst; sort ascending (least-exploding first, ties by index).
                 let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|s| s.expand_enodes as f64 / s.substs as f64).fold(-f64::INFINITY, f64::max)).collect();
                 let mut order: Vec<usize> = (0..n).collect();
                 order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
                 order
             }
-            // Keep left-to-right creation order (identity rank).
             VarOrder::LeftToRight => (0..n).collect(),
         };
         let mut rank = vec![0usize; n];
