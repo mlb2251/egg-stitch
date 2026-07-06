@@ -2,9 +2,9 @@
 """Render ``results/arity.json`` as arity-vs-time plots.
 
 For each domain, plots search time (y, log) against the abstraction-arity cap
-(x, log), one line per method (BFS, Stitch). A curve that exceeds its timeout
-ends at an "x" at the timeout height. A shaded band marks the arities whose
-converged compression matches the unbounded (10^6) optimum.
+(x, linear with a break to the unbounded 10^6 point), one line per method (BFS,
+Stitch). A shaded band marks the arities whose converged compression matches the
+unbounded (10^6) optimum. Every arity must have converged; a DNF errors out.
 
 Writes ``figures/arity/<domain>.png`` per domain.
 """
@@ -41,25 +41,20 @@ MAIN_ARITY_MAX = 20
 LARGE_ARITY = 1_000_000
 
 
-def method_curve(arity_map: dict[str, list]) -> tuple[list, tuple | None]:
-    """Reduce ``{arity_str: repeats}`` to a plottable curve.
+def method_curve(arity_map: dict[str, list]) -> list[tuple[int, float, float | None]]:
+    """Reduce ``{arity_str: repeats}`` to a sorted list of ``(arity, time, cr)``.
 
-    Returns ``(points, dnf)`` where ``points`` is a sorted list of
-    ``(arity, time, cr)`` for every converged arity and ``dnf`` is
-    ``(arity, budget_seconds)`` for the arity that timed out (or None).
+    Every arity must have converged; a DNF (timeout/OOM) raises rather than
+    plotting a partial curve.
     """
     points: list[tuple[int, float, float | None]] = []
-    dnf: tuple[int, float] | None = None
     for a_str, reps in sorted(arity_map.items(), key=lambda kv: int(kv[0])):
-        a = int(a_str)
         if has_dnf(reps):
-            # First timed-out arity; the DNF sentinel stored the wall-clock
-            # budget as elapsed_secs (domains are single-file, so reps[0][0]).
-            if dnf is None:
-                dnf = (a, reps[0][0]["elapsed_secs"])
-            continue
-        points.append((a, aggregate_time(reps), aggregate_cr(reps)))
-    return points, dnf
+            raise ValueError(
+                f"arity {a_str} DNF'd (timeout/OOM); rerun the sweep with a "
+                "larger budget before rendering")
+        points.append((int(a_str), aggregate_time(reps), aggregate_cr(reps)))
+    return points
 
 
 def assert_cr_agreement(methods: dict[str, dict], domain: str, tol: float = 1e-3) -> None:
@@ -72,8 +67,8 @@ def assert_cr_agreement(methods: dict[str, dict], domain: str, tol: float = 1e-3
     """
     if "enum" not in methods or "stitch" not in methods:
         return
-    ec = {a: cr for a, _t, cr in method_curve(methods["enum"])[0]}
-    sc = {a: cr for a, _t, cr in method_curve(methods["stitch"])[0]}
+    ec = {a: cr for a, _t, cr in method_curve(methods["enum"])}
+    sc = {a: cr for a, _t, cr in method_curve(methods["stitch"])}
     for a in sorted(set(ec) & set(sc)):
         assert abs(ec[a] - sc[a]) <= tol * ec[a], (
             f"{domain} a={a}: BFS CR {ec[a]:.4f} != Stitch CR {sc[a]:.4f} "
@@ -90,7 +85,7 @@ def optimal_arity(methods: dict[str, dict]) -> int | None:
     else Stitch). Returns None if no such point exists.
     """
     for method in ("enum", "stitch"):
-        pts = [p for p in method_curve(methods.get(method, {}))[0] if p[2] is not None]
+        pts = [p for p in method_curve(methods.get(method, {})) if p[2] is not None]
         if pts:
             break
     else:
@@ -106,20 +101,18 @@ def optimal_arity(methods: dict[str, dict]) -> int | None:
 
 
 def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
-    """Plot every method's curve + timeout marker on both the main (``ax``,
-    arities 1..MAIN_ARITY_MAX) and break (``axb``, the large arity) panels.
+    """Plot every method's curve on both the main (``ax``, arities
+    1..MAIN_ARITY_MAX) and break (``axb``, the large arity) panels.
 
     The 1..20 region is a solid line on the main panel; a converged 10^6 point is
-    a dot on the break panel (labelled with its time in seconds), no connector. A
-    timed-out method ends at an "x" at its first timed-out arity, reached by a
-    dashed line from the last converged point.
+    a dot on the break panel (labelled with its time in seconds), no connector.
     """
     for method in METHOD_ORDER:
         if method not in methods:
             continue
         color = METHOD_COLORS.get(method, "black")
         label = METHOD_PLOT_LABELS.get(method, method)
-        points, dnf = method_curve(methods[method])
+        points = method_curve(methods[method])
         main_pts = [(a, t) for a, t, _cr in points if a <= MAIN_ARITY_MAX]
         big_pts = [(a, t) for a, t, _cr in points if a > MAIN_ARITY_MAX]
 
@@ -134,18 +127,6 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
             axb.annotate(f"{t:.0f}s", (a, t), textcoords="offset points",
                          xytext=(8, 0), ha="left", va="center", fontsize=7,
                          color=color, zorder=4)
-
-        # Timeout: an "x" at the first timed-out arity, reached by a dashed line
-        # from the last converged point.
-        if dnf is not None:
-            first, budget = dnf
-            panel = ax if first <= MAIN_ARITY_MAX else axb
-            panel.scatter([first], [budget], color=color, marker="x", s=60,
-                          linewidths=1.8, zorder=3, label=label if not main_pts else None)
-            if main_pts:
-                la, lt = main_pts[-1]
-                for p in (ax, axb):
-                    p.plot([la, first], [lt, budget], "--", color=color, linewidth=1.2, zorder=2)
 
 
 def _draw_optimal(container, ax, axb, methods: dict[str, dict]) -> None:
