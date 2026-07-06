@@ -204,7 +204,26 @@ fn check_slow_high_arity_multi_abstr() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--num-abstractions", "2", "--temperature", "100"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        INPUT,
+        "--rules",
+        RULES,
+        "--num-steps",
+        "20",
+        "--num-particles",
+        "100",
+        "--max-arity",
+        "4",
+        "--check-slow",
+        "--num-abstractions",
+        "2",
+        "--temperature",
+        "100",
+    ]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
