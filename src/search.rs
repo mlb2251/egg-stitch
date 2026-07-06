@@ -787,12 +787,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// [`SharedSearchData::var_order`] via [`Self::compute_rank`], but only takes
     /// effect under the freeze rule: with the rule off (e.g. SMC without the
     /// freeze rule) `rank`/`order` are the identity. `--var-order` therefore
-    /// requires the freeze rule; a non-default order with the rule off is a
-    /// misconfiguration (asserted).
+    /// requires the freeze rule; that a non-default order is only used with the
+    /// rule on is validated up front in [`crate::Args::normalize`].
     fn shape_pass(&self, shared: &SharedSearchData<F, O>) -> (Vec<VarShapes<F, O>>, Vec<usize>, Vec<usize>) {
         let n = self.pattern.vars.len();
         let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
-        assert!(self.freeze_rule || shared.var_order == VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
         let (rank, order) = if self.freeze_rule { self.compute_rank(shared.var_order, &shapes) } else { ((0..n).collect(), (0..n).collect()) };
         (shapes, rank, order)
     }

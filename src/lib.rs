@@ -280,6 +280,11 @@ impl Args {
             self.opt_useless_inline = false;
             self.opt_dominance_reuse = false;
         }
+        // `--var-order` only selects the freeze rule's ordering, so it requires
+        // the freeze rule to be on. Best-first always runs it; SMC does not, so
+        // a non-default order there is a misconfiguration.
+        let freeze_rule_on = matches!(self.search, SearchKind::BestFirst);
+        assert!(freeze_rule_on || self.var_order == search::VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
     }
 }
 
