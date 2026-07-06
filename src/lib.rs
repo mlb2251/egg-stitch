@@ -146,6 +146,14 @@ pub struct Args {
     #[arg(long)]
     pub time_limit: Option<f64>,
 
+    /// Compression-ratio early-stop target. When set, the search stops as soon
+    /// as it finds an abstraction reaching this ratio, so a run does only as much
+    /// work as reaching that quality requires. Only supported with
+    /// `--num-abstractions 1` (there's no single ratio to stop at once
+    /// abstractions stack).
+    #[arg(long)]
+    pub compression_limit: Option<f64>,
+
     /// Softmax temperature for resampling weights. Required for SMC search.
     #[arg(long)]
     pub temperature: Option<f64>,
@@ -319,6 +327,9 @@ impl Args {
         // Resolve `--freeze-rule` as the search drivers do (best-first defaults on).
         let freeze_rule_on = self.freeze_rule.resolve(matches!(self.search, SearchKind::BestFirst));
         assert!(freeze_rule_on || self.var_order == search::VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
+        // `--compression-limit` is a single-abstraction stop: with stacked
+        // abstractions there's no one ratio to stop at.
+        assert!(self.compression_limit.is_none() || self.num_abstractions == 1, "--compression-limit requires --num-abstractions 1");
     }
 }
 

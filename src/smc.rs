@@ -359,6 +359,18 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
 
+        // `--compression-limit` early stop: once the best particle reaches the
+        // target ratio there's nothing to gain from more steps. Checked per step
+        // (SMC's natural granularity).
+        if let Some(limit) = args.compression_limit
+            && let Some((cost, _)) = search.best()
+            && original_size as f64 / *cost as f64 >= limit
+        {
+            steps_run = step + 1;
+            println!("{}", format!("reached compression limit {:.3}", limit).yellow());
+            break;
+        }
+
         // Follow stage: kill non-matching particles directly in `pruned` so the
         // `reweight` below drops them, and stop on an exact match. Kept inline
         // (not in `reweight`) because the exact-match exit owns the loop's
