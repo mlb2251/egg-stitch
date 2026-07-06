@@ -41,9 +41,8 @@ class Stitch:
 
     ``timeout`` (seconds) caps wall-clock and ``mem_limit`` (bytes) caps address
     space; a run that blows either is killed and surfaces as a DNF (same as the
-    ours runners). Both default to None (uncapped), so the table rosters that
-    don't cap Stitch are unchanged; the arity sweep sets them so a run-away
-    high-arity Stitch stops the curve instead of hanging."""
+    ours runners). Both default to None (uncapped) and are excluded from repr, so
+    the method label and the table rosters that don't cap Stitch are unchanged."""
 
     max_arity: int = MAX_ARITY
     timeout: float | None = field(default=None, repr=False)

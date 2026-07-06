@@ -2,10 +2,9 @@
 """Render ``results/arity.json`` as arity-vs-time plots.
 
 For each domain, plots search time (y, log) against the abstraction-arity cap
-(x, log) as one line per method (BFS, Stitch). Each curve stops where the tool
-first exceeded its timeout; that stopping arity is marked with an "x" at the
-timeout height. A dashed vertical marks the smallest arity whose compression
-matches the unbounded (10^6) optimum -- the "optimal abstraction" arity.
+(x, log), one line per method (BFS, Stitch). A curve that exceeds its timeout
+ends at an "x" at the timeout height. A shaded band marks the arities whose
+converged compression matches the unbounded (10^6) optimum.
 
 Writes ``figures/arity/<domain>.png`` per domain plus ``figures/arity.png``
 (both domains side by side).
@@ -55,9 +54,8 @@ def method_curve(arity_map: dict[str, list]) -> tuple[list, tuple | None]:
     for a_str, reps in sorted(arity_map.items(), key=lambda kv: int(kv[0])):
         a = int(a_str)
         if has_dnf(reps):
-            # First timeout arity (the sweep stops here). Since convergence time
-            # is monotone in arity, every larger arity times out too; the DNF
-            # sentinel stored the wall-clock budget as elapsed_secs.
+            # First timed-out arity; the DNF sentinel stored the wall-clock
+            # budget as elapsed_secs (domains are single-file, so reps[0][0]).
             if dnf is None:
                 dnf = (a, reps[0][0]["elapsed_secs"])
             continue
@@ -69,11 +67,9 @@ def assert_cr_agreement(methods: dict[str, dict], domain: str, tol: float = 1e-3
     """Assert BFS and Stitch report the same compression at every arity where
     both converged.
 
-    Both search a *single* abstraction to convergence under the same cost metric
-    (egg-stitch's unit-per-node op-children cost == Stitch's matched ``--cost``
-    flags == the uniform ``ast_size`` the runner re-costs with), so they must
-    find an equally-optimal abstraction -> identical CR. :func:`optimal_arity`
-    trusts BFS's CR as canonical; fail loudly if that ever breaks.
+    Both search a single abstraction to convergence under the same cost metric,
+    so their CR should match. :func:`optimal_arity` trusts BFS's CR as canonical;
+    fail loudly if that ever breaks.
     """
     if "enum" not in methods or "stitch" not in methods:
         return
@@ -114,11 +110,10 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
     """Plot every method's curve + timeout marker on both the main (``ax``,
     arities 1..MAIN_ARITY_MAX) and break (``axb``, the large arity) panels.
 
-    The dense 1..20 region is a solid line on the main panel; a 10^6 point that
-    converged is shown as a dot on the break panel (labelled with its time in
-    seconds), with no connecting line. A
-    method that times out ends at an "x" at its first timed-out arity, reached by
-    a dashed line from the last converged point.
+    The 1..20 region is a solid line on the main panel; a converged 10^6 point is
+    a dot on the break panel (labelled with its time in seconds), no connector. A
+    timed-out method ends at an "x" at its first timed-out arity, reached by a
+    dashed line from the last converged point.
     """
     for method in METHOD_ORDER:
         if method not in methods:
