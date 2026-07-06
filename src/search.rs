@@ -944,6 +944,9 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     // each family ships its own walker.
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
+    // Verify the fv(c)=fv(MinTerm(c)) invariant that downstream capture decisions
+    // rely on before the search reads any eclass's `data.fv`.
+    crate::cost::assert_fv_matches_min_term(&data.egraph);
     let crate::shared::SharedData { egraph, root } = data;
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let eclass_shapes = compute_eclass_shapes::<F, O>(&egraph);
