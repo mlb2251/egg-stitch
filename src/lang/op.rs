@@ -48,15 +48,6 @@ pub trait StitchOp: StitchDisc {
     }
 }
 
-/// True iff a De Bruijn variable leaf is strictly more expensive than a symbol
-/// leaf under `weights`. Vacuously true when `O` has no De Bruijn variables.
-pub fn de_bruijn_strictly_more_expensive_than_symbols<O: StitchOp>(weights: &Weights) -> bool {
-    match O::make_db_var(0) {
-        None => true,
-        Some(db) => db.intrinsic_size(weights) > O::from_name("a").intrinsic_size(weights),
-    }
-}
-
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum Op {
     /// Opaque symbolic operator.

@@ -63,7 +63,7 @@ impl std::str::FromStr for MaxForcedExpansion {
 #[command(version)]
 pub struct Args {
     /// Search algorithm to use.
-    #[arg(long, value_enum, default_value_t = SearchKind::Smc)]
+    #[arg(long, value_enum)]
     pub search: SearchKind,
 
     /// Path to the input JSON file containing programs.
@@ -116,9 +116,9 @@ pub struct Args {
     #[arg(long)]
     pub time_limit: Option<f64>,
 
-    /// Softmax temperature for resampling weights.
-    #[arg(long, default_value_t = 100.0)]
-    pub temperature: f64,
+    /// Softmax temperature for resampling weights. Required for SMC search.
+    #[arg(long)]
+    pub temperature: Option<f64>,
 
     /// Stop after this many steps with no improvement.
     #[arg(long, default_value_t = 50)]

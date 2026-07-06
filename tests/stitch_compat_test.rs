@@ -510,8 +510,8 @@ fn common_start() {
 
 /// Regression for the `shift_equal` binder-cycle non-termination
 /// (`src/shift_equal.rs`). The rules `a => (lambda a)` / `b => (lambda b)` carry
-/// no metavariables, so `rule_fv_verdict` accepts them, yet each concrete RHS
-/// hashconses back into the matched class — equality saturation closes two
+/// no metavariables, so they preserve `fv(c)=fv(MinTerm(c))`, yet each concrete
+/// RHS hashconses back into the matched class — equality saturation closes two
 /// distinct cycles *through the `lambda` binder*. Best-first then reaches a
 /// pattern with two metavars at different binder depths capturing those cyclic
 /// classes and calls `shift_equal(a, b, 0, 1)`.

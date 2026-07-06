@@ -3533,6 +3533,23 @@
             }
           ]
         ],
+        "babble": [
+          [
+            {
+              "method": "Babble(beams=400, lps=1, max_arity=4)",
+              "domain": "epfl-circuits:hyp",
+              "file": "hyp",
+              "initial_cost": 22455,
+              "final_cost": null,
+              "compression_ratio": null,
+              "elapsed_secs": 300.0,
+              "library": [],
+              "egraph_min_term_size": null,
+              "timed_out": true,
+              "cost_at_end_of_each_iter": null
+            }
+          ]
+        ],
         "enum-baseline": [
           [
             {
@@ -7317,6 +7334,23 @@
             }
           ]
         ],
+        "babble": [
+          [
+            {
+              "method": "Babble(beams=400, lps=1, max_arity=4)",
+              "domain": "epfl-circuits:log2",
+              "file": "log2",
+              "initial_cost": 29748,
+              "final_cost": null,
+              "compression_ratio": null,
+              "elapsed_secs": 300.0,
+              "library": [],
+              "egraph_min_term_size": null,
+              "timed_out": true,
+              "cost_at_end_of_each_iter": null
+            }
+          ]
+        ],
         "enum-baseline": [
           [
             {
@@ -10631,6 +10665,23 @@
             }
           ]
         ],
+        "babble": [
+          [
+            {
+              "method": "Babble(beams=400, lps=1, max_arity=4)",
+              "domain": "epfl-circuits:multiplier",
+              "file": "multiplier",
+              "initial_cost": 36301,
+              "final_cost": null,
+              "compression_ratio": null,
+              "elapsed_secs": 300.0,
+              "library": [],
+              "egraph_min_term_size": null,
+              "timed_out": true,
+              "cost_at_end_of_each_iter": null
+            }
+          ]
+        ],
         "enum-baseline": [
           [
             {
@@ -13707,6 +13758,23 @@
                 15067,
                 14339
               ]
+            }
+          ]
+        ],
+        "babble": [
+          [
+            {
+              "method": "Babble(beams=400, lps=1, max_arity=4)",
+              "domain": "epfl-circuits:square",
+              "file": "square",
+              "initial_cost": 30981,
+              "final_cost": null,
+              "compression_ratio": null,
+              "elapsed_secs": 300.0,
+              "library": [],
+              "egraph_min_term_size": null,
+              "timed_out": true,
+              "cost_at_end_of_each_iter": null
             }
           ]
         ],
@@ -17491,6 +17559,23 @@
                 13876,
                 13256
               ]
+            }
+          ]
+        ],
+        "babble": [
+          [
+            {
+              "method": "Babble(beams=400, lps=1, max_arity=4)",
+              "domain": "epfl-circuits:voter",
+              "file": "voter",
+              "initial_cost": 25998,
+              "final_cost": null,
+              "compression_ratio": null,
+              "elapsed_secs": 300.0,
+              "library": [],
+              "egraph_min_term_size": null,
+              "timed_out": true,
+              "cost_at_end_of_each_iter": null
             }
           ]
         ],
