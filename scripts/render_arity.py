@@ -19,7 +19,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from expts.render_common import aggregate_cr, aggregate_time, has_dnf  # noqa: E402
-from render_tables import METHOD_COLORS, METHOD_PLOT_LABELS  # noqa: E402
+from render_tables import METHOD_PLOT_LABELS  # noqa: E402
+from render_molecules import METHOD_COLORS as _MOL_COLORS  # noqa: E402
+
+# Reuse the molecules figure's palette: E-Stitch (our BFS) in orange, Stitch in
+# purple, so the two figures read as one colour scheme.
+METHOD_COLORS = {"enum": _MOL_COLORS["search-DSR"], "stitch": _MOL_COLORS["DSR-canon"]}
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_JSON = PROJECT_ROOT / "results" / "arity.json"
@@ -58,13 +63,34 @@ def method_curve(arity_map: dict[str, list]) -> tuple[list, tuple | None]:
     return points, dnf
 
 
+def assert_cr_agreement(methods: dict[str, dict], domain: str, tol: float = 1e-3) -> None:
+    """Assert BFS and Stitch report the same compression at every arity where
+    both converged.
+
+    Both search a *single* abstraction to convergence under the same cost metric
+    (egg-stitch's unit-per-node op-children cost == Stitch's matched ``--cost``
+    flags == the uniform ``ast_size`` the runner re-costs with), so they must
+    find an equally-optimal abstraction -> identical CR. The single ``cr_segments``
+    ribbon depends on this; fail loudly if it ever breaks.
+    """
+    if "enum" not in methods or "stitch" not in methods:
+        return
+    ec = {a: cr for a, _t, cr in method_curve(methods["enum"])[0]}
+    sc = {a: cr for a, _t, cr in method_curve(methods["stitch"])[0]}
+    for a in sorted(set(ec) & set(sc)):
+        assert abs(ec[a] - sc[a]) <= tol * ec[a], (
+            f"{domain} a={a}: BFS CR {ec[a]:.4f} != Stitch CR {sc[a]:.4f} "
+            "-- tools disagree on the optimal single abstraction"
+        )
+
+
 def cr_segments(methods: dict[str, dict]) -> list[tuple[int, int, float]]:
     """Contiguous arity ranges that share one converged compression ratio.
 
-    Both tools run to convergence, so their CR-vs-arity curves agree; use
-    whichever reaches the higher arity (BFS) as canonical, falling back to
-    Stitch. Returns ``(lo, hi, cr)`` per constant-CR run, in arity order (CR is
-    monotone non-decreasing, so runs are contiguous).
+    Both tools run to convergence, so their CR-vs-arity curves agree (see
+    :func:`assert_cr_agreement`); use whichever reaches the higher arity (BFS) as
+    canonical, falling back to Stitch. Returns ``(lo, hi, cr)`` per constant-CR
+    run, in arity order (CR is monotone non-decreasing, so runs are contiguous).
     """
     for method in ("enum", "stitch"):
         pts = [p for p in method_curve(methods.get(method, {}))[0] if p[2] is not None]
@@ -85,10 +111,10 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
     """Plot every method's curve + timeout marker on both the main (``ax``,
     arities 1..MAIN_ARITY_MAX) and break (``axb``, the large arity) panels.
 
-    The dense 1..20 region is a solid line on the main panel; the 10^6 point
-    (or the timeout "x") is reached by a dashed connector spanning the axis
-    break, drawn on both panels and clipped so it reads across the gap. A
-    method that times out ends at a single "x" at its first timed-out arity.
+    The dense 1..20 region is a solid line on the main panel; a 10^6 point that
+    converged is shown as a star on the break panel, with no connecting line. A
+    method that times out ends at an "x" at its first timed-out arity, reached by
+    a dashed line from the last converged point.
     """
     for method in METHOD_ORDER:
         if method not in methods:
@@ -103,28 +129,21 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
         if main_pts:
             ax.plot([a for a, _ in main_pts], [t for _, t in main_pts], "-o",
                     color=color, markersize=4, linewidth=1.4, label=label, zorder=2)
-        # Converged 10^6 point(s) as bare markers on the break panel.
+        # Converged 10^6 point(s) as stars on the break panel (no connector).
         for a, t in big_pts:
-            axb.plot([a], [t], "o", color=color, markersize=4, zorder=2)
+            axb.plot([a], [t], "*", color=color, markersize=13, zorder=3)
 
-        # The point the dashed connector reaches: the 10^6 point if the method
-        # got there, else the timeout "x".
+        # Timeout: an "x" at the first timed-out arity, reached by a dashed line
+        # from the last converged point.
         if dnf is not None:
             first, budget = dnf
-            reach = (first, budget)
             panel = ax if first <= MAIN_ARITY_MAX else axb
             panel.scatter([first], [budget], color=color, marker="x", s=60,
                           linewidths=1.8, zorder=3, label=label if not main_pts else None)
-        elif big_pts:
-            reach = big_pts[0]
-        else:
-            reach = None
-        # Dashed connector from the last converged point across the break.
-        if reach is not None and main_pts:
-            la, lt = main_pts[-1]
-            for panel in (ax, axb):
-                panel.plot([la, reach[0]], [lt, reach[1]], "--",
-                           color=color, linewidth=1.2, zorder=2)
+            if main_pts:
+                la, lt = main_pts[-1]
+                for p in (ax, axb):
+                    p.plot([la, first], [lt, budget], "--", color=color, linewidth=1.2, zorder=2)
 
 
 def _draw_cr_ribbon(rax, rbx, methods: dict[str, dict]) -> None:
@@ -136,7 +155,7 @@ def _draw_cr_ribbon(rax, rbx, methods: dict[str, dict]) -> None:
     label goes on the panel holding the wider part of the range.
     """
     for i, (lo, hi, cr) in enumerate(cr_segments(methods)):
-        shade = "0.88" if i % 2 else "white"
+        shade = "0.90" if i % 2 else "white"
         # Main ribbon: the 1..20 portion of this constant-CR range. A range that
         # continues past 20 has its right edge pushed off-panel so no border cuts
         # across the break (it resumes in the 10^6 cell).
@@ -158,6 +177,20 @@ def _draw_cr_ribbon(rax, rbx, methods: dict[str, dict]) -> None:
                      rotation=90, fontsize=6, color="0.15", zorder=2)
 
 
+def _shade_regions(ax, axb, methods: dict[str, dict]) -> None:
+    """Shade the plot columns matching the gray (odd-indexed) CR-ribbon cells,
+    so each constant-CR band lines up with its box in the ribbon below."""
+    for i, (lo, hi, cr) in enumerate(cr_segments(methods)):
+        if i % 2 == 0:  # gray cells are the odd-indexed ones (see _draw_cr_ribbon)
+            continue
+        if lo <= MAIN_ARITY_MAX:
+            right = hi + 0.5 if hi <= MAIN_ARITY_MAX else MAIN_ARITY_MAX + 1.0
+            ax.axvspan(lo - 0.5, right, facecolor="0.90", edgecolor="none", zorder=0)
+        if hi > MAIN_ARITY_MAX:
+            axb.axvspan(LARGE_ARITY * 0.1, LARGE_ARITY * 10, facecolor="0.90",
+                        edgecolor="none", zorder=0)
+
+
 def _break_marks(left, right) -> None:
     """Draw the diagonal axis-break marks on a (left, right) panel pair."""
     left.spines["right"].set_visible(False)
@@ -175,6 +208,8 @@ def render_domain_panel(container, methods: dict[str, dict], title: str):
     compression-ratio ribbon that shares the same broken x axis."""
     from matplotlib.ticker import FixedLocator, FixedFormatter, MultipleLocator
 
+    assert_cr_agreement(methods, title)
+
     gs = container.add_gridspec(2, 2, width_ratios=[8, 1], height_ratios=[6, 0.7],
                                 wspace=0.08, hspace=0.3)
     ax = container.add_subplot(gs[0, 0])
@@ -182,12 +217,13 @@ def render_domain_panel(container, methods: dict[str, dict], title: str):
     rax = container.add_subplot(gs[1, 0], sharex=ax)
     rbx = container.add_subplot(gs[1, 1], sharex=axb, sharey=rax)
 
+    _shade_regions(ax, axb, methods)
     _draw_curves(ax, axb, methods)
     _draw_cr_ribbon(rax, rbx, methods)
 
     for a in (ax, axb):
         a.set_yscale("log")  # time spans several decades; keep it log
-        a.grid(True, which="both", linewidth=0.3, alpha=0.5)
+        a.grid(True, which="major", axis="y", linewidth=0.5, alpha=0.7)
     ax.set_xlim(0.5, MAIN_ARITY_MAX + 0.5)
     axb.set_xlim(LARGE_ARITY * 0.4, LARGE_ARITY * 1.6)
     ax.set_ylabel("Time (s)")
