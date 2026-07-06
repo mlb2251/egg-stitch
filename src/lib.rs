@@ -149,10 +149,9 @@ pub struct Args {
     /// expansion. Ranks each var by how little expanding it explodes the match
     /// set, then expanding a var freezes every lower-ranked one (and enforces the
     /// canonical reuse-pair order), so a given abstraction is proposed via one
-    /// canonical action sequence instead of every permutation. On by default;
-    /// pass `--no-smc-variable-ordering` to keep creation order and leave all
-    /// vars expandable.
-    #[arg(long = "no-smc-variable-ordering", action = clap::ArgAction::SetFalse)]
+    /// canonical action sequence instead of every permutation. Off by default;
+    /// pass `--smc-variable-ordering` to enable it.
+    #[arg(long = "smc-variable-ordering", default_value_t = false)]
     pub smc_variable_ordering: bool,
 
     /// Enable slow rewrite check (assert fast == slow computation).
