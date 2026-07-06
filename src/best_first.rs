@@ -147,7 +147,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     } else {
         args.priority
     };
-    let initial_state = SearchState::new(&shared, true);
+    let initial_state = SearchState::new(&shared, args.freeze_rule.resolve(true));
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
     // No parent, so no lower bound: scan fully.
