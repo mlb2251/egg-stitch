@@ -306,15 +306,17 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _, _)| *c);
             let arity = child_state.pattern.vars.len();
-            // In `--follow` mode this records the cheapest matching *prefix* as
-            // `best` — the non-prefix children are already filtered out above
-            // (see :199), so every candidate here is a valid follow-prefix. SMC
-            // does the same prefix-based recording (its prefix check is inline at
-            // smc.rs, since its `compute_costs` sees unfiltered particles). One
-            // deliberate difference: best-first keeps the `original_size` floor
-            // here (it reaches compressing prefixes systematically), while SMC
-            // drops it in follow mode so its stochastic search still reports the
-            // prefix it reached under variable ordering.
+            // KNOWN DIVERGENCE FROM SMC: this update is *not* guarded by
+            // `shared.follow.is_none()`, unlike its counterpart at smc.rs:135. In
+            // `--follow` mode best-first therefore records the cheapest matching
+            // *prefix* as `best`, whereas SMC records only an exact follow match
+            // (and returns `None` if the budget runs out first). The non-prefix
+            // children are already filtered out above (see :199), so `best` is
+            // always a valid follow-prefix; the two backends just disagree on
+            // what they report when no exact hit is reached within budget. This
+            // is intentionally left as-is: follow mode is a reachability check
+            // and none of the follow tests depend on which backend's
+            // budget-exhaustion behaviour is used.
             if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat && (args.allow_useless_vars || !child_state.has_useless_var(&shared)) {
                 let elapsed = search_start.elapsed().as_secs_f64();
                 println!(
