@@ -112,7 +112,8 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
     arities 1..MAIN_ARITY_MAX) and break (``axb``, the large arity) panels.
 
     The dense 1..20 region is a solid line on the main panel; a 10^6 point that
-    converged is shown as a star on the break panel, with no connecting line. A
+    converged is shown as a dot on the break panel (labelled with its time in
+    seconds), with no connecting line. A
     method that times out ends at an "x" at its first timed-out arity, reached by
     a dashed line from the last converged point.
     """
@@ -129,9 +130,13 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
         if main_pts:
             ax.plot([a for a, _ in main_pts], [t for _, t in main_pts], "-o",
                     color=color, markersize=4, linewidth=1.4, label=label, zorder=2)
-        # Converged 10^6 point(s) as stars on the break panel (no connector).
+        # Converged 10^6 point(s) as dots on the break panel (no connector),
+        # each labelled with its convergence time in seconds.
         for a, t in big_pts:
-            axb.plot([a], [t], "*", color=color, markersize=13, zorder=3)
+            axb.plot([a], [t], "o", color=color, markersize=7, zorder=3)
+            axb.annotate(f"{t:.0f}s", (a, t), textcoords="offset points",
+                         xytext=(8, 0), ha="left", va="center", fontsize=7,
+                         color=color, zorder=4)
 
         # Timeout: an "x" at the first timed-out arity, reached by a dashed line
         # from the last converged point.
@@ -169,8 +174,10 @@ def _draw_cr_ribbon(rax, rbx, methods: dict[str, dict]) -> None:
             rbx.axvspan(LARGE_ARITY * 0.1, LARGE_ARITY * 10, facecolor=shade,
                         edgecolor="none", zorder=1)
         # Label the wider part: the 1..20 span, or the centre of the 10^6 cell.
-        if hi <= MAIN_ARITY_MAX:
-            rax.text((lo + hi) / 2, 0.5, f"{cr:.2f}", ha="center", va="center",
+        if lo <= MAIN_ARITY_MAX:
+            # Align the label with the first arity that achieves this CR (even
+            # when the range plateaus across the break into the 10^6 cell).
+            rax.text(lo, 0.5, f"{cr:.2f}", ha="center", va="center",
                      rotation=90, fontsize=6, color="0.15", zorder=2)
         else:
             rbx.text(LARGE_ARITY, 0.5, f"{cr:.2f}", ha="center", va="center",
@@ -225,7 +232,7 @@ def render_domain_panel(container, methods: dict[str, dict], title: str):
         a.set_yscale("log")  # time spans several decades; keep it log
         a.grid(True, which="major", axis="y", linewidth=0.5, alpha=0.7)
     ax.set_xlim(0.5, MAIN_ARITY_MAX + 0.5)
-    axb.set_xlim(LARGE_ARITY * 0.4, LARGE_ARITY * 1.6)
+    axb.set_xlim(LARGE_ARITY * 0.4, LARGE_ARITY * 3.0)  # right room for the time label
     ax.set_ylabel("Time (s)")
     axb.tick_params(labelleft=False, left=False, which="both")  # y ticks (incl. minor) belong to the main panel
 
