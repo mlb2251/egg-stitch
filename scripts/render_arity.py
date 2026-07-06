@@ -239,16 +239,6 @@ def main() -> None:
         plt.close(fig)
         print(f"wrote {out}")
 
-    # Combined figure: one broken-axis sub-figure per domain, side by side.
-    fig = plt.figure(figsize=(6 * len(domains), 4.5))
-    subfigs = fig.subfigures(1, len(domains), wspace=0.08, squeeze=False)[0]
-    for sf, domain in zip(subfigs, domains):
-        render_domain_panel(sf, data["domains"][domain]["methods"], DOMAIN_TITLES.get(domain, domain))
-    out = FIGURES_DIR / "arity.png"
-    fig.savefig(out, dpi=300)
-    plt.close(fig)
-    print(f"wrote {out}")
-
 
 if __name__ == "__main__":
     main()
