@@ -58,12 +58,13 @@ def method_curve(arity_map: dict[str, list]) -> tuple[list, tuple | None]:
     return points, dnf
 
 
-def compression_jumps(methods: dict[str, dict]) -> list[tuple[int, float]]:
-    """Arities at which the optimal single abstraction's CR strictly increases.
+def cr_segments(methods: dict[str, dict]) -> list[tuple[int, int, float]]:
+    """Contiguous arity ranges that share one converged compression ratio.
 
     Both tools run to convergence, so their CR-vs-arity curves agree; use
     whichever reaches the higher arity (BFS) as canonical, falling back to
-    Stitch. Returns ``(arity, new_cr)`` for each jump, in arity order.
+    Stitch. Returns ``(lo, hi, cr)`` per constant-CR run, in arity order (CR is
+    monotone non-decreasing, so runs are contiguous).
     """
     for method in ("enum", "stitch"):
         pts = [p for p in method_curve(methods.get(method, {}))[0] if p[2] is not None]
@@ -71,13 +72,13 @@ def compression_jumps(methods: dict[str, dict]) -> list[tuple[int, float]]:
             break
     else:
         return []
-    jumps: list[tuple[int, float]] = []
-    prev = None
+    segs: list[list] = []
     for a, _t, cr in pts:
-        if prev is None or cr > prev * 1.0005:  # 0.05% guard against float noise
-            jumps.append((a, cr))
-        prev = cr
-    return jumps
+        if segs and abs(cr - segs[-1][2]) <= segs[-1][2] * 0.0005:  # same CR
+            segs[-1][1] = a
+        else:
+            segs.append([a, a, cr])
+    return [(lo, hi, cr) for lo, hi, cr in segs]
 
 
 def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
@@ -89,15 +90,6 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
     break, drawn on both panels and clipped so it reads across the gap. A
     method that times out ends at a single "x" at its first timed-out arity.
     """
-    for a, cr in compression_jumps(methods):
-        target = ax if a <= MAIN_ARITY_MAX else axb
-        target.axvline(a, color="0.6", linestyle=":", linewidth=0.8, zorder=0)
-        target.annotate(
-            f"a={a}\nCR {cr:.2f}", xy=(a, 0), xytext=(0, 2),
-            xycoords=("data", "axes fraction"), textcoords="offset points",
-            ha="center", va="bottom", fontsize=6, color="0.35",
-        )
-
     for method in METHOD_ORDER:
         if method not in methods:
             continue
@@ -135,16 +127,63 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
                            color=color, linewidth=1.2, zorder=2)
 
 
+def _draw_cr_ribbon(rax, rbx, methods: dict[str, dict]) -> None:
+    """Fill a thin strip below the plot with boxes spanning each constant-CR
+    arity range, labelled with just that compression ratio.
+
+    Alternating shades separate neighbours; a box is drawn (clipped) on both
+    ribbon panels so a range that plateaus across the break shows on each. The
+    label goes on the panel holding the wider part of the range.
+    """
+    for i, (lo, hi, cr) in enumerate(cr_segments(methods)):
+        shade = "0.88" if i % 2 else "white"
+        # Main ribbon: the 1..20 portion of this constant-CR range. A range that
+        # continues past 20 has its right edge pushed off-panel so no border cuts
+        # across the break (it resumes in the 10^6 cell).
+        if lo <= MAIN_ARITY_MAX:
+            right = hi + 0.5 if hi <= MAIN_ARITY_MAX else MAIN_ARITY_MAX + 1.0
+            rax.axvspan(lo - 0.5, right, facecolor=shade,
+                        edgecolor="0.55", linewidth=0.5, zorder=1)
+        # Break ribbon: if the range reaches 10^6, fill the whole cell -- edges
+        # pushed outside the x-limits so neither border cuts through the label.
+        if hi > MAIN_ARITY_MAX:
+            rbx.axvspan(LARGE_ARITY * 0.1, LARGE_ARITY * 10, facecolor=shade,
+                        edgecolor="none", zorder=1)
+        # Label the wider part: the 1..20 span, or the centre of the 10^6 cell.
+        if hi <= MAIN_ARITY_MAX:
+            rax.text((lo + hi) / 2, 0.5, f"{cr:.2f}", ha="center", va="center",
+                     rotation=90, fontsize=6, color="0.15", zorder=2)
+        else:
+            rbx.text(LARGE_ARITY, 0.5, f"{cr:.2f}", ha="center", va="center",
+                     rotation=90, fontsize=6, color="0.15", zorder=2)
+
+
+def _break_marks(left, right) -> None:
+    """Draw the diagonal axis-break marks on a (left, right) panel pair."""
+    left.spines["right"].set_visible(False)
+    right.spines["left"].set_visible(False)
+    d = 0.5  # slant of the marks
+    kw = dict(marker=[(-1, -d), (1, d)], markersize=8, linestyle="none",
+              color="k", mec="k", mew=1, clip_on=False)
+    left.plot([1, 1], [0, 1], transform=left.transAxes, **kw)
+    right.plot([0, 0], [0, 1], transform=right.transAxes, **kw)
+
+
 def render_domain_panel(container, methods: dict[str, dict], title: str):
-    """Draw one domain onto ``container`` (a Figure or SubFigure) as a broken-x
-    pair: a wide 1..20 panel and a narrow 10^6 panel with diagonal break marks."""
+    """Draw one domain onto ``container`` (a Figure or SubFigure): a broken-x
+    time-vs-arity plot (wide 1..20 panel + narrow 10^6 panel) over a thin
+    compression-ratio ribbon that shares the same broken x axis."""
     from matplotlib.ticker import FixedLocator, FixedFormatter, MultipleLocator
 
-    gs = container.add_gridspec(1, 2, width_ratios=[8, 1], wspace=0.08)
+    gs = container.add_gridspec(2, 2, width_ratios=[8, 1], height_ratios=[6, 0.7],
+                                wspace=0.08, hspace=0.3)
     ax = container.add_subplot(gs[0, 0])
     axb = container.add_subplot(gs[0, 1], sharey=ax)
+    rax = container.add_subplot(gs[1, 0], sharex=ax)
+    rbx = container.add_subplot(gs[1, 1], sharex=axb, sharey=rax)
 
     _draw_curves(ax, axb, methods)
+    _draw_cr_ribbon(rax, rbx, methods)
 
     for a in (ax, axb):
         a.set_yscale("log")  # time spans several decades; keep it log
@@ -152,23 +191,24 @@ def render_domain_panel(container, methods: dict[str, dict], title: str):
     ax.set_xlim(0.5, MAIN_ARITY_MAX + 0.5)
     axb.set_xlim(LARGE_ARITY * 0.4, LARGE_ARITY * 1.6)
     ax.set_ylabel("Time (s)")
+    axb.tick_params(labelleft=False, left=False, which="both")  # y ticks (incl. minor) belong to the main panel
 
-    # Main panel: linear arity axis, labelled every 5 with integer minor ticks.
+    # The plot row carries the arity tick labels; the ribbon sits *below* them.
     ax.xaxis.set_major_locator(FixedLocator([1, 5, 10, 15, 20]))
     ax.xaxis.set_minor_locator(MultipleLocator(1))
-    # Break panel: a single 10^6 tick, no y ticks (shared with the main panel).
     axb.xaxis.set_major_locator(FixedLocator([LARGE_ARITY]))
     axb.xaxis.set_major_formatter(FixedFormatter([r"$10^6$"]))
-    axb.tick_params(labelleft=False, left=False, which="both")
 
-    # Hide the facing spines and draw the diagonal break marks.
-    ax.spines["right"].set_visible(False)
-    axb.spines["left"].set_visible(False)
-    d = 0.5  # slant of the break marks
-    kw = dict(marker=[(-1, -d), (1, d)], markersize=8, linestyle="none",
-              color="k", mec="k", mew=1, clip_on=False)
-    ax.plot([1, 1], [0, 1], transform=ax.transAxes, **kw)
-    axb.plot([0, 0], [0, 1], transform=axb.transAxes, **kw)
+    # Ribbon row: pure CR boxes -- no ticks of its own.
+    rax.set_ylim(0, 1)
+    rax.set_yticks([])
+    rbx.set_yticks([])
+    rax.set_ylabel("CR", rotation=0, ha="right", va="center", fontsize=8)
+    for r in (rax, rbx):
+        r.tick_params(bottom=False, labelbottom=False)
+
+    _break_marks(ax, axb)
+    _break_marks(rax, rbx)
 
     ax.legend(title="Method", loc="upper left")
     container.suptitle(title)
