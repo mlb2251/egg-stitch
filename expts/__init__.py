@@ -28,3 +28,4 @@ from .runner import *
 from .bench import *
 from .run_models import *
 from .tables import *
+from .arity import *
