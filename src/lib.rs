@@ -42,34 +42,6 @@ pub enum SearchKind {
     BestFirst,
 }
 
-/// A cumulative-compression early-stop target for the multi-abstraction search.
-///
-/// The search stops as soon as the corpus's cumulative compression ratio
-/// reaches `limit`. Built once per abstraction step by
-/// [`multiple_step_search`]: `base_original_size` is the un-abstracted corpus
-/// size (`None` on the first step, where the running search's own original size
-/// is used), and `prev_library_cost` is the summed size of the abstraction
-/// bodies already learned. See [`CompressionStop::reached`].
-pub struct CompressionStop {
-    /// Target cumulative compression ratio (original size / compressed size).
-    pub limit: f64,
-    /// Step-0 corpus size; `None` means "use this step's own original size"
-    /// (only correct on the first abstraction, where no bodies precede it).
-    pub base_original_size: Option<usize>,
-    /// Summed `pattern_size` of the abstraction bodies learned in prior steps.
-    pub prev_library_cost: usize,
-}
-
-impl CompressionStop {
-    /// Whether an abstraction step scoring `best_cost` (its rewritten corpus +
-    /// this step's body) reaches the cumulative target. `this_step_original_size`
-    /// is the running search's own original size, used as the base on step 0.
-    pub fn reached(&self, this_step_original_size: usize, best_cost: usize) -> bool {
-        let base = self.base_original_size.unwrap_or(this_step_original_size);
-        base as f64 / (best_cost + self.prev_library_cost) as f64 >= self.limit
-    }
-}
-
 /// `--freeze-rule`: whether the canonical variable-ordering (freeze) rule is on.
 ///
 /// The rule ranks each var by how little expanding it explodes the match set,
@@ -174,10 +146,11 @@ pub struct Args {
     #[arg(long)]
     pub time_limit: Option<f64>,
 
-    /// Cumulative-compression early-stop target. When set, the multi-abstraction
-    /// search stops as soon as the corpus's cumulative compression ratio reaches
-    /// this value (checked within a search step and between abstractions), so a
-    /// run does only as much work as reaching that quality requires.
+    /// Compression-ratio early-stop target. When set, the search stops as soon
+    /// as it finds an abstraction reaching this ratio, so a run does only as much
+    /// work as reaching that quality requires. Only supported with
+    /// `--num-abstractions 1` (there's no single ratio to stop at once
+    /// abstractions stack).
     #[arg(long)]
     pub compression_limit: Option<f64>,
 
@@ -354,6 +327,9 @@ impl Args {
         // Resolve `--freeze-rule` as the search drivers do (best-first defaults on).
         let freeze_rule_on = self.freeze_rule.resolve(matches!(self.search, SearchKind::BestFirst));
         assert!(freeze_rule_on || self.var_order == search::VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
+        // `--compression-limit` is a single-abstraction stop: with stacked
+        // abstractions there's no one ratio to stop at.
+        assert!(self.compression_limit.is_none() || self.num_abstractions == 1, "--compression-limit requires --num-abstractions 1");
     }
 }
 
@@ -415,22 +391,13 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let fn_name_base = first_free_fn_index::<F::Apply<O>>(&data.egraph);
 
     for abstraction_idx in 0..args.num_abstractions {
-        // Cumulative-compression early stop (`--compression-limit`). On step 0 the
-        // running search's own original size is the base and no bodies precede it;
-        // later steps carry the step-0 size and the summed prior-body cost so the
-        // per-step best_cost maps to a cumulative ratio.
-        let compression_stop = args.compression_limit.map(|limit| CompressionStop {
-            limit,
-            base_original_size: (abstraction_idx > 0).then_some(original_size),
-            prev_library_cost: library.iter().map(|a: &results::AbstractionResult| a.pattern_size).sum(),
-        });
         let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history, iter_heap_size) = match args.search {
             SearchKind::Smc => {
-                let r = smc::smc::<F, O>(data, args, &mut rng, compression_stop.as_ref());
+                let r = smc::smc::<F, O>(data, args, &mut rng);
                 (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None, None)
             }
             SearchKind::BestFirst => {
-                let r = best_first::best_first(data, args, compression_stop.as_ref());
+                let r = best_first::best_first(data, args);
                 (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history), Some(r.heap_size_at_end))
             }
         };
@@ -495,15 +462,11 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 });
                 search_ends.push(Instant::now());
 
-                // Stop early once the cumulative compression target is reached
-                // (`--compression-limit`): the per-step search already stops the
-                // instant it crosses the target, so no further abstraction is
-                // needed. `best_cost + prev_bodies` is this step's cumulative cost.
-                let hit_limit = args.compression_limit.is_some_and(|limit| original_size as f64 / (best_cost + prev_bodies) as f64 >= limit);
-                if hit_limit || abstraction_idx + 1 >= args.num_abstractions {
+                if abstraction_idx + 1 < args.num_abstractions {
+                    data = next_data;
+                } else {
                     break;
                 }
-                data = next_data;
             }
         }
     }

@@ -324,7 +324,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
 ///
 /// We further assume that K_n(t_l, t_j') = 0 for all transitions that are not realized in the sample, so we
 /// only accumulate over the parents that actually reached t_j'.
-pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng, compression_stop: Option<&crate::CompressionStop>) -> SmcResult<F, O> {
+pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, rng: &mut StdRng) -> SmcResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
@@ -359,15 +359,15 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
 
-        // Cumulative-compression early stop (`--compression-limit`): once the
-        // best particle reaches the target quality there's nothing to gain from
-        // more steps. Checked per step (SMC's natural granularity).
-        if let Some(cs) = compression_stop
+        // `--compression-limit` early stop: once the best particle reaches the
+        // target ratio there's nothing to gain from more steps. Checked per step
+        // (SMC's natural granularity).
+        if let Some(limit) = args.compression_limit
             && let Some((cost, _)) = search.best()
-            && cs.reached(original_size, *cost)
+            && original_size as f64 / *cost as f64 >= limit
         {
             steps_run = step + 1;
-            println!("{}", format!("reached compression limit {:.3}", cs.limit).yellow());
+            println!("{}", format!("reached compression limit {:.3}", limit).yellow());
             break;
         }
 

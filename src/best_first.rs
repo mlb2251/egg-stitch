@@ -129,7 +129,7 @@ struct Node<F: LanguageFamily, O: StitchOp> {
 /// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
 /// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
 /// improvement" just means we're grinding through a less promising branch.)
-pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args, compression_stop: Option<&crate::CompressionStop>) -> BestFirstResult<F, O> {
+pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> BestFirstResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
@@ -337,10 +337,10 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                     cost: child_cost,
                     pattern: child_state.pattern.to_string(),
                 });
-                // Cumulative-compression early stop: this best already reaches the
-                // target, so no better one is needed. Break after pushing the node
-                // below (its id must be live for the winner extraction).
-                if compression_stop.is_some_and(|cs| cs.reached(original_size, child_cost)) {
+                // `--compression-limit` early stop: this best already reaches the
+                // target ratio, so no better one is needed. Break after pushing the
+                // node below (its id must be live for the winner extraction).
+                if args.compression_limit.is_some_and(|limit| original_size as f64 / child_cost as f64 >= limit) {
                     hit_compression_limit = true;
                 }
             }
@@ -384,7 +384,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             }
 
             if hit_compression_limit {
-                println!("{}", format!("reached compression limit {:.3}", compression_stop.map_or(0.0, |cs| cs.limit)).yellow());
+                println!("{}", format!("reached compression limit {:.3}", args.compression_limit.unwrap_or(0.0)).yellow());
                 num_expansions += 1;
                 break 'search;
             }

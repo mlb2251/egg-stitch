@@ -18,13 +18,13 @@ fn fixtures_present() -> bool {
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
     let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
-    smc::smc(data, args, &mut rng, None)
+    smc::smc(data, args, &mut rng)
 }
 
 fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
     let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
-    smc::smc(data, args, &mut rng, None)
+    smc::smc(data, args, &mut rng)
 }
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
