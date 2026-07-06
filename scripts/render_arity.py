@@ -4,9 +4,8 @@
 For each domain, plots search time (y, log) against the abstraction-arity cap
 (x, log) as one line per method (BFS, Stitch). Each curve stops where the tool
 first exceeded its timeout; that stopping arity is marked with an "x" at the
-timeout height. The arities at which the single learned abstraction's
-compression ratio jumps (i.e. a higher-arity abstraction becomes optimal) are
-annotated as vertical guides along the x-axis.
+timeout height. A dashed vertical marks the smallest arity whose compression
+matches the unbounded (10^6) optimum -- the "optimal abstraction" arity.
 
 Writes ``figures/arity/<domain>.png`` per domain plus ``figures/arity.png``
 (both domains side by side).
@@ -25,6 +24,9 @@ from render_molecules import METHOD_COLORS as _MOL_COLORS  # noqa: E402
 # Reuse the molecules figure's palette: E-Stitch (our BFS) in orange, Stitch in
 # purple, so the two figures read as one colour scheme.
 METHOD_COLORS = {"enum": _MOL_COLORS["search-DSR"], "stitch": _MOL_COLORS["DSR-canon"]}
+
+# Presentation-figure blue, used to shade the optimal-abstraction arity range.
+OPTIMAL_COLOR = "#80cdff"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_JSON = PROJECT_ROOT / "results" / "arity.json"
@@ -70,8 +72,8 @@ def assert_cr_agreement(methods: dict[str, dict], domain: str, tol: float = 1e-3
     Both search a *single* abstraction to convergence under the same cost metric
     (egg-stitch's unit-per-node op-children cost == Stitch's matched ``--cost``
     flags == the uniform ``ast_size`` the runner re-costs with), so they must
-    find an equally-optimal abstraction -> identical CR. The single ``cr_segments``
-    ribbon depends on this; fail loudly if it ever breaks.
+    find an equally-optimal abstraction -> identical CR. :func:`optimal_arity`
+    trusts BFS's CR as canonical; fail loudly if that ever breaks.
     """
     if "enum" not in methods or "stitch" not in methods:
         return
@@ -84,27 +86,28 @@ def assert_cr_agreement(methods: dict[str, dict], domain: str, tol: float = 1e-3
         )
 
 
-def cr_segments(methods: dict[str, dict]) -> list[tuple[int, int, float]]:
-    """Contiguous arity ranges that share one converged compression ratio.
+def optimal_arity(methods: dict[str, dict]) -> int | None:
+    """Smallest bounded arity whose converged compression matches the unbounded
+    (10^6) optimum.
 
-    Both tools run to convergence, so their CR-vs-arity curves agree (see
-    :func:`assert_cr_agreement`); use whichever reaches the higher arity (BFS) as
-    canonical, falling back to Stitch. Returns ``(lo, hi, cr)`` per constant-CR
-    run, in arity order (CR is monotone non-decreasing, so runs are contiguous).
+    Both tools run a single abstraction to convergence under the same cost
+    metric, so their CR curves agree; use whichever reaches the large arity (BFS,
+    else Stitch). Returns None if no such point exists.
     """
     for method in ("enum", "stitch"):
         pts = [p for p in method_curve(methods.get(method, {}))[0] if p[2] is not None]
         if pts:
             break
     else:
-        return []
-    segs: list[list] = []
+        return None
+    big = [cr for a, _t, cr in pts if a > MAIN_ARITY_MAX]
+    if not big:
+        return None
+    target = big[0]
     for a, _t, cr in pts:
-        if segs and abs(cr - segs[-1][2]) <= segs[-1][2] * 0.0005:  # same CR
-            segs[-1][1] = a
-        else:
-            segs.append([a, a, cr])
-    return [(lo, hi, cr) for lo, hi, cr in segs]
+        if a <= MAIN_ARITY_MAX and abs(cr - target) <= target * 0.0005:
+            return a
+    return None
 
 
 def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
@@ -151,51 +154,17 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
                     p.plot([la, first], [lt, budget], "--", color=color, linewidth=1.2, zorder=2)
 
 
-def _draw_cr_ribbon(rax, rbx, methods: dict[str, dict]) -> None:
-    """Fill a thin strip below the plot with boxes spanning each constant-CR
-    arity range, labelled with just that compression ratio.
-
-    Alternating shades separate neighbours; a box is drawn (clipped) on both
-    ribbon panels so a range that plateaus across the break shows on each. The
-    label goes on the panel holding the wider part of the range.
-    """
-    for i, (lo, hi, cr) in enumerate(cr_segments(methods)):
-        shade = "0.90" if i % 2 else "white"
-        # Main ribbon: the 1..20 portion of this constant-CR range. A range that
-        # continues past 20 has its right edge pushed off-panel so no border cuts
-        # across the break (it resumes in the 10^6 cell).
-        if lo <= MAIN_ARITY_MAX:
-            right = hi + 0.5 if hi <= MAIN_ARITY_MAX else MAIN_ARITY_MAX + 1.0
-            rax.axvspan(lo - 0.5, right, facecolor=shade,
-                        edgecolor="0.55", linewidth=0.5, zorder=1)
-        # Break ribbon: if the range reaches 10^6, fill the whole cell -- edges
-        # pushed outside the x-limits so neither border cuts through the label.
-        if hi > MAIN_ARITY_MAX:
-            rbx.axvspan(LARGE_ARITY * 0.1, LARGE_ARITY * 10, facecolor=shade,
-                        edgecolor="none", zorder=1)
-        # Label the wider part: the 1..20 span, or the centre of the 10^6 cell.
-        if lo <= MAIN_ARITY_MAX:
-            # Align the label with the first arity that achieves this CR (even
-            # when the range plateaus across the break into the 10^6 cell).
-            rax.text(lo, 0.5, f"{cr:.2f}", ha="center", va="center",
-                     rotation=90, fontsize=6, color="0.15", zorder=2)
-        else:
-            rbx.text(LARGE_ARITY, 0.5, f"{cr:.2f}", ha="center", va="center",
-                     rotation=90, fontsize=6, color="0.15", zorder=2)
-
-
-def _shade_regions(ax, axb, methods: dict[str, dict]) -> None:
-    """Shade the plot columns matching the gray (odd-indexed) CR-ribbon cells,
-    so each constant-CR band lines up with its box in the ribbon below."""
-    for i, (lo, hi, cr) in enumerate(cr_segments(methods)):
-        if i % 2 == 0:  # gray cells are the odd-indexed ones (see _draw_cr_ribbon)
-            continue
-        if lo <= MAIN_ARITY_MAX:
-            right = hi + 0.5 if hi <= MAIN_ARITY_MAX else MAIN_ARITY_MAX + 1.0
-            ax.axvspan(lo - 0.5, right, facecolor="0.90", edgecolor="none", zorder=0)
-        if hi > MAIN_ARITY_MAX:
-            axb.axvspan(LARGE_ARITY * 0.1, LARGE_ARITY * 10, facecolor="0.90",
-                        edgecolor="none", zorder=0)
+def _draw_optimal(ax, axb, methods: dict[str, dict]) -> None:
+    """Shade the arity range that reaches the unbounded optimum -- from the
+    smallest such arity onward (through the 10^6 cell) -- labelled "optimal
+    abstraction"."""
+    opt = optimal_arity(methods)
+    if opt is None:
+        return
+    ax.axvspan(opt - 0.5, MAIN_ARITY_MAX + 0.5, facecolor=OPTIMAL_COLOR, alpha=0.35, zorder=0)
+    axb.axvspan(LARGE_ARITY * 0.1, LARGE_ARITY * 10, facecolor=OPTIMAL_COLOR, alpha=0.35, zorder=0)
+    ax.text(opt - 0.25, 0.97, "optimal abstraction", transform=ax.get_xaxis_transform(),
+            rotation=90, va="top", ha="left", fontsize=8, color="#1a6a9c", zorder=1)
 
 
 def _break_marks(left, right) -> None:
@@ -211,22 +180,18 @@ def _break_marks(left, right) -> None:
 
 def render_domain_panel(container, methods: dict[str, dict], title: str):
     """Draw one domain onto ``container`` (a Figure or SubFigure): a broken-x
-    time-vs-arity plot (wide 1..20 panel + narrow 10^6 panel) over a thin
-    compression-ratio ribbon that shares the same broken x axis."""
+    time-vs-arity plot (wide 1..20 panel + narrow 10^6 panel), with the
+    optimal-abstraction arity range shaded."""
     from matplotlib.ticker import FixedLocator, FixedFormatter, MultipleLocator
 
     assert_cr_agreement(methods, title)
 
-    gs = container.add_gridspec(2, 2, width_ratios=[8, 1], height_ratios=[6, 0.7],
-                                wspace=0.08, hspace=0.3)
+    gs = container.add_gridspec(1, 2, width_ratios=[8, 1], wspace=0.08)
     ax = container.add_subplot(gs[0, 0])
     axb = container.add_subplot(gs[0, 1], sharey=ax)
-    rax = container.add_subplot(gs[1, 0], sharex=ax)
-    rbx = container.add_subplot(gs[1, 1], sharex=axb, sharey=rax)
 
-    _shade_regions(ax, axb, methods)
+    _draw_optimal(ax, axb, methods)
     _draw_curves(ax, axb, methods)
-    _draw_cr_ribbon(rax, rbx, methods)
 
     for a in (ax, axb):
         a.set_yscale("log")  # time spans several decades; keep it log
@@ -236,22 +201,12 @@ def render_domain_panel(container, methods: dict[str, dict], title: str):
     ax.set_ylabel("Time (s)")
     axb.tick_params(labelleft=False, left=False, which="both")  # y ticks (incl. minor) belong to the main panel
 
-    # The plot row carries the arity tick labels; the ribbon sits *below* them.
     ax.xaxis.set_major_locator(FixedLocator([1, 5, 10, 15, 20]))
     ax.xaxis.set_minor_locator(MultipleLocator(1))
     axb.xaxis.set_major_locator(FixedLocator([LARGE_ARITY]))
     axb.xaxis.set_major_formatter(FixedFormatter([r"$10^6$"]))
 
-    # Ribbon row: pure CR boxes -- no ticks of its own.
-    rax.set_ylim(0, 1)
-    rax.set_yticks([])
-    rbx.set_yticks([])
-    rax.set_ylabel("CR", rotation=0, ha="right", va="center", fontsize=8)
-    for r in (rax, rbx):
-        r.tick_params(bottom=False, labelbottom=False)
-
     _break_marks(ax, axb)
-    _break_marks(rax, rbx)
 
     ax.legend(title="Method", loc="upper left")
     container.suptitle(title)
