@@ -80,14 +80,14 @@ def compression_jumps(methods: dict[str, dict]) -> list[tuple[int, float]]:
     return jumps
 
 
-def _draw_curves(ax, axb, methods: dict[str, dict], sweep_arities: list[int]) -> None:
-    """Plot every method's curve + timeout markers on both the main (``ax``,
+def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
+    """Plot every method's curve + timeout marker on both the main (``ax``,
     arities 1..MAIN_ARITY_MAX) and break (``axb``, the large arity) panels.
 
-    Each series is drawn on both axes and clipped by their x-limits, so the
-    1..20 detail and the 10^6 point read as one broken line. Once a method
-    times out, an "x" is drawn at every sweep arity from there on (they all
-    time out too), including the 10^6 point on the break panel.
+    The dense 1..20 region is a solid line on the main panel; the 10^6 point
+    (or the timeout "x") is reached by a dashed connector spanning the axis
+    break, drawn on both panels and clipped so it reads across the gap. A
+    method that times out ends at a single "x" at its first timed-out arity.
     """
     for a, cr in compression_jumps(methods):
         target = ax if a <= MAIN_ARITY_MAX else axb
@@ -104,31 +104,38 @@ def _draw_curves(ax, axb, methods: dict[str, dict], sweep_arities: list[int]) ->
         color = METHOD_COLORS.get(method, "black")
         label = METHOD_PLOT_LABELS.get(method, method)
         points, dnf = method_curve(methods[method])
-        if points:
-            xs = [a for a, _t, _cr in points]
-            ys = [t for _a, t, _cr in points]
-            ax.plot(xs, ys, "-o", color=color, markersize=4, linewidth=1.4,
-                    label=label, zorder=2)
-            axb.plot(xs, ys, "-o", color=color, markersize=4, linewidth=1.4, zorder=2)
+        main_pts = [(a, t) for a, t, _cr in points if a <= MAIN_ARITY_MAX]
+        big_pts = [(a, t) for a, t, _cr in points if a > MAIN_ARITY_MAX]
+
+        # Solid line through the dense 1..20 region.
+        if main_pts:
+            ax.plot([a for a, _ in main_pts], [t for _, t in main_pts], "-o",
+                    color=color, markersize=4, linewidth=1.4, label=label, zorder=2)
+        # Converged 10^6 point(s) as bare markers on the break panel.
+        for a, t in big_pts:
+            axb.plot([a], [t], "o", color=color, markersize=4, zorder=2)
+
+        # The point the dashed connector reaches: the 10^6 point if the method
+        # got there, else the timeout "x".
         if dnf is not None:
-            # An "x" at the timeout budget for the first timed-out arity and
-            # every larger sweep arity (all monotonically time out too). Legend
-            # entry goes on the first x only when there's no line to carry it.
             first, budget = dnf
-            needs_label = not points
-            for a in sweep_arities:
-                if a < first:
-                    continue
-                panel = ax if a <= MAIN_ARITY_MAX else axb
-                lbl = label if (needs_label and panel is ax) else None
-                panel.scatter([a], [budget], color=color, marker="x", s=60,
-                              linewidths=1.8, zorder=3, label=lbl)
-                if lbl:
-                    needs_label = False
+            reach = (first, budget)
+            panel = ax if first <= MAIN_ARITY_MAX else axb
+            panel.scatter([first], [budget], color=color, marker="x", s=60,
+                          linewidths=1.8, zorder=3, label=label if not main_pts else None)
+        elif big_pts:
+            reach = big_pts[0]
+        else:
+            reach = None
+        # Dashed connector from the last converged point across the break.
+        if reach is not None and main_pts:
+            la, lt = main_pts[-1]
+            for panel in (ax, axb):
+                panel.plot([la, reach[0]], [lt, reach[1]], "--",
+                           color=color, linewidth=1.2, zorder=2)
 
 
-def render_domain_panel(container, methods: dict[str, dict], title: str,
-                        sweep_arities: list[int]):
+def render_domain_panel(container, methods: dict[str, dict], title: str):
     """Draw one domain onto ``container`` (a Figure or SubFigure) as a broken-x
     pair: a wide 1..20 panel and a narrow 10^6 panel with diagonal break marks."""
     from matplotlib.ticker import FixedLocator, FixedFormatter, MultipleLocator
@@ -137,7 +144,7 @@ def render_domain_panel(container, methods: dict[str, dict], title: str,
     ax = container.add_subplot(gs[0, 0])
     axb = container.add_subplot(gs[0, 1], sharey=ax)
 
-    _draw_curves(ax, axb, methods, sweep_arities)
+    _draw_curves(ax, axb, methods)
 
     for a in (ax, axb):
         a.set_yscale("log")  # time spans several decades; keep it log
@@ -177,14 +184,13 @@ def main() -> None:
     with open(RESULTS_JSON) as f:
         data = json.load(f)
     domains = list(data["domains"])
-    sweep = data["config"]["arities"]
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     (FIGURES_DIR / "arity").mkdir(parents=True, exist_ok=True)
 
     # Per-domain figures.
     for domain in domains:
         fig = plt.figure(figsize=(6, 4.5))
-        render_domain_panel(fig, data["domains"][domain]["methods"], DOMAIN_TITLES.get(domain, domain), sweep)
+        render_domain_panel(fig, data["domains"][domain]["methods"], DOMAIN_TITLES.get(domain, domain))
         out = FIGURES_DIR / "arity" / f"{domain}.png"
         fig.savefig(out, dpi=300)
         plt.close(fig)
@@ -194,7 +200,7 @@ def main() -> None:
     fig = plt.figure(figsize=(6 * len(domains), 4.5))
     subfigs = fig.subfigures(1, len(domains), wspace=0.08, squeeze=False)[0]
     for sf, domain in zip(subfigs, domains):
-        render_domain_panel(sf, data["domains"][domain]["methods"], DOMAIN_TITLES.get(domain, domain), sweep)
+        render_domain_panel(sf, data["domains"][domain]["methods"], DOMAIN_TITLES.get(domain, domain))
     out = FIGURES_DIR / "arity.png"
     fig.savefig(out, dpi=300)
     plt.close(fig)
