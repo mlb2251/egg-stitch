@@ -784,30 +784,46 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
     /// emission order so those act on the chosen order rather than creation
     /// order, *without* renumbering the pattern. The order is selected by
-    /// [`SharedSearchData::var_order`], but only takes effect under the freeze
-    /// rule: with the rule off (e.g. SMC without `--smc-variable-ordering`)
-    /// `rank`/`order` are the identity, and [`VarOrder::LeftToRight`] is also
-    /// the identity. `--var-order` therefore requires the freeze rule; a
-    /// non-default order with the rule off is a misconfiguration (asserted).
+    /// [`SharedSearchData::var_order`] via [`Self::compute_rank`], but only takes
+    /// effect under the freeze rule: with the rule off (e.g. SMC without the
+    /// freeze rule) `rank`/`order` are the identity. `--var-order` therefore
+    /// requires the freeze rule; a non-default order with the rule off is a
+    /// misconfiguration (asserted).
     fn shape_pass(&self, shared: &SharedSearchData<F, O>) -> (Vec<VarShapes<F, O>>, Vec<usize>, Vec<usize>) {
         let n = self.pattern.vars.len();
         let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
         assert!(self.freeze_rule || shared.var_order == VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
-        // Only MeanNodesPerClass reorders; LeftToRight (and the rule-off case)
-        // keep creation order.
-        let (rank, order) = if self.freeze_rule && n > 1 && shared.var_order == VarOrder::MeanNodesPerClass {
-            let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|s| s.expand_enodes as f64 / s.substs as f64).fold(-f64::INFINITY, f64::max)).collect();
-            let mut order: Vec<usize> = (0..n).collect();
-            order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
-            let mut rank = vec![0usize; n];
-            for (r, &k) in order.iter().enumerate() {
-                rank[k] = r;
-            }
-            (rank, order)
-        } else {
-            ((0..n).collect(), (0..n).collect())
-        };
+        let (rank, order) = if self.freeze_rule { self.compute_rank(shared.var_order, &shapes) } else { ((0..n).collect(), (0..n).collect()) };
         (shapes, rank, order)
+    }
+
+    /// Computes `(rank, order)` for a given [`VarOrder`] from the per-var
+    /// expansion `shapes`: `rank[var] -> rank`, `order[rank] -> var`. Each
+    /// ordering is a match arm — add a new [`VarOrder`] variant here to define
+    /// how it ranks vars. Returns the identity for ≤1 var (nothing to order).
+    /// Only called under the freeze rule (see [`Self::shape_pass`]).
+    fn compute_rank(&self, var_order: VarOrder, shapes: &[VarShapes<F, O>]) -> (Vec<usize>, Vec<usize>) {
+        let n = self.pattern.vars.len();
+        if n <= 1 {
+            return ((0..n).collect(), (0..n).collect());
+        }
+        let order: Vec<usize> = match var_order {
+            // Rank by explosiveness: each var's most-exploding expansion's mean
+            // e-nodes per subst, least-exploding first (ties broken by index).
+            VarOrder::MeanNodesPerClass => {
+                let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|s| s.expand_enodes as f64 / s.substs as f64).fold(-f64::INFINITY, f64::max)).collect();
+                let mut order: Vec<usize> = (0..n).collect();
+                order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
+                order
+            }
+            // Keep left-to-right creation order (identity rank).
+            VarOrder::LeftToRight => (0..n).collect(),
+        };
+        let mut rank = vec![0usize; n];
+        for (r, &k) in order.iter().enumerate() {
+            rank[k] = r;
+        }
+        (rank, order)
     }
 
     /// Returns the enumerable successors of `self`. When dominance pruning
