@@ -9,11 +9,17 @@ Runs *after* ``results/table{3,5,7}.json`` exist. For each of those tables it:
    cell has no reported time, so it can't be "hardest"). Multi-file (dreamcoder)
    domains are skipped so the compression target is one per-file ratio.
 2. Establishes a **target compression** = the ratio the baseline (all
-   optimisations on) best-first run reaches with a single abstraction.
+   optimisations on) best-first run reaches with a single abstraction at the
+   table's canonical BFS operating point (``spec.enum_point`` steps).
 3a. **BFS (``--compression-limit``).** Re-runs best-first with every BFS
     ablation, each stopped the instant it reaches the target compression, and
     reports the geomean wall-clock over :data:`NUM_REPS` replicates. Every
     ablation stops at the same quality, so the times compare like-for-like.
+    These runs use a large step budget (:data:`BFS_ABLATION_STEPS`) and a
+    :data:`BFS_ABLATION_TIMEOUT`, so the compression limit — not the step cap —
+    is what ends the search (a weaker ablation needs more heap pops than the
+    baseline to reach the same quality); an ablation that can't reach the target
+    within the timeout is a DNF.
 3b. **SMC (particle sweep).** For every SMC ablation, binary-searches the
     smallest particle count whose compression reaches the target, then reports
     that point's geomean wall-clock.
@@ -60,6 +66,13 @@ NUM_ABSTRACTIONS = 1
 # Replicates per measurement. BFS is deterministic, so these only average out
 # wall-clock noise; SMC is stochastic, so they also stabilise its geomean CR.
 NUM_REPS = 3
+# BFS ablation runs (3a) get a large step budget and a timeout so the
+# `--compression-limit` stop — not the step cap — is what ends the search: a
+# weaker ablation needs more heap pops than the baseline to reach the same
+# target compression. The timeout bounds any ablation that can't reach it (→
+# DNF). The target-setting run keeps the table's own enum_point/timeout instead.
+BFS_ABLATION_STEPS = 10_000_000
+BFS_ABLATION_TIMEOUT = 600.0
 # SMC search defaults (matching the table runs: OursSmc's own defaults).
 SMC_NUM_STEPS = 100
 SMC_TEMPERATURE = 100.0
@@ -196,17 +209,29 @@ def _measure(runner, domain: str, spec: TableSpec, cache_key: str, reps: int = N
 
 
 def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], target_cr: float | None) -> OursBf:
-    """Best-first runner: the table's BFS config plus the ablation flags and,
-    when ``target_cr`` is set, a ``--compression-limit`` stop at that ratio.
+    """Best-first runner, in one of two modes keyed on ``target_cr``:
+
+    * ``target_cr is None`` — the target-setting run: the table's canonical BFS
+      operating point (``spec.enum_point`` steps, ``spec.timeout``), no limit.
+      Its final CR *is* the target every ablation is then timed to reach.
+    * ``target_cr`` set — an ablation run: a ``--compression-limit`` stop at that
+      ratio, run with a large step budget (:data:`BFS_ABLATION_STEPS`) and
+      :data:`BFS_ABLATION_TIMEOUT` so the compression limit — not the step cap —
+      ends the search (a weaker ablation needs more pops than the baseline to
+      reach the same quality; the timeout bounds one that can't → DNF).
 
     The limit is rounded *down* to 6 decimals (never up), so it can't land a
     hair above the baseline's own achieved CR — otherwise the baseline (and any
-    tie) would sail past its `>=` early stop and overcount steps/time."""
-    limit = () if target_cr is None else (
-        "--compression-limit", f"{math.floor(target_cr * 1e6) / 1e6:.6f}")
+    tie) would sail past its `>=` early stop and overcount steps/time.
+    """
+    if target_cr is None:
+        num_steps, timeout, limit = spec.enum_point, spec.timeout, ()
+    else:
+        num_steps, timeout = BFS_ABLATION_STEPS, BFS_ABLATION_TIMEOUT
+        limit = ("--compression-limit", f"{math.floor(target_cr * 1e6) / 1e6:.6f}")
     return OursBf(
-        num_steps=spec.enum_point, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
-        timeout=spec.timeout, mem_limit=spec.mem_limit, extra_args=flags + limit,
+        num_steps=num_steps, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
+        timeout=timeout, mem_limit=spec.mem_limit, extra_args=flags + limit,
     )
 
 
