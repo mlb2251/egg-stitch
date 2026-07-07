@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Render the ablation experiment (``results/ablation.json``) into LaTeX.
 
-Emits ``figures/ablation.tex`` with two tables — one for the BFS ablations
-(wall-clock at the target compression, via ``--compression-limit``) and one for
-the SMC ablations (particles needed to reach the target, and that point's
-wall-clock) — with one column group per hardest experiment (tables 3/5/7).
+Emits ``figures/ablation.tex`` with a single table: one column per ablation and
+one row per domain/algorithm combo (the hardest experiment of tables 3/5/7, each
+run under BFS and SMC — six rows). Cells hold the wall-clock (s) to reach the
+target compression, and are blank when the ablation doesn't apply to that
+algorithm.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -17,24 +19,27 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_JSON = PROJECT_ROOT / "results" / "ablation.json"
 FIGURES_DIR = PROJECT_ROOT / "figures"
 
-# Row order + display labels for each ablation family (keys match expts.ablation).
-BFS_ABLATIONS = [
-    ("baseline", "Baseline (all on)"),
+# Which ablations apply to each algorithm (keys match expts.ablation).
+BFS_KEYS = {"baseline", "no-lower-bound", "no-dominance", "no-equivalence",
+            "no-var-ordering", "var-ordering-l2r", "no-forced-expansion"}
+SMC_KEYS = {"baseline", "no-lower-bound", "no-dominance", "add-var-ordering"}
+
+# One row per ablation (union across both algorithms), in display order,
+# grouped into sections: baseline, the three prunes, the variable-ordering
+# knobs, then forced expansion. A ``\midrule`` follows each key in RULE_AFTER.
+ABLATION_COLUMNS = [
+    ("baseline", "Baseline"),
     ("no-lower-bound", "No lower-bound pruning"),
     ("no-dominance", "No dominance"),
     ("no-equivalence", "No equivalence pruning"),
+    ("add-var-ordering", "Add variable ordering"),
     ("no-var-ordering", "No variable ordering"),
     ("var-ordering-l2r", "Variable ordering L$\\to$R"),
     ("no-forced-expansion", "No forced expansion"),
 ]
-SMC_ABLATIONS = [
-    ("baseline", "Baseline"),
-    ("no-lower-bound", "No lower-bound pruning"),
-    ("no-dominance", "No dominance"),
-    ("add-var-ordering", "Add variable ordering"),
-]
+RULE_AFTER = {"baseline", "no-equivalence", "var-ordering-l2r"}
 
-# Column order across the three hardest experiments.
+# Column order across the three hardest experiments (one domain per table).
 TABLE_ORDER = ["3", "5", "7"]
 
 # Pretty names for the family/dreamcoder domains that can be picked as hardest.
@@ -58,67 +63,46 @@ def _domain_label(domain: str) -> str:
 
 
 def _fmt_time(t: float | None) -> str:
-    """Seconds with two significant-ish digits, or ``DNF`` when missing."""
+    """Seconds with at least two significant figures and at least one decimal
+    place, or ``DNF`` when the ablation ran but never reached the target."""
     if t is None:
         return "DNF"
-    return f"{t:.2f}" if t < 100 else f"{t:.0f}"
+    if t <= 0:
+        return "0.0"
+    # Decimals for two sig figs (2-1-exponent), floored at one decimal place.
+    decimals = max(1 - math.floor(math.log10(t)), 1)
+    return f"{t:.{decimals}f}"
 
 
-def _fmt_steps(s: int | None) -> str:
-    """Search-step count with thousands separators, or ``--`` when missing."""
-    return "--" if s is None else f"{s:,}"
-
-
-def _bfs_table(tables: dict) -> list[str]:
-    """LaTeX ``tabular`` for the BFS ablations: per experiment, the search work
-    (best-first heap pops, deterministic) and wall-clock (s) to reach the target
-    compression."""
-    cols = [t for t in TABLE_ORDER if t in tables]
-    lines = ["% BFS ablations: search steps + time to reach the target compression (--compression-limit)"]
-    lines.append("\\begin{tabular}{l" + "".join(" rr" for _ in cols) + "}")
+def _ablation_table(tables: dict) -> list[str]:
+    """LaTeX ``tabular``: one row per ablation, one column per domain/algorithm
+    combo, holding the wall-clock (s) to reach the target compression. Cells are
+    blank where the ablation doesn't apply to that algorithm."""
+    applies = {"bfs": BFS_KEYS, "smc": SMC_KEYS}
+    # The 6 (domain, algorithm) columns, grouped two-per-domain.
+    cols = [(t, algo, disp) for t in TABLE_ORDER if t in tables
+            for algo, disp in (("bfs", "BFS"), ("smc", "SMC"))]
+    lines = ["% Ablation wall-clock (s) to reach the target compression: one row per ablation, one column per domain/algorithm."]
+    lines.append("\\begin{tabular}{l" + "r" * len(cols) + "}")
     lines.append("\\toprule")
-    heads = " & ".join(
-        f"\\multicolumn{{2}}{{c}}{{{_domain_label(tables[t]['domain'])} "
-        f"($\\geq${tables[t]['target_cr']:.2f}$\\times$)}}"
-        for t in cols
+    groups = " & ".join(
+        f"\\multicolumn{{2}}{{c}}{{{_domain_label(tables[t]['domain'])}}}"
+        for t in TABLE_ORDER if t in tables
     )
-    lines.append("Ablation (BFS) & " + heads + " \\\\")
-    lines.append(" & " + " & ".join("Steps & Time (s)" for _ in cols) + " \\\\")
+    lines.append("Ablation & " + groups + " \\\\")
+    lines.append(" & " + " & ".join(disp for _, _, disp in cols) + " \\\\")
     lines.append("\\midrule")
-    for key, label in BFS_ABLATIONS:
+    for key, label in ABLATION_COLUMNS:
         cells = []
-        for t in cols:
-            cell = tables[t]["bfs"].get(key, {})
-            cells.append(f"{_fmt_steps(cell.get('steps'))} & {_fmt_time(cell.get('time'))}")
+        for t, algo, _ in cols:
+            if key not in applies[algo]:
+                cells.append("")  # ablation doesn't apply to this algorithm
+                continue
+            cell = tables[t][algo].get(key, {})
+            cells.append(_fmt_time(cell.get("time")))
         lines.append(f"{label} & " + " & ".join(cells) + " \\\\")
-    lines.append("\\bottomrule")
-    lines.append("\\end{tabular}")
-    return lines
-
-
-def _smc_table(tables: dict) -> list[str]:
-    """LaTeX ``tabular`` for the SMC ablations: per experiment, the particle
-    count needed to reach the target compression and that point's wall-clock."""
-    cols = [t for t in TABLE_ORDER if t in tables]
-    lines = ["% SMC ablations: particles needed to reach the target compression, and that point's time"]
-    lines.append("\\begin{tabular}{l" + "".join(" rr" for _ in cols) + "}")
-    lines.append("\\toprule")
-    heads = " & ".join(
-        f"\\multicolumn{{2}}{{c}}{{{_domain_label(tables[t]['domain'])} "
-        f"($\\geq${tables[t]['target_cr']:.2f}$\\times$)}}"
-        for t in cols
-    )
-    lines.append("Ablation (SMC) & " + heads + " \\\\")
-    lines.append(" & " + " & ".join("Particles & Time (s)" for _ in cols) + " \\\\")
-    lines.append("\\midrule")
-    for key, label in SMC_ABLATIONS:
-        cells = []
-        for t in cols:
-            cell = tables[t]["smc"].get(key, {})
-            parts = cell.get("particles")
-            parts_s = str(parts) if parts is not None else "--"
-            cells.append(f"{parts_s} & {_fmt_time(cell.get('time'))}")
-        lines.append(f"{label} & " + " & ".join(cells) + " \\\\")
+        if key in RULE_AFTER:
+            lines.append("\\midrule")
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
     return lines
@@ -130,7 +114,7 @@ def main() -> None:
         sys.exit(f"missing {RESULTS_JSON}; run ./run.py ablation first")
     with open(RESULTS_JSON) as fh:
         tables = json.load(fh)["tables"]
-    out = _bfs_table(tables) + ["", ""] + _smc_table(tables)
+    out = _ablation_table(tables)
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     dest = FIGURES_DIR / "ablation.tex"
     dest.write_text("\n".join(out) + "\n")

@@ -1,29 +1,19 @@
-% BFS ablations: search steps + time to reach the target compression (--compression-limit)
-\begin{tabular}{l rr rr rr}
+% Ablation wall-clock (s) to reach the target compression: one row per ablation, one column per domain/algorithm.
+\begin{tabular}{lrrrrrr}
 \toprule
-Ablation (BFS) & \multicolumn{2}{c}{Furniture ($\geq$1.69$\times$)} & \multicolumn{2}{c}{Hexyl ($\geq$3.05$\times$)} & \multicolumn{2}{c}{Log2 ($\geq$2.67$\times$)} \\
- & Steps & Time (s) & Steps & Time (s) & Steps & Time (s) \\
+Ablation & \multicolumn{2}{c}{Furniture} & \multicolumn{2}{c}{Hexyl} & \multicolumn{2}{c}{Log2} \\
+ & BFS & SMC & BFS & SMC & BFS & SMC \\
 \midrule
-Baseline (all on) & 1,554 & 0.12 & 6,366 & 5.55 & 7,329 & 86.31 \\
-No lower-bound pruning & 34,997 & 0.86 & 22,257 & 5.79 & -- & DNF \\
-No dominance & 2,810 & 0.22 & 8,396 & 7.54 & 7,329 & 86.50 \\
-No equivalence pruning & 1,554 & 0.11 & -- & DNF & 7,851 & 85.49 \\
-No variable ordering & -- & DNF & -- & DNF & -- & DNF \\
-Variable ordering L$\to$R & 1,532 & 0.12 & 13,817 & 11.21 & 8,320 & 84.90 \\
-No forced expansion & 1,601 & 0.12 & 6,366 & 5.58 & -- & DNF \\
-\bottomrule
-\end{tabular}
-
-
-% SMC ablations: particles needed to reach the target compression, and that point's time
-\begin{tabular}{l rr rr rr}
-\toprule
-Ablation (SMC) & \multicolumn{2}{c}{Furniture ($\geq$1.69$\times$)} & \multicolumn{2}{c}{Hexyl ($\geq$3.05$\times$)} & \multicolumn{2}{c}{Log2 ($\geq$2.67$\times$)} \\
- & Particles & Time (s) & Particles & Time (s) & Particles & Time (s) \\
+Baseline & 0.12 & 0.025 & 5.6 & 0.86 & 86.3 & 0.78 \\
 \midrule
-Baseline & 28 & 0.03 & 12 & 0.86 & 10 & 0.78 \\
-No lower-bound pruning & 82 & 0.03 & 9 & 0.85 & 10 & 0.69 \\
-No dominance & 19 & 0.02 & 16 & 0.91 & 11 & 0.90 \\
-Add variable ordering & -- & DNF & 4703 & 1.54 & 145 & 0.91 \\
+No lower-bound pruning & 0.86 & 0.027 & 5.8 & 0.85 & DNF & 0.69 \\
+No dominance & 0.22 & 0.025 & 7.5 & 0.91 & 86.5 & 0.90 \\
+No equivalence pruning & 0.11 &  & DNF &  & 85.5 &  \\
+\midrule
+Add variable ordering &  & DNF &  & 1.5 &  & 0.91 \\
+No variable ordering & DNF &  & DNF &  & DNF &  \\
+Variable ordering L$\to$R & 0.12 &  & 11.2 &  & 84.9 &  \\
+\midrule
+No forced expansion & 0.12 &  & 5.6 &  & DNF &  \\
 \bottomrule
 \end{tabular}
