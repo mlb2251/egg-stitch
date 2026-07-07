@@ -1,13 +1,13 @@
 {
-  "compression_ratio": 1.849194283976893,
+  "compression_ratio": 1.849381714980742,
   "cost_after_rewrites": 18246,
   "cost_at_end_of_each_iter": [
     11673,
     10601,
-    10143,
-    9867
+    10142,
+    9866
   ],
-  "final_cost": 9867,
+  "final_cost": 9866,
   "initial_cost": 30982,
   "library": [
     {
@@ -29,12 +29,12 @@
       "usage_matches": 1439
     },
     {
-      "approx_cost": 9938,
+      "approx_cost": 10002,
       "arity": 3,
-      "lambda": "(lam (lam (lam (fn_0 (and (not $2) (not $1)) $0 (and $2 $1)))))",
+      "lambda": "(lam (lam (lam (fn_0 (not (or $2 $1)) $0 (and $1 $2)))))",
       "num_matches": 5,
-      "pattern": "fn_2: (fn_0 (and (not ?#0) (not ?#1)) ?#2 (and ?#0 ?#1))",
-      "pattern_size": 10,
+      "pattern": "fn_2: (fn_0 (not (or ?#0 ?#1)) ?#2 (and ?#1 ?#0))",
+      "pattern_size": 9,
       "usage_matches": 65
     },
     {

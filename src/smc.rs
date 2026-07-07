@@ -352,7 +352,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut scratch = CostScratch::new(&search.shared.egraph);
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
-    let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
+    let mut lower_bound_pruner = LowerBoundPruner::new(args.lower_bound.resolve(false));
 
     for step in 0..num_steps {
         let (expanded, mults, props) = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
