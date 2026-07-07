@@ -11,3 +11,9 @@ slow-timeout = "2m"
 [[profile.default.overrides]]
 filter = "binary(epfl_circuits_test)"
 slow-timeout = { period = "4m", terminate-after = 3 }
+
+# The cogsci `*_algebra` cases run the algebraic drawing rewrites and can exceed
+# the 2m default; warn at 4m, kill at 12m (hang backstop).
+[[profile.default.overrides]]
+filter = "test(/_algebra$/)"
+slow-timeout = { period = "4m", terminate-after = 3 }
