@@ -1,0 +1,29 @@
+% BFS ablations: search steps + time to reach the target compression (--compression-limit)
+\begin{tabular}{l rr rr rr}
+\toprule
+Ablation (BFS) & \multicolumn{2}{c}{Furniture ($\geq$1.70$\times$)} & \multicolumn{2}{c}{Hexyl ($\geq$3.08$\times$)} & \multicolumn{2}{c}{Log2 ($\geq$2.70$\times$)} \\
+ & Steps & Time (s) & Steps & Time (s) & Steps & Time (s) \\
+\midrule
+Baseline (all on) & 1,554 & 0.12 & 6,366 & 5.55 & 7,329 & 86.31 \\
+No lower-bound pruning & 34,997 & 0.86 & 22,257 & 5.79 & -- & DNF \\
+No dominance & 2,810 & 0.22 & 8,396 & 7.54 & 7,329 & 86.50 \\
+No equivalence pruning & 1,554 & 0.11 & -- & DNF & 7,851 & 85.49 \\
+No variable ordering & -- & DNF & -- & DNF & -- & DNF \\
+Variable ordering L$\to$R & 1,532 & 0.12 & 13,817 & 11.21 & 8,320 & 84.90 \\
+No forced expansion & 1,601 & 0.12 & 6,366 & 5.58 & -- & DNF \\
+\bottomrule
+\end{tabular}
+
+
+% SMC ablations: particles needed to reach the target compression, and that point's time
+\begin{tabular}{l rr rr rr}
+\toprule
+Ablation (SMC) & \multicolumn{2}{c}{Furniture ($\geq$1.70$\times$)} & \multicolumn{2}{c}{Hexyl ($\geq$3.08$\times$)} & \multicolumn{2}{c}{Log2 ($\geq$2.70$\times$)} \\
+ & Particles & Time (s) & Particles & Time (s) & Particles & Time (s) \\
+\midrule
+Baseline & 243 & 0.03 & 31 & 0.86 & 1916 & 8.17 \\
+No lower-bound pruning & 124 & 0.03 & 10 & 0.81 & 280 & 1.83 \\
+No dominance & 80 & 0.03 & 51 & 0.98 & -- & DNF \\
+Add variable ordering & -- & DNF & 12471 & 2.65 & 20000 & 1.22 \\
+\bottomrule
+\end{tabular}

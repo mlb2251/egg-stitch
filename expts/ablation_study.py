@@ -8,15 +8,18 @@ Runs *after* ``results/table{3,5,7}.json`` exist. For each of those tables it:
    longest wall-clock, among domains where BFS actually produced a result (a DNF
    cell has no reported time, so it can't be "hardest"). Multi-file (dreamcoder)
    domains are skipped so the compression target is one per-file ratio.
-2. Establishes a **target compression** = the ratio the baseline (all
-   optimisations on) best-first run reaches with a single abstraction at the
-   table's canonical BFS operating point (``spec.enum_point`` steps). Two forms
-   are recorded: the harness ic/fc metric (``target_cr``, for display and the SMC
-   bar) and egg-stitch's *own* reported ``compression_ratio`` (``egg_cr``). The
-   BFS ``--compression-limit`` uses ``egg_cr`` verbatim — that flag checks egg's
-   exact ratio, and the harness's independent ic/fc recompute differs by a node
-   or two (egg's ``(programs …)`` wrapper + its analytic corpus score), which at
-   the ``>=`` boundary would be unreachable.
+2. Establishes a **target compression** = :data:`TARGET_COMPRESSION_FRACTION`
+   (99%) of the *max* compression the baseline (all optimisations on) best-first
+   run reaches with a single abstraction at the table's canonical BFS operating
+   point (``spec.enum_point`` steps). Targeting 99% rather than the exact max
+   makes "reached" mean "learned the same-quality abstraction" instead of "nailed
+   its single minimal-body syntactic form" (a one-node, noise-dominated bar).
+   Two forms of the max are recorded: the harness ic/fc metric (``target_cr``,
+   for display and the SMC bar) and egg-stitch's *own* reported
+   ``compression_ratio`` (``egg_cr``). The BFS ``--compression-limit`` uses the
+   scaled ``egg_cr`` — that flag checks egg's ratio, and the harness's
+   independent ic/fc recompute differs by a node or two (egg's ``(programs …)``
+   wrapper + its analytic corpus score), so it's not interchangeable at the flag.
 3a. **BFS (``--compression-limit``).** Re-runs best-first with every BFS
     ablation, each stopped the instant it reaches the target compression, and
     reports the geomean wall-clock over :data:`NUM_REPS` replicates. Every
@@ -55,6 +58,7 @@ from __future__ import annotations
 
 import json
 import math
+import statistics
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,7 +66,7 @@ from typing import Callable
 
 from .bench import MAX_ARITY, MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
-from .render_common import aggregate_cr, aggregate_time, has_dnf
+from .render_common import aggregate_time, has_dnf, repeat_cr
 from .run_models import OursBf, OursSmc
 from .runner import input_files, run_method
 from .tables import TABLE5_ENUM_POINT, TABLE5_TIMEOUT, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT
@@ -70,9 +74,21 @@ from .tables import TABLE5_ENUM_POINT, TABLE5_TIMEOUT, TABLE7_ITER_LIMIT, TABLE7
 # Every ablation run learns a single abstraction — the only mode
 # `--compression-limit` supports.
 NUM_ABSTRACTIONS = 1
-# Replicates per measurement. BFS is deterministic, so these only average out
-# wall-clock noise; SMC is stochastic, so they also stabilise its geomean CR.
+# Replicates per BFS measurement. BFS is deterministic, so these only average
+# out wall-clock noise.
 NUM_REPS = 3
+# SMC is stochastic and its "reached" check is a razor-thin CR comparison, so it
+# gets more replicates and uses the *median* CR (not geomean): robust to the
+# occasional unlucky run that misses the target, without a single lucky run
+# flipping the threshold.
+SMC_NUM_REPS = 9
+# Each ablation is timed to reach this fraction of the baseline's *max*
+# compression, not the max itself. Hitting the exact max is a razor-thin,
+# noise-sensitive bar — it requires finding the single minimal-body syntactic
+# form of the abstraction (e.g. a 9-node vs 10-node XNOR body), so a run that
+# already learned the same gate can miss by one node. 99% of max is a robust
+# "found the same-quality abstraction" threshold.
+TARGET_COMPRESSION_FRACTION = 0.99
 # BFS ablation runs (3a) get a large step budget so the `--compression-limit`
 # stop — not the step cap — is what ends the search: a weaker ablation needs
 # more heap pops than the baseline to reach the same target compression. But a
@@ -202,14 +218,16 @@ def _geomean(vals: list[float]) -> float | None:
     return math.exp(sum(map(math.log, vals)) / len(vals)) if vals else None
 
 
-def _measure(runner, domain: str, spec: TableSpec, cache_key: str, reps: int = NUM_REPS) -> dict:
+def _measure(runner, domain: str, spec: TableSpec, cache_key: str,
+             reps: int = NUM_REPS, cr_median: bool = False) -> dict:
     """Run ``runner`` on ``domain`` for ``reps`` replicates and return
-    ``{cr, egg_cr, time, steps, dnf}`` (geomeans over (rep, file), or ``None``
-    when any replicate DNF'd). ``cr`` is the harness ic/fc metric (the table's
-    standard, for display and the SMC bar); ``egg_cr`` is egg-stitch's own
-    reported ``compression_ratio`` — the exact metric ``--compression-limit``
-    checks, fed straight back so the BFS stop is reachable. Cached by
-    ``cache_key`` under ``results/ablation/``."""
+    ``{cr, egg_cr, time, steps, dnf}`` (or ``None`` when any replicate DNF'd).
+    ``cr`` is the harness ic/fc metric (the table's standard, for display and the
+    SMC bar): the geomean of per-rep CRs, or their **median** when ``cr_median``
+    (SMC uses this — robust to an unlucky run missing the razor-thin target).
+    ``egg_cr`` is egg-stitch's own reported ``compression_ratio`` — the exact
+    metric ``--compression-limit`` checks, fed straight back so the BFS stop is
+    reachable. Cached by ``cache_key`` under ``results/ablation/``."""
     cache = _cache_path(spec, cache_key)
     if cache.exists():
         with open(cache) as fh:
@@ -225,8 +243,11 @@ def _measure(runner, domain: str, spec: TableSpec, cache_key: str, reps: int = N
     steps = round(_geomean(step_vals)) if step_vals and not dnf else None
     # egg-stitch's own reported ratio — the exact --compression-limit metric.
     egg_vals = [r["egg_compression_ratio"] for run in runs for r in run if r.get("egg_compression_ratio")]
+    # Per-rep CRs aggregated by median (SMC) or geomean (BFS/default).
+    rep_crs = [c for c in (repeat_cr(r) for r in runs) if c is not None]
+    cr = statistics.median(rep_crs) if cr_median else _geomean(rep_crs)
     out = {
-        "cr": None if dnf else aggregate_cr(runs),
+        "cr": None if dnf or not rep_crs else cr,
         "egg_cr": None if dnf else _geomean(egg_vals),
         "time": None if dnf else aggregate_time(runs),
         "steps": steps, "dnf": dnf,
@@ -282,17 +303,17 @@ def _smc_runner(spec: TableSpec, flags: tuple[str, ...], num_particles: int) -> 
     )
 
 
-def target_compression(spec: TableSpec, domain: str) -> tuple[float, float]:
-    """The compression the baseline single-abstraction best-first run reaches on
-    ``domain``, as ``(harness_cr, egg_cr)`` — the quality every ablation is then
-    timed to reach. One (deterministic) replicate; cached.
+def max_compression(spec: TableSpec, domain: str) -> tuple[float, float]:
+    """The *max* compression the baseline single-abstraction best-first run
+    reaches on ``domain``, as ``(harness_cr, egg_cr)``. One (deterministic)
+    replicate; cached. Each ablation is then timed to reach
+    :data:`TARGET_COMPRESSION_FRACTION` of this (see :func:`ablation`).
 
     ``harness_cr`` (ic/fc, the table's standard metric) is the SMC quality bar
-    and the reported/displayed target; ``egg_cr`` (egg-stitch's own reported
-    ``compression_ratio``) is the BFS ``--compression-limit`` value, since that
-    flag checks egg's exact ratio and the harness recompute can't match it to the
-    node. Both are equivalent quality bars (each means "final_cost ≤ baseline's"),
-    just measured on slightly different (constant-offset) scales."""
+    and the reported/displayed number; ``egg_cr`` (egg-stitch's own reported
+    ``compression_ratio``) is the metric the BFS ``--compression-limit`` flag
+    checks. Both anchor to the same baseline final_cost, on slightly different
+    (constant-offset) scales."""
     m = _measure(_bfs_runner(spec, (), None), domain, spec, "bfs_target", reps=1)
     if m["dnf"] or m["cr"] is None or m.get("egg_cr") is None:
         raise SystemExit(f"ablation: baseline BFS DNF'd on {domain}; can't set a target")
@@ -337,7 +358,7 @@ def _find_min_particles(eval_at: Callable[[int], dict], target_cr: float) -> tup
 
 def _run_bfs_ablations(spec: TableSpec, domain: str, limit_cr: float) -> dict[str, dict]:
     """3a: geomean time (over :data:`NUM_REPS`) for every BFS ablation, each
-    stopped at ``limit_cr`` (the baseline's egg-reported ``egg_cr``) via
+    stopped at ``limit_cr`` (99% of the baseline's egg-reported max) via
     ``--compression-limit``."""
     out: dict[str, dict] = {}
     for name, flags in BFS_ABLATIONS.items():
@@ -353,7 +374,8 @@ def _run_smc_ablations(spec: TableSpec, domain: str, target_cr: float) -> dict[s
     out: dict[str, dict] = {}
     for name, flags in SMC_ABLATIONS.items():
         def eval_at(p: int, _flags=flags) -> dict:
-            return _measure(_smc_runner(spec, _flags, p), domain, spec, f"smc_{name}_p{p}")
+            return _measure(_smc_runner(spec, _flags, p), domain, spec, f"smc_{name}_p{p}",
+                            reps=SMC_NUM_REPS, cr_median=True)
 
         particles, m = _find_min_particles(eval_at, target_cr)
         if particles is None:
@@ -371,13 +393,20 @@ def ablation() -> Path:
     results: dict = {"tables": {}}
     for table, spec in TABLE_SPECS.items():
         domain = hardest_domain(spec)
-        target_cr, egg_cr = target_compression(spec, domain)
-        print(f"=== table{table}: hardest={domain}, target CR={target_cr:.4f} "
-              f"(egg CR={egg_cr:.4f}) ===", flush=True)
+        max_cr, max_egg_cr = max_compression(spec, domain)
+        # Target = 99% of max, so an ablation that learns the same-quality
+        # abstraction counts as reaching it even if it misses the exact
+        # minimal-body form by a node.
+        target_cr = max_cr * TARGET_COMPRESSION_FRACTION
+        egg_cr = max_egg_cr * TARGET_COMPRESSION_FRACTION
+        print(f"=== table{table}: hardest={domain}, max CR={max_cr:.4f}, "
+              f"target={target_cr:.4f} (egg {egg_cr:.4f}) ===", flush=True)
         results["tables"][str(table)] = {
             "domain": domain,
+            "max_cr": max_cr,
             "target_cr": target_cr,
             "egg_cr": egg_cr,
+            "target_fraction": TARGET_COMPRESSION_FRACTION,
             "enum_point": spec.enum_point,
             "smc_num_steps": SMC_NUM_STEPS,
             # BFS stops via --compression-limit at egg's own reported ratio
