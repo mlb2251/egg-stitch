@@ -147,7 +147,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     } else {
         args.priority
     };
-    let initial_state = SearchState::new(&shared, true);
+    let initial_state = SearchState::new(&shared, args.freeze_rule.resolve(true));
     let mut scratch = CostScratch::new(&shared.egraph);
     let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
     // No parent, so no lower bound: scan fully.
@@ -187,6 +187,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
     let mut useless_frozen_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
+    // Set when a new best reaches the `--compression-limit` cumulative target;
+    // the search breaks after the child node is pushed (so `best`'s node id is valid).
+    let mut hit_compression_limit = false;
     let search_start = Instant::now();
 
     'search: loop {
@@ -334,6 +337,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                     cost: child_cost,
                     pattern: child_state.pattern.to_string(),
                 });
+                // `--compression-limit` early stop: this best already reaches the
+                // target ratio, so no better one is needed. Break after pushing the
+                // node below (its id must be live for the winner extraction).
+                if args.compression_limit.is_some_and(|limit| original_size as f64 / child_cost as f64 >= limit) {
+                    hit_compression_limit = true;
+                }
             }
 
             // Mirrors SMC's `follow exact match` exit (src/smc.rs:132): once
@@ -370,6 +379,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 );
                 best = Some((child_cost, child_id, child_selection));
                 best_found_at = Some(num_expansions);
+                num_expansions += 1;
+                break 'search;
+            }
+
+            if hit_compression_limit {
+                println!("{}", format!("reached compression limit {:.3}", args.compression_limit.unwrap_or(0.0)).yellow());
                 num_expansions += 1;
                 break 'search;
             }
