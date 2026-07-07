@@ -78,7 +78,7 @@ NUM_REPS = 3
 # seconds, not the ~10min a 600s cap would burn *per replicate*. The
 # target-setting run keeps the table's own enum_point/timeout/mem_limit instead.
 BFS_ABLATION_STEPS = 10_000_000
-BFS_ABLATION_TIMEOUT = 120.0
+BFS_ABLATION_TIMEOUT = 300.0
 BFS_ABLATION_MEM = MEM_LIMIT_BYTES
 # SMC search defaults (matching the table runs: OursSmc's own defaults).
 SMC_NUM_STEPS = 100
