@@ -23,7 +23,7 @@ pub enum SearchPriority {
     BreadthFirst,
     /// Patterns with the most e-class matches first.
     MostMatches,
-    /// Lexicographic `(forced-expansion, cost)` (default)
+    /// Lexicographic `(forced-expansion, cost)`
     ForcedThenCost,
 }
 
