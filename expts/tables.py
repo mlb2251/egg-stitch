@@ -26,7 +26,16 @@ from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
 from .runner import EPFL_CIRCUITS, MOLECULES
 
-NUM_RUNS = 10
+# SMC is stochastic, so it needs more repeats to average out run-to-run noise;
+# every other method here is deterministic and only needs a few for timing noise.
+SMC_NUM_RUNS = 10
+NUM_RUNS = 3
+
+
+def _num_runs_for(label: str) -> int:
+    """Repeats to run for a method: ``SMC_NUM_RUNS`` for the stochastic SMC
+    sweep (``smc-<particles>``), ``NUM_RUNS`` for every deterministic method."""
+    return SMC_NUM_RUNS if label.startswith("smc") else NUM_RUNS
 
 # Table 1 / 3: babble has no equational theory for text/logo/towers, so the
 # "with DSRs" comparison excludes them.
@@ -99,25 +108,27 @@ def _run_method_for_table(
     cache_path: Path,
     bar: tqdm,
 ) -> dict[str, list[list[dict]]]:
-    """Run one method across all domains × ``NUM_RUNS`` for a single table.
+    """Run one method across all domains × its repeat count for a single table.
 
-    Returns ``{domain: [run0_per_file_dicts, run1_per_file_dicts, ...]}``.
-    Cached as a single JSON file per (table, method); delete the file to
-    force a recompute.
+    The repeat count is ``SMC_NUM_RUNS`` for SMC and ``NUM_RUNS`` otherwise (see
+    ``_num_runs_for``). Returns ``{domain: [run0_per_file_dicts, ...]}``. Cached
+    as a single JSON file per (table, method); delete the file to force a
+    recompute.
     """
     from .runner import run_method  # local import: runner pulls heavy deps
 
+    num_runs = _num_runs_for(label)
     if cache_path.exists():
         with open(cache_path) as fh:
             out = json.load(fh)
-        bar.update(len(domains) * NUM_RUNS)
+        bar.update(len(domains) * num_runs)
         return out
 
     out: dict[str, list[list[dict]]] = {}
     for domain in domains:
         runs: list[list[dict]] = []
-        for i in range(NUM_RUNS):
-            bar.set_description(f"{domain} {label} rep {i+1}/{NUM_RUNS}")
+        for i in range(num_runs):
+            bar.set_description(f"{domain} {label} rep {i+1}/{num_runs}")
             per_file = run_method(
                 runner,
                 domain,
@@ -131,7 +142,7 @@ def _run_method_for_table(
             # domain (the renderer drops a method with any DNF), so the remaining
             # replicates can only repeat an expensive timeout — skip them.
             if any(r["compression_ratio"] is None for r in run):
-                bar.update(NUM_RUNS - (i + 1))
+                bar.update(num_runs - (i + 1))
                 break
         out[domain] = runs
 
@@ -150,7 +161,8 @@ def _run_table(
     folder_prefix: str,
     output_name: str,
 ) -> Path:
-    """Run each ``(label, runner)`` on every domain ``NUM_RUNS`` times and save JSON."""
+    """Run each ``(label, runner)`` on every domain (SMC ``SMC_NUM_RUNS`` times,
+    others ``NUM_RUNS``; see ``_num_runs_for``) and save JSON."""
     assert all(
         d in ALL_DOMAINS or d.startswith("molecules:") or d.startswith("epfl-circuits:")
         for d in domains
@@ -162,7 +174,7 @@ def _run_table(
     }
     cache_root = SUMMARY_RESULTS_DIR / Path(output_name).stem
 
-    total = len(domains) * NUM_RUNS * len(runners)
+    total = len(domains) * sum(_num_runs_for(label) for label, _ in runners)
     with tqdm(total=total, unit="run", smoothing=0.05) as bar:
         for label, runner in runners:
             by_domain = _run_method_for_table(
