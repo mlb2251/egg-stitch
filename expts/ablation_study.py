@@ -25,10 +25,13 @@ at once abstractions stack).
 The ablations (see :data:`BFS_ABLATIONS` / :data:`SMC_ABLATIONS`):
 
 * no lower-bound pruning (both)      — ``--no-opt-lower-bound``
-* no dominance (both)                — ``--no-opt-dominance-reuse``
+* no dominance (both)                — ``--no-opt-dominance-reuse`` +
+  ``--no-opt-useless-inline`` (the reuse and inlining dominating-successor
+  short-circuits both go off together)
 * no equivalence pruning (BFS only)  — ``--no-opt-dedup-by-match``
 * no variable ordering (BFS only)    — ``--freeze-rule off``
 * variable ordering left-to-right    — ``--var-order left-to-right``
+* no forced expansion (BFS only)     — ``--priority cost``
 * add variable ordering (SMC only)   — ``--freeze-rule on``
 
 Results are cached per measurement under ``results/ablation/`` (delete a file to
@@ -74,20 +77,24 @@ TABLE7_ENUM_POINT = 10_000
 # BFS ablations: the baseline (all optimisations on) plus one knob removed each.
 # "no variable ordering" turns the freeze rule off entirely (`--freeze-rule off`);
 # "left-to-right" keeps the rule on but swaps the ordering (`--var-order`).
+# "no forced expansion" drops the default `forced-then-cost` heap ordering back
+# to plain cost (`--priority cost`), so patterns are no longer explored in
+# forced-expansion order.
 BFS_ABLATIONS: dict[str, tuple[str, ...]] = {
     "baseline": (),
     "no-lower-bound": ("--no-opt-lower-bound",),
-    "no-dominance": ("--no-opt-dominance-reuse",),
+    "no-dominance": ("--no-opt-dominance-reuse", "--no-opt-useless-inline"),
     "no-equivalence": ("--no-opt-dedup-by-match",),
     "no-var-ordering": ("--freeze-rule", "off"),
     "var-ordering-l2r": ("--var-order", "left-to-right"),
+    "no-forced-expansion": ("--priority", "cost"),
 }
 # SMC ablations: baseline plus the two shared prunes removed, and the (normally
 # off) variable ordering added by turning the freeze rule on (`--freeze-rule on`).
 SMC_ABLATIONS: dict[str, tuple[str, ...]] = {
     "baseline": (),
     "no-lower-bound": ("--no-opt-lower-bound",),
-    "no-dominance": ("--no-opt-dominance-reuse",),
+    "no-dominance": ("--no-opt-dominance-reuse", "--no-opt-useless-inline"),
     "add-var-ordering": ("--freeze-rule", "on"),
 }
 
@@ -190,8 +197,13 @@ def _measure(runner, domain: str, spec: TableSpec, cache_key: str, reps: int = N
 
 def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], target_cr: float | None) -> OursBf:
     """Best-first runner: the table's BFS config plus the ablation flags and,
-    when ``target_cr`` is set, a ``--compression-limit`` stop at that ratio."""
-    limit = () if target_cr is None else ("--compression-limit", f"{target_cr:.6f}")
+    when ``target_cr`` is set, a ``--compression-limit`` stop at that ratio.
+
+    The limit is rounded *down* to 6 decimals (never up), so it can't land a
+    hair above the baseline's own achieved CR — otherwise the baseline (and any
+    tie) would sail past its `>=` early stop and overcount steps/time."""
+    limit = () if target_cr is None else (
+        "--compression-limit", f"{math.floor(target_cr * 1e6) / 1e6:.6f}")
     return OursBf(
         num_steps=spec.enum_point, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
         timeout=spec.timeout, mem_limit=spec.mem_limit, extra_args=flags + limit,
@@ -227,17 +239,21 @@ def _find_min_particles(eval_at: Callable[[int], dict], target_cr: float) -> tup
     """Smallest particle count whose measurement reaches ``target_cr``.
 
     Doubles from :data:`SMC_START_PARTICLES` until a point reaches the target
-    (bracketing it) or :data:`SMC_MAX_PARTICLES` is exceeded (``(None, None)`` —
-    never reached), then bisects the integer particle count. ``eval_at`` is a
-    cached measurement of one particle count. Returns ``(particles, measurement)``.
+    (bracketing it), probing :data:`SMC_MAX_PARTICLES` itself before giving up
+    (the doubling is capped there so the ceiling is honoured exactly, not
+    overshot); if even that doesn't reach, returns ``(None, None)`` — never
+    reached. Then bisects the integer particle count. ``eval_at`` is a cached
+    measurement of one particle count. Returns ``(particles, measurement)``.
     """
     lo, p, hi, hi_m = 0, SMC_START_PARTICLES, None, None
-    while p <= SMC_MAX_PARTICLES:
+    while True:
         m = eval_at(p)
         if _reached(m, target_cr):
             hi, hi_m = p, m
             break
-        lo, p = p, p * 2
+        if p >= SMC_MAX_PARTICLES:  # ceiling probed and still short → give up
+            break
+        lo, p = p, min(p * 2, SMC_MAX_PARTICLES)
     if hi is None:
         return None, None
     while hi - lo > 1:  # bisect the integer particle count in (lo, hi]

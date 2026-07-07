@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run every ./run.py tableX experiment in order, then render the tables.
-# Continues past a failing table and reports which ones failed at the end.
+# Run every ./run.py tableX experiment (plus the arity sweep and ablation) in
+# order, then render them all. Continues past a failing experiment and reports
+# which ones failed at the end.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
@@ -16,6 +17,14 @@ done
 
 echo "=== Rendering tables ==="
 python scripts/render_tables.py
+
+echo "=== Running arity ==="
+if ./run.py arity_experiment; then
+    python scripts/render_arity.py
+else
+    echo "!!! arity_experiment failed, continuing"
+    failed+=("arity_experiment")
+fi
 
 # Ablation study: reuses results/table{3,5,7}.json (the hardest experiment of
 # each), so it runs after those tables. Every measurement is cached, so this is

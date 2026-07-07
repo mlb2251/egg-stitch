@@ -25,6 +25,7 @@ BFS_ABLATIONS = [
     ("no-equivalence", "No equivalence pruning"),
     ("no-var-ordering", "No variable ordering"),
     ("var-ordering-l2r", "Variable ordering L$\\to$R"),
+    ("no-forced-expansion", "No forced expansion"),
 ]
 SMC_ABLATIONS = [
     ("baseline", "Baseline"),
