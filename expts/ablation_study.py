@@ -15,11 +15,12 @@ Runs *after* ``results/table{3,5,7}.json`` exist. For each of those tables it:
     ablation, each stopped the instant it reaches the target compression, and
     reports the geomean wall-clock over :data:`NUM_REPS` replicates. Every
     ablation stops at the same quality, so the times compare like-for-like.
-    These runs use a large step budget (:data:`BFS_ABLATION_STEPS`) and a
-    :data:`BFS_ABLATION_TIMEOUT`, so the compression limit — not the step cap —
-    is what ends the search (a weaker ablation needs more heap pops than the
-    baseline to reach the same quality); an ablation that can't reach the target
-    within the timeout is a DNF.
+    These runs use a large step budget (:data:`BFS_ABLATION_STEPS`), so the
+    compression limit — not the step cap — is what ends the search (a weaker
+    ablation needs more heap pops than the baseline to reach the same quality);
+    a :data:`BFS_ABLATION_TIMEOUT` and :data:`BFS_ABLATION_MEM` cap bound an
+    ablation that can't reach the target at all (→ DNF) instead of letting it run
+    the whole budget or exhaust memory.
 3b. **SMC (particle sweep).** For every SMC ablation, binary-searches the
     smallest particle count whose compression reaches the target, then reports
     that point's geomean wall-clock.
@@ -66,13 +67,19 @@ NUM_ABSTRACTIONS = 1
 # Replicates per measurement. BFS is deterministic, so these only average out
 # wall-clock noise; SMC is stochastic, so they also stabilise its geomean CR.
 NUM_REPS = 3
-# BFS ablation runs (3a) get a large step budget and a timeout so the
-# `--compression-limit` stop — not the step cap — is what ends the search: a
-# weaker ablation needs more heap pops than the baseline to reach the same
-# target compression. The timeout bounds any ablation that can't reach it (→
-# DNF). The target-setting run keeps the table's own enum_point/timeout instead.
+# BFS ablation runs (3a) get a large step budget so the `--compression-limit`
+# stop — not the step cap — is what ends the search: a weaker ablation needs
+# more heap pops than the baseline to reach the same target compression. But a
+# pathological ablation may *never* reach it (e.g. `no-dominance` explores an
+# unbounded frontier), so each run is also bounded by a wall-clock timeout and a
+# memory cap; whichever trips first records the run as a DNF. Successful
+# ablations reach the target in ~seconds (baseline ~0.2s here), so the timeout
+# only ever fires on runs that genuinely can't — keep it short so a DNF costs
+# seconds, not the ~10min a 600s cap would burn *per replicate*. The
+# target-setting run keeps the table's own enum_point/timeout/mem_limit instead.
 BFS_ABLATION_STEPS = 10_000_000
-BFS_ABLATION_TIMEOUT = 600.0
+BFS_ABLATION_TIMEOUT = 120.0
+BFS_ABLATION_MEM = MEM_LIMIT_BYTES
 # SMC search defaults (matching the table runs: OursSmc's own defaults).
 SMC_NUM_STEPS = 100
 SMC_TEMPERATURE = 100.0
@@ -215,23 +222,25 @@ def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], target_cr: float | None
       operating point (``spec.enum_point`` steps, ``spec.timeout``), no limit.
       Its final CR *is* the target every ablation is then timed to reach.
     * ``target_cr`` set — an ablation run: a ``--compression-limit`` stop at that
-      ratio, run with a large step budget (:data:`BFS_ABLATION_STEPS`) and
-      :data:`BFS_ABLATION_TIMEOUT` so the compression limit — not the step cap —
-      ends the search (a weaker ablation needs more pops than the baseline to
-      reach the same quality; the timeout bounds one that can't → DNF).
+      ratio, run with a large step budget (:data:`BFS_ABLATION_STEPS`) so the
+      compression limit — not the step cap — ends the search (a weaker ablation
+      needs more pops than the baseline to reach the same quality), bounded by
+      :data:`BFS_ABLATION_TIMEOUT` and :data:`BFS_ABLATION_MEM` so an ablation
+      that *can't* reach the target dies quickly as a DNF instead of running the
+      full step budget (or ballooning memory on a table with no cap of its own).
 
     The limit is rounded *down* to 6 decimals (never up), so it can't land a
     hair above the baseline's own achieved CR — otherwise the baseline (and any
     tie) would sail past its `>=` early stop and overcount steps/time.
     """
     if target_cr is None:
-        num_steps, timeout, limit = spec.enum_point, spec.timeout, ()
+        num_steps, timeout, mem, limit = spec.enum_point, spec.timeout, spec.mem_limit, ()
     else:
-        num_steps, timeout = BFS_ABLATION_STEPS, BFS_ABLATION_TIMEOUT
+        num_steps, timeout, mem = BFS_ABLATION_STEPS, BFS_ABLATION_TIMEOUT, BFS_ABLATION_MEM
         limit = ("--compression-limit", f"{math.floor(target_cr * 1e6) / 1e6:.6f}")
     return OursBf(
         num_steps=num_steps, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
-        timeout=timeout, mem_limit=spec.mem_limit, extra_args=flags + limit,
+        timeout=timeout, mem_limit=mem, extra_args=flags + limit,
     )
 
 
