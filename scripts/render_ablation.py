@@ -63,11 +63,17 @@ def _fmt_time(t: float | None) -> str:
     return f"{t:.2f}" if t < 100 else f"{t:.0f}"
 
 
+def _fmt_steps(s: int | None) -> str:
+    """Search-step count with thousands separators, or ``--`` when missing."""
+    return "--" if s is None else f"{s:,}"
+
+
 def _bfs_table(tables: dict) -> list[str]:
-    """LaTeX ``tabular`` for the BFS ablations: per experiment, wall-clock (s) at
-    the target compression and the slowdown vs. the baseline."""
+    """LaTeX ``tabular`` for the BFS ablations: per experiment, the search work
+    (best-first heap pops, deterministic) and wall-clock (s) to reach the target
+    compression."""
     cols = [t for t in TABLE_ORDER if t in tables]
-    lines = ["% BFS ablations: time to reach the target compression (--compression-limit)"]
+    lines = ["% BFS ablations: search steps + time to reach the target compression (--compression-limit)"]
     lines.append("\\begin{tabular}{l" + "".join(" rr" for _ in cols) + "}")
     lines.append("\\toprule")
     heads = " & ".join(
@@ -76,17 +82,13 @@ def _bfs_table(tables: dict) -> list[str]:
         for t in cols
     )
     lines.append("Ablation (BFS) & " + heads + " \\\\")
-    lines.append(" & " + " & ".join("Time (s) & Slow" for _ in cols) + " \\\\")
+    lines.append(" & " + " & ".join("Steps & Time (s)" for _ in cols) + " \\\\")
     lines.append("\\midrule")
-    baselines = {t: tables[t]["bfs"].get("baseline", {}).get("time") for t in cols}
     for key, label in BFS_ABLATIONS:
         cells = []
         for t in cols:
             cell = tables[t]["bfs"].get(key, {})
-            time = cell.get("time")
-            base = baselines[t]
-            slow = f"{time / base:.2f}$\\times$" if (time and base) else "--"
-            cells.append(f"{_fmt_time(time)} & {slow}")
+            cells.append(f"{_fmt_steps(cell.get('steps'))} & {_fmt_time(cell.get('time'))}")
         lines.append(f"{label} & " + " & ".join(cells) + " \\\\")
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")

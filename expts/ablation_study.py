@@ -38,6 +38,7 @@ recompute it) and summarised into ``results/ablation.json``.
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -176,7 +177,11 @@ def _measure(runner, domain: str, spec: TableSpec, cache_key: str, reps: int = N
         per_file = run_method(runner, domain, rounds=NUM_ABSTRACTIONS, use_dsrs=True)
         runs.append([r.to_dict() for r in per_file])
     dnf = has_dnf(runs)
-    out = {"cr": None if dnf else aggregate_cr(runs), "time": None if dnf else aggregate_time(runs), "dnf": dnf}
+    # Geomean search-work (best-first pops cut short by --compression-limit, or
+    # SMC steps) over every (rep, file); deterministic for BFS, averaged for SMC.
+    step_vals = [r["num_steps_run"] for run in runs for r in run if r.get("num_steps_run")]
+    steps = round(math.exp(sum(map(math.log, step_vals)) / len(step_vals))) if step_vals and not dnf else None
+    out = {"cr": None if dnf else aggregate_cr(runs), "time": None if dnf else aggregate_time(runs), "steps": steps, "dnf": dnf}
     cache.parent.mkdir(parents=True, exist_ok=True)
     with open(cache, "w") as fh:
         json.dump(out, fh, indent=2)
@@ -251,8 +256,8 @@ def _run_bfs_ablations(spec: TableSpec, domain: str, target_cr: float) -> dict[s
     out: dict[str, dict] = {}
     for name, flags in BFS_ABLATIONS.items():
         m = _measure(_bfs_runner(spec, flags, target_cr), domain, spec, f"bfs_{name}")
-        out[name] = {"time": m["time"], "cr": m["cr"], "dnf": m["dnf"]}
-        print(f"  [table{spec.table}] BFS {name}: time={m['time']}, cr={m['cr']}", flush=True)
+        out[name] = {"time": m["time"], "steps": m["steps"], "cr": m["cr"], "dnf": m["dnf"]}
+        print(f"  [table{spec.table}] BFS {name}: time={m['time']}, steps={m['steps']}, cr={m['cr']}", flush=True)
     return out
 
 
@@ -266,9 +271,9 @@ def _run_smc_ablations(spec: TableSpec, domain: str, target_cr: float) -> dict[s
 
         particles, m = _find_min_particles(eval_at, target_cr)
         if particles is None:
-            out[name] = {"particles": None, "time": None, "cr": None, "reached": False}
+            out[name] = {"particles": None, "time": None, "steps": None, "cr": None, "reached": False}
         else:
-            out[name] = {"particles": particles, "time": m["time"], "cr": m["cr"], "reached": True}
+            out[name] = {"particles": particles, "time": m["time"], "steps": m["steps"], "cr": m["cr"], "reached": True}
         print(f"  [table{spec.table}] SMC {name}: particles={out[name]['particles']}, time={out[name]['time']}", flush=True)
     return out
 

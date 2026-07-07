@@ -55,6 +55,12 @@ class PerFileResult:
     folded in), one entry per learned abstraction. None for other tools or a
     timed-out run. The scramble renderer uses it for the step trajectory."""
 
+    num_steps_run: int | None = None
+    """egg-stitch's search-work count for the first abstraction (best-first heap
+    pops, cut short by --compression-limit, or SMC steps run). None for other
+    tools, a timed-out run, or when no abstraction was found. Used by the
+    ablation study as a hardware-independent complement to wall-clock."""
+
     @classmethod
     def timed_out_result(cls, *, method: str, domain: str, file: str,
                          initial_cost: int, timeout: float) -> "PerFileResult":

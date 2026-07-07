@@ -58,6 +58,11 @@ class BenchResult:
     # egg-stitch fills this; other tools leave it None. Used by the scramble
     # renderer to draw the step-by-step compression trajectory.
     cost_at_end_of_each_iter: list[int] | None = field(default=None)
+    # egg-stitch's search-work count for the first abstraction: best-first heap
+    # pops (which `--compression-limit` cuts short) or SMC steps run. Only
+    # egg-stitch fills this; other tools leave it None. A hardware-independent
+    # complement to wall-clock for the ablation study.
+    num_steps_run: int | None = field(default=None)
 
 
 # Maximum arity of learned abstractions — set the same across all tools so the
