@@ -1,6 +1,6 @@
 use clap::Parser;
 use egg_stitch::{
-    Args, io,
+    Args, best_first, io,
     lang::{LambdaCalc, LanguageFamily, Op, OpChildren, OpDB, Weights},
     pattern::PatternRecExpr,
     smc,
@@ -25,6 +25,11 @@ fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
     let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
     smc::smc(data, args, &mut rng)
+}
+
+fn run_best_first(args: &Args) -> best_first::BestFirstResult<OpChildren, Op> {
+    let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
+    best_first::best_first(data, args)
 }
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
@@ -285,6 +290,41 @@ fn check_slow_intermediate_propagation() {
         "888315200261588942",
     ]);
     let _ = run_lambda_calc(&args);
+}
+
+/// Regression: op-children fast path over-counted when a nested match's rewrite
+/// shrank a captured arg but never re-dirtied the outer match root (missing
+/// `RewriteAnalysis::extra_parents`). Fixture reduced from `epfl-circuits/log2`;
+/// best-first only (SMC doesn't reliably hit the over-counting candidate).
+#[test]
+fn check_slow_op_children_overcount() {
+    let input = "data/domains/stitch/op-children-fast-slow-overcount.json";
+    let rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites";
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
+        return;
+    }
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "best-first",
+        "--input",
+        input,
+        "--rules",
+        rules,
+        "--language",
+        "op-children",
+        "--max-arity",
+        "4",
+        "--num-abstractions",
+        "1",
+        "--iter-limit",
+        "30",
+        "--num-steps",
+        "100",
+        "--check-slow",
+    ]);
+    let result = run_best_first(&args);
+    assert!(result.best.is_some());
 }
 
 /// Exercises the lambda-calc fast/slow check against real physics corpora.
