@@ -126,6 +126,9 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     # --compression-limit, or SMC steps run); None when no abstraction was found.
     library = data.get("library", [])
     num_steps_run = library[0].get("num_steps_run") if library else None
+    # egg-stitch's own reported compression ratio — the exact metric
+    # `--compression-limit` checks; None when no abstraction was found.
+    egg_compression_ratio = data.get("compression_ratio") if library else None
     return BenchResult(
         # Wall-clock from the wrapper (incl. process spawn + corpus read + JSON
         # write), not egg-stitch's internal ``elapsed_secs``, so the time is
@@ -139,6 +142,7 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         cost_after_rewrites=float(data["cost_after_rewrites"]) if rewrites_path is not None else math.nan,
         cost_at_end_of_each_iter=data.get("cost_at_end_of_each_iter"),
         num_steps_run=num_steps_run,
+        egg_compression_ratio=egg_compression_ratio,
     )
 
 

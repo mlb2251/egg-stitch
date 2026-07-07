@@ -63,6 +63,15 @@ class BenchResult:
     # egg-stitch fills this; other tools leave it None. A hardware-independent
     # complement to wall-clock for the ablation study.
     num_steps_run: int | None = field(default=None)
+    # egg-stitch's own reported compression ratio (its `compression_ratio` output).
+    # This is the *exact* quantity `--compression-limit` compares against — the
+    # flag's check and this report use the same cost model — so the ablation feeds
+    # this value straight back as the BFS limit and the `>=` stop is guaranteed
+    # reachable. The harness's own ic/fc (via `ast_size`) is a separate
+    # reimplementation that differs by a node or two (egg's `(programs …)` wrapper
+    # + its analytic corpus score), so it can't be used at the boundary. Only
+    # egg-stitch fills this; other tools leave it None.
+    egg_compression_ratio: float | None = field(default=None)
 
 
 # Maximum arity of learned abstractions — set the same across all tools so the

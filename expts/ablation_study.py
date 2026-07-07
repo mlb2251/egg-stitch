@@ -10,7 +10,13 @@ Runs *after* ``results/table{3,5,7}.json`` exist. For each of those tables it:
    domains are skipped so the compression target is one per-file ratio.
 2. Establishes a **target compression** = the ratio the baseline (all
    optimisations on) best-first run reaches with a single abstraction at the
-   table's canonical BFS operating point (``spec.enum_point`` steps).
+   table's canonical BFS operating point (``spec.enum_point`` steps). Two forms
+   are recorded: the harness ic/fc metric (``target_cr``, for display and the SMC
+   bar) and egg-stitch's *own* reported ``compression_ratio`` (``egg_cr``). The
+   BFS ``--compression-limit`` uses ``egg_cr`` verbatim — that flag checks egg's
+   exact ratio, and the harness's independent ic/fc recompute differs by a node
+   or two (egg's ``(programs …)`` wrapper + its analytic corpus score), which at
+   the ``>=`` boundary would be unreachable.
 3a. **BFS (``--compression-limit``).** Re-runs best-first with every BFS
     ablation, each stopped the instant it reaches the target compression, and
     reports the geomean wall-clock over :data:`NUM_REPS` replicates. Every
@@ -191,10 +197,19 @@ def _cache_path(spec: TableSpec, key: str) -> Path:
     return SUMMARY_RESULTS_DIR / "ablation" / f"table{spec.table}" / f"{key}.json"
 
 
+def _geomean(vals: list[float]) -> float | None:
+    """Geometric mean of ``vals``, or ``None`` when empty."""
+    return math.exp(sum(map(math.log, vals)) / len(vals)) if vals else None
+
+
 def _measure(runner, domain: str, spec: TableSpec, cache_key: str, reps: int = NUM_REPS) -> dict:
     """Run ``runner`` on ``domain`` for ``reps`` replicates and return
-    ``{cr, time, dnf}`` (geomean CR / geomean total wall-clock, or ``None`` when
-    any replicate DNF'd). Cached by ``cache_key`` under ``results/ablation/``."""
+    ``{cr, egg_cr, time, steps, dnf}`` (geomeans over (rep, file), or ``None``
+    when any replicate DNF'd). ``cr`` is the harness ic/fc metric (the table's
+    standard, for display and the SMC bar); ``egg_cr`` is egg-stitch's own
+    reported ``compression_ratio`` — the exact metric ``--compression-limit``
+    checks, fed straight back so the BFS stop is reachable. Cached by
+    ``cache_key`` under ``results/ablation/``."""
     cache = _cache_path(spec, cache_key)
     if cache.exists():
         with open(cache) as fh:
@@ -207,21 +222,28 @@ def _measure(runner, domain: str, spec: TableSpec, cache_key: str, reps: int = N
     # Geomean search-work (best-first pops cut short by --compression-limit, or
     # SMC steps) over every (rep, file); deterministic for BFS, averaged for SMC.
     step_vals = [r["num_steps_run"] for run in runs for r in run if r.get("num_steps_run")]
-    steps = round(math.exp(sum(map(math.log, step_vals)) / len(step_vals))) if step_vals and not dnf else None
-    out = {"cr": None if dnf else aggregate_cr(runs), "time": None if dnf else aggregate_time(runs), "steps": steps, "dnf": dnf}
+    steps = round(_geomean(step_vals)) if step_vals and not dnf else None
+    # egg-stitch's own reported ratio — the exact --compression-limit metric.
+    egg_vals = [r["egg_compression_ratio"] for run in runs for r in run if r.get("egg_compression_ratio")]
+    out = {
+        "cr": None if dnf else aggregate_cr(runs),
+        "egg_cr": None if dnf else _geomean(egg_vals),
+        "time": None if dnf else aggregate_time(runs),
+        "steps": steps, "dnf": dnf,
+    }
     cache.parent.mkdir(parents=True, exist_ok=True)
     with open(cache, "w") as fh:
         json.dump(out, fh, indent=2)
     return out
 
 
-def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], target_cr: float | None) -> OursBf:
-    """Best-first runner, in one of two modes keyed on ``target_cr``:
+def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], limit_cr: float | None) -> OursBf:
+    """Best-first runner, in one of two modes keyed on ``limit_cr``:
 
-    * ``target_cr is None`` — the target-setting run: the table's canonical BFS
+    * ``limit_cr is None`` — the target-setting run: the table's canonical BFS
       operating point (``spec.enum_point`` steps, ``spec.timeout``), no limit.
-      Its final CR *is* the target every ablation is then timed to reach.
-    * ``target_cr`` set — an ablation run: a ``--compression-limit`` stop at that
+      Its output *defines* the targets every ablation is then timed to reach.
+    * ``limit_cr`` set — an ablation run: a ``--compression-limit`` stop at that
       ratio, run with a large step budget (:data:`BFS_ABLATION_STEPS`) so the
       compression limit — not the step cap — ends the search (a weaker ablation
       needs more pops than the baseline to reach the same quality), bounded by
@@ -229,15 +251,21 @@ def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], target_cr: float | None
       that *can't* reach the target dies quickly as a DNF instead of running the
       full step budget (or ballooning memory on a table with no cap of its own).
 
-    The limit is rounded *down* to 6 decimals (never up), so it can't land a
-    hair above the baseline's own achieved CR — otherwise the baseline (and any
-    tie) would sail past its `>=` early stop and overcount steps/time.
+    ``limit_cr`` must be egg-stitch's own reported ``compression_ratio``
+    (``egg_cr``), because ``--compression-limit`` checks that exact quantity. The
+    harness's ic/fc recompute (via ``ast_size``) differs by a node or two — egg's
+    ``(programs …)`` wrapper plus its analytic corpus score — so flooring *that*
+    could land just above what egg can reach and never trip the stop. Feeding
+    egg's own value back sidesteps the mismatch. It is rounded *down* to 6
+    decimals (never up), so it can't land a hair above the baseline's own achieved
+    ratio — otherwise the baseline (and any tie) would sail past its `>=` early
+    stop and overcount steps/time.
     """
-    if target_cr is None:
+    if limit_cr is None:
         num_steps, timeout, mem, limit = spec.enum_point, spec.timeout, spec.mem_limit, ()
     else:
         num_steps, timeout, mem = BFS_ABLATION_STEPS, BFS_ABLATION_TIMEOUT, BFS_ABLATION_MEM
-        limit = ("--compression-limit", f"{math.floor(target_cr * 1e6) / 1e6:.6f}")
+        limit = ("--compression-limit", f"{math.floor(limit_cr * 1e6) / 1e6:.6f}")
     return OursBf(
         num_steps=num_steps, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
         timeout=timeout, mem_limit=mem, extra_args=flags + limit,
@@ -254,14 +282,21 @@ def _smc_runner(spec: TableSpec, flags: tuple[str, ...], num_particles: int) -> 
     )
 
 
-def target_compression(spec: TableSpec, domain: str) -> float:
-    """The single-abstraction compression the baseline best-first run reaches on
-    ``domain`` — the quality every ablation is then timed to reach. One
-    (deterministic) replicate; cached."""
+def target_compression(spec: TableSpec, domain: str) -> tuple[float, float]:
+    """The compression the baseline single-abstraction best-first run reaches on
+    ``domain``, as ``(harness_cr, egg_cr)`` — the quality every ablation is then
+    timed to reach. One (deterministic) replicate; cached.
+
+    ``harness_cr`` (ic/fc, the table's standard metric) is the SMC quality bar
+    and the reported/displayed target; ``egg_cr`` (egg-stitch's own reported
+    ``compression_ratio``) is the BFS ``--compression-limit`` value, since that
+    flag checks egg's exact ratio and the harness recompute can't match it to the
+    node. Both are equivalent quality bars (each means "final_cost ≤ baseline's"),
+    just measured on slightly different (constant-offset) scales."""
     m = _measure(_bfs_runner(spec, (), None), domain, spec, "bfs_target", reps=1)
-    if m["dnf"] or m["cr"] is None:
+    if m["dnf"] or m["cr"] is None or m.get("egg_cr") is None:
         raise SystemExit(f"ablation: baseline BFS DNF'd on {domain}; can't set a target")
-    return m["cr"]
+    return m["cr"], m["egg_cr"]
 
 
 def _reached(m: dict, target_cr: float) -> bool:
@@ -300,12 +335,13 @@ def _find_min_particles(eval_at: Callable[[int], dict], target_cr: float) -> tup
     return hi, hi_m
 
 
-def _run_bfs_ablations(spec: TableSpec, domain: str, target_cr: float) -> dict[str, dict]:
+def _run_bfs_ablations(spec: TableSpec, domain: str, limit_cr: float) -> dict[str, dict]:
     """3a: geomean time (over :data:`NUM_REPS`) for every BFS ablation, each
-    stopped at ``target_cr`` via ``--compression-limit``."""
+    stopped at ``limit_cr`` (the baseline's egg-reported ``egg_cr``) via
+    ``--compression-limit``."""
     out: dict[str, dict] = {}
     for name, flags in BFS_ABLATIONS.items():
-        m = _measure(_bfs_runner(spec, flags, target_cr), domain, spec, f"bfs_{name}")
+        m = _measure(_bfs_runner(spec, flags, limit_cr), domain, spec, f"bfs_{name}")
         out[name] = {"time": m["time"], "steps": m["steps"], "cr": m["cr"], "dnf": m["dnf"]}
         print(f"  [table{spec.table}] BFS {name}: time={m['time']}, steps={m['steps']}, cr={m['cr']}", flush=True)
     return out
@@ -335,14 +371,19 @@ def ablation() -> Path:
     results: dict = {"tables": {}}
     for table, spec in TABLE_SPECS.items():
         domain = hardest_domain(spec)
-        target_cr = target_compression(spec, domain)
-        print(f"=== table{table}: hardest={domain}, target CR={target_cr:.4f} ===", flush=True)
+        target_cr, egg_cr = target_compression(spec, domain)
+        print(f"=== table{table}: hardest={domain}, target CR={target_cr:.4f} "
+              f"(egg CR={egg_cr:.4f}) ===", flush=True)
         results["tables"][str(table)] = {
             "domain": domain,
             "target_cr": target_cr,
+            "egg_cr": egg_cr,
             "enum_point": spec.enum_point,
             "smc_num_steps": SMC_NUM_STEPS,
-            "bfs": _run_bfs_ablations(spec, domain, target_cr),
+            # BFS stops via --compression-limit at egg's own reported ratio
+            # (egg_cr); SMC's _reached check compares the harness ic/fc against
+            # target_cr. Both anchor to the same baseline final_cost.
+            "bfs": _run_bfs_ablations(spec, domain, egg_cr),
             "smc": _run_smc_ablations(spec, domain, target_cr),
         }
     out_path = summary_results_path("ablation.json")

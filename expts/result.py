@@ -61,6 +61,15 @@ class PerFileResult:
     tools, a timed-out run, or when no abstraction was found. Used by the
     ablation study as a hardware-independent complement to wall-clock."""
 
+    egg_compression_ratio: float | None = None
+    """egg-stitch's own reported ``compression_ratio`` for the first abstraction —
+    the *exact* metric ``--compression-limit`` checks (the flag and the report
+    share a cost model). None for other tools, a timed-out run, or when no
+    abstraction was found. The ablation feeds the baseline's value straight back
+    as its BFS ``--compression-limit`` so the ``>=`` stop is reachable; the
+    harness's own ic/fc recompute differs by a node or two and can't be used at
+    that boundary."""
+
     @classmethod
     def timed_out_result(cls, *, method: str, domain: str, file: str,
                          initial_cost: int, timeout: float) -> "PerFileResult":
