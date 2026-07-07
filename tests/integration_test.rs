@@ -295,10 +295,12 @@ fn check_slow_intermediate_propagation() {
 /// Regression: op-children fast path over-counted when a nested match's rewrite
 /// shrank a captured arg but never re-dirtied the outer match root (missing
 /// `RewriteAnalysis::extra_parents`). Fixture reduced from `epfl-circuits/log2`;
-/// best-first only (SMC doesn't reliably hit the over-counting candidate).
+/// best-first only (SMC doesn't reliably hit the over-counting candidate). Kept
+/// in `data/test/` (not `data/domains/`) so the follow-reaches sweep doesn't feed
+/// this adversarial term to reference stitch, whose own utility assert trips on it.
 #[test]
 fn check_slow_op_children_overcount() {
-    let input = "data/domains/stitch/op-children-fast-slow-overcount.json";
+    let input = "data/test/op-children-fast-slow-overcount.json";
     let rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites";
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
