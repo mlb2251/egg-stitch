@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import re
 import sys
 from dataclasses import dataclass
@@ -66,14 +65,10 @@ TICK_FONTSIZE = 11
 LEGEND_FONTSIZE = 14
 TIME_FONTSIZE = 9
 
-ATOM_COLORS = {
-    "C": "#000000",
-    "H": "#555555",
-    "O": "#c81e1e",
-    "R": "#00823c",
-    "R1": "#00823c",
-    "R2": "#00823c",
-}
+# RDKit depiction: keep bond length constant (in px) across molecules so every
+# diagram renders at the same scale, then autocrop and place at a single zoom.
+BOND_LENGTH_PX = 26
+DIAGRAM_ZOOM = 0.28
 
 
 @dataclass(frozen=True)
@@ -201,162 +196,83 @@ def with_implicit_root(node: ExprNode) -> ExprNode:
     return ExprNode(head="m1", label="R", children=(node,))
 
 
-def layout_tree(
-    node: ExprNode,
-) -> tuple[dict[int, tuple[float, float]], dict[int, tuple[int, int]], list[int]]:
-    """Lay out a rooted tree using leaf order on x and depth on y."""
-    positions: dict[int, tuple[float, float]] = {}
-    edges: dict[int, tuple[int, int]] = {}
-    order: list[int] = []
-    leaf_x = 0
+def build_rdkit_mol(node: ExprNode):
+    """Build an RDKit molecule from a parsed expression tree.
 
-    def walk(current: ExprNode, depth: int, parent: ExprNode | None) -> float:
-        nonlocal leaf_x
-        node_id = id(current)
-        order.append(node_id)
-        if not current.children:
-            x = float(leaf_x)
-            leaf_x += 1
+    Each ``ExprNode`` becomes an atom (``R*`` labels become dummy attachment
+    atoms), and the parent link becomes a single or double bond according to the
+    child head (``d`` = double). Explicit ``H`` atoms are added so valences are
+    complete; the depiction later collapses them into the skeletal drawing.
+    """
+    from rdkit import Chem
+
+    mol = Chem.RWMol()
+
+    def add(current: ExprNode, parent_idx: int | None, order: int) -> int:
+        label = current.label
+        if label.startswith("R"):
+            atom = Chem.Atom(0)  # dummy attachment point
+            atom.SetProp("atomLabel", label)
+        elif label == "H":
+            atom = Chem.Atom(1)
+            atom.SetNoImplicit(True)
         else:
-            xs = [walk(child, depth + 1, current) for child in current.children]
-            x = sum(xs) / len(xs)
-        positions[node_id] = (x, -float(depth))
-        if parent is not None:
-            edges[node_id] = (id(parent), bond_order(current.head))
-        return x
+            atom = Chem.Atom(label)
+        idx = mol.AddAtom(atom)
+        if parent_idx is not None:
+            bond = Chem.BondType.DOUBLE if order == 2 else Chem.BondType.SINGLE
+            mol.AddBond(parent_idx, idx, bond)
+        for child in current.children:
+            add(child, idx, bond_order(child.head))
+        return idx
 
-    walk(node, 0, None)
-    return positions, edges, order
-
-
-def normalize_positions(
-    positions: dict[int, tuple[float, float]],
-) -> dict[int, tuple[float, float]]:
-    """Scale a layout into the unit box."""
-    xs = [p[0] for p in positions.values()]
-    ys = [p[1] for p in positions.values()]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    x_span = max_x - min_x
-    y_span = max_y - min_y
-
-    def place_within(value: float, min_val: float, span: float) -> float:
-        # A vertical/linear fragment collapses to a single column or row.
-        if span == 0:
-            return 0.5
-        return (value - min_val) / span
-
-    return {
-        node_id: (
-            place_within(x, min_x, x_span),
-            place_within(y, min_y, y_span),
-        )
-        for node_id, (x, y) in positions.items()
-    }
+    add(node, None, 1)
+    return mol
 
 
-def add_bond_segments(
-    drawer, p1: tuple[float, float], p2: tuple[float, float], order: int
-) -> None:
-    """Draw one, two, or three parallel bond segments."""
-    from matplotlib.lines import Line2D
-
-    x1, y1 = p1
-    x2, y2 = p2
-    dx = x2 - x1
-    dy = y2 - y1
-    length = math.hypot(dx, dy) or 1.0
-    px = -dy / length
-    py = dx / length
-    offsets = {1: [0.0], 2: [-0.06, 0.06]}[order]
-    for offset in offsets:
-        drawer.add_artist(
-            Line2D(
-                [x1 + px * offset, x2 + px * offset],
-                [y1 + py * offset, y2 + py * offset],
-                color="black",
-                linewidth=1.0 if order == 1 else 0.9,
-                solid_capstyle="round",
-            )
-        )
+def autocrop(image: np.ndarray, margin: int = 2) -> np.ndarray:
+    """Trim fully-transparent borders from an RGBA image, keeping a small margin."""
+    opaque = np.where(image[:, :, 3] > 0)
+    if opaque[0].size == 0:
+        return image
+    y0, y1 = opaque[0].min(), opaque[0].max()
+    x0, x1 = opaque[1].min(), opaque[1].max()
+    h, w = image.shape[:2]
+    y0, x0 = max(y0 - margin, 0), max(x0 - margin, 0)
+    y1, x1 = min(y1 + margin, h - 1), min(x1 + margin, w - 1)
+    return image[y0 : y1 + 1, x0 : x1 + 1]
 
 
 def render_molecule_diagram(entry: ExprNode):
-    """Build a compact molecular diagram for a learned library entry."""
-    from matplotlib.offsetbox import DrawingArea
-    from matplotlib.patches import Circle
-    from matplotlib.text import Text
+    """Build a skeletal molecular diagram for a learned library entry.
+
+    Returns a matplotlib ``OffsetImage`` of the RDKit depiction, cropped to its
+    content and scaled at a shared zoom so every diagram uses the same bond
+    length regardless of molecule size.
+    """
+    from io import BytesIO
+    import matplotlib.image as mpimg
+    from matplotlib.offsetbox import OffsetImage
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+    from rdkit.Chem.Draw import rdMolDraw2D
 
     node = with_implicit_root(entry).normalize_labels()
-    positions, edges, order = layout_tree(node)
-    positions = normalize_positions(positions)
+    mol = build_rdkit_mol(node).GetMol()
+    Chem.SanitizeMol(mol)
+    mol = Chem.RemoveHs(mol)  # collapse to skeletal form (implicit H on carbons)
+    AllChem.Compute2DCoords(mol)
 
-    width = 46
-    height = 33
-    pad_x = 4
-    pad_y = 4
-    scale_x = width - 2 * pad_x
-    scale_y = height - 2 * pad_y
-    drawer = DrawingArea(width, height, 0, 0)
+    drawer = rdMolDraw2D.MolDraw2DCairo(600, 600)
+    opts = drawer.drawOptions()
+    opts.clearBackground = False  # transparent background
+    opts.fixedBondLength = BOND_LENGTH_PX
+    opts.bondLineWidth = 2
+    rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol)
+    drawer.FinishDrawing()
 
-    for child_id, (parent_id, bond) in edges.items():
-        add_bond_segments(
-            drawer,
-            (
-                pad_x + positions[parent_id][0] * scale_x,
-                pad_y + positions[parent_id][1] * scale_y,
-            ),
-            (
-                pad_x + positions[child_id][0] * scale_x,
-                pad_y + positions[child_id][1] * scale_y,
-            ),
-            bond,
-        )
-
-    for node_id in order:
-        current = None
-        stack = [node]
-        while stack:
-            candidate = stack.pop()
-            if id(candidate) == node_id:
-                current = candidate
-                break
-            stack.extend(candidate.children)
-        if current is None:
-            continue
-
-        x, y = positions[node_id]
-        x = pad_x + x * scale_x
-        y = pad_y + y * scale_y
-        atom_color = ATOM_COLORS[current.label]
-
-        gray = sum(int(atom_color[i : i + 2], 16) for i in (1, 3, 5)) / 3
-        if gray < 128:
-            text = "white"
-        else:
-            text = "black"
-        radius = 2.7
-        drawer.add_artist(
-            Circle(
-                (x, y),
-                radius=radius,
-                facecolor=atom_color,
-                linewidth=1.0,
-            )
-        )
-        drawer.add_artist(
-            Text(
-                x,
-                y,
-                current.label,
-                fontsize=3.9,
-                ha="center",
-                va="center",
-                color=text,
-            )
-        )
-
-    return drawer
+    image = autocrop(mpimg.imread(BytesIO(drawer.GetDrawingText()), format="png"))
+    return OffsetImage(image, zoom=DIAGRAM_ZOOM)
 
 
 def annotate_diagram(ax, x: float, y: float, entry: ExprNode, offset_y: int) -> None:
@@ -458,7 +374,7 @@ def annotate_series(
             annotate_diagram(ax, x, y, label, yoff)
 
     ax.annotate(
-        f"t={time_value:.3f}s",
+        f"t={time_value:.2f}s",
         xy=(xs[-1], ys[-1]),
         xytext=(8, 0),
         textcoords="offset points",
@@ -512,9 +428,12 @@ def plot_domain(ax, saved: dict, domain: str, max_step: int) -> tuple[list, list
     ax.set_xlabel("Step", fontsize=LABEL_FONTSIZE)
     ax.set_ylabel("Compression", fontsize=LABEL_FONTSIZE)
     ax.grid(True, which="both", linewidth=0.35, alpha=0.35)
+    from matplotlib.ticker import MultipleLocator
+
     lo, hi = ax.get_ylim()
     r = hi - lo
-    ax.set_ylim(lo - r * 0.12, hi + r * 0.28)
+    ax.set_ylim(lo - r * 0.08, hi + r * 0.20)
+    ax.yaxis.set_major_locator(MultipleLocator(1))
 
     family = domain.split(":", 1)[1] if ":" in domain else domain
     ax.set_title(family.capitalize(), fontsize=TITLE_FONTSIZE)
@@ -532,7 +451,10 @@ def render_combined(saved: dict, out_path: Path, max_step: int) -> None:
 
     domains = [d for d in TABLE5_DOMAINS if d in saved["domains"]]
 
-    fig, axes = plt.subplots(2, 2, figsize=(8.0, 6.0), tight_layout=True)
+    fig, axes = plt.subplots(
+        2, 2, figsize=(8.0, 4.8), constrained_layout=True
+    )
+    fig.get_layout_engine().set(h_pad=0.02, hspace=0.02)
     flat = list(axes.flatten())
 
     legend_handles: list = []
