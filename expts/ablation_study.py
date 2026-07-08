@@ -9,46 +9,25 @@ Runs *after* ``results/table{3,5,7}.json`` exist. For each of those tables it:
    cell has no reported time, so it can't be "hardest"). Multi-file (dreamcoder)
    domains are skipped so the compression target is one per-file ratio.
 2. Establishes a **target compression** = :data:`TARGET_COMPRESSION_FRACTION`
-   (99%) of the *max* compression the baseline (all optimisations on) best-first
-   run reaches with a single abstraction at the table's canonical BFS operating
-   point (``spec.enum_point`` steps). Targeting 99% rather than the exact max
-   makes "reached" mean "learned the same-quality abstraction" instead of "nailed
-   its single minimal-body syntactic form" (a one-node, noise-dominated bar).
-   Two forms of the max are recorded: the harness ic/fc metric (``target_cr``,
-   for display and the SMC bar) and egg-stitch's *own* reported
-   ``compression_ratio`` (``egg_cr``). The BFS ``--compression-limit`` uses the
-   scaled ``egg_cr`` — that flag checks egg's ratio, and the harness's
-   independent ic/fc recompute differs by a node or two (egg's ``(programs …)``
-   wrapper + its analytic corpus score), so it's not interchangeable at the flag.
+   of the *max* compression the baseline (all optimisations on) best-first run
+   reaches with a single abstraction at the table's canonical BFS operating point
+   (``spec.enum_point`` steps). Two forms of the max are recorded: the harness
+   ic/fc metric (``target_cr``, for display and the SMC bar) and egg-stitch's own
+   reported ``compression_ratio`` (``egg_cr``, what BFS ``--compression-limit``
+   checks); see :attr:`expts.bench.BenchResult.egg_compression_ratio`.
 3a. **BFS (``--compression-limit``).** Re-runs best-first with every BFS
     ablation, each stopped the instant it reaches the target compression, and
     reports the geomean wall-clock over :data:`NUM_REPS` replicates. Every
-    ablation stops at the same quality, so the times compare like-for-like.
-    These runs use a large step budget (:data:`BFS_ABLATION_STEPS`), so the
-    compression limit — not the step cap — is what ends the search (a weaker
-    ablation needs more heap pops than the baseline to reach the same quality);
-    a :data:`BFS_ABLATION_TIMEOUT` and :data:`BFS_ABLATION_MEM` cap bound an
-    ablation that can't reach the target at all (→ DNF) instead of letting it run
-    the whole budget or exhaust memory.
+    ablation stops at the same quality, so the times compare like-for-like (see
+    :data:`BFS_ABLATION_STEPS` for the step/timeout/memory bounds these runs use).
 3b. **SMC (particle sweep).** For every SMC ablation, binary-searches the
     smallest particle count whose compression reaches the target, then reports
     that point's geomean wall-clock.
 
 Everything runs with a **single abstraction** (``--num-abstractions 1``), which
 is the only mode ``--compression-limit`` supports (there's no one ratio to stop
-at once abstractions stack).
-
-The ablations (see :data:`BFS_ABLATIONS` / :data:`SMC_ABLATIONS`):
-
-* no lower-bound pruning (BFS only)  — ``--lower-bound off`` (BFS defaults on)
-* add lower-bound pruning (SMC only) — ``--lower-bound on`` (SMC defaults off)
-* no dominance (both)                — ``--no-opt-dominance-reuse`` +
-  ``--no-opt-useless-inline`` (the reuse and inlining dominating-successor
-  short-circuits both go off together)
-* no equivalence pruning (BFS only)  — ``--no-opt-dedup-by-match``
-* no variable ordering (BFS only)    — ``--freeze-rule off``
-* variable ordering left-to-right    — ``--var-order left-to-right``
-* add variable ordering (SMC only)   — ``--freeze-rule on``
+at once abstractions stack). The ablations themselves are :data:`BFS_ABLATIONS`
+and :data:`SMC_ABLATIONS`.
 
 Results are cached per measurement under ``results/ablation/`` (delete a file to
 recompute it) and summarised into ``results/ablation.json``.
@@ -264,22 +243,16 @@ def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], limit_cr: float | None)
       operating point (``spec.enum_point`` steps, ``spec.timeout``), no limit.
       Its output *defines* the targets every ablation is then timed to reach.
     * ``limit_cr`` set — an ablation run: a ``--compression-limit`` stop at that
-      ratio, run with a large step budget (:data:`BFS_ABLATION_STEPS`) so the
-      compression limit — not the step cap — ends the search (a weaker ablation
-      needs more pops than the baseline to reach the same quality), bounded by
-      :data:`BFS_ABLATION_TIMEOUT` and :data:`BFS_ABLATION_MEM` so an ablation
-      that *can't* reach the target dies quickly as a DNF instead of running the
-      full step budget (or ballooning memory on a table with no cap of its own).
+      ratio, run with the large :data:`BFS_ABLATION_STEPS` budget and bounded by
+      :data:`BFS_ABLATION_TIMEOUT` / :data:`BFS_ABLATION_MEM` (see those
+      constants for why).
 
-    ``limit_cr`` must be egg-stitch's own reported ``compression_ratio``
-    (``egg_cr``), because ``--compression-limit`` checks that exact quantity. The
-    harness's ic/fc recompute (via ``ast_size``) differs by a node or two — egg's
-    ``(programs …)`` wrapper plus its analytic corpus score — so flooring *that*
-    could land just above what egg can reach and never trip the stop. Feeding
-    egg's own value back sidesteps the mismatch. It is rounded *down* to 6
-    decimals (never up), so it can't land a hair above the baseline's own achieved
-    ratio — otherwise the baseline (and any tie) would sail past its `>=` early
-    stop and overcount steps/time.
+    ``limit_cr`` must be egg's own reported ratio (``egg_cr``), the quantity
+    ``--compression-limit`` checks — not the harness ic/fc (see
+    :attr:`expts.bench.BenchResult.egg_compression_ratio`). It is rounded *down*
+    to 6 decimals (never up), so it can't land a hair above the baseline's own
+    achieved ratio — otherwise the baseline (and any tie) would sail past its
+    ``>=`` early stop and overcount steps/time.
     """
     if limit_cr is None:
         num_steps, timeout, mem, limit = spec.enum_point, spec.timeout, spec.mem_limit, ()
@@ -304,15 +277,11 @@ def _smc_runner(spec: TableSpec, flags: tuple[str, ...], num_particles: int) -> 
 
 def max_compression(spec: TableSpec, domain: str) -> tuple[float, float]:
     """The *max* compression the baseline single-abstraction best-first run
-    reaches on ``domain``, as ``(harness_cr, egg_cr)``. One (deterministic)
-    replicate; cached. Each ablation is then timed to reach
-    :data:`TARGET_COMPRESSION_FRACTION` of this (see :func:`ablation`).
-
-    ``harness_cr`` (ic/fc, the table's standard metric) is the SMC quality bar
-    and the reported/displayed number; ``egg_cr`` (egg-stitch's own reported
-    ``compression_ratio``) is the metric the BFS ``--compression-limit`` flag
-    checks. Both anchor to the same baseline final_cost, on slightly different
-    (constant-offset) scales."""
+    reaches on ``domain``, as ``(harness_cr, egg_cr)`` — the SMC quality bar and
+    the BFS ``--compression-limit`` metric respectively (both anchored to the same
+    baseline final_cost). One (deterministic) replicate; cached. Each ablation is
+    then timed to reach :data:`TARGET_COMPRESSION_FRACTION` of this (see
+    :func:`ablation`)."""
     m = _measure(_bfs_runner(spec, (), None), domain, spec, "bfs_target", reps=1)
     if m["dnf"] or m["cr"] is None or m.get("egg_cr") is None:
         raise SystemExit(f"ablation: baseline BFS DNF'd on {domain}; can't set a target")
