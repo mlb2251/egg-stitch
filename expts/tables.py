@@ -47,11 +47,14 @@ TABLE2_DOMAINS = TABLE1_DOMAINS + ["text", "logo", "towers"]
 # Hyperparameter sweeps for the two ours-search modes. Each value gets its
 # own runner / cache file, labelled ``enum-<num_steps>`` /
 # ``smc-<num_particles>`` so the renderer can group sweep points back into
-# a single line per base method. The table cells still show one canonical
-# point per method (see ``TABLE_BFS_STEPS`` / ``TABLE_SMC_PARTICLES`` in
-# ``scripts/render_tables.py``).
+# a single line per base method, at the one canonical point below.
 BFS_STEP_SWEEP: tuple[int, ...] = (200, 500, 1000, 2000, 5000, 10000, 20000, 50000)
 SMC_PARTICLE_SWEEP: tuple[int, ...] = (20, 50, 100, 200, 500, 1000, 2000, 5000)
+
+# The single sweep point each base method contributes to the table cells.
+# Plots use the full sweep regardless.
+TABLE_BFS_STEPS = 10000
+TABLE_SMC_PARTICLES = 1000
 
 
 def _sweep_runners(

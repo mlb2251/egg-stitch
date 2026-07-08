@@ -33,6 +33,8 @@ from expts.tables import (  # noqa: E402
     TABLE7_BFS_SWEEP,
     TABLE7_DOMAINS,
     TABLE7_SMC_SWEEP,
+    TABLE_BFS_STEPS,
+    TABLE_SMC_PARTICLES,
 )
 from dataclasses import dataclass  # noqa: E402
 
@@ -93,10 +95,6 @@ METHOD_PLOT_LABELS = {
     BASELINE_METHOD: "E-Stitch: BFS (DSRs at start)",
     NO_RULES_METHOD: "E-Stitch: BFS (no rules)",
 }
-# The single sweep point each base method contributes to the table cells.
-# Plots use the full sweep regardless.
-TABLE_BFS_STEPS = 10000
-TABLE_SMC_PARTICLES = 1000
 TABLE_DATA_KEYS = {
     "enum": f"enum-{TABLE_BFS_STEPS}",
     "smc": f"smc-{TABLE_SMC_PARTICLES}",

@@ -48,7 +48,10 @@ from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .render_common import aggregate_time, has_dnf, repeat_cr
 from .run_models import OursBf, OursSmc
 from .runner import input_files, run_method
-from .tables import TABLE5_ENUM_POINT, TABLE5_TIMEOUT, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT
+from .tables import (
+    TABLE5_ENUM_POINT, TABLE5_TIMEOUT, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT,
+    TABLE_BFS_STEPS,
+)
 
 # Every ablation run learns a single abstraction — the only mode
 # `--compression-limit` supports.
@@ -88,12 +91,6 @@ SMC_TEMPERATURE = 100.0
 # point reaches the target (or MAX is exceeded → "never reached"), then bisects.
 SMC_START_PARTICLES = 20
 SMC_MAX_PARTICLES = 20_000
-
-# The canonical BFS step budget behind each table's ``enum`` cell — table5's
-# molecule sweep uses an extended 100k point, the cogsci/circuit tables 10k
-# (mirrors ``TABLE_BFS_STEPS`` / ``TABLE5_ENUM_POINT`` in render_tables.py).
-TABLE3_ENUM_POINT = 10_000
-TABLE7_ENUM_POINT = 10_000
 
 # BFS ablations: the baseline (all optimisations on) plus one knob removed each.
 # "no lower-bound" forces lower-bound pruning off (`--lower-bound off`); BFS
@@ -144,11 +141,11 @@ class TableSpec:
 
 TABLE_SPECS: dict[int, TableSpec] = {
     3: TableSpec(table=3, max_arity=MAX_ARITY, iter_limit=None, timeout=None,
-                 mem_limit=None, enum_point=TABLE3_ENUM_POINT),
+                 mem_limit=None, enum_point=TABLE_BFS_STEPS),
     5: TableSpec(table=5, max_arity=MAX_ARITY, iter_limit=None, timeout=TABLE5_TIMEOUT,
                  mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE5_ENUM_POINT),
     7: TableSpec(table=7, max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT,
-                 timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE7_ENUM_POINT),
+                 timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE_BFS_STEPS),
 }
 
 
