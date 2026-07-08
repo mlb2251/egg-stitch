@@ -159,15 +159,21 @@ def _break_marks(left, right) -> None:
     right.plot([0, 0], [0, 1], transform=right.transAxes, **kw)
 
 
-def render_domain_panel(container, methods: dict[str, dict], title: str):
+def render_domain_panel(container, methods: dict[str, dict], title: str,
+                        show_legend: bool = True):
     """Draw one domain onto ``container`` (a Figure or SubFigure): a broken-x
     time-vs-arity plot (wide 1..20 panel + narrow 10^6 panel), with the
-    optimal-abstraction arity range shaded."""
+    optimal-abstraction arity range shaded. ``show_legend`` toggles the legend
+    (drawn bottom-right)."""
     from matplotlib.ticker import FixedLocator, FixedFormatter, MultipleLocator
 
     assert_cr_agreement(methods, title)
 
-    gs = container.add_gridspec(1, 2, width_ratios=[8, 1], wspace=0.08)
+    # Reserve bottom room for the figure-level "Max arity" label up front, so
+    # the optimal-band bridge rectangle (which reads the axes' positions) lands
+    # in the right place.
+    gs = container.add_gridspec(1, 2, width_ratios=[8, 1], wspace=0.08,
+                                bottom=0.17, top=0.97)
     ax = container.add_subplot(gs[0, 0])
     axb = container.add_subplot(gs[0, 1], sharey=ax)
 
@@ -189,13 +195,13 @@ def render_domain_panel(container, methods: dict[str, dict], title: str):
 
     _break_marks(ax, axb)
 
-    from matplotlib.patches import Patch
-    handles, _ = ax.get_legend_handles_labels()
-    if optimal_arity(methods) is not None:
-        handles.append(Patch(facecolor=OPTIMAL_COLOR, alpha=0.35, label="optimal abstraction"))
-    ax.legend(handles=handles, loc="upper left")
-    container.suptitle(title)
-    container.supxlabel("Max arity")
+    if show_legend:
+        from matplotlib.patches import Patch
+        handles, _ = ax.get_legend_handles_labels()
+        if optimal_arity(methods) is not None:
+            handles.append(Patch(facecolor=OPTIMAL_COLOR, alpha=0.35, label="optimal abstraction"))
+        ax.legend(handles=handles, loc="lower right")
+    container.supxlabel("Max arity", y=0.04)
     return ax, axb
 
 
@@ -212,10 +218,12 @@ def main() -> None:
 
     # Per-domain figures.
     for domain in domains:
-        fig = plt.figure(figsize=(6, 4.5))
-        render_domain_panel(fig, data["domains"][domain]["methods"], DOMAIN_TITLES.get(domain, domain))
+        fig = plt.figure(figsize=(6, 3.0))
+        render_domain_panel(fig, data["domains"][domain]["methods"],
+                            DOMAIN_TITLES.get(domain, domain),
+                            show_legend=domain == "wheels")
         out = FIGURES_DIR / "arity" / f"{domain}.png"
-        fig.savefig(out, dpi=300)
+        fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.02)
         plt.close(fig)
         print(f"wrote {out}")
 
