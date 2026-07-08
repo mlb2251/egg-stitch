@@ -108,24 +108,12 @@ def _reported_enum_point(spec: TableSpec, saved: dict) -> int:
 
 
 def hardest_domain(spec: TableSpec, saved: dict) -> str:
-    """The table's hardest single-file domain (longest BFS time, skipping multi-file).
-    """
+    """The table's hardest single-file domain: the longest BFS time at the reported
+    cell. reported_sweep_point picked that cell so every domain finishes there, so
+    there are no DNFs to skip; multi-file (dreamcoder) domains are excluded."""
     key = spec.enum_key
-    best: tuple[str, float] | None = None  # (domain, time)
-    for domain, payload in saved["domains"].items():
-        if len(input_files(domain)) != 1:  # skip multi-file (dreamcoder) domains
-            continue
-        reps = payload.get("runs", {}).get(key)
-        if not reps or has_dnf(reps):
-            raise ValueError(f"ablation: table{spec.table} domain {domain} has no non-DNF single-file BFS ({key}) result")
-        t = aggregate_time(reps)
-        if t is not None and (best is None or t > best[1]):
-            best = (domain, t)
-    if best is None:
-        raise SystemExit(
-            f"ablation: table{spec.table} has no non-DNF single-file BFS ({key}) result"
-        )
-    return best[0]
+    singles = [d for d in saved["domains"] if len(input_files(d)) == 1]
+    return max(singles, key=lambda d: aggregate_time(saved["domains"][d]["runs"][key]))
 
 
 # ─── measurement + caching ─────────────────────────────────────────────────
