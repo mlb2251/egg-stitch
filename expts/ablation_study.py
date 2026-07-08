@@ -35,6 +35,7 @@ from .tables import (
     TABLE7_BFS_SWEEP, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT, TABLE_BFS_STEPS,
 )
 
+TARGET_COMPRESSION_FRACTION = 0.99
 BFS_NUM_REPS = 3
 SMC_NUM_REPS = 9
 # Run for effectively unlimited steps, but stop at 5 minutes or 8GB
