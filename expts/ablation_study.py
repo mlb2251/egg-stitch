@@ -39,18 +39,18 @@ import json
 import math
 import statistics
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
 from .bench import MAX_ARITY, MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
-from .render_common import aggregate_time, has_dnf, repeat_cr
+from .render_common import aggregate_time, has_dnf, repeat_cr, reported_sweep_point
 from .run_models import OursBf, OursSmc
 from .runner import input_files, run_method
 from .tables import (
-    TABLE5_ENUM_POINT, TABLE5_TIMEOUT, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT,
-    TABLE_BFS_STEPS,
+    BFS_STEP_SWEEP, TABLE5_BFS_SWEEP, TABLE5_ENUM_POINT, TABLE5_TIMEOUT,
+    TABLE7_BFS_SWEEP, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT, TABLE_BFS_STEPS,
 )
 
 # Every ablation run learns a single abstraction — the only mode
@@ -131,7 +131,10 @@ class TableSpec:
     iter_limit: int | None
     timeout: float | None
     mem_limit: int | None
+    # Configured BFS operating point and its sweep, resolved to the reported cell
+    # via :func:`reported_sweep_point` (see :func:`_reported_enum_point`).
     enum_point: int
+    bfs_sweep: tuple[int, ...]
 
     @property
     def enum_key(self) -> str:
@@ -141,27 +144,42 @@ class TableSpec:
 
 TABLE_SPECS: dict[int, TableSpec] = {
     3: TableSpec(table=3, max_arity=MAX_ARITY, iter_limit=None, timeout=None,
-                 mem_limit=None, enum_point=TABLE_BFS_STEPS),
+                 mem_limit=None, enum_point=TABLE_BFS_STEPS, bfs_sweep=BFS_STEP_SWEEP),
     5: TableSpec(table=5, max_arity=MAX_ARITY, iter_limit=None, timeout=TABLE5_TIMEOUT,
-                 mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE5_ENUM_POINT),
+                 mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE5_ENUM_POINT, bfs_sweep=TABLE5_BFS_SWEEP),
     7: TableSpec(table=7, max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT,
-                 timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE_BFS_STEPS),
+                 timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
+                 enum_point=TABLE_BFS_STEPS, bfs_sweep=TABLE7_BFS_SWEEP),
 }
 
 
-def hardest_domain(spec: TableSpec) -> str:
-    """The table's hardest **single-file** BFS experiment.
-
-    Reads ``results/table{N}.json`` and, over the single-file domains where the
-    canonical BFS cell finished (non-DNF time), returns the one with the longest
-    BFS wall-clock. Multi-file (dreamcoder) domains are excluded so the target is
-    a single per-file ratio rather than a cross-file geomean.
-    """
+def _load_table(spec: TableSpec) -> dict:
+    """Load ``results/table{N}.json`` (the ablation runs after that table)."""
     path = SUMMARY_RESULTS_DIR / f"table{spec.table}.json"
     if not path.exists():
         raise SystemExit(f"ablation: missing {path}; run table{spec.table} first")
     with open(path) as fh:
-        saved = json.load(fh)
+        return json.load(fh)
+
+
+def _reported_enum_point(spec: TableSpec, saved: dict) -> int:
+    """The BFS point the LaTeX table reports for ``spec`` — its configured
+    ``enum_point``, kicked down like the family tables when a family DNFs there
+    (table7 configures 10k but reports enum-1000). :func:`ablation` then pins
+    ``spec.enum_point`` to it, so the hardest-domain pick and the target run both
+    use the reported cell."""
+    domain_runs = [d.get("runs", {}) for d in saved["domains"].values()]
+    return reported_sweep_point(domain_runs, "enum", spec.bfs_sweep, spec.enum_point)
+
+
+def hardest_domain(spec: TableSpec, saved: dict) -> str:
+    """The table's hardest **single-file** BFS experiment.
+
+    Over the single-file domains where the reported BFS cell (``spec.enum_key``,
+    already kicked down by :func:`ablation`) finished, returns the one with the
+    longest BFS wall-clock. Multi-file (dreamcoder) domains are excluded so the
+    target is a single per-file ratio rather than a cross-file geomean.
+    """
     key = spec.enum_key
     best: tuple[str, float] | None = None  # (domain, time)
     for domain, payload in saved["domains"].items():
@@ -357,7 +375,11 @@ def ablation() -> Path:
     set_folder(f"ablation/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {"tables": {}}
     for table, spec in TABLE_SPECS.items():
-        domain = hardest_domain(spec)
+        saved = _load_table(spec)
+        # Pin enum_point to the cell the table actually reports (kicked down when
+        # the configured point DNFs), so the hardest pick and target run match it.
+        spec = replace(spec, enum_point=_reported_enum_point(spec, saved))
+        domain = hardest_domain(spec, saved)
         max_cr, max_egg_cr = max_compression(spec, domain)
         # Target = 99% of max, so an ablation that learns the same-quality
         # abstraction counts as reaching it even if it misses the exact
