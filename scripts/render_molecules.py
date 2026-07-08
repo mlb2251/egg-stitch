@@ -57,6 +57,15 @@ METHOD_COMMON_NAME = {
     "search-DSR": "E-Stitch",
 }
 
+# Font sizes (points) for the combined 2x2 figure. Kept deliberately large
+# relative to the shrunken per-panel size so that, once the whole grid is
+# placed at \textwidth in the paper, the text reads clearly.
+TITLE_FONTSIZE = 14
+LABEL_FONTSIZE = 13
+TICK_FONTSIZE = 11
+LEGEND_FONTSIZE = 14
+TIME_FONTSIZE = 9
+
 ATOM_COLORS = {
     "C": "#000000",
     "H": "#555555",
@@ -282,10 +291,10 @@ def render_molecule_diagram(entry: ExprNode):
     positions, edges, order = layout_tree(node)
     positions = normalize_positions(positions)
 
-    width = 74
-    height = 52
-    pad_x = 7
-    pad_y = 6
+    width = 46
+    height = 33
+    pad_x = 4
+    pad_y = 4
     scale_x = width - 2 * pad_x
     scale_y = height - 2 * pad_y
     drawer = DrawingArea(width, height, 0, 0)
@@ -326,7 +335,7 @@ def render_molecule_diagram(entry: ExprNode):
             text = "white"
         else:
             text = "black"
-        radius = 4
+        radius = 2.7
         drawer.add_artist(
             Circle(
                 (x, y),
@@ -340,7 +349,7 @@ def render_molecule_diagram(entry: ExprNode):
                 x,
                 y,
                 current.label,
-                fontsize=5.8,
+                fontsize=3.9,
                 ha="center",
                 va="center",
                 color=text,
@@ -444,7 +453,7 @@ def annotate_series(
             continue
 
         if label:
-            offset = 30
+            offset = 18
             yoff = offset if above_median else -offset
             annotate_diagram(ax, x, y, label, yoff)
 
@@ -455,18 +464,19 @@ def annotate_series(
         textcoords="offset points",
         ha="left",
         va="center",
-        fontsize=7,
+        fontsize=TIME_FONTSIZE,
         color=color,
         bbox={"facecolor": "white", "alpha": 0.82, "edgecolor": "none", "pad": 0.2},
     )
 
 
-def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> None:
-    """Render one family figure and write it to ``out_path``."""
-    import matplotlib.pyplot as plt
+def plot_domain(ax, saved: dict, domain: str, max_step: int) -> tuple[list, list]:
+    """Plot one family's trajectory onto ``ax``.
 
-    fig, ax = plt.subplots(figsize=(8.8, 6.0), tight_layout=True)
-
+    Returns the legend ``(handles, labels)`` for the series drawn, so that a
+    caller can render a single shared legend elsewhere (e.g. in a spare panel of
+    a 2x2 grid).
+    """
     methods, results = [], []
     for method in METHODS:
         perfile = perfile_record(saved, domain, method)
@@ -477,47 +487,84 @@ def render_domain(saved: dict, domain: str, out_path: Path, max_step: int) -> No
 
     median_ys = np.median([ys for _, ys, _, _ in results], axis=0)
 
-    for method, (xs, ys, labels, last_time) in zip(methods, results):
-        ax.plot(
+    handles, labels = [], []
+    for method, (xs, ys, point_labels, last_time) in zip(methods, results):
+        (line,) = ax.plot(
             xs,
             ys,
             color=METHOD_COLORS[method],
             marker=METHOD_MARKERS[method],
             linewidth=2.0,
             markersize=6,
-            label=METHOD_COMMON_NAME[method]
+            label=METHOD_COMMON_NAME[method],
         )
+        handles.append(line)
+        labels.append(METHOD_COMMON_NAME[method])
         annotate_series(
-            ax, xs, ys, labels, METHOD_COLORS[method], last_time, median_ys=median_ys
+            ax, xs, ys, point_labels, METHOD_COLORS[method], last_time,
+            median_ys=median_ys,
         )
 
-    ax.set_xlim(-0.2, max_step + 0.35)
+    ax.set_xlim(-0.2, max_step + 1.4)
     ax.set_xticks(list(range(max_step + 1)))
+    ax.tick_params(axis="both", labelsize=TICK_FONTSIZE)
     ax.tick_params(axis="x", labelbottom=True)
-    ax.set_xlabel("Step")
-    ax.set_ylabel("Compression")
+    ax.set_xlabel("Step", fontsize=LABEL_FONTSIZE)
+    ax.set_ylabel("Compression", fontsize=LABEL_FONTSIZE)
     ax.grid(True, which="both", linewidth=0.35, alpha=0.35)
-    ax.legend(loc="upper left")
     lo, hi = ax.get_ylim()
     r = hi - lo
-    ax.set_ylim(lo - r * 0.05, hi + r * 0.15)
+    ax.set_ylim(lo - r * 0.12, hi + r * 0.28)
 
     family = domain.split(":", 1)[1] if ":" in domain else domain
-    ax.set_title(f"Scramble results: {family}")
-    fig.savefig(out_path, dpi=300)
+    ax.set_title(family.capitalize(), fontsize=TITLE_FONTSIZE)
+    return handles, labels
+
+
+def render_combined(saved: dict, out_path: Path, max_step: int) -> None:
+    """Render all families as a 2x2 grid, with a shared legend in the spare panel.
+
+    The figure is deliberately compact in inches and saved at a high DPI: this
+    keeps the point-sized text large relative to each panel, so that the grid
+    stays legible when placed at \\textwidth in the paper.
+    """
+    import matplotlib.pyplot as plt
+
+    domains = [d for d in TABLE5_DOMAINS if d in saved["domains"]]
+
+    fig, axes = plt.subplots(2, 2, figsize=(8.0, 6.0), tight_layout=True)
+    flat = list(axes.flatten())
+
+    legend_handles: list = []
+    legend_labels: list = []
+    for ax, domain in zip(flat, domains):
+        handles, labels = plot_domain(ax, saved, domain, max_step)
+        if len(labels) > len(legend_labels):
+            legend_handles, legend_labels = handles, labels
+
+    # Any panel not used by a family becomes the legend panel; the last spare
+    # one carries the shared legend, and the rest (if any) are hidden.
+    for ax in flat[len(domains):]:
+        ax.axis("off")
+    if len(flat) > len(domains):
+        flat[-1].legend(
+            legend_handles,
+            legend_labels,
+            loc="center",
+            frameon=True,
+            fontsize=LEGEND_FONTSIZE,
+        )
+
+    fig.savefig(out_path, dpi=400)
     plt.close(fig)
 
 
 def render_all(saved: dict, out_dir: Path, max_step: int = DEFAULT_MAX_STEP) -> None:
-    """Render one per-family scramble figure into ``out_dir`` for each domain."""
+    """Render the combined 2x2 scramble figure into ``out_dir``."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    for domain in TABLE5_DOMAINS:
-        if domain not in saved["domains"]:
-            continue
-        family = domain.split(":", 1)[1]
-        out_path = out_dir / f"{family}.png"
-        render_domain(saved, domain, out_path, max_step)
-        print(f"wrote {out_path}", file=sys.stderr)
+    out_path = out_dir / "search-progress.png"
+    render_combined(saved, out_path, max_step)
+    print(f"wrote {out_path}", file=sys.stderr)
 
 
 def main() -> None:
