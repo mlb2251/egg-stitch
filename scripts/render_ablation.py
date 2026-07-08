@@ -24,25 +24,28 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_JSON = PROJECT_ROOT / "results" / "ablation.json"
 FIGURES_DIR = PROJECT_ROOT / "figures"
 
-# Which ablations apply to each algorithm (keys match expts.ablation).
+# Which ablations apply to each algorithm (keys match expts.ablation). BFS
+# defaults lower-bound pruning on (so it can be *removed*); SMC defaults it off
+# (so it can only be *added*) — mirroring the variable-ordering pair.
 BFS_KEYS = {"baseline", "no-lower-bound", "no-dominance", "no-equivalence",
-            "no-var-ordering", "var-ordering-l2r", "no-forced-expansion"}
-SMC_KEYS = {"baseline", "no-lower-bound", "no-dominance", "add-var-ordering"}
+            "no-var-ordering", "var-ordering-l2r"}
+SMC_KEYS = {"baseline", "add-lower-bound", "no-dominance", "add-var-ordering"}
 
 # One row per ablation (union across both algorithms), in display order,
-# grouped into sections: baseline, the three prunes, the variable-ordering
-# knobs, then forced expansion. A ``\midrule`` follows each key in RULE_AFTER.
+# grouped into sections: baseline, the prunes (lower-bound both directions,
+# dominance, equivalence), then the variable-ordering knobs. A ``\midrule``
+# follows each key in RULE_AFTER.
 ABLATION_COLUMNS = [
     ("baseline", "Baseline"),
     ("no-lower-bound", "No lower-bound pruning"),
+    ("add-lower-bound", "Add lower-bound pruning"),
     ("no-dominance", "No dominance"),
     ("no-equivalence", "No equivalence pruning"),
     ("add-var-ordering", "Add variable ordering"),
     ("no-var-ordering", "No variable ordering"),
     ("var-ordering-l2r", "Variable ordering L$\\to$R"),
-    ("no-forced-expansion", "No forced expansion"),
 ]
-RULE_AFTER = {"baseline", "no-equivalence", "var-ordering-l2r"}
+RULE_AFTER = {"baseline", "no-equivalence"}
 
 # Column order across the three hardest experiments (one domain per table).
 TABLE_ORDER = ["3", "5", "7"]

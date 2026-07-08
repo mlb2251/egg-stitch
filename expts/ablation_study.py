@@ -40,14 +40,14 @@ at once abstractions stack).
 
 The ablations (see :data:`BFS_ABLATIONS` / :data:`SMC_ABLATIONS`):
 
-* no lower-bound pruning (both)      — ``--no-opt-lower-bound``
+* no lower-bound pruning (BFS only)  — ``--lower-bound off`` (BFS defaults on)
+* add lower-bound pruning (SMC only) — ``--lower-bound on`` (SMC defaults off)
 * no dominance (both)                — ``--no-opt-dominance-reuse`` +
   ``--no-opt-useless-inline`` (the reuse and inlining dominating-successor
   short-circuits both go off together)
 * no equivalence pruning (BFS only)  — ``--no-opt-dedup-by-match``
 * no variable ordering (BFS only)    — ``--freeze-rule off``
 * variable ordering left-to-right    — ``--var-order left-to-right``
-* no forced expansion (BFS only)     — ``--priority cost``
 * add variable ordering (SMC only)   — ``--freeze-rule on``
 
 Results are cached per measurement under ``results/ablation/`` (delete a file to
@@ -117,25 +117,24 @@ TABLE3_ENUM_POINT = 10_000
 TABLE7_ENUM_POINT = 10_000
 
 # BFS ablations: the baseline (all optimisations on) plus one knob removed each.
-# "no variable ordering" turns the freeze rule off entirely (`--freeze-rule off`);
-# "left-to-right" keeps the rule on but swaps the ordering (`--var-order`).
-# "no forced expansion" drops the default `forced-then-cost` heap ordering back
-# to plain cost (`--priority cost`), so patterns are no longer explored in
-# forced-expansion order.
+# "no lower-bound" forces lower-bound pruning off (`--lower-bound off`); BFS
+# defaults it on. "no variable ordering" turns the freeze rule off entirely
+# (`--freeze-rule off`); "left-to-right" keeps the rule on but swaps the ordering
+# (`--var-order`).
 BFS_ABLATIONS: dict[str, tuple[str, ...]] = {
     "baseline": (),
-    "no-lower-bound": ("--no-opt-lower-bound",),
+    "no-lower-bound": ("--lower-bound", "off"),
     "no-dominance": ("--no-opt-dominance-reuse", "--no-opt-useless-inline"),
     "no-equivalence": ("--no-opt-dedup-by-match",),
     "no-var-ordering": ("--freeze-rule", "off"),
     "var-ordering-l2r": ("--var-order", "left-to-right"),
-    "no-forced-expansion": ("--priority", "cost"),
 }
-# SMC ablations: baseline plus the two shared prunes removed, and the (normally
-# off) variable ordering added by turning the freeze rule on (`--freeze-rule on`).
+# SMC ablations: baseline plus the shared dominance prune removed, and the two
+# optimisations SMC leaves off by default added back — lower-bound pruning
+# (`--lower-bound on`) and variable ordering (`--freeze-rule on`).
 SMC_ABLATIONS: dict[str, tuple[str, ...]] = {
     "baseline": (),
-    "no-lower-bound": ("--no-opt-lower-bound",),
+    "add-lower-bound": ("--lower-bound", "on"),
     "no-dominance": ("--no-opt-dominance-reuse", "--no-opt-useless-inline"),
     "add-var-ordering": ("--freeze-rule", "on"),
 }
