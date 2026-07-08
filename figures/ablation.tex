@@ -1,0 +1,19 @@
+% Ablation wall-clock (s) to reach the target compression: one row per ablation, one column per domain/algorithm.
+% Requires \usepackage{array} (centred fixed-width p-columns) and \usepackage{booktabs}.
+\begin{tabular}{l >{\centering\arraybackslash}p{1.5em} >{\centering\arraybackslash}p{3.4em}>{\centering\arraybackslash}p{3.4em} >{\centering\arraybackslash}p{1.5em} >{\centering\arraybackslash}p{3.4em}>{\centering\arraybackslash}p{3.4em} >{\centering\arraybackslash}p{1.5em} >{\centering\arraybackslash}p{3.4em}>{\centering\arraybackslash}p{3.4em}}
+\toprule
+Ablation & & \multicolumn{2}{c}{Furniture} & & \multicolumn{2}{c}{Hexyl} & & \multicolumn{2}{c}{Square} \\
+ &  & BFS & SMC &  & BFS & SMC &  & BFS & SMC \\
+\midrule
+Baseline &  & 0.14 & 0.026 &  & 6.3 & 0.84 &  & 4.0 & 16.0 \\
+\midrule
+No lower-bound pruning &  & 0.93 &  &  & 6.1 &  &  & 3.0 &  \\
+Add lower-bound pruning &  &  & 0.027 &  &  & 0.87 &  &  & 18.1 \\
+No dominance &  & 0.49 & 0.046 &  & 8.4 & 0.89 &  & 4.1 & 16.6 \\
+No equivalence pruning &  & DNF &  &  & DNF &  &  & DNF &  \\
+\midrule
+Add variable ordering &  &  & DNF &  &  & 0.97 &  &  & 1.1 \\
+No variable ordering &  & DNF &  &  & DNF &  &  & 59.8 &  \\
+Variable ordering L$\to$R &  & 0.54 &  &  & 13.0 &  &  & 3.7 &  \\
+\bottomrule
+\end{tabular}

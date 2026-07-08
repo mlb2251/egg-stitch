@@ -1,0 +1,19 @@
+% Ablation wall-clock (s) with BFS steps / SMC particles in parentheses: one row per ablation, one column per domain/algorithm.
+% Requires \usepackage{array} (centred fixed-width p-columns) and \usepackage{booktabs}.
+\begin{tabular}{l >{\centering\arraybackslash}p{1.5em} >{\centering\arraybackslash}p{7em}>{\centering\arraybackslash}p{7em} >{\centering\arraybackslash}p{1.5em} >{\centering\arraybackslash}p{7em}>{\centering\arraybackslash}p{7em} >{\centering\arraybackslash}p{1.5em} >{\centering\arraybackslash}p{7em}>{\centering\arraybackslash}p{7em}}
+\toprule
+Ablation & & \multicolumn{2}{c}{Furniture} & & \multicolumn{2}{c}{Hexyl} & & \multicolumn{2}{c}{Square} \\
+ &  & BFS & SMC &  & BFS & SMC &  & BFS & SMC \\
+\midrule
+Baseline &  & 0.14 (1,601) & 0.026 (31) &  & 6.3 (6,366) & 0.84 (8) &  & 4.0 (65) & 16.0 (4,505) \\
+\midrule
+No lower-bound pruning &  & 0.93 (37,185) &  &  & 6.1 (22,257) &  &  & 3.0 (65) &  \\
+Add lower-bound pruning &  &  & 0.027 (31) &  &  & 0.87 (12) &  &  & 18.1 (4,612) \\
+No dominance &  & 0.49 (4,107) & 0.046 (121) &  & 8.4 (8,396) & 0.89 (16) &  & 4.1 (65) & 16.6 (8,007) \\
+No equivalence pruning &  & DNF &  &  & DNF &  &  & DNF &  \\
+\midrule
+Add variable ordering &  &  & DNF &  &  & 0.97 (4,887) &  &  & 1.1 (400) \\
+No variable ordering &  & DNF &  &  & DNF &  &  & 59.8 (503) &  \\
+Variable ordering L$\to$R &  & 0.54 (2,480) &  &  & 13.0 (13,817) &  &  & 3.7 (63) &  \\
+\bottomrule
+\end{tabular}
