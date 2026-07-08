@@ -23,6 +23,7 @@ from expts.render_common import (  # noqa: E402
     aggregate_methods_time,
     egraph_min_for_domain,
     initial_size_for_domain,
+    reported_sweep_point,
 )
 from expts.tables import (  # noqa: E402
     BFS_STEP_SWEEP,
@@ -33,6 +34,8 @@ from expts.tables import (  # noqa: E402
     TABLE7_BFS_SWEEP,
     TABLE7_DOMAINS,
     TABLE7_SMC_SWEEP,
+    TABLE_BFS_STEPS,
+    TABLE_SMC_PARTICLES,
 )
 from dataclasses import dataclass  # noqa: E402
 
@@ -93,10 +96,6 @@ METHOD_PLOT_LABELS = {
     BASELINE_METHOD: "E-Stitch: BFS (DSRs at start)",
     NO_RULES_METHOD: "E-Stitch: BFS (no rules)",
 }
-# The single sweep point each base method contributes to the table cells.
-# Plots use the full sweep regardless.
-TABLE_BFS_STEPS = 10000
-TABLE_SMC_PARTICLES = 1000
 TABLE_DATA_KEYS = {
     "enum": f"enum-{TABLE_BFS_STEPS}",
     "smc": f"smc-{TABLE_SMC_PARTICLES}",
@@ -737,27 +736,15 @@ def _kicked_data_keys(saved: dict, spec: "FamilySpec") -> tuple[dict[str, str], 
     ``data_keys`` overrides ``spec.data_keys`` for any kicked-down method and
     ``notices`` is a human-readable line per kick-down (empty if none)."""
     domains = [d for d in spec.domains if d in saved["domains"]]
-    cr_by_domain = {
-        d: aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains
-    }
-
-    def finishes_every_family(key: str) -> bool:
-        return bool(domains) and all(cr_by_domain[d].get(key) is not None for d in domains)
+    domain_runs = [saved["domains"][d].get("runs", {}) for d in domains]
 
     data_keys = dict(spec.data_keys)
     notices: list[str] = []
     for method, sweep in spec.sweep_for_method.items():
         point = spec.sweep_point[method]
-        if finishes_every_family(f"{method}-{point}"):
-            continue
-        # Highest sweep point at or below the configured one that finishes.
-        chosen = next(
-            (v for v in sorted((s for s in sweep if s <= point), reverse=True)
-             if finishes_every_family(f"{method}-{v}")),
-            None,
-        )
-        if chosen is None:
-            continue  # nothing finishes; leave the configured point to render DNF
+        chosen = reported_sweep_point(domain_runs, method, sweep, point)
+        if chosen == point:
+            continue  # configured point finishes (or nothing does → render DNF)
         data_keys[method] = f"{method}-{chosen}"
         notices.append(
             f"{spec.fig_subdir} {spec.col_labels[method]}: kicked down "
