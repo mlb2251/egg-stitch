@@ -40,7 +40,7 @@ ABLATION_COLUMNS = [
     ("no-lower-bound", "No lower-bound pruning"),
     ("add-lower-bound", "Add lower-bound pruning"),
     ("no-dominance", "No dominance"),
-    ("no-equivalence", "No equivalence pruning"),
+    ("no-equivalence", "No observational equivalence pruning"),
     ("add-var-ordering", "Add variable ordering"),
     ("no-var-ordering", "No variable ordering"),
     ("var-ordering-l2r", "Variable ordering L$\\to$R"),
