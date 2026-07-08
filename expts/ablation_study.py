@@ -1,36 +1,18 @@
-"""Ablation experiment: how each search optimisation pays off on the single
+"""
+Ablation experiment: how each search optimisation pays off on the single
 hardest experiment of tables 3, 5, and 7.
 
 Runs *after* ``results/table{3,5,7}.json`` exist. For each of those tables it:
 
-1. Picks the **hardest experiment** — the *single-file* domain whose canonical
-   BFS point (the ``enum-<steps>`` cell reported in the LaTeX table) took the
-   longest wall-clock, among domains where BFS actually produced a result (a DNF
-   cell has no reported time, so it can't be "hardest"). Multi-file (dreamcoder)
-   domains are skipped so the compression target is one per-file ratio.
-2. Establishes a **target compression** = :data:`TARGET_COMPRESSION_FRACTION`
-   of the *max* compression the baseline (all optimisations on) best-first run
-   reaches with a single abstraction at the table's canonical BFS operating point
-   (``spec.enum_point`` steps). Two forms of the max are recorded: the harness
-   ic/fc metric (``target_cr``, for display and the SMC bar) and egg-stitch's own
-   reported ``compression_ratio`` (``egg_cr``, what BFS ``--compression-limit``
-   checks); see :attr:`expts.bench.BenchResult.egg_compression_ratio`.
-3a. **BFS (``--compression-limit``).** Re-runs best-first with every BFS
-    ablation, each stopped the instant it reaches the target compression, and
-    reports the geomean wall-clock over :data:`NUM_REPS` replicates. Every
-    ablation stops at the same quality, so the times compare like-for-like (see
-    :data:`BFS_ABLATION_STEPS` for the step/timeout/memory bounds these runs use).
-3b. **SMC (particle sweep).** For every SMC ablation, binary-searches the
-    smallest particle count whose compression reaches the target, then reports
-    that point's geomean wall-clock.
+1. Picks the hardest single-file domain from the latex tables, hard=BFS took longest.
+2. Establishes a target compression to reach based on the BFS's configuration but run
+    for 1 abstraction, multiplied by 0.99.
+3a. Runs BFS ablations with a large step budget and a ``--compression-limit`` stop.
+3b. Does a binary search over SMC particle counts to find the smallest that reaches the target.
 
-Everything runs with a **single abstraction** (``--num-abstractions 1``), which
-is the only mode ``--compression-limit`` supports (there's no one ratio to stop
-at once abstractions stack). The ablations themselves are :data:`BFS_ABLATIONS`
-and :data:`SMC_ABLATIONS`.
+Everything runs with a single abstraction.
 
-Results are cached per measurement under ``results/ablation/`` (delete a file to
-recompute it) and summarised into ``results/ablation.json``.
+Results are cached per measurement under results/ablation/ and summarized into results/ablation.json.
 """
 
 from __future__ import annotations
@@ -53,34 +35,9 @@ from .tables import (
     TABLE7_BFS_SWEEP, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT, TABLE_BFS_STEPS,
 )
 
-# Every ablation run learns a single abstraction — the only mode
-# `--compression-limit` supports.
-NUM_ABSTRACTIONS = 1
-# Replicates per BFS measurement. BFS is deterministic, so these only average
-# out wall-clock noise.
-NUM_REPS = 3
-# SMC is stochastic and its "reached" check is a razor-thin CR comparison, so it
-# gets more replicates and uses the *median* CR (not geomean): robust to the
-# occasional unlucky run that misses the target, without a single lucky run
-# flipping the threshold.
+BFS_NUM_REPS = 3
 SMC_NUM_REPS = 9
-# Each ablation is timed to reach this fraction of the baseline's *max*
-# compression, not the max itself. Hitting the exact max is a razor-thin,
-# noise-sensitive bar — it requires finding the single minimal-body syntactic
-# form of the abstraction (e.g. a 9-node vs 10-node XNOR body), so a run that
-# already learned the same gate can miss by one node. 99% of max is a robust
-# "found the same-quality abstraction" threshold.
-TARGET_COMPRESSION_FRACTION = 0.99
-# BFS ablation runs (3a) get a large step budget so the `--compression-limit`
-# stop — not the step cap — is what ends the search: a weaker ablation needs
-# more heap pops than the baseline to reach the same target compression. But a
-# pathological ablation may *never* reach it (e.g. `no-dominance` explores an
-# unbounded frontier), so each run is also bounded by a wall-clock timeout and a
-# memory cap; whichever trips first records the run as a DNF. Successful
-# ablations reach the target in ~seconds (baseline ~0.2s here), so the timeout
-# only ever fires on runs that genuinely can't — keep it short so a DNF costs
-# seconds, not the ~10min a 600s cap would burn *per replicate*. The
-# target-setting run keeps the table's own enum_point/timeout/mem_limit instead.
+# Run for effectively unlimited steps, but stop at 5 minutes or 8GB
 BFS_ABLATION_STEPS = 10_000_000
 BFS_ABLATION_TIMEOUT = 300.0
 BFS_ABLATION_MEM = MEM_LIMIT_BYTES
@@ -118,14 +75,6 @@ SMC_ABLATIONS: dict[str, tuple[str, ...]] = {
 
 @dataclass(frozen=True)
 class TableSpec:
-    """The table-run configuration the ablation reproduces for one table.
-
-    Mirrors the roster config in :mod:`expts.tables` so the ablation runs the
-    hardest domain under the settings that produced its LaTeX cell (arity,
-    resource caps, BFS step budget) — except that it always learns a single
-    abstraction (:data:`NUM_ABSTRACTIONS`).
-    """
-
     table: int
     max_arity: int
     iter_limit: int | None
@@ -212,7 +161,7 @@ def _geomean(vals: list[float]) -> float | None:
 
 
 def _measure(runner, domain: str, spec: TableSpec, cache_key: str,
-             reps: int = NUM_REPS, cr_median: bool = False) -> dict:
+             reps: int = BFS_NUM_REPS, cr_median: bool = False) -> dict:
     """Run ``runner`` on ``domain`` for ``reps`` replicates and return
     ``{cr, egg_cr, time, steps, dnf}`` (or ``None`` when any replicate DNF'd).
     ``cr`` is the harness ic/fc metric (the table's standard, for display and the
@@ -227,7 +176,7 @@ def _measure(runner, domain: str, spec: TableSpec, cache_key: str,
             return json.load(fh)
     runs: list[list[dict]] = []
     for _ in range(reps):
-        per_file = run_method(runner, domain, rounds=NUM_ABSTRACTIONS, use_dsrs=True)
+        per_file = run_method(runner, domain, rounds=1, use_dsrs=True)
         runs.append([r.to_dict() for r in per_file])
     dnf = has_dnf(runs)
     # Geomean search-work (best-first pops cut short by --compression-limit, or
