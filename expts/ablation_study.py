@@ -41,19 +41,11 @@ SMC_NUM_REPS = 9
 BFS_ABLATION_STEPS = 10_000_000
 BFS_ABLATION_TIMEOUT = 300.0
 BFS_ABLATION_MEM = MEM_LIMIT_BYTES
-# SMC search defaults (matching the table runs: OursSmc's own defaults).
-SMC_NUM_STEPS = 100
-SMC_TEMPERATURE = 100.0
 # Particle-sweep bounds for 3b. The search grows from LO by doubling until a
 # point reaches the target (or MAX is exceeded → "never reached"), then bisects.
 SMC_START_PARTICLES = 20
 SMC_MAX_PARTICLES = 20_000
 
-# BFS ablations: the baseline (all optimisations on) plus one knob removed each.
-# "no lower-bound" forces lower-bound pruning off (`--lower-bound off`); BFS
-# defaults it on. "no variable ordering" turns the freeze rule off entirely
-# (`--freeze-rule off`); "left-to-right" keeps the rule on but swaps the ordering
-# (`--var-order`).
 BFS_ABLATIONS: dict[str, tuple[str, ...]] = {
     "baseline": (),
     "no-lower-bound": ("--lower-bound", "off"),
@@ -62,9 +54,7 @@ BFS_ABLATIONS: dict[str, tuple[str, ...]] = {
     "no-var-ordering": ("--freeze-rule", "off"),
     "var-ordering-l2r": ("--var-order", "left-to-right"),
 }
-# SMC ablations: baseline plus the shared dominance prune removed, and the two
-# optimisations SMC leaves off by default added back — lower-bound pruning
-# (`--lower-bound on`) and variable ordering (`--freeze-rule on`).
+
 SMC_ABLATIONS: dict[str, tuple[str, ...]] = {
     "baseline": (),
     "add-lower-bound": ("--lower-bound", "on"),
@@ -112,22 +102,13 @@ def _load_table(spec: TableSpec) -> dict:
 
 
 def _reported_enum_point(spec: TableSpec, saved: dict) -> int:
-    """The BFS point the LaTeX table reports for ``spec`` — its configured
-    ``enum_point``, kicked down like the family tables when a family DNFs there
-    (table7 configures 10k but reports enum-1000). :func:`ablation` then pins
-    ``spec.enum_point`` to it, so the hardest-domain pick and the target run both
-    use the reported cell."""
+    """The BFS point the LaTeX table reports"""
     domain_runs = [d.get("runs", {}) for d in saved["domains"].values()]
     return reported_sweep_point(domain_runs, "enum", spec.bfs_sweep, spec.enum_point)
 
 
 def hardest_domain(spec: TableSpec, saved: dict) -> str:
-    """The table's hardest **single-file** BFS experiment.
-
-    Over the single-file domains where the reported BFS cell (``spec.enum_key``,
-    already kicked down by :func:`ablation`) finished, returns the one with the
-    longest BFS wall-clock. Multi-file (dreamcoder) domains are excluded so the
-    target is a single per-file ratio rather than a cross-file geomean.
+    """The table's hardest single-file domain (longest BFS time, skipping multi-file).
     """
     key = spec.enum_key
     best: tuple[str, float] | None = None  # (domain, time)
@@ -136,7 +117,7 @@ def hardest_domain(spec: TableSpec, saved: dict) -> str:
             continue
         reps = payload.get("runs", {}).get(key)
         if not reps or has_dnf(reps):
-            continue
+            raise ValueError(f"ablation: table{spec.table} domain {domain} has no non-DNF single-file BFS ({key}) result")
         t = aggregate_time(reps)
         if t is not None and (best is None or t > best[1]):
             best = (domain, t)
@@ -232,9 +213,9 @@ def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], limit_cr: float | None)
 def _smc_runner(spec: TableSpec, flags: tuple[str, ...], num_particles: int) -> OursSmc:
     """SMC runner for one ablation at ``num_particles`` (no compression limit —
     3b sweeps particles to *reach* the target, then reports the run's time)."""
+    # num_steps/temperature left at OursSmc's defaults, matching the table runs.
     return OursSmc(
-        num_particles=num_particles, num_steps=SMC_NUM_STEPS, temperature=SMC_TEMPERATURE,
-        max_arity=spec.max_arity, iter_limit=spec.iter_limit,
+        num_particles=num_particles, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
         timeout=spec.timeout, mem_limit=spec.mem_limit, extra_args=flags,
     )
 
@@ -344,7 +325,7 @@ def ablation() -> Path:
             "egg_cr": egg_cr,
             "target_fraction": TARGET_COMPRESSION_FRACTION,
             "enum_point": spec.enum_point,
-            "smc_num_steps": SMC_NUM_STEPS,
+            "smc_num_steps": OursSmc.num_steps,
             # BFS stops via --compression-limit at egg's own reported ratio
             # (egg_cr); SMC's _reached check compares the harness ic/fc against
             # target_cr. Both anchor to the same baseline final_cost.
