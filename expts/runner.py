@@ -286,5 +286,7 @@ def run_method(
             library=[f"{a.name}: {a.body}" for a in b.abstractions],
             egraph_min_term_size=egraph_min_from_bench(b.cost_after_rewrites),
             cost_at_end_of_each_iter=b.cost_at_end_of_each_iter,
+            num_steps_run=b.num_steps_run,
+            egg_compression_ratio=b.egg_compression_ratio,
         ))
     return out
