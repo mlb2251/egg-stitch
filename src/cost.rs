@@ -343,17 +343,33 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
 #[derive(Default)]
 pub struct RewriteScratch {
     pub eclass_to_match_idx: FxHashMap<Id, usize>,
+    /// Captured-arg eclass → match roots that read it. Feeds `extra_parents` so a
+    /// shrunk arg re-dirties the match roots reading it via the (non-syntactic)
+    /// rewrite path. Mirrors `LowerBoundAnalysis::arg_to_match_roots`.
+    pub arg_to_match_roots: FxHashMap<Id, Vec<Id>>,
 }
 
 impl RewriteScratch {
-    /// Refills the index map from `search_state`. Clears first; retains capacity.
-    /// Match-root ids are canonical by construction (see `MatchAtEClass`): they
-    /// originate from `egraph.classes()` and propagate unchanged through
+    /// Refills the index maps from `search_state`. Clears first; retains capacity.
+    /// Match-root and row ids are canonical by construction (see `MatchAtEClass`):
+    /// they originate from `egraph.classes()` and propagate unchanged through
     /// `build_subset_matches`; the egraph isn't unioned during search.
     pub fn fill<F: LanguageFamily, O: StitchOp>(&mut self, search_state: &SearchState<F, O>) {
         self.eclass_to_match_idx.clear();
+        self.arg_to_match_roots.clear();
         for (i, m) in search_state.matches.iter().enumerate() {
             self.eclass_to_match_idx.insert(m.root_eclass, i);
+            for f in &m.factors {
+                for row in &f.rows {
+                    for &v in row {
+                        self.arg_to_match_roots.entry(v).or_default().push(m.root_eclass);
+                    }
+                }
+            }
+        }
+        for roots in self.arg_to_match_roots.values_mut() {
+            roots.sort_unstable();
+            roots.dedup();
         }
     }
 }
@@ -380,6 +396,8 @@ pub enum KeptArgs<'a> {
 pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub search_state: &'a SearchState<F, O>,
     pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
+    /// See `RewriteScratch::arg_to_match_roots`. Drives `extra_parents`.
+    pub arg_to_match_roots: &'a FxHashMap<Id, Vec<Id>>,
     pub ho_arity: &'a [u32],
     pub kept: KeptArgs<'a>,
 }
@@ -412,6 +430,9 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             }
         }
         best
+    }
+    fn extra_parents(&self, id: Id) -> &[Id] {
+        self.arg_to_match_roots.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
     }
 }
 
@@ -549,6 +570,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+        arg_to_match_roots: &scratch.rewrite.arg_to_match_roots,
         ho_arity,
         kept: match &filtered {
             Some(f) => KeptArgs::Filtered(f),

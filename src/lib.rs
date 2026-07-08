@@ -72,6 +72,34 @@ impl FreezeRule {
     }
 }
 
+/// `--lower-bound`: whether lower-bound pruning of search successors is on.
+///
+/// Each successor gets a `compute_lower_bound` estimate; if it already exceeds
+/// the current best, the full cost call is skipped. `Default` resolves per
+/// search mode (best-first: on; SMC: off); `On`/`Off` force it.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LowerBound {
+    /// Best-first: on; SMC: off.
+    #[default]
+    Default,
+    /// Force lower-bound pruning on.
+    On,
+    /// Force lower-bound pruning off.
+    Off,
+}
+
+impl LowerBound {
+    /// Resolves to a concrete on/off, substituting `default_on` for `Default`.
+    /// Callers pass their search mode's default (best-first `true`, SMC `false`).
+    pub fn resolve(self, default_on: bool) -> bool {
+        match self {
+            LowerBound::Default => default_on,
+            LowerBound::On => true,
+            LowerBound::Off => false,
+        }
+    }
+}
+
 /// `--max-forced-expansion` value: a slack bound `Some(k)`, or `none` to disable
 /// the forced-expansion prune entirely.
 #[derive(Clone, Copy, Debug)]
@@ -171,9 +199,8 @@ pub struct Args {
     pub no_zero_arity: bool,
 
     /// Heap priority for best-first search (only used when --search=best-first).
-    /// Default `forced-then-cost`: explore all patterns without a forced expansion,
-    /// ordered by cost, then move on to patterns with 1 forced expansion, and so on.
-    #[arg(long, value_enum, default_value_t = SearchPriority::ForcedThenCost)]
+    /// Default `cost`: explore patterns in order of cost.
+    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
 
     /// Metavar ordering used by the freeze rule (which `--freeze-rule` toggles).
@@ -252,12 +279,13 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub allow_useless_vars: bool,
 
-    /// Disable lower-bound pruning of best-first children (on by default).
-    /// Each child gets a `compute_lower_bound` estimate; if it already
-    /// exceeds the current best, skip the full cost call. Bounds are also
-    /// re-checked on heap pop in case the best improved meanwhile.
-    #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
-    pub opt_lower_bound: bool,
+    /// Lower-bound pruning of search successors. `default` defers to the search
+    /// mode (best-first: on; SMC: off); `on`/`off` force it. Each successor gets
+    /// a `compute_lower_bound` estimate; if it already exceeds the current best,
+    /// skip the full cost call. Bounds are also re-checked on heap pop in case
+    /// the best improved meanwhile.
+    #[arg(long = "lower-bound", value_enum, default_value_t = LowerBound::Default)]
+    pub lower_bound: LowerBound,
 
     /// Prune patterns which force "expansions" (e.g., 4 -> (+ 4 0)) at *every*
     /// match site.

@@ -23,7 +23,7 @@ pub enum SearchPriority {
     BreadthFirst,
     /// Patterns with the most e-class matches first.
     MostMatches,
-    /// Lexicographic `(forced-expansion, cost)` (default)
+    /// Lexicographic `(forced-expansion, cost)`
     ForcedThenCost,
 }
 
@@ -113,7 +113,7 @@ pub struct BestFirstResult<F: LanguageFamily, O: StitchOp> {
 struct Node<F: LanguageFamily, O: StitchOp> {
     state: SearchState<F, O>,
     depth: usize,
-    /// Lower bound on cost of any descendant; only set when `--opt-lower-bound` is on.
+    /// Lower bound on cost of any descendant; only set when `--lower-bound` is on.
     /// Re-checked on pop in case `best` improved between push and pop.
     lower_bound: Option<usize>,
     /// This node's ForcedExpansion (0 unless ordering by `ForcedThenCost`). Used
@@ -184,7 +184,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
     let mut dominance_hits: usize = 0;
-    let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
+    let mut lower_bound_pruner = LowerBoundPruner::new(args.lower_bound.resolve(true));
     let mut useless_frozen_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
     // Set when a new best reaches the `--compression-limit` cumulative target;
