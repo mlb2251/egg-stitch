@@ -132,14 +132,15 @@ def _geomean(vals: list[float]) -> float | None:
 
 def _measure(runner, domain: str, spec: TableSpec, cache_key: str,
              reps: int = BFS_NUM_REPS, cr_median: bool = False) -> dict:
-    """Run ``runner`` on ``domain`` for ``reps`` replicates and return
-    ``{cr, egg_cr, time, steps, dnf}`` (or ``None`` when any replicate DNF'd).
-    ``cr`` is the harness ic/fc metric (the table's standard, for display and the
-    SMC bar): the geomean of per-rep CRs, or their **median** when ``cr_median``
-    (SMC uses this — robust to an unlucky run missing the razor-thin target).
-    ``egg_cr`` is egg-stitch's own reported ``compression_ratio`` — the exact
-    metric ``--compression-limit`` checks, fed straight back so the BFS stop is
-    reachable. Cached by ``cache_key`` under ``results/ablation/``."""
+    """
+    Returns {cr, egg_cr, time, steps, dnf} where
+        - cr: the median (SMC) or geomean (BFS) of the per-rep harness compression ratios
+        - egg_cr: the geomean of the per-rep egg-reported compression ratios
+        - time: the geomean of the per-rep times (seconds)
+        - steps: the geomean of the per-rep steps (BFS only, None if SMC)
+        - dnf: whether any rep DNF'd (True/False)
+    """
+
     cache = _cache_path(spec, cache_key)
     if cache.exists():
         with open(cache) as fh:
