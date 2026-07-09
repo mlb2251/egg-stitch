@@ -32,6 +32,11 @@ fn run_best_first(args: &Args) -> best_first::BestFirstResult<OpChildren, Op> {
     best_first::best_first(data, args)
 }
 
+fn run_best_first_lambda_calc(args: &Args) -> best_first::BestFirstResult<LambdaCalc, OpDB<Op>> {
+    let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
+    best_first::best_first(data, args)
+}
+
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
     let follow: PatternRecExpr<OpChildren, Op> = follow_str.parse().expect("parse follow");
     let (cost, best) = result.best.as_ref().expect("smc should produce a best pattern");
@@ -379,6 +384,141 @@ fn check_slow_physics_18_09_34_bench003() {
 #[test]
 fn check_slow_physics_18_09_34_bench004() {
     check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json");
+}
+
+/// Exercises the lambda-calc fast/slow check against real dreamcoder `list`
+/// corpora — the sibling dreamcoder domain to `physics`. One test per file so
+/// they parallelize and failures point at a specific input. A representative
+/// slice (the first two benchmarks of each timestamp batch) stands in for the
+/// full 59-file corpus, which is too slow to sweep under `--check-slow`.
+fn check_slow_list(name: &str) {
+    let input = format!("data/domains/list/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "100", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_list_11_26_41_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_26_41_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.26.41__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_31_39_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_31_39_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.31.39__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_35_48_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.35.48__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_35_48_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.35.48__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_39_19_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.39.19__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_39_19_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.39.19__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_43_28_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.43.28__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_43_28_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.43.28__bench001_it1.json");
+}
+
+// --- Best-first `--check-slow` per benchmark domain ---
+//
+// The `check_slow_*` tests above (and the EPFL circuit suite) drive the
+// fast/slow cost cross-check under SMC's *stochastic* candidate stream. These
+// mirror them under best-first, whose *systematic* enumeration exercises the
+// same `compute_cost_and_select` check over a different, more exhaustive set of
+// candidate patterns. Together with the molecule best-first tests in
+// `stitch_compat_test.rs` and `check_slow_op_children_overcount` (circuit data),
+// every benchmark domain now has a best-first `--check-slow` run. These are
+// smoke runs: `--check-slow` panics on a fast/slow mismatch, so a clean run is
+// the assertion — no fixture. A small `--num-steps` budget keeps them cheap
+// while still scoring many distinct patterns.
+
+/// Best-first `--check-slow` over an op-children cogsci corpus + its DSRs.
+fn check_slow_bf_cogsci(input: &str, rules: &str) {
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "100", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
+    let result = run_best_first(&args);
+    assert!(result.best.is_some());
+}
+
+#[test]
+fn check_slow_bf_dials() {
+    check_slow_bf_cogsci(INPUT, RULES);
+}
+#[test]
+fn check_slow_bf_furniture() {
+    check_slow_bf_cogsci("data/domains/cogsci/furniture.json", &format!("{}/drawings.furniture.rewrites", REWRITES_DIR));
+}
+#[test]
+fn check_slow_bf_nuts_bolts() {
+    check_slow_bf_cogsci("data/domains/cogsci/nuts-bolts.json", &format!("{}/drawings.nuts-bolts.rewrites", REWRITES_DIR));
+}
+#[test]
+fn check_slow_bf_wheels() {
+    check_slow_bf_cogsci("data/domains/cogsci/wheels.json", &format!("{}/drawings.wheels.rewrites", REWRITES_DIR));
+}
+
+/// Best-first `--check-slow` over a lambda-calc physics corpus. Named
+/// `check_slow_physics_*` so CI routes it into the dedicated physics job.
+fn check_slow_physics_bf(name: &str) {
+    let input = format!("data/domains/physics/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", &input, "--num-steps", "100", "--num-abstractions", "1", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_best_first_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_physics_bf_bench000() {
+    check_slow_physics_bf("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0.json");
+}
+#[test]
+fn check_slow_physics_bf_bench001() {
+    check_slow_physics_bf("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0.json");
+}
+
+/// Best-first `--check-slow` over a lambda-calc `list` corpus. Named
+/// `check_slow_list_*` so CI routes it into the dedicated list job.
+fn check_slow_list_bf(name: &str) {
+    let input = format!("data/domains/list/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", &input, "--num-steps", "100", "--num-abstractions", "1", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_best_first_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_list_bf_bench000() {
+    check_slow_list_bf("list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_bf_bench001() {
+    check_slow_list_bf("list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0.json");
 }
 
 // --- End-to-end --follow tests in the lambda-calc domain ---
