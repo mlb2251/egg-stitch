@@ -806,7 +806,7 @@ TABLE5_SPEC = FamilySpec.estitch_roster(
     enum_sweep=TABLE5_BFS_SWEEP,
     smc_sweep=SMC_PARTICLE_SWEEP,
     extras=[
-        ("babble", "babble", "babble"),
+        ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
     ],
 )
@@ -831,7 +831,7 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     enum_sweep=TABLE7_BFS_SWEEP,
     smc_sweep=TABLE7_SMC_SWEEP,
     extras=[
-        ("babble", "babble", "babble"),
+        ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
     ],
 )
