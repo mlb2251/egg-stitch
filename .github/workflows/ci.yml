@@ -65,10 +65,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
-      # The epfl circuit check_slow tests are named `<circuit>::check_slow`, so
-      # exclude that binary here — it runs in its own test-epfl-circuits job.
-      - name: cargo nextest check_slow (excluding physics, list, epfl-circuits)
-        run: cargo nextest run --release -E 'test(/check_slow/) and not test(/check_slow_physics/) and not test(/check_slow_list/) and not binary(epfl_circuits_test)'
+      - name: cargo nextest check_slow (excluding physics and list)
+        run: cargo nextest run --release -E 'test(/check_slow/) and not test(/check_slow_physics/) and not test(/check_slow_list/)'
 
   test-check-slow-physics:
     runs-on: ubuntu-latest

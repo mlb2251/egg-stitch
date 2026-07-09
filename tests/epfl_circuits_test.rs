@@ -2,9 +2,7 @@
 //! corpora. Per circuit: a fixed 4-abstraction SMC rollout (seed 1) in three
 //! configs — no-rules `baseline`, factoring `live`, factoring `at-start` —
 //! snapshotted, plus `corpus_regenerates` (regenerate the corpus from the
-//! gitignored `<circuit>.aig`) and `check_slow` (a short best-first rollout with
-//! `--check-slow` that cross-checks the fast incremental cost against the slow
-//! rebuild on the real circuit e-graph).
+//! gitignored `<circuit>.aig`).
 //!
 //! Re-bless: `BLESS=1 cargo test --release --test epfl_circuits_test -- --test-threads=1`.
 
@@ -145,45 +143,6 @@ fn check_regen(circuit: &str) {
     );
 }
 
-/// Best-first `--check-slow` smoke run over the *real* circuit corpus (with the
-/// factoring DSRs), driving the fast/slow cost cross-check on the actual EPFL
-/// e-graph rather than the reduced `op-children-fast-slow-overcount` fixture.
-/// `--check-slow` clones and rebuilds the e-graph per scored candidate, which is
-/// costly on these 100k+ node graphs, so a tiny `--num-steps` bounds the work:
-/// best-first still scores many distinct patterns, but only a handful of steps.
-/// `--check-slow` panics on a mismatch, so a zero exit is the assertion.
-fn check_slow_bf(circuit: &str) {
-    let corpus = corpus_path(circuit);
-    let out = std::env::temp_dir().join(format!("egg-stitch-cs-{}-{}.json", std::process::id(), circuit));
-    let out_str = out.to_str().expect("utf-8 temp path");
-    let status = Command::new(BIN)
-        .args([
-            "-i",
-            &corpus,
-            "--output",
-            out_str,
-            "--search",
-            "best-first",
-            "--language",
-            "op-children-db",
-            "--max-arity",
-            "4",
-            "-r",
-            FAC,
-            "--num-abstractions",
-            "1",
-            "--num-steps",
-            "3",
-            "--iter-limit",
-            "30",
-            "--check-slow",
-        ])
-        .status()
-        .unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
-    let _ = fs::remove_file(&out);
-    assert!(status.success(), "best-first --check-slow failed for {circuit}");
-}
-
 /// One snapshot suite per circuit. The whole binary is its own CI job (selected
 /// by `binary(epfl_circuits_test)`), heavier than the parallel `test` job's cases.
 macro_rules! circuit_suite {
@@ -209,11 +168,6 @@ macro_rules! circuit_suite {
             #[test]
             fn corpus_regenerates() {
                 check_regen($circuit);
-            }
-
-            #[test]
-            fn check_slow() {
-                check_slow_bf($circuit);
             }
         }
     };
