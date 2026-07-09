@@ -85,13 +85,13 @@ BASELINE_METHOD = "enum-dsrs-at-start"
 NO_RULES_METHOD = "enum-baseline"
 # Table cells use the bare search-strategy name; plot legends spell out the
 # E-Stitch prefix so each series is unambiguous standalone.
-METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "babble",
+METHOD_LABELS = {"enum": "BFS", "smc": "SMC", "babble": "Babble",
                  "stitch": "Stitch", BASELINE_METHOD: "BFS/MT",
                  NO_RULES_METHOD: "BFS/NR"}
 METHOD_PLOT_LABELS = {
     "enum": "E-Stitch: BFS",
     "smc": "E-Stitch: SMC",
-    "babble": "babble",
+    "babble": "Babble",
     "stitch": "Stitch",
     BASELINE_METHOD: "BFS (DSRs at start)",
     NO_RULES_METHOD: "BFS (no rules)",
@@ -806,7 +806,7 @@ TABLE5_SPEC = FamilySpec.estitch_roster(
     enum_sweep=TABLE5_BFS_SWEEP,
     smc_sweep=SMC_PARTICLE_SWEEP,
     extras=[
-        ("babble", "babble", "babble"),
+        ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
     ],
 )
@@ -831,7 +831,7 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     enum_sweep=TABLE7_BFS_SWEEP,
     smc_sweep=TABLE7_SMC_SWEEP,
     extras=[
-        ("babble", "babble", "babble"),
+        ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
     ],
 )
