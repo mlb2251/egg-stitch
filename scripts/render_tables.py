@@ -1057,7 +1057,7 @@ def plot_geomean_panel(panel: dict, out_path: Path) -> list:
     fig.canvas.draw()
     _place_sweep_labels(fig, ax, sweep_series)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=_PANEL_DPI)
+    fig.savefig(out_path, dpi=_PANEL_DPI, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
     return handles
 
@@ -1069,7 +1069,7 @@ def plot_geomean_legend(handles: list, out_path: Path, ncol: int = 3) -> None:
 
     fig = plt.figure(figsize=(5.5 * 2, 1.4))
     fig.legend(handles=handles, title="Method", loc="center", ncol=ncol)
-    fig.savefig(out_path, dpi=_PANEL_DPI, bbox_inches="tight")
+    fig.savefig(out_path, dpi=_PANEL_DPI, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
 
