@@ -381,6 +381,61 @@ fn check_slow_physics_18_09_34_bench004() {
     check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json");
 }
 
+/// Exercises the lambda-calc fast/slow check against real dreamcoder `list`
+/// corpora — the sibling dreamcoder domain to `physics`. One test per file so
+/// they parallelize and failures point at a specific input. A representative
+/// slice (the first two benchmarks of each timestamp batch) stands in for the
+/// full 59-file corpus, which is too slow to sweep under `--check-slow`.
+fn check_slow_list(name: &str) {
+    let input = format!("data/domains/list/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "100", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_list_11_26_41_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_26_41_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.26.41__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_31_39_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_31_39_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.31.39__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_35_48_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.35.48__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_35_48_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.35.48__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_39_19_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.39.19__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_39_19_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.39.19__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_43_28_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.43.28__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_43_28_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.43.28__bench001_it1.json");
+}
+
 // --- End-to-end --follow tests in the lambda-calc domain ---
 //
 // These exercise the LambdaCalc `parse_follow_pattern` override end-to-end:

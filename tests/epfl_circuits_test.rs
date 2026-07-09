@@ -2,7 +2,9 @@
 //! corpora. Per circuit: a fixed 4-abstraction SMC rollout (seed 1) in three
 //! configs — no-rules `baseline`, factoring `live`, factoring `at-start` —
 //! snapshotted, plus `corpus_regenerates` (regenerate the corpus from the
-//! gitignored `<circuit>.aig`).
+//! gitignored `<circuit>.aig`). Every rollout runs under `--check-slow`, so
+//! each also cross-checks the fast incremental cost against the slow rebuild
+//! (the op-children-db analogue of the molecule domain's best-first coverage).
 //!
 //! Re-bless: `BLESS=1 cargo test --release --test epfl_circuits_test -- --test-threads=1`.
 
@@ -65,6 +67,12 @@ fn run_smc(circuit: &str, rules: Option<&str>, at_start: bool, tag: &str) -> Val
         "1",
         "--iter-limit",
         "30",
+        // Cross-check the fast incremental cost against the slow rebuild on every
+        // scored candidate. `--check-slow` only asserts (fast == slow) and returns
+        // the fast result, so the snapshot output is unchanged and the fixtures
+        // stay valid — this is the op-children-db analogue of the molecule domain's
+        // `--check-slow` best-first coverage in `stitch_compat_test.rs`.
+        "--check-slow",
     ]);
     if let Some(r) = rules {
         cmd.args(["-r", r]);
