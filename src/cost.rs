@@ -386,6 +386,11 @@ pub struct ResolvedArg {
     pub extra_lams: u32,
 }
 
+/// Per-candidate folded HO slots: `(slot k, arg-eclass v) → ResolvedArg`.
+type ResolvedArgs = FxHashMap<(usize, Id), ResolvedArg>;
+/// Dirty-propagation edges: operand eclass → the match roots that read it.
+type MatchRootEdges = FxHashMap<Id, Vec<Id>>;
+
 /// Resolve one `(arg, h, d_k)` triple to a `ResolvedArg`. When the shifted
 /// arg's eclass would not change (shift is a no-op), we run a non-mutating
 /// `try_lookup_wrap_lams` to fold as many of the `h` lambda wraps as already
@@ -439,8 +444,8 @@ fn for_each_kept_slot<F: LanguageFamily, O: StitchOp>(search_state: &SearchState
 ///   dirty-propagation re-dirty the root and the single `solve()` converge.
 ///   `None` when nothing folded (every lambda-free candidate included), so
 ///   callers reuse the shared, built-once `arg_to_match_roots` and pay nothing.
-fn resolve_folds<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, filtered: &Option<Vec<Option<Vec<Factor>>>>, ho_arity: &[u32], var_depth: &[u32]) -> (FxHashMap<(usize, Id), ResolvedArg>, Option<FxHashMap<Id, Vec<Id>>>) {
-    let mut resolved: FxHashMap<(usize, Id), ResolvedArg> = FxHashMap::default();
+fn resolve_folds<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, filtered: &Option<Vec<Option<Vec<Factor>>>>, ho_arity: &[u32], var_depth: &[u32]) -> (ResolvedArgs, Option<MatchRootEdges>) {
+    let mut resolved: ResolvedArgs = FxHashMap::default();
     if ho_arity.iter().any(|&h| h > 0) {
         let mut seen: FxHashSet<(usize, Id)> = FxHashSet::default();
         for_each_kept_slot(search_state, filtered, |_root, k, v| {
@@ -453,7 +458,7 @@ fn resolve_folds<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<
         });
     }
     let fold_edges = (!resolved.is_empty()).then(|| {
-        let mut edges: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
+        let mut edges: MatchRootEdges = FxHashMap::default();
         for_each_kept_slot(search_state, filtered, |root, k, v| {
             let dep = resolved.get(&(k, v)).map_or(v, |r| r.eclass);
             edges.entry(dep).or_default().push(root);
