@@ -119,7 +119,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         let mut props: Vec<f64> = Vec::new();
         let mut dedup: FxHashMap<Pattern<F, O>, usize> = FxHashMap::default();
         for (state, mult) in particles {
-            let actions = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
+            let (actions, rank) = match state.enumerate_successor_actions(&self.shared, self.args.opt_dominance_reuse, self.args.opt_useless_inline, usize::MAX, dominance_hits, useless_inline_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
                     // Deterministic successor: K_n(t_l, t_j') = 1, so the proposal
                     // mass routed here is C_l · 1 = mult.
@@ -128,9 +128,11 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
                     }
                     continue;
                 }
-                // SMC keeps creation order (`freeze_rule = false`), so the freeze
-                // rule is inert — `apply_action` ignores `rank` below.
-                SuccessorEnum::All { actions, .. } => actions,
+                // `rank` drives the freeze rule in `apply_action`. Under
+                // `--freeze-rule on` it is the f-value order; otherwise
+                // (`freeze_rule = false`) it is the identity and `apply_action`
+                // ignores it.
+                SuccessorEnum::All { actions, rank } => (actions, rank),
             };
             if actions.is_empty() {
                 // Terminal particle carried forward unchanged: K_n = 1.
@@ -144,7 +146,7 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
             let counts = sample_counts(&mut weights, mult, self.rng);
             for (((action, _), count), q) in actions.into_iter().zip(counts).zip(weights) {
                 if count > 0 {
-                    let child = state.apply_action(&action, &self.shared, true, None);
+                    let child = state.apply_action(&action, &self.shared, true, Some(&rank));
                     if child.within_match_set_cap(max_match_set) {
                         // Proposal mass from this parent: C_l · K_n(t_l, t_j') =
                         // mult · q. Accumulated independent of the realized `count`
@@ -346,16 +348,28 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     // driver. All best-so-far access goes through its methods.
     let mut search = SmcSearchData::new(shared, args, rng, original_size);
 
-    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&search.shared, false), num_particles)];
+    let mut particles: Vec<(SearchState<F, O>, usize)> = vec![(SearchState::new(&search.shared, args.freeze_rule.resolve(false)), num_particles)];
     let mut scratch = CostScratch::new(&search.shared.egraph);
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
-    let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
+    let mut lower_bound_pruner = LowerBoundPruner::new(args.lower_bound.resolve(false));
 
     for step in 0..num_steps {
         let (expanded, mults, props) = search.expand_particles(std::mem::take(&mut particles), &mut dominance_hits, &mut useless_inline_hits);
 
         let (costs, mut pruned) = search.compute_costs(&expanded, step, &cost_cache, &mut scratch, &mut lower_bound_pruner);
+
+        // `--compression-limit` early stop: once the best particle reaches the
+        // target ratio there's nothing to gain from more steps. Checked per step
+        // (SMC's natural granularity).
+        if let Some(limit) = args.compression_limit
+            && let Some((cost, _)) = search.best()
+            && original_size as f64 / *cost as f64 >= limit
+        {
+            steps_run = step + 1;
+            println!("{}", format!("reached compression limit {:.3}", limit).yellow());
+            break;
+        }
 
         // Follow stage: kill non-matching particles directly in `pruned` so the
         // `reweight` below drops them, and stop on an exact match. Kept inline

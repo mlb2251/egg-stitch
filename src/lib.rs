@@ -42,6 +42,64 @@ pub enum SearchKind {
     BestFirst,
 }
 
+/// `--freeze-rule`: whether the canonical variable-ordering (freeze) rule is on.
+///
+/// The rule ranks each var by how little expanding it explodes the match set,
+/// then expanding a var freezes every lower-ranked one (and enforces the
+/// canonical reuse-pair order), so a given abstraction is reached via one
+/// canonical action sequence instead of every permutation. `Default` resolves
+/// per search mode (best-first: on; SMC: off); `On`/`Off` force it.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FreezeRule {
+    /// Best-first: on; SMC: off.
+    #[default]
+    Default,
+    /// Force the freeze rule on.
+    On,
+    /// Force the freeze rule off.
+    Off,
+}
+
+impl FreezeRule {
+    /// Resolves to a concrete on/off, substituting `default_on` for `Default`.
+    /// Callers pass their search mode's default (best-first `true`, SMC `false`).
+    pub fn resolve(self, default_on: bool) -> bool {
+        match self {
+            FreezeRule::Default => default_on,
+            FreezeRule::On => true,
+            FreezeRule::Off => false,
+        }
+    }
+}
+
+/// `--lower-bound`: whether lower-bound pruning of search successors is on.
+///
+/// Each successor gets a `compute_lower_bound` estimate; if it already exceeds
+/// the current best, the full cost call is skipped. `Default` resolves per
+/// search mode (best-first: on; SMC: off); `On`/`Off` force it.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LowerBound {
+    /// Best-first: on; SMC: off.
+    #[default]
+    Default,
+    /// Force lower-bound pruning on.
+    On,
+    /// Force lower-bound pruning off.
+    Off,
+}
+
+impl LowerBound {
+    /// Resolves to a concrete on/off, substituting `default_on` for `Default`.
+    /// Callers pass their search mode's default (best-first `true`, SMC `false`).
+    pub fn resolve(self, default_on: bool) -> bool {
+        match self {
+            LowerBound::Default => default_on,
+            LowerBound::On => true,
+            LowerBound::Off => false,
+        }
+    }
+}
+
 /// `--max-forced-expansion` value: a slack bound `Some(k)`, or `none` to disable
 /// the forced-expansion prune entirely.
 #[derive(Clone, Copy, Debug)]
@@ -116,6 +174,14 @@ pub struct Args {
     #[arg(long)]
     pub time_limit: Option<f64>,
 
+    /// Compression-ratio early-stop target. When set, the search stops as soon
+    /// as it finds an abstraction reaching this ratio, so a run does only as much
+    /// work as reaching that quality requires. Only supported with
+    /// `--num-abstractions 1` (there's no single ratio to stop at once
+    /// abstractions stack).
+    #[arg(long)]
+    pub compression_limit: Option<f64>,
+
     /// Softmax temperature for resampling weights. Required for SMC search.
     #[arg(long)]
     pub temperature: Option<f64>,
@@ -133,10 +199,14 @@ pub struct Args {
     pub no_zero_arity: bool,
 
     /// Heap priority for best-first search (only used when --search=best-first).
-    /// Default `forced-then-cost`: explore all patterns without a forced expansion,
-    /// ordered by cost, then move on to patterns with 1 forced expansion, and so on.
-    #[arg(long, value_enum, default_value_t = SearchPriority::ForcedThenCost)]
+    /// Default `cost`: explore patterns in order of cost.
+    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
+
+    /// Metavar ordering used by the freeze rule (which `--freeze-rule` toggles).
+    /// A non-default value requires the rule on.
+    #[arg(long, value_enum, default_value_t = search::VarOrder::MeanNodesPerClass)]
+    pub var_order: search::VarOrder,
 
     /// Multiplicative boost applied to reuse-action sampling weights in SMC.
     /// Each successor is weighted by its `(match, subst)` support count;
@@ -144,6 +214,14 @@ pub struct Args {
     /// while expand-action weights are left unscaled. Default 1.0 (no boost).
     #[arg(long, default_value_t = 1.0)]
     pub boost_reuse_weight: f64,
+
+    /// Whether the canonical variable-ordering (freeze) rule is on. `default`
+    /// defers to the search mode (best-first: on; SMC: off); `on`/`off` force it.
+    /// Enabling it for SMC proposes each abstraction via one canonical action
+    /// sequence instead of every permutation; disabling it for best-first turns
+    /// the canonical variable ordering off entirely.
+    #[arg(long = "freeze-rule", value_enum, default_value_t = FreezeRule::Default)]
+    pub freeze_rule: FreezeRule,
 
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]
@@ -201,12 +279,13 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub allow_useless_vars: bool,
 
-    /// Disable lower-bound pruning of best-first children (on by default).
-    /// Each child gets a `compute_lower_bound` estimate; if it already
-    /// exceeds the current best, skip the full cost call. Bounds are also
-    /// re-checked on heap pop in case the best improved meanwhile.
-    #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
-    pub opt_lower_bound: bool,
+    /// Lower-bound pruning of search successors. `default` defers to the search
+    /// mode (best-first: on; SMC: off); `on`/`off` force it. Each successor gets
+    /// a `compute_lower_bound` estimate; if it already exceeds the current best,
+    /// skip the full cost call. Bounds are also re-checked on heap pop in case
+    /// the best improved meanwhile.
+    #[arg(long = "lower-bound", value_enum, default_value_t = LowerBound::Default)]
+    pub lower_bound: LowerBound,
 
     /// Prune patterns which force "expansions" (e.g., 4 -> (+ 4 0)) at *every*
     /// match site.
@@ -272,6 +351,13 @@ impl Args {
             self.opt_useless_inline = false;
             self.opt_dominance_reuse = false;
         }
+        // Enforce that `--var-order` requires the freeze rule (see `VarOrder`).
+        // Resolve `--freeze-rule` as the search drivers do (best-first defaults on).
+        let freeze_rule_on = self.freeze_rule.resolve(matches!(self.search, SearchKind::BestFirst));
+        assert!(freeze_rule_on || self.var_order == search::VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
+        // `--compression-limit` is a single-abstraction stop: with stacked
+        // abstractions there's no one ratio to stop at.
+        assert!(self.compression_limit.is_none() || self.num_abstractions == 1, "--compression-limit requires --num-abstractions 1");
     }
 }
 
