@@ -12,6 +12,8 @@ Usage:
 """
 import os
 import sys
+import time
+import urllib.error
 import urllib.request
 
 # Pinned commit (2018-07-25 "Benchmark files."), so the download is immutable.
@@ -28,11 +30,27 @@ SUBDIR.update({c: "random_control" for c in
 
 
 def fetch(name: str) -> None:
-    """Download circuit `name` to scripts/epfl-circuits/<name>.aig."""
+    """Download circuit `name` to scripts/epfl-circuits/<name>.aig.
+
+    raw.githubusercontent.com rate-limits (HTTP 429) when the CI matrix hammers
+    it, so retry transient failures with exponential backoff before giving up.
+    """
     url = f"https://raw.githubusercontent.com/lsils/benchmarks/{REF}/{SUBDIR[name]}/{name}.aig"
     req = urllib.request.Request(url, headers={"User-Agent": "egg-stitch"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        data = resp.read()
+    for attempt in range(6):
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = resp.read()
+            break
+        except (urllib.error.HTTPError, urllib.error.URLError) as e:
+            # HTTPError carries a status code; a bare URLError (DNS/connection)
+            # is always worth retrying. Give up on non-transient HTTP codes.
+            transient = not isinstance(e, urllib.error.HTTPError) or e.code in (429, 500, 502, 503, 504)
+            if not transient or attempt == 5:
+                raise
+            delay = 2**attempt
+            print(f"{name}: {e}; retrying in {delay}s", file=sys.stderr)
+            time.sleep(delay)
     assert data.startswith(b"aig "), f"{name}: not an AIGER file"
     with open(os.path.join(HERE, f"{name}.aig"), "wb") as f:
         f.write(data)

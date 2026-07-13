@@ -91,6 +91,25 @@ def aggregate_methods_time(runs: dict[str, list[list[dict]]]) -> dict[str, float
     return {m: (None if has_dnf(reps) else aggregate_time(reps)) for m, reps in runs.items()}
 
 
+def reported_sweep_point(domain_runs: list[dict[str, list[list[dict]]]], method: str,
+                         sweep: tuple[int, ...], configured: int) -> int:
+    """The sweep value a table reports for a series ``method`` (Enum/SMC).
+
+    The ``configured`` operating point if every domain's cell finishes (non-DNF)
+    there, otherwise the highest lower sweep value that finishes on *every* domain
+    — the kick-down the family tables apply when the configured point DNFs — or
+    ``configured`` when nothing finishes (the cell then renders DNF).
+    ``domain_runs`` is each domain's ``runs`` dict."""
+    reportable = [aggregate_methods_cr(runs) for runs in domain_runs]
+
+    def finishes(point: int) -> bool:
+        key = f"{method}-{point}"
+        return bool(reportable) and all(cr.get(key) is not None for cr in reportable)
+
+    return next((p for p in sorted((s for s in sweep if s <= configured), reverse=True)
+                 if finishes(p)), configured)
+
+
 def initial_size_for_domain(runs: dict[str, list[list[dict]]]) -> float | None:
     """Geomean ``initial_cost`` per input file (same for every method/repeat).
 
