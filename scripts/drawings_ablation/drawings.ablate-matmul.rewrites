@@ -31,10 +31,13 @@ sin_pi: (sin pi) => 0
 cos_qpi: (cos (/ pi 4)) => 0.7071067811865476
 sin_qpi: (sin (/ pi 4)) => 0.7071067811865476
 
-// ── angle normalisation so equal rotations share a representative ──
+// ── angle normalisation so equal rotations share a representative
+//    (incl. the default's decimal-literal lifts) ──
 ang_q: (/ (* 2 pi) 4) <=> (/ pi 2)
 ang_e: (/ (* 2 pi) 8) <=> (/ pi 4)
 ang_h: (/ (* 2 pi) 2) <=> pi
+ang_lift_q: 1.5708 <=> (/ pi 2)
+ang_lift_e: 0.785398 <=> (/ pi 4)
 
 
 // ── non-confluent "choice" rules: two normal forms, best pick depends on the library ──

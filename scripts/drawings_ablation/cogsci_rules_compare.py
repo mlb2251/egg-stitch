@@ -54,7 +54,7 @@ def run(domain, rules_rel):
            "--max-match-set", str(MAX_MATCH_SET), "-r", rules]
     try:
         p = subprocess.run(cmd, cwd=ROOT, timeout=TIMEOUT,
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, check=True)
         out = p.stdout
     except subprocess.TimeoutExpired as e:
         out = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
