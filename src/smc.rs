@@ -223,10 +223,10 @@ impl<'a, F: LanguageFamily, O: StitchOp> SmcSearchData<'a, F, O> {
         let num_particles = self.args.num_particles;
         let counts = sample_counts_normalized(&weights, num_particles, self.rng);
 
-        if self.args.verbose {
+        if self.args.verbose || self.args.verbose_match_structure {
             println!("{}", format!("Step {}: resampled all particles", step).dimmed());
             let resample_weights: Vec<f64> = counts.iter().map(|&c| c as f64 / num_particles as f64).collect();
-            print_top_particles(&expanded, &resample_weights, &self.shared, self.original_size, |i| costs[i]);
+            print_top_particles(&expanded, &resample_weights, &self.shared, self.original_size, self.args.verbose_match_structure, |i| costs[i]);
         }
 
         expanded.into_iter().zip(counts).filter(|(_, c)| *c > 0).collect()
@@ -423,9 +423,9 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
             break;
         }
 
-        if verbose {
+        if verbose || args.verbose_match_structure {
             println!("{}", format!("Step {}: expanded all particles", step).dimmed());
-            print_top_particles(&expanded, &weights, &search.shared, original_size, |i| costs[i]);
+            print_top_particles(&expanded, &weights, &search.shared, original_size, args.verbose_match_structure, |i| costs[i]);
         }
 
         particles = search.resample(expanded, weights, &costs, step);

@@ -218,11 +218,14 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             continue;
         }
 
-        if args.verbose || args.verbose_forced_expansion {
+        if args.verbose || args.verbose_forced_expansion || args.verbose_match_structure {
             let tag = format!("[expansion {}]", num_expansions);
             let pat = nodes[node_id].state.pattern.to_string();
             if args.verbose {
                 println!("{} {} {}", tag.dimmed(), "expanding:".dimmed(), pat.clone().cyan());
+            }
+            if args.verbose_match_structure {
+                crate::logging::print_match_structure(&nodes[node_id].state.matches, 10);
             }
             if args.verbose_forced_expansion {
                 let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared, i64::MIN) {
