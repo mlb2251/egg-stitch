@@ -1,12 +1,19 @@
 {
   "compression_ratio": 1.2857142857142858,
   "cost_after_rewrites": 36,
+  "cost_at_end_of_each_iter": [
+    28
+  ],
   "final_cost": 28,
+  "heap_sizes_at_end": [
+    0
+  ],
   "initial_cost": 36,
   "library": [
     {
       "approx_cost": -14,
       "arity": 2,
+      "lambda": "(lam (lam (+ $1 (* $0 $0))))",
       "num_matches": 11,
       "pattern": "fn_0: (+ ?#0 (* ?#1 ?#1))",
       "pattern_size": 5,

@@ -1,8 +1,12 @@
 {
   "compression_ratio": null,
   "cost_after_rewrites": 1110,
+  "cost_at_end_of_each_iter": null,
   "final_cost": null,
-  "initial_cost": 21,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 1110,
   "original_programs": [
     "(a (lam (cons (car $0))))",
     "(a (lam (cons (+ 1 (car $0)))))"

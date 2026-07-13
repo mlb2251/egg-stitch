@@ -9,19 +9,204 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+          components: rustfmt
       - name: cargo fmt
         run: cargo fmt -- --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
       - name: cargo clippy
         run: cargo clippy --all-targets -- -D warnings
-      - name: cargo test
-        run: cargo test --release
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest (excluding check_slow and epfl_circuits)
+        run: cargo nextest run --release -E 'not test(/check_slow/) and not binary(epfl_circuits_test)'
+
+  # EPFL-circuit snapshot suite (tests/epfl_circuits_test.rs), in its own
+  # single-threaded job (the SMC rollouts are heavier than the `test` job's cases).
+  # Needs python (the regen check) and the gitignored .aig blobs, fetched first.
+  test-epfl-circuits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: fetch vendored .aig circuits
+        run: python3 scripts/epfl-circuits/fetch_aigs.py
+      - name: cargo nextest epfl-circuits (single-threaded)
+        run: cargo nextest run --release -E 'binary(epfl_circuits_test)' --test-threads=1
+
+  test-check-slow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest check_slow (excluding physics and list)
+        run: cargo nextest run --release -E 'test(/check_slow/) and not test(/check_slow_physics/) and not test(/check_slow_list/)'
+
+  test-check-slow-physics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest check_slow_physics
+        run: cargo nextest run --release -E 'test(/check_slow_physics/)'
+
+  # Sibling dreamcoder domain to physics; split into its own job for the same
+  # reason (SMC rollouts at 10 000 particles are heavier than the shared job's).
+  test-check-slow-list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest check_slow_list
+        run: cargo nextest run --release -E 'test(/check_slow_list/)'
+
+  smc-fv-crash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: SMC fv-crash regression sweep
         run: ./tests/smc_fv_crash_regression.sh
+
+  cross-depth-reuse-leaf-expand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: cross-depth-reuse-then-leaf-DB-var regression
+        run: ./tests/cross_depth_reuse_then_db_var_regression.sh
+
+  # External equivalence-oracle checks. The checker is pure Python and lives
+  # under `scripts/`; it reads each fixture's `original_programs` and
+  # `rewritten_programs`, inlines library lambdas, and verifies β-equivalence
+  # (plus DSRs where applicable). Independent of the Rust search code, so it
+  # catches abstraction bugs the unit tests don't.
+  check-fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: oracle self-tests
+        run: python3 scripts/test_check_equiv.py
+      - name: check every expected_outputs/*.out.json
+        run: python3 scripts/check_all_outputs.py
+
+  # Enumerate data/domains/* so the matrices below stay in sync with the repo.
+  # `domains` is one entry per domain dir. `targets` is the same, except the
+  # domains listed in `split_per_file` are expanded into one entry per *.json
+  # file so their (slow) problems run as separate parallel jobs.
+  list-domains:
+    runs-on: ubuntu-latest
+    outputs:
+      domains: ${{ steps.ls.outputs.domains }}
+      targets: ${{ steps.ls.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ls
+        run: |
+          split_per_file="cogsci"
+          # These domains are excluded from the lambda-calc search/follow sweeps
+          # below, as op-children (not lambda-calc) corpora: `molecules` holds
+          # paired canon/scram corpora under subdirs, and `epfl-circuits` holds
+          # the AIG boolean corpora (their own snapshot suite is `test-epfl-circuits`).
+          skip="molecules epfl-circuits"
+          domains=$(ls -1 data/domains | grep -vxF "$(printf '%s\n' $skip)" | jq -R . | jq -sc .)
+          echo "domains=$domains" >> "$GITHUB_OUTPUT"
+          targets=$(
+            for d in data/domains/*/; do
+              name=$(basename "$d")
+              if printf '%s\n' $skip | grep -qx "$name"; then
+                continue
+              fi
+              if printf '%s\n' $split_per_file | grep -qx "$name"; then
+                ls -1 "$d"*.json
+              else
+                printf '%s\n' "${d%/}"
+              fi
+            done | jq -R . | jq -sc .
+          )
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+  # Run the search end-to-end (both backends) on every problem in each
+  # data/domains/* corpus, then verify each rewritten corpus is equivalent
+  # to the input under the same oracle. One job per target (a domain dir, or a
+  # single problem file for domains in `split_per_file`), in parallel.
+  search-and-check-domains:
+    needs: list-domains
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.list-domains.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: build release binary
+        run: cargo build --release
+      - name: search-and-check ${{ matrix.target }}
+        run: python3 scripts/search_and_check_domain.py ${{ matrix.target }} -- --language lambda-calc --num-steps 2000
+
+  # For each input in each domain: run the reference stitch compressor to
+  # discover an abstraction, then re-run both backends with `--follow` on that
+  # pattern and assert each reaches it. Guards against regressions where follow
+  # mode can no longer reproduce the abstraction stitch itself finds. The script
+  # self-clones/builds `../stitch`, so no extra checkout step is needed here.
+  follow-reaches-domains:
+    needs: list-domains
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        domain: ${{ fromJson(needs.list-domains.outputs.domains) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: build release binary
+        run: cargo build --release
+      - name: follow-reaches ${{ matrix.domain }}
+        run: python3 scripts/follow_reaches_domain.py data/domains/${{ matrix.domain }}

@@ -1,0 +1,4181 @@
+{
+  "nuts-bolts": [
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 10717,
+        "compression_ratio": 1.7736306802276756,
+        "elapsed_secs": 0.16579294204711914,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))"
+        ],
+        "egraph_min_term_size": 19009.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10718
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 10717,
+        "compression_ratio": 1.7736306802276756,
+        "elapsed_secs": 0.16423511505126953,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))"
+        ],
+        "egraph_min_term_size": 19009.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10718
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "nuts-bolts",
+        "file": "nuts-bolts",
+        "initial_cost": 19008,
+        "final_cost": 10717,
+        "compression_ratio": 1.7736306802276756,
+        "elapsed_secs": 0.16572022438049316,
+        "library": [
+          "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))"
+        ],
+        "egraph_min_term_size": 19009.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          10718
+        ]
+      }
+    ]
+  ],
+  "dials": [
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 17117,
+        "compression_ratio": 2.086346906584098,
+        "elapsed_secs": 0.14186835289001465,
+        "library": [
+          "fn_0: (C ?#0 (T (T (T l (M 1 0 -0.5 0)) (M ?#1 (/ pi 4) 0 0)) (M 1 0 (* ?#1 (* 0.5 (cos (/ pi 4)))) (* ?#1 (* 0.5 (sin (/ pi 4)))))))"
+        ],
+        "egraph_min_term_size": 20583.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          17118
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 17117,
+        "compression_ratio": 2.086346906584098,
+        "elapsed_secs": 0.14435029029846191,
+        "library": [
+          "fn_0: (C ?#0 (T (T (T l (M 1 0 -0.5 0)) (M ?#1 (/ pi 4) 0 0)) (M 1 0 (* ?#1 (* 0.5 (cos (/ pi 4)))) (* ?#1 (* 0.5 (sin (/ pi 4)))))))"
+        ],
+        "egraph_min_term_size": 20583.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          17118
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "dials",
+        "file": "dials",
+        "initial_cost": 35712,
+        "final_cost": 17117,
+        "compression_ratio": 2.086346906584098,
+        "elapsed_secs": 0.14209246635437012,
+        "library": [
+          "fn_0: (C ?#0 (T (T (T l (M 1 0 -0.5 0)) (M ?#1 (/ pi 4) 0 0)) (M 1 0 (* ?#1 (* 0.5 (cos (/ pi 4)))) (* ?#1 (* 0.5 (sin (/ pi 4)))))))"
+        ],
+        "egraph_min_term_size": 20583.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          17118
+        ]
+      }
+    ]
+  ],
+  "wheels": [
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 24415,
+        "compression_ratio": 1.4509932418595126,
+        "elapsed_secs": 0.09679889678955078,
+        "library": [
+          "fn_0: (T ?#0 (M ?#1 0 0 0))"
+        ],
+        "egraph_min_term_size": 30257.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          24416
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 24415,
+        "compression_ratio": 1.4509932418595126,
+        "elapsed_secs": 0.09729695320129395,
+        "library": [
+          "fn_0: (T ?#0 (M ?#1 0 0 0))"
+        ],
+        "egraph_min_term_size": 30257.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          24416
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "wheels",
+        "file": "wheels",
+        "initial_cost": 35426,
+        "final_cost": 24415,
+        "compression_ratio": 1.4509932418595126,
+        "elapsed_secs": 0.0984344482421875,
+        "library": [
+          "fn_0: (T ?#0 (M ?#1 0 0 0))"
+        ],
+        "egraph_min_term_size": 30257.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          24416
+        ]
+      }
+    ]
+  ],
+  "furniture": [
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 25186,
+        "compression_ratio": 1.70471690621774,
+        "elapsed_secs": 0.18004179000854492,
+        "library": [
+          "fn_0: (T ?#0 (M 1 0 0 ?#1))"
+        ],
+        "egraph_min_term_size": 37028.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          25187
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 25186,
+        "compression_ratio": 1.70471690621774,
+        "elapsed_secs": 0.17664837837219238,
+        "library": [
+          "fn_0: (T ?#0 (M 1 0 0 ?#1))"
+        ],
+        "egraph_min_term_size": 37028.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          25187
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "furniture",
+        "file": "furniture",
+        "initial_cost": 42935,
+        "final_cost": 25186,
+        "compression_ratio": 1.70471690621774,
+        "elapsed_secs": 0.17695260047912598,
+        "library": [
+          "fn_0: (T ?#0 (M 1 0 0 ?#1))"
+        ],
+        "egraph_min_term_size": 37028.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          25187
+        ]
+      }
+    ]
+  ],
+  "list": [
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0",
+        "initial_cost": 166,
+        "final_cost": 151,
+        "compression_ratio": 1.099337748344371,
+        "elapsed_secs": 0.005359172821044922,
+        "library": [
+          "fn_0: (lam (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))) $0))"
+        ],
+        "egraph_min_term_size": 167.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          152
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench001_it1",
+        "initial_cost": 216,
+        "final_cost": 212,
+        "compression_ratio": 1.0188679245283019,
+        "elapsed_secs": 0.005707979202270508,
+        "library": [
+          "fn_1: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 217.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          213
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench002_it2",
+        "initial_cost": 326,
+        "final_cost": 307,
+        "compression_ratio": 1.0618892508143323,
+        "elapsed_secs": 0.006651401519775391,
+        "library": [
+          "fn_2: (+ 1 1)"
+        ],
+        "egraph_min_term_size": 327.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          308
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench003_it4",
+        "initial_cost": 429,
+        "final_cost": 418,
+        "compression_ratio": 1.0263157894736843,
+        "elapsed_secs": 0.008573532104492188,
+        "library": [
+          "fn_5: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 430.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          419
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench004_it5",
+        "initial_cost": 498,
+        "final_cost": 482,
+        "compression_ratio": 1.033195020746888,
+        "elapsed_secs": 0.009013652801513672,
+        "library": [
+          "fn_7: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 499.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          483
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench005_it7",
+        "initial_cost": 770,
+        "final_cost": 743,
+        "compression_ratio": 1.0363391655450875,
+        "elapsed_secs": 0.012929439544677734,
+        "library": [
+          "fn_8: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 771.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          744
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench006_it8",
+        "initial_cost": 896,
+        "final_cost": 867,
+        "compression_ratio": 1.0334486735870818,
+        "elapsed_secs": 0.015001058578491211,
+        "library": [
+          "fn_9: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 897.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          868
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench007_it10",
+        "initial_cost": 1101,
+        "final_cost": 1061,
+        "compression_ratio": 1.0377002827521207,
+        "elapsed_secs": 0.01665353775024414,
+        "library": [
+          "fn_11: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1102.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1062
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench008_it11",
+        "initial_cost": 1002,
+        "final_cost": 959,
+        "compression_ratio": 1.0448383733055266,
+        "elapsed_secs": 0.012773513793945312,
+        "library": [
+          "fn_13: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1003.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          960
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench009_it12",
+        "initial_cost": 1052,
+        "final_cost": 1008,
+        "compression_ratio": 1.0436507936507937,
+        "elapsed_secs": 0.01440739631652832,
+        "library": [
+          "fn_14: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1053.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1009
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench010_it15",
+        "initial_cost": 1065,
+        "final_cost": 1015,
+        "compression_ratio": 1.0492610837438423,
+        "elapsed_secs": 0.01310110092163086,
+        "library": [
+          "fn_17: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1066.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1016
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0",
+        "initial_cost": 171,
+        "final_cost": 148,
+        "compression_ratio": 1.1554054054054055,
+        "elapsed_secs": 0.00504755973815918,
+        "library": [
+          "fn_0: (+ 1 1)"
+        ],
+        "egraph_min_term_size": 172.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          149
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench001_it1",
+        "initial_cost": 215,
+        "final_cost": 202,
+        "compression_ratio": 1.0643564356435644,
+        "elapsed_secs": 0.00477290153503418,
+        "library": [
+          "fn_20: (map (lam (?#0 $0 ?#1)))"
+        ],
+        "egraph_min_term_size": 216.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          203
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench002_it2",
+        "initial_cost": 286,
+        "final_cost": 262,
+        "compression_ratio": 1.0916030534351144,
+        "elapsed_secs": 0.005246162414550781,
+        "library": [
+          "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))"
+        ],
+        "egraph_min_term_size": 287.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          263
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench003_it3",
+        "initial_cost": 322,
+        "final_cost": 313,
+        "compression_ratio": 1.0287539936102237,
+        "elapsed_secs": 0.0065953731536865234,
+        "library": [
+          "fn_26: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 323.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          314
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench004_it4",
+        "initial_cost": 424,
+        "final_cost": 398,
+        "compression_ratio": 1.065326633165829,
+        "elapsed_secs": 0.008386850357055664,
+        "library": [
+          "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))"
+        ],
+        "egraph_min_term_size": 425.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          399
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench005_it5",
+        "initial_cost": 481,
+        "final_cost": 460,
+        "compression_ratio": 1.0456521739130435,
+        "elapsed_secs": 0.0077877044677734375,
+        "library": [
+          "fn_27: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 482.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          461
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench006_it6",
+        "initial_cost": 549,
+        "final_cost": 520,
+        "compression_ratio": 1.0557692307692308,
+        "elapsed_secs": 0.007455110549926758,
+        "library": [
+          "fn_28: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 550.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          521
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench007_it7",
+        "initial_cost": 651,
+        "final_cost": 617,
+        "compression_ratio": 1.0551053484602917,
+        "elapsed_secs": 0.008457660675048828,
+        "library": [
+          "fn_29: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 652.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          618
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench008_it8",
+        "initial_cost": 751,
+        "final_cost": 714,
+        "compression_ratio": 1.0518207282913166,
+        "elapsed_secs": 0.009502410888671875,
+        "library": [
+          "fn_30: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 752.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          715
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench009_it11",
+        "initial_cost": 900,
+        "final_cost": 858,
+        "compression_ratio": 1.048951048951049,
+        "elapsed_secs": 0.010565042495727539,
+        "library": [
+          "fn_30: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 901.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          859
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench010_it16",
+        "initial_cost": 837,
+        "final_cost": 793,
+        "compression_ratio": 1.055485498108449,
+        "elapsed_secs": 0.009434223175048828,
+        "library": [
+          "fn_33: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 838.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          794
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench011_it18",
+        "initial_cost": 903,
+        "final_cost": 856,
+        "compression_ratio": 1.0549065420560748,
+        "elapsed_secs": 0.009871482849121094,
+        "library": [
+          "fn_34: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 904.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          857
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench000_it0",
+        "initial_cost": 146,
+        "final_cost": 133,
+        "compression_ratio": 1.0977443609022557,
+        "elapsed_secs": 0.004902839660644531,
+        "library": [
+          "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))"
+        ],
+        "egraph_min_term_size": 143.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          134
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench001_it1",
+        "initial_cost": 212,
+        "final_cost": 201,
+        "compression_ratio": 1.054726368159204,
+        "elapsed_secs": 0.00525212287902832,
+        "library": [
+          "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))"
+        ],
+        "egraph_min_term_size": 209.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          202
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench002_it2",
+        "initial_cost": 288,
+        "final_cost": 262,
+        "compression_ratio": 1.099236641221374,
+        "elapsed_secs": 0.0054340362548828125,
+        "library": [
+          "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+        ],
+        "egraph_min_term_size": 285.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          263
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench003_it3",
+        "initial_cost": 400,
+        "final_cost": 360,
+        "compression_ratio": 1.1111111111111112,
+        "elapsed_secs": 0.010297775268554688,
+        "library": [
+          "fn_40: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+        ],
+        "egraph_min_term_size": 393.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          361
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench004_it4",
+        "initial_cost": 490,
+        "final_cost": 443,
+        "compression_ratio": 1.1060948081264108,
+        "elapsed_secs": 0.010901927947998047,
+        "library": [
+          "fn_41: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 483.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          444
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench005_it5",
+        "initial_cost": 632,
+        "final_cost": 588,
+        "compression_ratio": 1.0748299319727892,
+        "elapsed_secs": 0.015579938888549805,
+        "library": [
+          "fn_42: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 625.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          589
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench006_it6",
+        "initial_cost": 679,
+        "final_cost": 630,
+        "compression_ratio": 1.0777777777777777,
+        "elapsed_secs": 0.010077238082885742,
+        "library": [
+          "fn_45: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 676.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          631
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench007_it7",
+        "initial_cost": 739,
+        "final_cost": 698,
+        "compression_ratio": 1.0587392550143266,
+        "elapsed_secs": 0.010236501693725586,
+        "library": [
+          "fn_46: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 732.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          699
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench008_it8",
+        "initial_cost": 744,
+        "final_cost": 710,
+        "compression_ratio": 1.047887323943662,
+        "elapsed_secs": 0.009451627731323242,
+        "library": [
+          "fn_50: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 745.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          711
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench009_it10",
+        "initial_cost": 883,
+        "final_cost": 842,
+        "compression_ratio": 1.0486935866983373,
+        "elapsed_secs": 0.010102272033691406,
+        "library": [
+          "fn_52: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 884.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          843
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench010_it12",
+        "initial_cost": 917,
+        "final_cost": 869,
+        "compression_ratio": 1.0552359033371692,
+        "elapsed_secs": 0.010159730911254883,
+        "library": [
+          "fn_53: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 918.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          869
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench011_it17",
+        "initial_cost": 919,
+        "final_cost": 866,
+        "compression_ratio": 1.0612009237875288,
+        "elapsed_secs": 0.009796857833862305,
+        "library": [
+          "fn_54: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 920.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          866
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench000_it0",
+        "initial_cost": 176,
+        "final_cost": 165,
+        "compression_ratio": 1.0666666666666667,
+        "elapsed_secs": 0.005339145660400391,
+        "library": [
+          "fn_0: (+ 1)"
+        ],
+        "egraph_min_term_size": 177.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          166
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench001_it1",
+        "initial_cost": 245,
+        "final_cost": 236,
+        "compression_ratio": 1.0381355932203389,
+        "elapsed_secs": 0.005815267562866211,
+        "library": [
+          "fn_55: (map (lam (index $0 ?#0)) (range ?#1))"
+        ],
+        "egraph_min_term_size": 246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          237
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench002_it3",
+        "initial_cost": 473,
+        "final_cost": 449,
+        "compression_ratio": 1.0534521158129175,
+        "elapsed_secs": 0.008122682571411133,
+        "library": [
+          "fn_57: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 474.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          450
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench003_it4",
+        "initial_cost": 480,
+        "final_cost": 459,
+        "compression_ratio": 1.0457516339869282,
+        "elapsed_secs": 0.007625579833984375,
+        "library": [
+          "fn_59: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 481.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          460
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench004_it5",
+        "initial_cost": 559,
+        "final_cost": 526,
+        "compression_ratio": 1.0627376425855513,
+        "elapsed_secs": 0.007940053939819336,
+        "library": [
+          "fn_60: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 560.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          527
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench005_it6",
+        "initial_cost": 570,
+        "final_cost": 537,
+        "compression_ratio": 1.0614525139664805,
+        "elapsed_secs": 0.007378101348876953,
+        "library": [
+          "fn_62: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 571.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          538
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench006_it7",
+        "initial_cost": 614,
+        "final_cost": 581,
+        "compression_ratio": 1.0567986230636832,
+        "elapsed_secs": 0.00740814208984375,
+        "library": [
+          "fn_62: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 615.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          582
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench007_it8",
+        "initial_cost": 703,
+        "final_cost": 670,
+        "compression_ratio": 1.0492537313432835,
+        "elapsed_secs": 0.00823354721069336,
+        "library": [
+          "fn_63: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 704.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          671
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench008_it9",
+        "initial_cost": 776,
+        "final_cost": 740,
+        "compression_ratio": 1.0486486486486486,
+        "elapsed_secs": 0.009070634841918945,
+        "library": [
+          "fn_64: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 777.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          741
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench009_it10",
+        "initial_cost": 825,
+        "final_cost": 786,
+        "compression_ratio": 1.049618320610687,
+        "elapsed_secs": 0.008753538131713867,
+        "library": [
+          "fn_65: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 826.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          787
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench010_it11",
+        "initial_cost": 782,
+        "final_cost": 746,
+        "compression_ratio": 1.0482573726541555,
+        "elapsed_secs": 0.008044719696044922,
+        "library": [
+          "fn_67: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 783.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          747
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench011_it14",
+        "initial_cost": 808,
+        "final_cost": 771,
+        "compression_ratio": 1.0479896238651103,
+        "elapsed_secs": 0.008643865585327148,
+        "library": [
+          "fn_68: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 809.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          772
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench000_it0",
+        "initial_cost": 135,
+        "final_cost": 120,
+        "compression_ratio": 1.125,
+        "elapsed_secs": 0.003927946090698242,
+        "library": [
+          "fn_0: (+ 1 (+ 1 1))"
+        ],
+        "egraph_min_term_size": 136.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          121
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench001_it1",
+        "initial_cost": 251,
+        "final_cost": 241,
+        "compression_ratio": 1.04149377593361,
+        "elapsed_secs": 0.0055389404296875,
+        "library": [
+          "fn_19: (map (lam (?#0 $0 ?#1)))"
+        ],
+        "egraph_min_term_size": 252.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          242
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench002_it2",
+        "initial_cost": 303,
+        "final_cost": 284,
+        "compression_ratio": 1.0669014084507042,
+        "elapsed_secs": 0.005414009094238281,
+        "library": [
+          "fn_57: (lam (map (lam (?#0 $0 ?#1)) $0))"
+        ],
+        "egraph_min_term_size": 304.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          285
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench003_it3",
+        "initial_cost": 427,
+        "final_cost": 412,
+        "compression_ratio": 1.0364077669902914,
+        "elapsed_secs": 0.007879257202148438,
+        "library": [
+          "fn_57: (cdr (cdr ?#0))"
+        ],
+        "egraph_min_term_size": 424.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          413
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench004_it4",
+        "initial_cost": 478,
+        "final_cost": 463,
+        "compression_ratio": 1.0323974082073435,
+        "elapsed_secs": 0.008562326431274414,
+        "library": [
+          "fn_57: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 475.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          464
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench005_it5",
+        "initial_cost": 588,
+        "final_cost": 565,
+        "compression_ratio": 1.0407079646017698,
+        "elapsed_secs": 0.012746095657348633,
+        "library": [
+          "fn_69: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 581.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          566
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench006_it6",
+        "initial_cost": 671,
+        "final_cost": 643,
+        "compression_ratio": 1.0435458786936236,
+        "elapsed_secs": 0.008823394775390625,
+        "library": [
+          "fn_71: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 668.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          644
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench007_it7",
+        "initial_cost": 761,
+        "final_cost": 730,
+        "compression_ratio": 1.0424657534246575,
+        "elapsed_secs": 0.009921550750732422,
+        "library": [
+          "fn_72: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 758.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          731
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench008_it8",
+        "initial_cost": 831,
+        "final_cost": 796,
+        "compression_ratio": 1.0439698492462313,
+        "elapsed_secs": 0.010687589645385742,
+        "library": [
+          "fn_73: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 828.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          797
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench009_it13",
+        "initial_cost": 1070,
+        "final_cost": 1020,
+        "compression_ratio": 1.0490196078431373,
+        "elapsed_secs": 0.012949466705322266,
+        "library": [
+          "fn_74: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1067.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1021
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench010_it17",
+        "initial_cost": 1027,
+        "final_cost": 979,
+        "compression_ratio": 1.04902962206333,
+        "elapsed_secs": 0.011678457260131836,
+        "library": [
+          "fn_75: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1024.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          980
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench011_it19",
+        "initial_cost": 1008,
+        "final_cost": 957,
+        "compression_ratio": 1.0532915360501567,
+        "elapsed_secs": 0.010962247848510742,
+        "library": [
+          "fn_76: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1005.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          958
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0",
+        "initial_cost": 166,
+        "final_cost": 151,
+        "compression_ratio": 1.099337748344371,
+        "elapsed_secs": 0.005744457244873047,
+        "library": [
+          "fn_0: (lam (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))) $0))"
+        ],
+        "egraph_min_term_size": 167.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          152
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench001_it1",
+        "initial_cost": 216,
+        "final_cost": 212,
+        "compression_ratio": 1.0188679245283019,
+        "elapsed_secs": 0.005796909332275391,
+        "library": [
+          "fn_1: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 217.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          213
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench002_it2",
+        "initial_cost": 326,
+        "final_cost": 307,
+        "compression_ratio": 1.0618892508143323,
+        "elapsed_secs": 0.006544828414916992,
+        "library": [
+          "fn_2: (+ 1 1)"
+        ],
+        "egraph_min_term_size": 327.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          308
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench003_it4",
+        "initial_cost": 429,
+        "final_cost": 418,
+        "compression_ratio": 1.0263157894736843,
+        "elapsed_secs": 0.008739948272705078,
+        "library": [
+          "fn_5: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 430.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          419
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench004_it5",
+        "initial_cost": 498,
+        "final_cost": 482,
+        "compression_ratio": 1.033195020746888,
+        "elapsed_secs": 0.009391307830810547,
+        "library": [
+          "fn_7: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 499.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          483
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench005_it7",
+        "initial_cost": 770,
+        "final_cost": 743,
+        "compression_ratio": 1.0363391655450875,
+        "elapsed_secs": 0.013630867004394531,
+        "library": [
+          "fn_8: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 771.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          744
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench006_it8",
+        "initial_cost": 896,
+        "final_cost": 867,
+        "compression_ratio": 1.0334486735870818,
+        "elapsed_secs": 0.015766143798828125,
+        "library": [
+          "fn_9: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 897.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          868
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench007_it10",
+        "initial_cost": 1101,
+        "final_cost": 1061,
+        "compression_ratio": 1.0377002827521207,
+        "elapsed_secs": 0.0172727108001709,
+        "library": [
+          "fn_11: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1102.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1062
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench008_it11",
+        "initial_cost": 1002,
+        "final_cost": 959,
+        "compression_ratio": 1.0448383733055266,
+        "elapsed_secs": 0.012959480285644531,
+        "library": [
+          "fn_13: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1003.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          960
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench009_it12",
+        "initial_cost": 1052,
+        "final_cost": 1008,
+        "compression_ratio": 1.0436507936507937,
+        "elapsed_secs": 0.014456033706665039,
+        "library": [
+          "fn_14: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1053.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1009
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench010_it15",
+        "initial_cost": 1065,
+        "final_cost": 1015,
+        "compression_ratio": 1.0492610837438423,
+        "elapsed_secs": 0.012874841690063477,
+        "library": [
+          "fn_17: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1066.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1016
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0",
+        "initial_cost": 171,
+        "final_cost": 148,
+        "compression_ratio": 1.1554054054054055,
+        "elapsed_secs": 0.004267692565917969,
+        "library": [
+          "fn_0: (+ 1 1)"
+        ],
+        "egraph_min_term_size": 172.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          149
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench001_it1",
+        "initial_cost": 215,
+        "final_cost": 202,
+        "compression_ratio": 1.0643564356435644,
+        "elapsed_secs": 0.0045528411865234375,
+        "library": [
+          "fn_20: (map (lam (?#0 $0 ?#1)))"
+        ],
+        "egraph_min_term_size": 216.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          203
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench002_it2",
+        "initial_cost": 286,
+        "final_cost": 262,
+        "compression_ratio": 1.0916030534351144,
+        "elapsed_secs": 0.005007266998291016,
+        "library": [
+          "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))"
+        ],
+        "egraph_min_term_size": 287.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          263
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench003_it3",
+        "initial_cost": 322,
+        "final_cost": 313,
+        "compression_ratio": 1.0287539936102237,
+        "elapsed_secs": 0.006801128387451172,
+        "library": [
+          "fn_26: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 323.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          314
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench004_it4",
+        "initial_cost": 424,
+        "final_cost": 398,
+        "compression_ratio": 1.065326633165829,
+        "elapsed_secs": 0.00820612907409668,
+        "library": [
+          "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))"
+        ],
+        "egraph_min_term_size": 425.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          399
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench005_it5",
+        "initial_cost": 481,
+        "final_cost": 460,
+        "compression_ratio": 1.0456521739130435,
+        "elapsed_secs": 0.007056713104248047,
+        "library": [
+          "fn_27: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 482.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          461
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench006_it6",
+        "initial_cost": 549,
+        "final_cost": 520,
+        "compression_ratio": 1.0557692307692308,
+        "elapsed_secs": 0.008196830749511719,
+        "library": [
+          "fn_28: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 550.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          521
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench007_it7",
+        "initial_cost": 651,
+        "final_cost": 617,
+        "compression_ratio": 1.0551053484602917,
+        "elapsed_secs": 0.008569478988647461,
+        "library": [
+          "fn_29: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 652.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          618
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench008_it8",
+        "initial_cost": 751,
+        "final_cost": 714,
+        "compression_ratio": 1.0518207282913166,
+        "elapsed_secs": 0.009729146957397461,
+        "library": [
+          "fn_30: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 752.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          715
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench009_it11",
+        "initial_cost": 900,
+        "final_cost": 858,
+        "compression_ratio": 1.048951048951049,
+        "elapsed_secs": 0.01066899299621582,
+        "library": [
+          "fn_30: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 901.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          859
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench010_it16",
+        "initial_cost": 837,
+        "final_cost": 793,
+        "compression_ratio": 1.055485498108449,
+        "elapsed_secs": 0.009324312210083008,
+        "library": [
+          "fn_33: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 838.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          794
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench011_it18",
+        "initial_cost": 903,
+        "final_cost": 856,
+        "compression_ratio": 1.0549065420560748,
+        "elapsed_secs": 0.009943246841430664,
+        "library": [
+          "fn_34: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 904.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          857
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench000_it0",
+        "initial_cost": 146,
+        "final_cost": 133,
+        "compression_ratio": 1.0977443609022557,
+        "elapsed_secs": 0.0051250457763671875,
+        "library": [
+          "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))"
+        ],
+        "egraph_min_term_size": 143.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          134
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench001_it1",
+        "initial_cost": 212,
+        "final_cost": 201,
+        "compression_ratio": 1.054726368159204,
+        "elapsed_secs": 0.005448579788208008,
+        "library": [
+          "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))"
+        ],
+        "egraph_min_term_size": 209.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          202
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench002_it2",
+        "initial_cost": 288,
+        "final_cost": 262,
+        "compression_ratio": 1.099236641221374,
+        "elapsed_secs": 0.005654335021972656,
+        "library": [
+          "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+        ],
+        "egraph_min_term_size": 285.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          263
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench003_it3",
+        "initial_cost": 400,
+        "final_cost": 360,
+        "compression_ratio": 1.1111111111111112,
+        "elapsed_secs": 0.010434389114379883,
+        "library": [
+          "fn_40: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+        ],
+        "egraph_min_term_size": 393.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          361
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench004_it4",
+        "initial_cost": 490,
+        "final_cost": 443,
+        "compression_ratio": 1.1060948081264108,
+        "elapsed_secs": 0.010924816131591797,
+        "library": [
+          "fn_41: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 483.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          444
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench005_it5",
+        "initial_cost": 632,
+        "final_cost": 588,
+        "compression_ratio": 1.0748299319727892,
+        "elapsed_secs": 0.017821073532104492,
+        "library": [
+          "fn_42: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 625.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          589
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench006_it6",
+        "initial_cost": 679,
+        "final_cost": 630,
+        "compression_ratio": 1.0777777777777777,
+        "elapsed_secs": 0.009293317794799805,
+        "library": [
+          "fn_45: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 676.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          631
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench007_it7",
+        "initial_cost": 739,
+        "final_cost": 698,
+        "compression_ratio": 1.0587392550143266,
+        "elapsed_secs": 0.010703086853027344,
+        "library": [
+          "fn_46: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 732.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          699
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench008_it8",
+        "initial_cost": 744,
+        "final_cost": 710,
+        "compression_ratio": 1.047887323943662,
+        "elapsed_secs": 0.009413003921508789,
+        "library": [
+          "fn_50: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 745.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          711
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench009_it10",
+        "initial_cost": 883,
+        "final_cost": 842,
+        "compression_ratio": 1.0486935866983373,
+        "elapsed_secs": 0.010376691818237305,
+        "library": [
+          "fn_52: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 884.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          843
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench010_it12",
+        "initial_cost": 917,
+        "final_cost": 869,
+        "compression_ratio": 1.0552359033371692,
+        "elapsed_secs": 0.010367393493652344,
+        "library": [
+          "fn_53: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 918.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          869
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench011_it17",
+        "initial_cost": 919,
+        "final_cost": 866,
+        "compression_ratio": 1.0612009237875288,
+        "elapsed_secs": 0.010557413101196289,
+        "library": [
+          "fn_54: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 920.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          866
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench000_it0",
+        "initial_cost": 176,
+        "final_cost": 165,
+        "compression_ratio": 1.0666666666666667,
+        "elapsed_secs": 0.005430459976196289,
+        "library": [
+          "fn_0: (+ 1)"
+        ],
+        "egraph_min_term_size": 177.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          166
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench001_it1",
+        "initial_cost": 245,
+        "final_cost": 236,
+        "compression_ratio": 1.0381355932203389,
+        "elapsed_secs": 0.005877017974853516,
+        "library": [
+          "fn_55: (map (lam (index $0 ?#0)) (range ?#1))"
+        ],
+        "egraph_min_term_size": 246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          237
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench002_it3",
+        "initial_cost": 473,
+        "final_cost": 449,
+        "compression_ratio": 1.0534521158129175,
+        "elapsed_secs": 0.00797581672668457,
+        "library": [
+          "fn_57: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 474.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          450
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench003_it4",
+        "initial_cost": 480,
+        "final_cost": 459,
+        "compression_ratio": 1.0457516339869282,
+        "elapsed_secs": 0.00780177116394043,
+        "library": [
+          "fn_59: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 481.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          460
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench004_it5",
+        "initial_cost": 559,
+        "final_cost": 526,
+        "compression_ratio": 1.0627376425855513,
+        "elapsed_secs": 0.00818943977355957,
+        "library": [
+          "fn_60: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 560.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          527
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench005_it6",
+        "initial_cost": 570,
+        "final_cost": 537,
+        "compression_ratio": 1.0614525139664805,
+        "elapsed_secs": 0.007391214370727539,
+        "library": [
+          "fn_62: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 571.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          538
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench006_it7",
+        "initial_cost": 614,
+        "final_cost": 581,
+        "compression_ratio": 1.0567986230636832,
+        "elapsed_secs": 0.007619380950927734,
+        "library": [
+          "fn_62: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 615.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          582
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench007_it8",
+        "initial_cost": 703,
+        "final_cost": 670,
+        "compression_ratio": 1.0492537313432835,
+        "elapsed_secs": 0.008360147476196289,
+        "library": [
+          "fn_63: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 704.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          671
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench008_it9",
+        "initial_cost": 776,
+        "final_cost": 740,
+        "compression_ratio": 1.0486486486486486,
+        "elapsed_secs": 0.009402275085449219,
+        "library": [
+          "fn_64: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 777.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          741
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench009_it10",
+        "initial_cost": 825,
+        "final_cost": 786,
+        "compression_ratio": 1.049618320610687,
+        "elapsed_secs": 0.009883880615234375,
+        "library": [
+          "fn_65: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 826.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          787
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench010_it11",
+        "initial_cost": 782,
+        "final_cost": 746,
+        "compression_ratio": 1.0482573726541555,
+        "elapsed_secs": 0.00837397575378418,
+        "library": [
+          "fn_67: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 783.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          747
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench011_it14",
+        "initial_cost": 808,
+        "final_cost": 771,
+        "compression_ratio": 1.0479896238651103,
+        "elapsed_secs": 0.008808612823486328,
+        "library": [
+          "fn_68: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 809.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          772
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench000_it0",
+        "initial_cost": 135,
+        "final_cost": 120,
+        "compression_ratio": 1.125,
+        "elapsed_secs": 0.003988027572631836,
+        "library": [
+          "fn_0: (+ 1 (+ 1 1))"
+        ],
+        "egraph_min_term_size": 136.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          121
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench001_it1",
+        "initial_cost": 251,
+        "final_cost": 241,
+        "compression_ratio": 1.04149377593361,
+        "elapsed_secs": 0.005446672439575195,
+        "library": [
+          "fn_19: (map (lam (?#0 $0 ?#1)))"
+        ],
+        "egraph_min_term_size": 252.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          242
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench002_it2",
+        "initial_cost": 303,
+        "final_cost": 284,
+        "compression_ratio": 1.0669014084507042,
+        "elapsed_secs": 0.005700826644897461,
+        "library": [
+          "fn_57: (lam (map (lam (?#0 $0 ?#1)) $0))"
+        ],
+        "egraph_min_term_size": 304.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          285
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench003_it3",
+        "initial_cost": 427,
+        "final_cost": 412,
+        "compression_ratio": 1.0364077669902914,
+        "elapsed_secs": 0.007869243621826172,
+        "library": [
+          "fn_57: (cdr (cdr ?#0))"
+        ],
+        "egraph_min_term_size": 424.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          413
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench004_it4",
+        "initial_cost": 478,
+        "final_cost": 463,
+        "compression_ratio": 1.0323974082073435,
+        "elapsed_secs": 0.008781671524047852,
+        "library": [
+          "fn_57: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 475.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          464
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench005_it5",
+        "initial_cost": 588,
+        "final_cost": 565,
+        "compression_ratio": 1.0407079646017698,
+        "elapsed_secs": 0.013051986694335938,
+        "library": [
+          "fn_69: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 581.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          566
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench006_it6",
+        "initial_cost": 671,
+        "final_cost": 643,
+        "compression_ratio": 1.0435458786936236,
+        "elapsed_secs": 0.008993148803710938,
+        "library": [
+          "fn_71: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 668.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          644
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench007_it7",
+        "initial_cost": 761,
+        "final_cost": 730,
+        "compression_ratio": 1.0424657534246575,
+        "elapsed_secs": 0.010095834732055664,
+        "library": [
+          "fn_72: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 758.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          731
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench008_it8",
+        "initial_cost": 831,
+        "final_cost": 796,
+        "compression_ratio": 1.0439698492462313,
+        "elapsed_secs": 0.01063847541809082,
+        "library": [
+          "fn_73: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 828.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          797
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench009_it13",
+        "initial_cost": 1070,
+        "final_cost": 1020,
+        "compression_ratio": 1.0490196078431373,
+        "elapsed_secs": 0.012718677520751953,
+        "library": [
+          "fn_74: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1067.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1021
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench010_it17",
+        "initial_cost": 1027,
+        "final_cost": 979,
+        "compression_ratio": 1.04902962206333,
+        "elapsed_secs": 0.01179051399230957,
+        "library": [
+          "fn_75: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1024.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          980
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench011_it19",
+        "initial_cost": 1008,
+        "final_cost": 957,
+        "compression_ratio": 1.0532915360501567,
+        "elapsed_secs": 0.010888814926147461,
+        "library": [
+          "fn_76: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1005.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          958
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0",
+        "initial_cost": 166,
+        "final_cost": 151,
+        "compression_ratio": 1.099337748344371,
+        "elapsed_secs": 0.0050733089447021484,
+        "library": [
+          "fn_0: (lam (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))) $0))"
+        ],
+        "egraph_min_term_size": 167.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          152
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench001_it1",
+        "initial_cost": 216,
+        "final_cost": 212,
+        "compression_ratio": 1.0188679245283019,
+        "elapsed_secs": 0.006110191345214844,
+        "library": [
+          "fn_1: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 217.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          213
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench002_it2",
+        "initial_cost": 326,
+        "final_cost": 307,
+        "compression_ratio": 1.0618892508143323,
+        "elapsed_secs": 0.006540536880493164,
+        "library": [
+          "fn_2: (+ 1 1)"
+        ],
+        "egraph_min_term_size": 327.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          308
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench003_it4",
+        "initial_cost": 429,
+        "final_cost": 418,
+        "compression_ratio": 1.0263157894736843,
+        "elapsed_secs": 0.00868535041809082,
+        "library": [
+          "fn_5: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 430.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          419
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench004_it5",
+        "initial_cost": 498,
+        "final_cost": 482,
+        "compression_ratio": 1.033195020746888,
+        "elapsed_secs": 0.009109735488891602,
+        "library": [
+          "fn_7: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 499.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          483
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench005_it7",
+        "initial_cost": 770,
+        "final_cost": 743,
+        "compression_ratio": 1.0363391655450875,
+        "elapsed_secs": 0.013074874877929688,
+        "library": [
+          "fn_8: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 771.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          744
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench006_it8",
+        "initial_cost": 896,
+        "final_cost": 867,
+        "compression_ratio": 1.0334486735870818,
+        "elapsed_secs": 0.015097856521606445,
+        "library": [
+          "fn_9: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 897.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          868
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench007_it10",
+        "initial_cost": 1101,
+        "final_cost": 1061,
+        "compression_ratio": 1.0377002827521207,
+        "elapsed_secs": 0.0171201229095459,
+        "library": [
+          "fn_11: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1102.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1062
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench008_it11",
+        "initial_cost": 1002,
+        "final_cost": 959,
+        "compression_ratio": 1.0448383733055266,
+        "elapsed_secs": 0.012931108474731445,
+        "library": [
+          "fn_13: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1003.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          960
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench009_it12",
+        "initial_cost": 1052,
+        "final_cost": 1008,
+        "compression_ratio": 1.0436507936507937,
+        "elapsed_secs": 0.015279531478881836,
+        "library": [
+          "fn_14: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1053.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1009
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.26.41__bench010_it15",
+        "initial_cost": 1065,
+        "final_cost": 1015,
+        "compression_ratio": 1.0492610837438423,
+        "elapsed_secs": 0.012871503829956055,
+        "library": [
+          "fn_17: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1066.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1016
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0",
+        "initial_cost": 171,
+        "final_cost": 148,
+        "compression_ratio": 1.1554054054054055,
+        "elapsed_secs": 0.0046880245208740234,
+        "library": [
+          "fn_0: (+ 1 1)"
+        ],
+        "egraph_min_term_size": 172.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          149
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench001_it1",
+        "initial_cost": 215,
+        "final_cost": 202,
+        "compression_ratio": 1.0643564356435644,
+        "elapsed_secs": 0.0048847198486328125,
+        "library": [
+          "fn_20: (map (lam (?#0 $0 ?#1)))"
+        ],
+        "egraph_min_term_size": 216.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          203
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench002_it2",
+        "initial_cost": 286,
+        "final_cost": 262,
+        "compression_ratio": 1.0916030534351144,
+        "elapsed_secs": 0.005217075347900391,
+        "library": [
+          "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))"
+        ],
+        "egraph_min_term_size": 287.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          263
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench003_it3",
+        "initial_cost": 322,
+        "final_cost": 313,
+        "compression_ratio": 1.0287539936102237,
+        "elapsed_secs": 0.006751060485839844,
+        "library": [
+          "fn_26: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 323.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          314
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench004_it4",
+        "initial_cost": 424,
+        "final_cost": 398,
+        "compression_ratio": 1.065326633165829,
+        "elapsed_secs": 0.008037328720092773,
+        "library": [
+          "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))"
+        ],
+        "egraph_min_term_size": 425.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          399
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench005_it5",
+        "initial_cost": 481,
+        "final_cost": 460,
+        "compression_ratio": 1.0456521739130435,
+        "elapsed_secs": 0.0075647830963134766,
+        "library": [
+          "fn_27: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 482.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          461
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench006_it6",
+        "initial_cost": 549,
+        "final_cost": 520,
+        "compression_ratio": 1.0557692307692308,
+        "elapsed_secs": 0.007493019104003906,
+        "library": [
+          "fn_28: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 550.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          521
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench007_it7",
+        "initial_cost": 651,
+        "final_cost": 617,
+        "compression_ratio": 1.0551053484602917,
+        "elapsed_secs": 0.00880885124206543,
+        "library": [
+          "fn_29: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 652.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          618
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench008_it8",
+        "initial_cost": 751,
+        "final_cost": 714,
+        "compression_ratio": 1.0518207282913166,
+        "elapsed_secs": 0.009436845779418945,
+        "library": [
+          "fn_30: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 752.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          715
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench009_it11",
+        "initial_cost": 900,
+        "final_cost": 858,
+        "compression_ratio": 1.048951048951049,
+        "elapsed_secs": 0.010621309280395508,
+        "library": [
+          "fn_30: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 901.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          859
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench010_it16",
+        "initial_cost": 837,
+        "final_cost": 793,
+        "compression_ratio": 1.055485498108449,
+        "elapsed_secs": 0.00970315933227539,
+        "library": [
+          "fn_33: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 838.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          794
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench011_it18",
+        "initial_cost": 903,
+        "final_cost": 856,
+        "compression_ratio": 1.0549065420560748,
+        "elapsed_secs": 0.010486364364624023,
+        "library": [
+          "fn_34: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 904.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          857
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench000_it0",
+        "initial_cost": 146,
+        "final_cost": 133,
+        "compression_ratio": 1.0977443609022557,
+        "elapsed_secs": 0.0050678253173828125,
+        "library": [
+          "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))"
+        ],
+        "egraph_min_term_size": 143.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          134
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench001_it1",
+        "initial_cost": 212,
+        "final_cost": 201,
+        "compression_ratio": 1.054726368159204,
+        "elapsed_secs": 0.005397796630859375,
+        "library": [
+          "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))"
+        ],
+        "egraph_min_term_size": 209.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          202
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench002_it2",
+        "initial_cost": 288,
+        "final_cost": 262,
+        "compression_ratio": 1.099236641221374,
+        "elapsed_secs": 0.005516767501831055,
+        "library": [
+          "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+        ],
+        "egraph_min_term_size": 285.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          263
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench003_it3",
+        "initial_cost": 400,
+        "final_cost": 360,
+        "compression_ratio": 1.1111111111111112,
+        "elapsed_secs": 0.010641098022460938,
+        "library": [
+          "fn_40: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+        ],
+        "egraph_min_term_size": 393.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          361
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench004_it4",
+        "initial_cost": 490,
+        "final_cost": 443,
+        "compression_ratio": 1.1060948081264108,
+        "elapsed_secs": 0.01096963882446289,
+        "library": [
+          "fn_41: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 483.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          444
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench005_it5",
+        "initial_cost": 632,
+        "final_cost": 588,
+        "compression_ratio": 1.0748299319727892,
+        "elapsed_secs": 0.016155719757080078,
+        "library": [
+          "fn_42: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 625.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          589
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench006_it6",
+        "initial_cost": 679,
+        "final_cost": 630,
+        "compression_ratio": 1.0777777777777777,
+        "elapsed_secs": 0.009226799011230469,
+        "library": [
+          "fn_45: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 676.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          631
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench007_it7",
+        "initial_cost": 739,
+        "final_cost": 698,
+        "compression_ratio": 1.0587392550143266,
+        "elapsed_secs": 0.010173320770263672,
+        "library": [
+          "fn_46: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 732.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          699
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench008_it8",
+        "initial_cost": 744,
+        "final_cost": 710,
+        "compression_ratio": 1.047887323943662,
+        "elapsed_secs": 0.00957179069519043,
+        "library": [
+          "fn_50: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 745.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          711
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench009_it10",
+        "initial_cost": 883,
+        "final_cost": 842,
+        "compression_ratio": 1.0486935866983373,
+        "elapsed_secs": 0.009979248046875,
+        "library": [
+          "fn_52: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 884.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          843
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench010_it12",
+        "initial_cost": 917,
+        "final_cost": 869,
+        "compression_ratio": 1.0552359033371692,
+        "elapsed_secs": 0.010100841522216797,
+        "library": [
+          "fn_53: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 918.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          869
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench011_it17",
+        "initial_cost": 919,
+        "final_cost": 866,
+        "compression_ratio": 1.0612009237875288,
+        "elapsed_secs": 0.010099172592163086,
+        "library": [
+          "fn_54: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 920.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          866
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench000_it0",
+        "initial_cost": 176,
+        "final_cost": 165,
+        "compression_ratio": 1.0666666666666667,
+        "elapsed_secs": 0.005860328674316406,
+        "library": [
+          "fn_0: (+ 1)"
+        ],
+        "egraph_min_term_size": 177.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          166
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench001_it1",
+        "initial_cost": 245,
+        "final_cost": 236,
+        "compression_ratio": 1.0381355932203389,
+        "elapsed_secs": 0.006261348724365234,
+        "library": [
+          "fn_55: (map (lam (index $0 ?#0)) (range ?#1))"
+        ],
+        "egraph_min_term_size": 246.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          237
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench002_it3",
+        "initial_cost": 473,
+        "final_cost": 449,
+        "compression_ratio": 1.0534521158129175,
+        "elapsed_secs": 0.008477926254272461,
+        "library": [
+          "fn_57: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 474.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          450
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench003_it4",
+        "initial_cost": 480,
+        "final_cost": 459,
+        "compression_ratio": 1.0457516339869282,
+        "elapsed_secs": 0.007958173751831055,
+        "library": [
+          "fn_59: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 481.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          460
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench004_it5",
+        "initial_cost": 559,
+        "final_cost": 526,
+        "compression_ratio": 1.0627376425855513,
+        "elapsed_secs": 0.00797891616821289,
+        "library": [
+          "fn_60: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 560.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          527
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench005_it6",
+        "initial_cost": 570,
+        "final_cost": 537,
+        "compression_ratio": 1.0614525139664805,
+        "elapsed_secs": 0.0073621273040771484,
+        "library": [
+          "fn_62: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 571.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          538
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench006_it7",
+        "initial_cost": 614,
+        "final_cost": 581,
+        "compression_ratio": 1.0567986230636832,
+        "elapsed_secs": 0.0076084136962890625,
+        "library": [
+          "fn_62: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 615.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          582
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench007_it8",
+        "initial_cost": 703,
+        "final_cost": 670,
+        "compression_ratio": 1.0492537313432835,
+        "elapsed_secs": 0.008595943450927734,
+        "library": [
+          "fn_63: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 704.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          671
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench008_it9",
+        "initial_cost": 776,
+        "final_cost": 740,
+        "compression_ratio": 1.0486486486486486,
+        "elapsed_secs": 0.009171724319458008,
+        "library": [
+          "fn_64: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 777.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          741
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench009_it10",
+        "initial_cost": 825,
+        "final_cost": 786,
+        "compression_ratio": 1.049618320610687,
+        "elapsed_secs": 0.008727073669433594,
+        "library": [
+          "fn_65: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 826.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          787
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench010_it11",
+        "initial_cost": 782,
+        "final_cost": 746,
+        "compression_ratio": 1.0482573726541555,
+        "elapsed_secs": 0.008095502853393555,
+        "library": [
+          "fn_67: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 783.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          747
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench011_it14",
+        "initial_cost": 808,
+        "final_cost": 771,
+        "compression_ratio": 1.0479896238651103,
+        "elapsed_secs": 0.009303092956542969,
+        "library": [
+          "fn_68: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 809.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          772
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench000_it0",
+        "initial_cost": 135,
+        "final_cost": 120,
+        "compression_ratio": 1.125,
+        "elapsed_secs": 0.003941774368286133,
+        "library": [
+          "fn_0: (+ 1 (+ 1 1))"
+        ],
+        "egraph_min_term_size": 136.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          121
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench001_it1",
+        "initial_cost": 251,
+        "final_cost": 241,
+        "compression_ratio": 1.04149377593361,
+        "elapsed_secs": 0.005613565444946289,
+        "library": [
+          "fn_19: (map (lam (?#0 $0 ?#1)))"
+        ],
+        "egraph_min_term_size": 252.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          242
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench002_it2",
+        "initial_cost": 303,
+        "final_cost": 284,
+        "compression_ratio": 1.0669014084507042,
+        "elapsed_secs": 0.0056612491607666016,
+        "library": [
+          "fn_57: (lam (map (lam (?#0 $0 ?#1)) $0))"
+        ],
+        "egraph_min_term_size": 304.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          285
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench003_it3",
+        "initial_cost": 427,
+        "final_cost": 412,
+        "compression_ratio": 1.0364077669902914,
+        "elapsed_secs": 0.008280754089355469,
+        "library": [
+          "fn_57: (cdr (cdr ?#0))"
+        ],
+        "egraph_min_term_size": 424.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          413
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench004_it4",
+        "initial_cost": 478,
+        "final_cost": 463,
+        "compression_ratio": 1.0323974082073435,
+        "elapsed_secs": 0.009091854095458984,
+        "library": [
+          "fn_57: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 475.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          464
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench005_it5",
+        "initial_cost": 588,
+        "final_cost": 565,
+        "compression_ratio": 1.0407079646017698,
+        "elapsed_secs": 0.013990163803100586,
+        "library": [
+          "fn_69: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 581.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          566
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench006_it6",
+        "initial_cost": 671,
+        "final_cost": 643,
+        "compression_ratio": 1.0435458786936236,
+        "elapsed_secs": 0.010149240493774414,
+        "library": [
+          "fn_71: (lam (map ?#0 $0))"
+        ],
+        "egraph_min_term_size": 668.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          644
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench007_it7",
+        "initial_cost": 761,
+        "final_cost": 730,
+        "compression_ratio": 1.0424657534246575,
+        "elapsed_secs": 0.010105133056640625,
+        "library": [
+          "fn_72: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 758.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          731
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench008_it8",
+        "initial_cost": 831,
+        "final_cost": 796,
+        "compression_ratio": 1.0439698492462313,
+        "elapsed_secs": 0.010807514190673828,
+        "library": [
+          "fn_73: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 828.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          797
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench009_it13",
+        "initial_cost": 1070,
+        "final_cost": 1020,
+        "compression_ratio": 1.0490196078431373,
+        "elapsed_secs": 0.012698888778686523,
+        "library": [
+          "fn_74: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1067.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          1021
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench010_it17",
+        "initial_cost": 1027,
+        "final_cost": 979,
+        "compression_ratio": 1.04902962206333,
+        "elapsed_secs": 0.011447906494140625,
+        "library": [
+          "fn_75: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1024.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          980
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "list",
+        "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench011_it19",
+        "initial_cost": 1008,
+        "final_cost": 957,
+        "compression_ratio": 1.0532915360501567,
+        "elapsed_secs": 0.010844230651855469,
+        "library": [
+          "fn_76: (lam (?#0 $0))"
+        ],
+        "egraph_min_term_size": 1005.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          958
+        ]
+      }
+    ]
+  ],
+  "physics": [
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.010525941848754883,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1",
+        "initial_cost": 474,
+        "final_cost": 433,
+        "compression_ratio": 1.094688221709007,
+        "elapsed_secs": 0.00825810432434082,
+        "library": [
+          "fn_143: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 475.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          434
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2",
+        "initial_cost": 438,
+        "final_cost": 389,
+        "compression_ratio": 1.1259640102827764,
+        "elapsed_secs": 0.005959033966064453,
+        "library": [
+          "fn_145: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 439.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          390
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3",
+        "initial_cost": 527,
+        "final_cost": 478,
+        "compression_ratio": 1.102510460251046,
+        "elapsed_secs": 0.008495807647705078,
+        "library": [
+          "fn_146: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 528.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          479
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4",
+        "initial_cost": 521,
+        "final_cost": 464,
+        "compression_ratio": 1.1228448275862069,
+        "elapsed_secs": 0.006955862045288086,
+        "library": [
+          "fn_148: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 522.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          465
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0",
+        "initial_cost": 600,
+        "final_cost": 551,
+        "compression_ratio": 1.0889292196007259,
+        "elapsed_secs": 0.009299039840698242,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 601.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          552
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1",
+        "initial_cost": 490,
+        "final_cost": 453,
+        "compression_ratio": 1.0816777041942605,
+        "elapsed_secs": 0.009029388427734375,
+        "library": [
+          "fn_155: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 491.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          454
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2",
+        "initial_cost": 449,
+        "final_cost": 404,
+        "compression_ratio": 1.1113861386138615,
+        "elapsed_secs": 0.006169319152832031,
+        "library": [
+          "fn_157: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 450.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          405
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3",
+        "initial_cost": 433,
+        "final_cost": 388,
+        "compression_ratio": 1.115979381443299,
+        "elapsed_secs": 0.006108999252319336,
+        "library": [
+          "fn_157: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 434.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          389
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4",
+        "initial_cost": 507,
+        "final_cost": 462,
+        "compression_ratio": 1.0974025974025974,
+        "elapsed_secs": 0.006365537643432617,
+        "library": [
+          "fn_158: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 508.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          463
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench005_it5",
+        "initial_cost": 518,
+        "final_cost": 461,
+        "compression_ratio": 1.123644251626898,
+        "elapsed_secs": 0.00690460205078125,
+        "library": [
+          "fn_160: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 519.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          462
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench006_it7",
+        "initial_cost": 527,
+        "final_cost": 474,
+        "compression_ratio": 1.1118143459915613,
+        "elapsed_secs": 0.00731968879699707,
+        "library": [
+          "fn_161: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 528.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          475
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.010776042938232422,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench001_it1",
+        "initial_cost": 505,
+        "final_cost": 468,
+        "compression_ratio": 1.079059829059829,
+        "elapsed_secs": 0.012242555618286133,
+        "library": [
+          "fn_162: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 506.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          469
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.011531591415405273,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench001_it1",
+        "initial_cost": 576,
+        "final_cost": 539,
+        "compression_ratio": 1.0686456400742115,
+        "elapsed_secs": 0.009698152542114258,
+        "library": [
+          "fn_165: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 577.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          540
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench000_it0",
+        "initial_cost": 658,
+        "final_cost": 605,
+        "compression_ratio": 1.087603305785124,
+        "elapsed_secs": 0.0113372802734375,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 659.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          606
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench001_it1",
+        "initial_cost": 463,
+        "final_cost": 426,
+        "compression_ratio": 1.0868544600938967,
+        "elapsed_secs": 0.00757908821105957,
+        "library": [
+          "fn_170: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 464.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          427
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.01058506965637207,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1",
+        "initial_cost": 474,
+        "final_cost": 433,
+        "compression_ratio": 1.094688221709007,
+        "elapsed_secs": 0.008143901824951172,
+        "library": [
+          "fn_143: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 475.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          434
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2",
+        "initial_cost": 438,
+        "final_cost": 389,
+        "compression_ratio": 1.1259640102827764,
+        "elapsed_secs": 0.0059816837310791016,
+        "library": [
+          "fn_145: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 439.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          390
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3",
+        "initial_cost": 527,
+        "final_cost": 478,
+        "compression_ratio": 1.102510460251046,
+        "elapsed_secs": 0.007661342620849609,
+        "library": [
+          "fn_146: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 528.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          479
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4",
+        "initial_cost": 521,
+        "final_cost": 464,
+        "compression_ratio": 1.1228448275862069,
+        "elapsed_secs": 0.00677037239074707,
+        "library": [
+          "fn_148: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 522.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          465
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0",
+        "initial_cost": 600,
+        "final_cost": 551,
+        "compression_ratio": 1.0889292196007259,
+        "elapsed_secs": 0.009228229522705078,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 601.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          552
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1",
+        "initial_cost": 490,
+        "final_cost": 453,
+        "compression_ratio": 1.0816777041942605,
+        "elapsed_secs": 0.009124755859375,
+        "library": [
+          "fn_155: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 491.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          454
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2",
+        "initial_cost": 449,
+        "final_cost": 404,
+        "compression_ratio": 1.1113861386138615,
+        "elapsed_secs": 0.006249666213989258,
+        "library": [
+          "fn_157: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 450.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          405
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3",
+        "initial_cost": 433,
+        "final_cost": 388,
+        "compression_ratio": 1.115979381443299,
+        "elapsed_secs": 0.005933523178100586,
+        "library": [
+          "fn_157: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 434.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          389
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4",
+        "initial_cost": 507,
+        "final_cost": 462,
+        "compression_ratio": 1.0974025974025974,
+        "elapsed_secs": 0.006476402282714844,
+        "library": [
+          "fn_158: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 508.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          463
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench005_it5",
+        "initial_cost": 518,
+        "final_cost": 461,
+        "compression_ratio": 1.123644251626898,
+        "elapsed_secs": 0.007186174392700195,
+        "library": [
+          "fn_160: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 519.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          462
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench006_it7",
+        "initial_cost": 527,
+        "final_cost": 474,
+        "compression_ratio": 1.1118143459915613,
+        "elapsed_secs": 0.007368564605712891,
+        "library": [
+          "fn_161: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 528.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          475
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.010218620300292969,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench001_it1",
+        "initial_cost": 505,
+        "final_cost": 468,
+        "compression_ratio": 1.079059829059829,
+        "elapsed_secs": 0.012267351150512695,
+        "library": [
+          "fn_162: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 506.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          469
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.011486053466796875,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench001_it1",
+        "initial_cost": 576,
+        "final_cost": 539,
+        "compression_ratio": 1.0686456400742115,
+        "elapsed_secs": 0.009784936904907227,
+        "library": [
+          "fn_165: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 577.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          540
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench000_it0",
+        "initial_cost": 658,
+        "final_cost": 605,
+        "compression_ratio": 1.087603305785124,
+        "elapsed_secs": 0.01142740249633789,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 659.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          606
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench001_it1",
+        "initial_cost": 463,
+        "final_cost": 426,
+        "compression_ratio": 1.0868544600938967,
+        "elapsed_secs": 0.007693767547607422,
+        "library": [
+          "fn_170: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 464.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          427
+        ]
+      }
+    ],
+    [
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.010530948638916016,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench001_it1",
+        "initial_cost": 474,
+        "final_cost": 433,
+        "compression_ratio": 1.094688221709007,
+        "elapsed_secs": 0.008521318435668945,
+        "library": [
+          "fn_143: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 475.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          434
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench002_it2",
+        "initial_cost": 438,
+        "final_cost": 389,
+        "compression_ratio": 1.1259640102827764,
+        "elapsed_secs": 0.005994558334350586,
+        "library": [
+          "fn_145: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 439.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          390
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench003_it3",
+        "initial_cost": 527,
+        "final_cost": 478,
+        "compression_ratio": 1.102510460251046,
+        "elapsed_secs": 0.007531166076660156,
+        "library": [
+          "fn_146: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 528.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          479
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench004_it4",
+        "initial_cost": 521,
+        "final_cost": 464,
+        "compression_ratio": 1.1228448275862069,
+        "elapsed_secs": 0.006778240203857422,
+        "library": [
+          "fn_148: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 522.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          465
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0",
+        "initial_cost": 600,
+        "final_cost": 551,
+        "compression_ratio": 1.0889292196007259,
+        "elapsed_secs": 0.00928807258605957,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 601.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          552
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench001_it1",
+        "initial_cost": 490,
+        "final_cost": 453,
+        "compression_ratio": 1.0816777041942605,
+        "elapsed_secs": 0.009222984313964844,
+        "library": [
+          "fn_155: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 491.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          454
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench002_it2",
+        "initial_cost": 449,
+        "final_cost": 404,
+        "compression_ratio": 1.1113861386138615,
+        "elapsed_secs": 0.006284236907958984,
+        "library": [
+          "fn_157: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 450.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          405
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench003_it3",
+        "initial_cost": 433,
+        "final_cost": 388,
+        "compression_ratio": 1.115979381443299,
+        "elapsed_secs": 0.00601649284362793,
+        "library": [
+          "fn_157: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 434.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          389
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4",
+        "initial_cost": 507,
+        "final_cost": 462,
+        "compression_ratio": 1.0974025974025974,
+        "elapsed_secs": 0.006433963775634766,
+        "library": [
+          "fn_158: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 508.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          463
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench005_it5",
+        "initial_cost": 518,
+        "final_cost": 461,
+        "compression_ratio": 1.123644251626898,
+        "elapsed_secs": 0.006893634796142578,
+        "library": [
+          "fn_160: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 519.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          462
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench006_it7",
+        "initial_cost": 527,
+        "final_cost": 474,
+        "compression_ratio": 1.1118143459915613,
+        "elapsed_secs": 0.0073833465576171875,
+        "library": [
+          "fn_161: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 528.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          475
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.00991511344909668,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.13.12__bench001_it1",
+        "initial_cost": 505,
+        "final_cost": 468,
+        "compression_ratio": 1.079059829059829,
+        "elapsed_secs": 0.01198577880859375,
+        "library": [
+          "fn_162: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 506.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          469
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench000_it0",
+        "initial_cost": 567,
+        "final_cost": 522,
+        "compression_ratio": 1.0862068965517242,
+        "elapsed_secs": 0.011553764343261719,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 568.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          523
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.16.45__bench001_it1",
+        "initial_cost": 576,
+        "final_cost": 539,
+        "compression_ratio": 1.0686456400742115,
+        "elapsed_secs": 0.009833574295043945,
+        "library": [
+          "fn_165: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 577.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          540
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench000_it0",
+        "initial_cost": 658,
+        "final_cost": 605,
+        "compression_ratio": 1.087603305785124,
+        "elapsed_secs": 0.01142430305480957,
+        "library": [
+          "fn_0: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 659.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          606
+        ]
+      },
+      {
+        "method": "OursBf(num_steps=2000, max_forced_expansion=None, max_arity=2)",
+        "domain": "physics",
+        "file": "scientific_unsolved_4h_ellisk_2019-07-20T18.20.13__bench001_it1",
+        "initial_cost": 463,
+        "final_cost": 426,
+        "compression_ratio": 1.0868544600938967,
+        "elapsed_secs": 0.007698774337768555,
+        "library": [
+          "fn_170: (lam (lam (?#0 $1 $0)))"
+        ],
+        "egraph_min_term_size": 464.0,
+        "timed_out": false,
+        "cost_at_end_of_each_iter": [
+          427
+        ]
+      }
+    ]
+  ]
+}

@@ -24,7 +24,7 @@ pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 
     /// If this op is a De Bruijn variable leaf, returns its index. Whether the
     /// occurrence is *free* in some enclosing context is decided elsewhere — this
     /// just reports the shape of the leaf.
-    fn de_bruijn_index(&self) -> Option<u32> {
+    fn de_bruijn_index(&self) -> Option<i32> {
         None
     }
     /// True iff this op binds a fresh De Bruijn slot for its `j`th child — i.e.,
@@ -43,7 +43,7 @@ pub trait StitchOp: StitchDisc {
     fn from_name(s: &str) -> Self;
 
     /// If this op type has a De Bruijn-var leaf, build it.
-    fn make_db_var(_n: u32) -> Option<Self> {
+    fn make_db_var(_n: i32) -> Option<Self> {
         None
     }
 }

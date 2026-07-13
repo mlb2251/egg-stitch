@@ -1,0 +1,5 @@
+// The operator list restricts which operators fold: only `+` is listed. So
+// `(+ 1 2)` folds to `3` and is baked into the abstraction, but `(* 4 5)` does
+// NOT fold (its operator is excluded) and therefore does not unify with the
+// literal `20` the other programs write — it has to be passed as an argument.
+constant_folding: !integers (params (ops (+)))

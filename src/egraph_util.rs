@@ -1,0 +1,104 @@
+//! E-graph traversal and query helpers used by the search, kept apart from the
+//! search logic itself. Each takes a [`StitchEgraph`] and computes a fact about
+//! it — a size-minimal extraction or per-class usage counts — without touching
+//! the search state.
+
+use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
+use egg::{Id, Language};
+use rustc_hash::{FxHashMap, FxHashSet};
+
+/// Walks `eclass` picking the size-minimal enode at each step (same cost
+/// rule as `extract_root_size`: intrinsic node weight + sum of child eclass
+/// sizes), appending each enode in postorder to `out` with its children
+/// remapped to the appended positions. `memo` shares any eclass visited
+/// twice in the walk, so the result is DAG-shared rather than tree-expanded.
+/// Returns the root's index in `out`. Discriminants are lifted into the
+/// pattern leaf-op via `OpWithVar::Node` so the result splices into a
+/// `Pattern<F, O>::pattern` directly.
+pub fn build_size_minimal_extraction<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, eclass: Id, out: &mut Vec<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>) -> Id {
+    let mut on_stack = FxHashSet::default();
+    build_size_minimal_extraction_rec::<F, O>(egraph, eclass, out, memo, &mut on_stack)
+}
+
+/// Recursive worker for [`build_size_minimal_extraction`]. `on_stack` holds the
+/// e-classes currently being built; the min-cost rep is chosen only among
+/// e-nodes whose children are all off-stack, so a cyclic e-class (e.g. one a
+/// non-shrinking rule like `(* ?x 0) => 0` makes self-referential) can never
+/// recurse forever. An acyclic e-node always exists because `data.size` is the
+/// finite minimal tree size.
+fn build_size_minimal_extraction_rec<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, eclass: Id, out: &mut Vec<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>, on_stack: &mut FxHashSet<Id>) -> Id {
+    let canonical = egraph.find(eclass);
+    if let Some(&id) = memo.get(&canonical) {
+        return id;
+    }
+    on_stack.insert(canonical);
+    let weights = egraph.analysis.weights;
+    let rep = egraph[canonical]
+        .nodes
+        .iter()
+        .filter(|n| n.children().iter().all(|&c| !on_stack.contains(&egraph.find(c))))
+        .min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>())
+        .expect("acyclic enode exists (data.size is finite)")
+        .clone();
+    let children: Vec<Id> = rep.children().iter().map(|&c| build_size_minimal_extraction_rec::<F, O>(egraph, c, out, memo, on_stack)).collect();
+    on_stack.remove(&canonical);
+    let node = F::make(F::map_discriminant(rep.discriminant(), OpWithVar::Node), children);
+    out.push(node);
+    let id = Id::from(out.len() - 1);
+    memo.insert(canonical, id);
+    id
+}
+
+/// Computes how many times each e-class appears in the fully-expanded corpus tree.
+/// Top-down pass: root gets count 1, then propagate to children of the size-minimal
+/// enode (same rule as [`build_size_minimal_extraction`] and `WeightedSize`).
+///
+/// Heuristic: this only accounts for the pre-rewrite extraction. `RewriteAnalysis`
+/// may route through a non-minimal enode when a rewrite shrinks the result, so
+/// counts can under-attribute multiplicity at e-classes only reached that way.
+///
+/// Canonical eclass ids are not necessarily in topological order after unions
+/// (a parent's canonical id can be lower than a child's), so we explicitly
+/// derive a parents-before-children order via iterative DFS post-order from
+/// the root and propagate along it.
+pub fn compute_usage_counts<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> FxHashMap<Id, usize> {
+    let root = egraph.find(root);
+    let weights = egraph.analysis.weights;
+    let min_enode = |id: Id| -> Option<&L> { egraph[id].nodes.iter().min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>()) };
+    let mut order: Vec<Id> = Vec::new();
+    let mut seen: FxHashSet<Id> = FxHashSet::default();
+    let mut stack: Vec<(Id, bool)> = vec![(root, false)];
+    while let Some((id, post)) = stack.pop() {
+        if post {
+            order.push(id);
+            continue;
+        }
+        if !seen.insert(id) {
+            continue;
+        }
+        stack.push((id, true));
+        if let Some(enode) = min_enode(id) {
+            for &child in enode.children() {
+                let child = egraph.find(child);
+                if !seen.contains(&child) {
+                    stack.push((child, false));
+                }
+            }
+        }
+    }
+    order.reverse();
+    let mut counts = FxHashMap::<Id, usize>::default();
+    counts.insert(root, 1);
+    for id in order {
+        let count = counts.get(&id).copied().unwrap_or(0);
+        if count == 0 {
+            continue;
+        }
+        if let Some(enode) = min_enode(id) {
+            for &child in enode.children() {
+                *counts.entry(egraph.find(child)).or_insert(0) += count;
+            }
+        }
+    }
+    counts
+}

@@ -1,62 +1,104 @@
+use crate::candidates::enumerate_candidates;
+use crate::factor::{Factor, factored_min};
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
+use crate::matching::MatchAtEClass;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
-use egg::{Id, Language, RecExpr};
+use egg::{CostFunction, Id, Language, RecExpr};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-/// Per-metavar higher-order arity. `ho_arity[k]` is the number of
-/// pattern-internal binders we abstract over when emitting `?#k`'s captured
-/// argument. Zero means plain capture (no body wrapping needed).
-///
-/// Computed as `max over matches m of needed(m, k)`, where
-/// `needed(m, k) = max{i + 1 : i ∈ fv(arg_{m,k}), i < d_k}` (or 0 if no such i).
-/// Taking the max ensures all call sites of `inv_0` agree on the body's
-/// `(@ … (@ ?#k $0) …)` shape.
-pub fn compute_ho_arity<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> Vec<u32> {
-    let arity = search_state.pattern.var_depth.len();
-    let mut out = vec![0u32; arity];
-    let var_depth = &search_state.pattern.var_depth;
-    for m in &search_state.matches {
-        for subst in &m.substs {
-            for (k, &arg_id) in subst.vars.iter().enumerate() {
-                let d_k = var_depth[k];
-                let needed = egraph[arg_id].data.fv.iter().filter(|&&i| i < d_k).map(|&i| i + 1).max().unwrap_or(0);
-                if needed > out[k] {
-                    out[k] = needed;
-                }
-            }
-        }
-    }
-    out
+/// `egg::CostFunction` that mirrors `StitchAnalysis`'s weighted size:
+/// `intrinsic_size(weights) + Σ child costs`. Use this rather than
+/// `egg::AstSize` whenever extracting from a `StitchEgraph` — under
+/// non-uniform `Weights` (e.g. `--sym-var-cost 100`) the AstSize-min term and
+/// the weighted-min term diverge, and any size compared against `data.size`
+/// (which is weighted) needs the extractor to agree.
+pub struct WeightedSize {
+    pub weights: Weights,
 }
 
-/// Build a copy of `eclass` in `egraph` with every free DB index `≥ initial_depth`
-/// shifted by `by` (positive = up, negative = down), so it can be relocated under
-/// a different number of binders without changing meaning. Picks the size-minimal
-/// enode per visited eclass (using the analysis's `data.size`, which is the same
-/// quantity AstSize would minimize) so the shifted witness is as small as possible.
+impl<L: StitchLanguage> CostFunction<L> for WeightedSize {
+    type Cost = u64;
+    fn cost<C: FnMut(Id) -> Self::Cost>(&mut self, enode: &L, mut costs: C) -> Self::Cost {
+        let intrinsic = enode.discriminant().intrinsic_size(&self.weights) as u64;
+        enode.children().iter().map(|&c| costs(c)).sum::<u64>() + intrinsic
+    }
+}
+
+/// A candidate choice of `S_k` (`variable_indices[k]`) — the captured
+/// pattern-internal fv promoted to higher-order args at metavar `?#k`. The set
+/// of substs it permits is implicit: a subst is "compatible" iff its per-slot fv
+/// `R^k ⊆ S_k` for every slot — only those can be rewritten, since
+/// `wrap_subst_args` would otherwise hit a fv it can't permute onto a wrap-lam
+/// slot. Because that test is per-slot (hence per-factor), the kept set is
+/// recovered on demand by [`filter_factors_by_candidate`] without ever
+/// materialising the product.
+#[derive(Debug, Clone)]
+pub struct CostCandidate {
+    pub variable_indices: Vec<Vec<i32>>,
+}
+
+/// Selection picked by the cost optimizer: the candidate with minimum total
+/// cost, plus that cost.
+#[derive(Debug, Clone)]
+pub struct CostSelection {
+    pub cost: usize,
+    pub candidate: CostCandidate,
+}
+
+/// A `SearchState` paired with the `CostSelection` the cost optimiser picked
+/// for it. The search threads this back to `multiple_step_search` so the
+/// downstream display + rewrite path doesn't have to redo the optimisation.
+#[derive(Clone)]
+pub struct SearchStateWithCostSelection<F: crate::lang::LanguageFamily, O: crate::lang::StitchOp> {
+    pub state: crate::search::SearchState<F, O>,
+    pub selection: CostSelection,
+}
+
+impl<F: LanguageFamily, O: StitchOp> SearchStateWithCostSelection<F, O> {
+    /// Canonicalizes the winning state's variable order (DFS first-appearance)
+    /// and remaps the selection's `variable_indices` by the same permutation.
+    /// Run on the winner before output/rewrite. We permute the existing
+    /// selection rather than re-running `compute_cost_and_select` because the
+    /// optimiser breaks ties between equal-cost candidates nondeterministically
+    /// (hash-order dependent) — recomputing could pick a different candidate and
+    /// make output flaky. The permutation preserves the exact selection (cost is
+    /// var-order invariant), just renumbered.
+    pub fn canonicalize(&mut self) {
+        let perm = self.state.canonicalize_vars();
+        let vi = &self.selection.candidate.variable_indices;
+        let mut new_vi = vec![Vec::new(); vi.len()];
+        for (k, &nk) in perm.iter().enumerate() {
+            new_vi[nk] = vi[k].clone();
+        }
+        self.selection.candidate.variable_indices = new_vi;
+    }
+}
+
+/// Build a copy of `eclass` in `egraph` with every free DB leaf permuted onto
+/// wrap-lam slots in preparation for the call-site β at `?#k`. For each free
+/// `$n` at recursion depth `initial_depth` (so its index relative to our root
+/// is `r = n - initial_depth`):
+///   - `0 ≤ r < d_k` (pattern-internal): replaced by `$rank_map[r]` — the
+///     wrap-lam slot that the body's η-app `(?#k … $r …)` re-binds at apply
+///     time.
+///   - `r ≥ d_k` (above-pattern free): replaced by `$(r - d_k + h)` — shifted
+///     past the `h` wrap-lams so it continues referencing the call-site binder
+///     it always did.
 ///
-/// Memoized per `(eclass, initial_depth, by)` for the lifetime of `memo` — callers
-/// reuse one `memo` across different `(initial_depth, by)` pairs, so both must be
-/// part of the key.
-///
-/// When `by` is negative, the caller must ensure no free index lies in
-/// `[initial_depth, initial_depth + |by|)` — otherwise the shifted index would
-/// underflow into the bound-variable range.
-pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, by: i32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32, i32), Id>) -> Id {
+/// Bound leaves (`n < initial_depth`) pass through unchanged. Picks the
+/// size-minimal enode per visited eclass; memoized per `(eclass, initial_depth)`.
+pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, eclass: Id, d_k: u32, rank_map: &FxHashMap<i32, u32>, h: u32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32), Id>) -> Id {
     let canonical = egraph.find(eclass);
-    if let Some(&cached) = memo.get(&(canonical, initial_depth, by)) {
+    if let Some(&cached) = memo.get(&(canonical, initial_depth)) {
         return cached;
     }
-    // If no fv `≥ initial_depth` is present in this class, the shift is a no-op
-    // — return the original eclass to preserve sharing.
-    if by == 0 || egraph[canonical].data.fv.iter().all(|&i| i < initial_depth) {
-        memo.insert((canonical, initial_depth, by), canonical);
+    // No fv ≥ initial_depth → subtree is closed under our recursion's binders;
+    // nothing to transform.
+    if egraph[canonical].data.fv.iter().all(|&i| i < initial_depth as i32) {
+        memo.insert((canonical, initial_depth), canonical);
         return canonical;
     }
-    // Pick the size-minimal enode by recomputing the analysis's `make` formula
-    // over the current class. Done inline so mid-recursion `egraph.add`s can't
-    // make the choice stale.
     let weights = egraph.analysis.weights;
     let rep = egraph[canonical]
         .nodes
@@ -65,8 +107,7 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
         .expect("non-empty eclass")
         .clone();
     // Under intersection-fv semantics the size-minimal rep is also fv-minimal,
-    // so its syntactic fv should match the eclass's analysis fv. Mirrors the
-    // assertion in `check_fvs_are_as_expected` for the extracted-RecExpr path.
+    // so its syntactic fv matches the eclass's analysis fv.
     let rep_fv = enode_fv(&rep, |c| &egraph[c].data.fv);
     assert_eq!(
         &rep_fv, &egraph[canonical].data.fv,
@@ -75,12 +116,16 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     );
     let disc = rep.discriminant();
     if let Some(n) = disc.de_bruijn_index() {
-        // Free DB-var leaf: rebuild with shifted index. (Bound vars `< initial_depth`
-        // were already short-circuited by the fv check above.)
-        let shifted_n = u32::try_from(n as i32 + by).expect("shifted DB index underflowed; caller violated negative-shift precondition");
-        let new_disc = F::map_discriminant(disc, |_| O::make_db_var(shifted_n).expect("higher-order capture requires a DB-var-bearing leaf op"));
+        let r = n - initial_depth as i32;
+        let new_n = if r < d_k as i32 {
+            let rank = *rank_map.get(&r).unwrap_or_else(|| panic!("captured DB index r={} for d_k={} not in slot's variable_indices map {:?}", r, d_k, rank_map));
+            rank as i32 + initial_depth as i32
+        } else {
+            r - d_k as i32 + h as i32 + initial_depth as i32
+        };
+        let new_disc = F::map_discriminant(disc, |_| O::make_db_var(new_n).expect("higher-order capture requires a DB-var-bearing leaf op"));
         let new_id = egraph.add(F::make(new_disc, vec![]));
-        memo.insert((canonical, initial_depth, by), new_id);
+        memo.insert((canonical, initial_depth), new_id);
         return new_id;
     }
     let new_children: Vec<Id> = rep
@@ -89,11 +134,11 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
         .enumerate()
         .map(|(j, &c)| {
             let child_depth = initial_depth + if disc.binds_child(j) { 1 } else { 0 };
-            shift_free_egraph::<F, O>(egraph, c, by, child_depth, memo)
+            shift_free_egraph::<F, O>(egraph, c, d_k, rank_map, h, child_depth, memo)
         })
         .collect();
     let new_id = egraph.add(F::make(disc, new_children));
-    memo.insert((canonical, initial_depth, by), new_id);
+    memo.insert((canonical, initial_depth), new_id);
     new_id
 }
 
@@ -103,10 +148,6 @@ pub struct CostCache {
     /// Eclasses reachable from `root`, in postorder (children before parents).
     /// `solve` iterates this so child sizes settle before their parents reconsider.
     visit_order: Vec<Id>,
-    /// Postorder index per eclass (children < parents). Indexed by `usize::from(Id)`.
-    /// Currently unused by `solve`, but kept for callers/inspection.
-    #[allow(dead_code)]
-    postorder: Vec<Option<u32>>,
     /// Child → parent eclass edges, built from all enodes.
     /// We maintain our own map because `egraph.parents()` can return stale non-canonical ids.
     parents_of: FxHashMap<Id, Vec<Id>>,
@@ -119,53 +160,51 @@ impl CostCache {
         for class in egraph.classes() {
             for enode in &class.nodes {
                 for &child in enode.children() {
-                    parents_of.entry(child).or_default().push(class.id);
+                    parents_of.entry(egraph.find(child)).or_default().push(class.id);
                 }
             }
         }
 
         let max_id = egraph.classes().map(|c| usize::from(c.id)).max().unwrap_or(0);
-        let mut postorder = vec![None; max_id + 1];
+        let mut visited = vec![false; max_id + 1];
         let mut visit_order: Vec<Id> = Vec::new();
-        let mut order: u32 = 0;
-        let mut stack: Vec<Result<Id, Id>> = vec![Err(root)]; // Err=enter, Ok=exit
+        let mut stack: Vec<Result<Id, Id>> = vec![Err(egraph.find(root))]; // Err=enter, Ok=exit
         let mut on_stack = FxHashSet::<Id>::default();
         while let Some(state) = stack.pop() {
             match state {
                 Err(id) => {
-                    if postorder[usize::from(id)].is_some() || !on_stack.insert(id) {
+                    if visited[usize::from(id)] || !on_stack.insert(id) {
                         continue;
                     }
                     stack.push(Ok(id));
                     for enode in &egraph[id].nodes {
                         for &child in enode.children() {
-                            stack.push(Err(child));
+                            stack.push(Err(egraph.find(child)));
                         }
                     }
                 }
                 Ok(id) => {
                     on_stack.remove(&id);
-                    postorder[usize::from(id)] = Some(order);
+                    visited[usize::from(id)] = true;
                     visit_order.push(id);
-                    order += 1;
                 }
             }
         }
 
-        Self { visit_order, postorder, parents_of }
+        Self { visit_order, parents_of }
     }
 }
 
 /// Reusable allocations for repeated cost computations. Build once with `new(egraph)`
-/// and pass `&mut` to `compute_cost` / `compute_size` to avoid reallocating across calls.
+/// and pass `&mut` to `compute_cost` / `compute_size_for_candidate` to avoid reallocating across calls.
 pub struct CostScratch {
     pub runner: RunnerScratch,
     pub rewrite: RewriteScratch,
 }
 
 impl CostScratch {
-    /// Builds the scratch space for a given egraph. The egraph's per-eclass AstSize
-    /// is captured into `runner.original` here and reused across all subsequent calls.
+    /// Builds the scratch space for a given egraph. The egraph's per-eclass weighted
+    /// size is captured into `runner.original` here and reused across all subsequent calls.
     pub fn new<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> Self {
         Self {
             runner: RunnerScratch::new(egraph),
@@ -176,8 +215,9 @@ impl CostScratch {
 
 /// Allocations owned by `StitchAnalysisRunner` itself (independent of the analysis).
 /// Two parallel dense vectors indexed by `usize::from(Id)`: `original` holds the
-/// un-rewritten AstSize per eclass (built once at construction), `overrides` is the
-/// working size table that `solve` relaxes downward. Both are sized to `max_id + 1`.
+/// un-rewritten weighted size per eclass (built once at construction), `overrides`
+/// is the working size table that `solve` relaxes downward. Both are sized to
+/// `max_id + 1`.
 pub struct RunnerScratch {
     original: Vec<i64>,
     overrides: Vec<i64>,
@@ -216,9 +256,15 @@ impl RunnerScratch {
 pub trait StitchAnalysis<L: StitchLanguage>: Sized {
     /// Candidate size for `eclass` given currently known sizes.
     fn best(sizes: &StitchAnalysisRunner<L, Self>, eclass: Id) -> i64;
+    /// Extra dirty-propagation edges beyond syntactic parents. When `id`
+    /// improves, these eclasses are also marked dirty. Used when `best` reads
+    /// non-syntactic dependencies (e.g. rewrite-arg eclasses).
+    fn extra_parents(&self, _id: Id) -> &[Id] {
+        &[]
+    }
 }
 
-/// Dense per-eclass size table with a fallback to the unrewritten AstSize
+/// Dense per-eclass size table with a fallback to the unrewritten weighted size
 /// (`egraph[id].data.size`). An entry is set only when the rewritten size beats the default.
 pub struct StitchAnalysisRunner<'a, L: StitchLanguage, A: StitchAnalysis<L>> {
     egraph: &'a StitchEgraph<L>,
@@ -241,7 +287,11 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
         self.scratch.overrides[usize::from(id)] = v;
         let parents = self.cache.parents_of.get(&id).map(|v| v.as_slice()).unwrap_or(&[]);
         for &p in parents {
-            self.mark_dirty(p);
+            self.scratch.dirty[usize::from(p)] = true;
+        }
+        let extras = self.analysis.extra_parents(id);
+        for &p in extras {
+            self.scratch.dirty[usize::from(p)] = true;
         }
     }
     fn mark_dirty(&mut self, id: Id) {
@@ -288,19 +338,38 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
 }
 
 /// Reusable index map: match-root eclass → index into `search_state.matches`.
-/// We store an index (not a `&Vec<Subst>`) so the map is `'static`-friendly and can
+/// We store an index (not a `&MatchAtEClass`) so the map is `'static`-friendly and can
 /// be reused across calls bound to different `SearchState`s.
 #[derive(Default)]
 pub struct RewriteScratch {
     pub eclass_to_match_idx: FxHashMap<Id, usize>,
+    /// Captured-arg eclass → match roots that read it. Feeds `extra_parents` so a
+    /// shrunk arg re-dirties the match roots reading it via the (non-syntactic)
+    /// rewrite path. Mirrors `LowerBoundAnalysis::arg_to_match_roots`.
+    pub arg_to_match_roots: FxHashMap<Id, Vec<Id>>,
 }
 
 impl RewriteScratch {
-    /// Refills the index map from `search_state`. Clears first; retains capacity.
+    /// Refills the index maps from `search_state`. Clears first; retains capacity.
+    /// Match-root and row ids are canonical by construction (see `MatchAtEClass`):
+    /// they originate from `egraph.classes()` and propagate unchanged through
+    /// `build_subset_matches`; the egraph isn't unioned during search.
     pub fn fill<F: LanguageFamily, O: StitchOp>(&mut self, search_state: &SearchState<F, O>) {
         self.eclass_to_match_idx.clear();
+        self.arg_to_match_roots.clear();
         for (i, m) in search_state.matches.iter().enumerate() {
             self.eclass_to_match_idx.insert(m.root_eclass, i);
+            for f in &m.factors {
+                for row in &f.rows {
+                    for &v in row {
+                        self.arg_to_match_roots.entry(v).or_default().push(m.root_eclass);
+                    }
+                }
+            }
+        }
+        for roots in self.arg_to_match_roots.values_mut() {
+            roots.sort_unstable();
+            roots.dedup();
         }
     }
 }
@@ -310,7 +379,7 @@ impl RewriteScratch {
 /// because no existing eclass realizes them. `extra_lams` is zero when the
 /// wrapped+shifted form was found in the egraph (and thus may share with
 /// another match-root's rewrite); otherwise it equals the unrealized wraps so
-/// the cost matches `wrap_lams_cost + size(arg)`.
+/// the cost matches `lams_cost(extra_lams) + size(arg)`.
 #[derive(Clone, Copy, Debug)]
 pub struct ResolvedArg {
     pub eclass: Id,
@@ -328,7 +397,7 @@ fn resolve_subst_arg<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Ap
         return ResolvedArg { eclass: arg, extra_lams: 0 };
     }
     let by = h as i32 - d_k as i32;
-    let shift_is_noop = by == 0 || egraph[arg].data.fv.iter().all(|&i| i < d_k);
+    let shift_is_noop = by == 0 || egraph[arg].data.fv.iter().all(|&i| i < d_k as i32);
     if !shift_is_noop {
         return ResolvedArg { eclass: arg, extra_lams: h };
     }
@@ -336,20 +405,37 @@ fn resolve_subst_arg<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Ap
     ResolvedArg { eclass, extra_lams }
 }
 
+/// How a candidate restricts the substs eligible to rewrite at each match.
+///
+/// Either way the rewrite cost is evaluated *factored* — `min over ∏factors of
+/// Σslots = Σfactors of (min over rows of Σslots)` — so the product is never
+/// materialised. Candidate compatibility is per-slot (`captures(R^k) ⊆ S_k`),
+/// hence per-factor, so a lambda-capture candidate just filters each factor's
+/// rows; the product structure (and the separable min) is preserved.
+pub enum KeptArgs<'a> {
+    /// Every subst is compatible — min over each match's own factors (the
+    /// common, lambda-free path).
+    AllFactored,
+    /// A lambda-capture candidate: per match, the candidate-filtered factors,
+    /// or `None` when some factor filtered empty (the match keeps no subst and
+    /// doesn't rewrite).
+    Filtered(&'a [Option<Vec<Factor>>]),
+}
+
 /// Default analysis: at each match root, rewriting via `inv_0(args...)` is allowed,
 /// otherwise we fall back to the minimum enode size.
 pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub search_state: &'a SearchState<F, O>,
     pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
-    /// Per-match list of pre-resolved subst arg costs. `resolved_substs[i][s][k]`
-    /// is the `?#k` slot of the `s`-th subst at the `i`-th match. Built once in
-    /// `compute_size` so `best` only does arithmetic.
-    pub resolved_substs: &'a [Vec<Vec<ResolvedArg>>],
-    /// Cached stub-application size for `inv_0` at this pattern's arity.
-    pub stub_size: i64,
-    /// Cached `lam_cost`; multiplied by `ResolvedArg::extra_lams`.
-    pub lam_cost: i64,
-    _marker: std::marker::PhantomData<(F, O)>,
+    /// See `RewriteScratch::arg_to_match_roots`. Drives `extra_parents`.
+    pub arg_to_match_roots: &'a FxHashMap<Id, Vec<Id>>,
+    pub ho_arity: &'a [u32],
+    pub kept: KeptArgs<'a>,
+    /// Pre-resolved `(slot, arg-eclass)` → `ResolvedArg` for every HO slot
+    /// (`ho_arity[k] > 0`) appearing in a kept factor row. Built once per
+    /// candidate so `arg_cost` folds wrapped-λ operands to real eclasses (and
+    /// thus counts their transitive rewrites) with only a map lookup in `best`.
+    pub resolved: &'a FxHashMap<(usize, Id), ResolvedArg>,
 }
 
 impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for RewriteAnalysis<'a, F, O> {
@@ -358,32 +444,75 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
         let mut best = sizes.min_enode_size(eclass);
         // For every way we match at this eclass (if any), try all ways of rewriting it.
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
-            let stub_size = sizes.analysis.stub_size;
-            let lam_cost = sizes.analysis.lam_cost;
-            if let Some(rewrite_size) = sizes.analysis.resolved_substs[i]
-                .iter()
-                .map(|args| {
-                    let args_size: i64 = args.iter().map(|a| sizes.get(a.eclass) + a.extra_lams as i64 * lam_cost).sum();
-                    stub_size + args_size
-                })
-                .min()
-            {
-                best = best.min(rewrite_size);
+            let weights = sizes.weights();
+            let ho_arity = sizes.analysis.ho_arity;
+            let stub_size = F::stub_application_size(ho_arity.len(), weights) as i64;
+            let resolved = sizes.analysis.resolved;
+            // Per-slot arg cost. For HO slots (`h > 0`) the arg is pre-resolved
+            // to the wrapped-λ eclass that already exists in the egraph, plus the
+            // `extra_lams` wraps that don't — so `get(eclass)` picks up any
+            // rewrite at that wrapped operand instead of a flat `lams_cost(h)`.
+            // Additively separable across slots, which is what lets the min
+            // factor over independent groups.
+            let arg_cost = |k: usize, v: Id| -> i64 {
+                match resolved.get(&(k, v)) {
+                    Some(r) => F::lams_cost(r.extra_lams, weights) as i64 + sizes.get(r.eclass),
+                    None => sizes.get(v),
+                }
+            };
+            // Separable min over a factor list: stub + Σfactors (min over rows of Σslots).
+            let min_over = |factors: &[Factor]| -> i64 { stub_size + factored_min(factors, arg_cost) };
+            let rewrite_size = match &sizes.analysis.kept {
+                KeptArgs::AllFactored => Some(min_over(&sizes.analysis.search_state.matches[i].factors)),
+                KeptArgs::Filtered(per) => per[i].as_deref().map(min_over),
+            };
+            if let Some(rs) = rewrite_size {
+                best = best.min(rs);
             }
         }
         best
     }
+    fn extra_parents(&self, id: Id) -> &[Id] {
+        self.arg_to_match_roots.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
+    }
 }
 
-/// Returns the total cost: compressed corpus size plus the abstraction's own
-/// pattern body size. Each `?#k` with `ho_arity[k] > 0` has its body uses
-/// applied to the enclosing binders (`(@ … (@ ?#k $0) … $h-1)`), which adds
-/// `h * (app_cost + sym_var_cost)` per occurrence.
+/// Returns the total cost (compressed corpus size + abstraction body size),
+/// optimised over every meaningful `variable_indices` candidate. See
+/// `enumerate_candidates` for the candidate space. Each `?#k` with
+/// `|S_k| > 0` has its body uses applied to the enclosing binders
+/// (`(@ … (@ ?#k $0) … $h-1)`), which adds `h * (app_cost + sym_var_cost)`
+/// per occurrence.
 pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
-    let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
-    let cost = compute_size(egraph, root, cache, scratch, search_state, check_slow, &ho_arity);
-    let body_size = compute_body_size_with_ho::<F, O>(&search_state.pattern, &ho_arity, &egraph.analysis.weights);
-    cost + body_size
+    compute_cost_and_select(egraph, root, cache, scratch, search_state, check_slow).cost
+}
+
+/// Optimise over every meaningful candidate. Returns the chosen candidate
+/// (variable_indices + kept-subst mask) and its total cost, so callers
+/// downstream (`apply_abstraction`, `build_rewritten_egraph`) can use the
+/// same selection without redoing the optimisation.
+pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> CostSelection {
+    assert!(
+        !search_state.matches.is_empty(),
+        "compute_cost_and_select: search_state.matches is empty; a pattern with no matches has no rewrite candidates to optimise over. Callers (best_first, smc) must filter empty-match states before scoring."
+    );
+    let candidates = enumerate_candidates::<F, O>(egraph, search_state);
+    let weights = &egraph.analysis.weights;
+    // Hoisted: fill once per cost call. `eclass_to_match_idx` depends only on
+    // `search_state.matches`, which is the same across every candidate, so
+    // repeating the fill per candidate was wasted work.
+    scratch.rewrite.fill(search_state);
+    let mut best: Option<CostSelection> = None;
+    for candidate in candidates {
+        let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
+        let corpus = compute_size_for_candidate_prefilled(egraph, root, cache, scratch, search_state, check_slow, &candidate, &ho_arity);
+        let body = compute_body_size_with_ho::<F, O>(&search_state.pattern, &ho_arity, weights);
+        let cost = corpus + body;
+        if best.as_ref().is_none_or(|b| cost < b.cost) {
+            best = Some(CostSelection { cost, candidate });
+        }
+    }
+    best.expect("enumerate_candidates returns at least one candidate")
 }
 
 /// Size of the abstraction's pattern body — the pattern AST counted under
@@ -396,19 +525,29 @@ pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F,
 }
 
 /// Total body size including HO-app wrapping: `compute_pattern_size` plus,
-/// for each occurrence of `?#k` with `ho_arity[k] > 0`, the cost of the
-/// `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
+/// for each *syntactic* occurrence of `?#k` with `ho_arity[k] > 0`, the cost
+/// of the `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
 /// `sym_var_cost` per binder, per occurrence.
+///
+/// Uses `pattern.var_occurrences[k]`, which is maintained incrementally by
+/// `expand`/`reuse` and counts each parent reference (matching
+/// `compute_pattern_size`'s syntactic-walk semantics). Using `vars[k].len()`
+/// here would charge once per unique RecExpr id and silently reward DAG-shared
+/// constructions, making the same final pattern cost less depending on the
+/// action sequence that built it.
 pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
-    let pattern_size = compute_pattern_size::<F, O>(pattern, weights);
+    let base = compute_pattern_size::<F, O>(pattern, weights);
     if ho_arity.iter().all(|&h| h == 0) {
-        return pattern_size;
+        return base;
     }
     let per_app = weights.app_cost + weights.sym_var_cost;
-    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.vars[k].len() as u32 * ho_arity[k] * per_app).sum();
-    pattern_size + ho_extra as usize
+    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.var_occurrences[k] as u32 * ho_arity[k] * per_app).sum();
+    base + ho_extra as usize
 }
 
+/// Tree-expanded size: DAG-shared subtrees are counted once per parent
+/// reference (e.g. `(+ a a a)` counts `a` three times). Matches the
+/// `var_occurrences` convention used throughout cost accounting.
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {
     let node = &rec_expr[ptr];
     node.discriminant().intrinsic_size(weights) as usize + node.children().iter().map(|&child| compute_recexpr_size::<L>(rec_expr, child, weights)).sum::<usize>()
@@ -418,32 +557,102 @@ pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, w
 ///
 /// Drives a `StitchAnalysisRunner` to fixed point. Match-root eclasses seed the
 /// dirty set; as their sizes improve, parents are re-dirtied and reconsidered.
-pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, ho_arity: &[u32]) -> usize {
+/// Compute the corpus size for a specific candidate. Only substs compatible
+/// with the candidate's `variable_indices` (`S`) are considered for rewriting,
+/// recovered per-factor via [`filter_factors_by_candidate`]; the body size is
+/// implied by `S` and is *not* added here — callers add it via
+/// `compute_body_size_with_ho`.
+pub fn compute_size_for_candidate<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, candidate: &CostCandidate) -> usize {
     scratch.rewrite.fill(search_state);
-    let weights = &egraph.analysis.weights;
+    let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
+    compute_size_for_candidate_prefilled(egraph, root, cache, scratch, search_state, check_slow, candidate, &ho_arity)
+}
+
+/// Filters each factor of `m` to the rows compatible with candidate fv-sets
+/// `S` (`variable_indices`): a row survives iff at every slot `k` it covers, the
+/// captured pattern-internal fv of its arg (`fv ∩ [0, d_k)`) is a subset of
+/// `S_k`. Returns `None` when any factor empties — the match keeps no subst.
+/// `S_k` is sorted ascending (`enumerate_candidates`), enabling the binary
+/// search.
+pub(crate) fn filter_factors_by_candidate<L: StitchLanguage>(egraph: &StitchEgraph<L>, m: &MatchAtEClass, variable_indices: &[Vec<i32>], var_depth: &[u32]) -> Option<Vec<Factor>> {
+    let mut out = Vec::with_capacity(m.factors.len());
+    for f in &m.factors {
+        let rows: Vec<Vec<Id>> = f
+            .rows
+            .iter()
+            .filter(|row| {
+                f.slots.iter().zip(row.iter()).all(|(&k, &v)| {
+                    let d_k = var_depth[k];
+                    d_k == 0 || egraph[v].data.fv.iter().all(|&i| i < 0 || (i as u32) >= d_k || variable_indices[k].binary_search(&i).is_ok())
+                })
+            })
+            .cloned()
+            .collect();
+        out.push(Factor::new(f.slots.clone(), rows)?);
+    }
+    Some(out)
+}
+
+/// Same as [`compute_size_for_candidate`] but assumes `scratch.rewrite` is
+/// already filled for the current `search_state` and the caller has already
+/// computed `ho_arity`. `compute_cost_and_select` hoists both to amortise
+/// across candidates.
+#[allow(clippy::too_many_arguments)]
+fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, candidate: &CostCandidate, ho_arity: &[u32]) -> usize {
+    // On lambda-bearing domains the candidate keeps a subst iff its per-slot
+    // captures fit `S` (`variable_indices`). That test is per-slot, hence
+    // per-factor, so we just filter each factor's rows — the product stays
+    // factored and the separable min applies unchanged. Lambda-free domains
+    // (`var_depth` all 0) can capture nothing, so every subst is kept and no
+    // filtering is needed.
     let var_depth = &search_state.pattern.var_depth;
-    let stub_size = F::stub_application_size::<O>("inv_0", var_depth.len(), weights) as i64;
-    let lam_cost = weights.lam_cost as i64;
-    // Pre-resolve every (subst arg, ho_arity, var_depth) triple to a real
-    // eclass id where possible. Doing this once outside the solve loop lets
-    // `RewriteAnalysis::best` pick up transitive rewrites at the wrapped
-    // operand's eclass — e.g. when `Lam^h(arg)` is itself another match-root —
-    // which a plain `wrap_cost + sizes.get(arg)` would miss.
-    let resolved_substs: Vec<Vec<Vec<ResolvedArg>>> = search_state
-        .matches
-        .iter()
-        .map(|m| m.substs.iter().map(|subst| subst.vars.iter().enumerate().map(|(k, &v)| resolve_subst_arg::<F, O>(egraph, v, ho_arity[k], var_depth[k])).collect()).collect())
-        .collect();
+    let lambda_free = var_depth.iter().all(|&d| d == 0);
+    let filtered: Option<Vec<Option<Vec<Factor>>>> = (!lambda_free).then(|| search_state.matches.iter().map(|m| filter_factors_by_candidate(egraph, m, &candidate.variable_indices, var_depth)).collect());
+    // Resolve each HO-slot arg to its wrapped-λ eclass once per candidate (see
+    // `RewriteAnalysis::resolved`), over exactly the factor rows `best` will
+    // score. Lambda-free candidates (`ho_arity` all 0) build an empty map and
+    // `arg_cost` stays a plain `get(v)`.
+    let mut resolved: FxHashMap<(usize, Id), ResolvedArg> = FxHashMap::default();
+    if ho_arity.iter().any(|&h| h > 0) {
+        for (i, m) in search_state.matches.iter().enumerate() {
+            let factors: &[Factor] = match &filtered {
+                Some(f) => match &f[i] {
+                    Some(ff) => ff,
+                    None => continue,
+                },
+                None => &m.factors,
+            };
+            for f in factors {
+                for row in &f.rows {
+                    for (&k, &v) in f.slots.iter().zip(row) {
+                        if ho_arity[k] > 0 {
+                            resolved.entry((k, v)).or_insert_with(|| resolve_subst_arg::<F, O>(egraph, v, ho_arity[k], var_depth[k]));
+                        }
+                    }
+                }
+            }
+        }
+    }
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
-        resolved_substs: &resolved_substs,
-        stub_size,
-        lam_cost,
-        _marker: std::marker::PhantomData,
+        arg_to_match_roots: &scratch.rewrite.arg_to_match_roots,
+        ho_arity,
+        kept: match &filtered {
+            Some(f) => KeptArgs::Filtered(f),
+            None => KeptArgs::AllFactored,
+        },
+        resolved: &resolved,
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
-    for m in &search_state.matches {
+    for (i, m) in search_state.matches.iter().enumerate() {
+        // Skip seeding matches that keep no subst (a factor filtered empty), so
+        // the dirty set agrees with what `best` will actually rewrite.
+        if let Some(f) = &filtered
+            && f[i].is_none()
+        {
+            continue;
+        }
         sizes.mark_dirty(m.root_eclass);
     }
     sizes.solve();
@@ -463,7 +672,7 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     }
     let final_size = sizes.get(root);
     if check_slow {
-        let rewritten = build_rewritten_egraph(egraph, search_state, ho_arity);
+        let rewritten = build_rewritten_egraph::<F, O>(egraph.clone(), search_state, candidate, "inv_0");
         let slow_size = rewritten[root].data.size as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
         // Semantic guard: rewriting must preserve the free-variable set at the
@@ -475,46 +684,106 @@ pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
     final_size as usize
 }
 
-/// Optimistic analysis producing a lower bound on achievable size. Match-root
-/// eclasses are seeded with size 1 directly into the runner's override table
-/// before `solve` runs, so `best` only needs to return the minimum enode size —
-/// the seeded `1`s persist because nothing improves on them.
-pub struct LowerBoundAnalysis;
-impl<L: StitchLanguage> StitchAnalysis<L> for LowerBoundAnalysis {
-    fn best(sizes: &StitchAnalysisRunner<L, Self>, eclass: Id) -> i64 {
-        sizes.min_enode_size(eclass)
+/// Optimistic analysis producing a lower bound on achievable size. At a match
+/// root, the rewrite collapses to a single stub node plus the captured
+/// arguments at frozen-var slots (those that are holes, `var_frozen[k]`) — those holes are
+/// committed to staying, so their args appear verbatim at every call site and
+/// must be paid for. Non-frozen vars can still be expanded into the body, so
+/// they contribute nothing here. Min taken across substs.
+pub struct LowerBoundAnalysis<'a, F: LanguageFamily, O: StitchOp> {
+    pub search_state: &'a SearchState<F, O>,
+    pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
+    /// Inverse index: frozen-arg eclass → match-root eclasses whose rewrite
+    /// size depends on it. The match-root's rewrite path reads arg sizes
+    /// directly, bypassing the syntactic enode chain, so syntactic dirty
+    /// propagation alone may not reach it when an arg improves.
+    pub arg_to_match_roots: FxHashMap<Id, Vec<Id>>,
+}
+
+impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBoundAnalysis<'a, F, O> {
+    fn best(sizes: &StitchAnalysisRunner<F::Apply<O>, Self>, eclass: Id) -> i64 {
+        let mut best = sizes.min_enode_size(eclass);
+        if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
+            let var_frozen = &sizes.analysis.search_state.pattern.var_frozen;
+            let weights = sizes.weights();
+            let stub_size = F::stub_application_size(sizes.analysis.search_state.frozen_count(), weights) as i64;
+            // Only frozen slots contribute; their arg sizes are additively
+            // separable, so the min over the product factors into a sum of
+            // per-factor minima (factors with no frozen slot add 0).
+            let factors = &sizes.analysis.search_state.matches[i].factors;
+            let rewrite_size = stub_size + factored_min(factors, |k, v| if var_frozen[k] { sizes.get(sizes.egraph.find(v)) } else { 0 });
+            best = best.min(rewrite_size);
+        }
+        best
+    }
+    fn extra_parents(&self, id: Id) -> &[Id] {
+        self.arg_to_match_roots.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
     }
 }
 
-/// Computes an optimistic lower bound on corpus size by assuming every match collapses
-/// to a single node. Reuses allocations in `scratch` across calls.
+/// Optimistic lower bound on the objective `corpus + body`. Corpus side: each
+/// match contributes a 1-node stub plus the minimum total size of its frozen-var
+/// arguments (those can no longer shrink via further expansion). Body side: the
+/// current pattern size — monotone non-decreasing under expand/reuse and a lower
+/// bound on the final `compute_body_size_with_ho` (the HO term is non-negative),
+/// so it both tightens the bound and, being unbounded in pattern depth,
+/// guarantees the search tree is finite. Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
-    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, LowerBoundAnalysis);
+    scratch.rewrite.fill(search_state);
+    let var_frozen = &search_state.pattern.var_frozen;
+    let mut arg_to_match_roots: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
     for m in &search_state.matches {
-        sizes.set(m.root_eclass, 1);
+        let root = egraph.find(m.root_eclass);
+        for f in &m.factors {
+            for (p, &k) in f.slots.iter().enumerate() {
+                if var_frozen[k] {
+                    for row in &f.rows {
+                        arg_to_match_roots.entry(egraph.find(row[p])).or_default().push(root);
+                    }
+                }
+            }
+        }
+    }
+    let analysis = LowerBoundAnalysis {
+        search_state,
+        eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+        arg_to_match_roots,
+    };
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
+    for m in &search_state.matches {
+        sizes.mark_dirty(m.root_eclass);
     }
     sizes.solve();
-    sizes.get(root) as usize
+    sizes.get(root) as usize + compute_pattern_size::<F, O>(&search_state.pattern, &egraph.analysis.weights)
 }
 
-/// Clones the egraph and unions each match root with an `inv_0(args...)`
-/// node, then rebuilds. Source of truth for the rewrite — `compute_size`'s
-/// fast path is validated against this via `check_slow`.
+/// Consumes `egraph` and unions each match root with a `fn_name(args...)`
+/// node, then rebuilds. Source of truth for the rewrite — used both by
+/// `lib::apply_abstraction` (which extracts+reparses on top) and by
+/// `compute_size_for_candidate`'s `check_slow` validation path.
 ///
-/// Each captured eclass's free indices `≥ d_k` are shifted by `ho_arity[k] - d_k`
-/// (lifting them from the pattern-internal capture position out to the call
-/// site, then accounting for the `ho_arity[k]` η-binders), and the result is
-/// wrapped under `ho_arity[k]` λs before being passed in.
-pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, ho_arity: &[u32]) -> StitchEgraph<F::Apply<O>> {
-    let mut egraph = egraph.clone();
+/// Each captured eclass is fed through `wrap_subst_args` to re-index its
+/// pattern-internal fv onto wrap-lam slots and shift above-pattern fv past
+/// the wrap-lams, then wrapped under `variable_indices[k].len()` λs before
+/// being passed in.
+pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(mut egraph: StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, candidate: &CostCandidate, fn_name: &str) -> StitchEgraph<F::Apply<O>> {
+    let variable_indices = &candidate.variable_indices;
     let var_depth = &search_state.pattern.var_depth;
-    let mut shift_memo: FxHashMap<(Id, u32, i32), Id> = FxHashMap::default();
-    // See `apply_abstraction` for why unions are deferred.
+    // Defer unions until all shifts are done. A mid-loop `union` shrinks
+    // `data.fv` on the unioned classes but leaves parent classes stale until
+    // `rebuild`, and the next iteration's `shift_free_egraph` would then
+    // read that stale fv and trip the intersection-fv assertion.
     let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &search_state.matches {
-        for subst in &m.substs {
-            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, ho_arity, var_depth, &mut shift_memo);
-            let x = F::add_stub_application::<O>("inv_0", wrapped, &mut egraph);
+        // Restrict to the candidate-compatible substs (per-factor filter), then
+        // materialise that filtered product — the rewrite genuinely needs each
+        // joint assignment. This is the slow/validation + apply path, not hot.
+        let Some(kept) = filter_factors_by_candidate(&egraph, m, variable_indices, var_depth) else {
+            continue;
+        };
+        for vars in crate::factor::factors_product(&kept) {
+            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &vars, variable_indices, var_depth);
+            let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
             pending.push((x, m.root_eclass));
         }
     }
@@ -526,37 +795,27 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgr
 }
 
 /// Per-subst HO wrapping: for each captured arg `arg_id` at metavar slot `k`,
-/// returns `λ^h. shift_free(arg_id, h - d_k, d_k)`, where `h = ho_arity[k]` and
-/// `d_k = var_depth[k]`. The `-d_k` component lifts free indices out of the
-/// pattern-internal capture position to the call site; the `+h` component
-/// accounts for the η-wrapping. Used by both `build_rewritten_egraph` and
-/// `lib::apply_abstraction`; `shift_memo` is shared across calls so equivalent
-/// shifts are deduplicated.
-pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], ho_arity: &[u32], var_depth: &[u32], shift_memo: &mut FxHashMap<(Id, u32, i32), Id>) -> Vec<Id> {
+/// returns `λ^h. permuted_shift(arg_id, vis[k], d_k)`, where `h = vis[k].len()`
+/// and `d_k = var_depth[k]`. Each pattern-internal `$i` with `i ∈ vis[k]` is
+/// re-indexed to the wrap-lam slot that the body's η-app at `?#k` will rebind
+/// it through, so β at the call site recovers the original `$i`. Above-pattern
+/// free indices (`i ≥ d_k`) shift past the `h` wrap-lams. Used by both
+/// `lib::apply_abstraction` and its `check_slow` validation path; `shift_memo`
+/// is shared across calls so equivalent shifts are deduplicated.
+pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut StitchEgraph<F::Apply<O>>, vars: &[Id], variable_indices: &[Vec<i32>], var_depth: &[u32]) -> Vec<Id> {
     vars.iter()
         .enumerate()
         .map(|(k, &arg_id)| {
-            let h = ho_arity[k];
+            let vis = &variable_indices[k];
+            let h = vis.len() as u32;
             let d_k = var_depth[k];
-            let by = h as i32 - d_k as i32;
-            let shifted = shift_free_egraph::<F, O>(egraph, arg_id, by, d_k, shift_memo);
+            let rank_map: FxHashMap<i32, u32> = vis.iter().enumerate().map(|(r, &i)| (i, r as u32)).collect();
+            // Memo is per-slot: keying by (canonical, initial_depth) is only
+            // valid for a single (d_k, h, rank_map) — sharing across slots
+            // would conflate transformations.
+            let mut shift_memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
+            let shifted = shift_free_egraph::<F, O>(egraph, arg_id, d_k, &rank_map, h, 0, &mut shift_memo);
             if h == 0 { shifted } else { F::wrap_lams::<O>(shifted, h, egraph) }
-        })
-        .collect()
-}
-
-/// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
-pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
-    let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
-    let rewritten = build_rewritten_egraph(egraph, search_state, &ho_arity);
-    let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0]
-        .children()
-        .iter()
-        .map(|&child| {
-            let (_, expr) = extractor.find_best(child);
-            check_fvs_are_as_expected::<F::Apply<O>>(&expr, &rewritten[child].data.fv);
-            <F::Apply<O> as StitchLanguage>::display_recexpr(&expr)
         })
         .collect()
 }
@@ -564,9 +823,9 @@ pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
 /// Computes the exact syntactic free-variable set at every position of `expr`,
 /// indexed by `usize::from(Id)`. Shares its per-enode rule with
 /// `StitchAnalysis::make` via `enode_fv`.
-pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
+pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<i32>> {
     let nodes: &[L] = expr.as_ref();
-    let mut fv: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); nodes.len()];
+    let mut fv: Vec<FxHashSet<i32>> = vec![FxHashSet::default(); nodes.len()];
     for (i, node) in nodes.iter().enumerate() {
         fv[i] = enode_fv(node, |c| &fv[usize::from(c)]);
     }
@@ -574,14 +833,32 @@ pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
 }
 
 /// Asserts that the extracted term's actual syntactic fv matches the egraph
-/// analysis's recorded fv. Under intersection-fv semantics + AstSize
+/// analysis's recorded fv. Under intersection-fv semantics + WeightedSize
 /// extraction, the minimal-size representative is also the fv-minimal one,
 /// so its fv should equal the intersection across reps — i.e. `expected`.
 /// A mismatch in either direction means the assumption "min-size ⇒ min-fv"
 /// failed for this extraction; downstream soundness checks that read
 /// `data.fv` lose their guarantee.
-pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<u32>) {
+pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<i32>) {
     let fv = recexpr_fv(expr);
     let actual = fv.last().expect("non-empty RecExpr");
     assert_eq!(actual, expected, "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", actual, expected,);
+}
+
+/// Asserts the invariant `fv(c) = fv(MinTerm(c))` for every eclass: the analysis
+/// fv `data.fv` must equal the syntactic fv of the class's size-minimal enode
+/// (computed from its children's class fv). Downstream capture decisions read
+/// `data.fv` and rely on it matching the extracted min term. Panics on the first
+/// offending class.
+pub fn assert_fv_matches_min_term<L: StitchLanguage>(egraph: &StitchEgraph<L>) {
+    let weights = egraph.analysis.weights;
+    for c in egraph.classes() {
+        let rep = c.nodes.iter().min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&ch| egraph[ch].data.size as u64).sum::<u64>()).expect("non-empty eclass");
+        let rep_fv = enode_fv(rep, |ch| &egraph[ch].data.fv);
+        assert_eq!(
+            &rep_fv, &c.data.fv,
+            "eclass {:?} data.fv {:?} differs from its min-term node fv {:?}; the fv(c)=fv(MinTerm(c)) invariant (min-size rep is fv-minimal) is violated",
+            c.id, c.data.fv, rep_fv
+        );
+    }
 }
