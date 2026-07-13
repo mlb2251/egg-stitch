@@ -77,21 +77,6 @@ RULES_BY_REL = {
     "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
 }
 
-# Fixtures the equivalence oracle cannot tractably verify and so skips entirely.
-# The cogsci `*.algebra` fixtures use our algebraic drawing rewrites
-# (drawings.rewrites), which are non-confluent and node-exploding (matmul,
-# overlay/arith commutativity, repeat-unroll) — the same blowup that forces
-# `--iter-limit` on the real search. `check_equiv` saturates without such a cap,
-# so it bails on the node limit (false negatives) and is brutally slow over the
-# 250-program corpus. These fixtures are instead pinned EXACTLY by the
-# `*_algebra` snapshot cases in `tests/cogsci_bfs_test.rs`.
-SKIP_RELS = {
-    "cogsci/dials.algebra.out.json",
-    "cogsci/furniture.algebra.out.json",
-    "cogsci/nuts-bolts.algebra.out.json",
-    "cogsci/wheels.algebra.out.json",
-}
-
 # The plain-`op-children` half of the op-children-db contrast deliberately bakes
 # the symbol `$0` into the body (`(f (g (h ?#0)) $0)`). check_equiv reads `$0` as
 # a De Bruijn variable, so it sees an unsound rewrite — which is exactly the
