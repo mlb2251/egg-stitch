@@ -1,0 +1,18 @@
+{
+  "compression_ratio": null,
+  "cost_after_rewrites": 9,
+  "cost_at_end_of_each_iter": null,
+  "final_cost": null,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 9,
+  "original_programs": [
+    "(a (lam_1 (a a)))",
+    "(b (lam_1 (b b)))"
+  ],
+  "rewritten_programs": [
+    "(a (lam_1 (a a)))",
+    "(b (lam_1 (b b)))"
+  ]
+}

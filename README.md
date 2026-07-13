@@ -5,6 +5,11 @@
 # Key commands
 
 
+Install the Python dependencies for the experiment/plotting scripts with:
+```
+pip install -r requirements.txt
+```
+
 Launch results visualization server (if not already running) with:
 ```
 make server
@@ -18,23 +23,18 @@ run all experiments
 python3 -c 'from expts import *; runall(num_steps=10, num_particles=100)'
 ```
 
-Run the dials domain
+run a single (method, domain) cell of Table 1/2 directly
 
 ```
-python3 -c 'from expts import *; run_domain("dials", num_steps=10, num_particles=1000)'
+python3 -c 'from expts import *; print(run_method(OursSmc(), "dials", rounds=1, use_dsrs=True)[0].summary_line())'
 ```
 
-compress a json directly
-
-```
-python3 -c 'from expts import *; compress("data/domains/cogsci/dials.json", rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites", num_steps=100, num_particles=1000, max_arity=2, temperature=1000)'
-```
-
-Follow:
-
-```
-python3 -c 'from expts import *; compress("data/domains/cogsci/dials.json", rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites", num_steps=10, num_particles=100, follow="(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))")'
-```
+Each runner (`OursSmc`, `OursBf`, `Babble`, `Stitch`) is a frozen
+dataclass carrying its own hyperparameters as fields — pass overrides as
+kwargs at construction (e.g. `OursSmc(num_steps=50)`) instead of mutating
+module state. To invoke the egg-stitch binary
+directly with custom flags, drive ``$(cargo build --release && ls
+target/release/egg-stitch)`` yourself.
 
 
 

@@ -1,0 +1,235 @@
+{
+  "tables": {
+    "3": {
+      "domain": "furniture",
+      "max_cr": 1.70471690621774,
+      "target_cr": 1.6876697371555627,
+      "egg_cr": 1.4554222416325884,
+      "target_fraction": 0.99,
+      "enum_point": 10000,
+      "smc_num_steps": 100,
+      "bfs": {
+        "baseline": {
+          "time": 0.1399830040994664,
+          "steps": 1601,
+          "cr": 1.70471690621774,
+          "dnf": false
+        },
+        "no-lower-bound": {
+          "time": 0.9312192748950163,
+          "steps": 37185,
+          "cr": 1.70471690621774,
+          "dnf": false
+        },
+        "no-dominance": {
+          "time": 0.49035638261199405,
+          "steps": 4107,
+          "cr": 1.70471690621774,
+          "dnf": false
+        },
+        "no-equivalence": {
+          "time": null,
+          "steps": null,
+          "cr": null,
+          "dnf": true
+        },
+        "no-var-ordering": {
+          "time": null,
+          "steps": null,
+          "cr": null,
+          "dnf": true
+        },
+        "var-ordering-l2r": {
+          "time": 0.538000354561001,
+          "steps": 2480,
+          "cr": 1.70471690621774,
+          "dnf": false
+        }
+      },
+      "smc": {
+        "baseline": {
+          "particles": 31,
+          "time": 0.02620484367347108,
+          "steps": 15,
+          "cr": 1.70471690621774,
+          "reached": true
+        },
+        "add-lower-bound": {
+          "particles": 31,
+          "time": 0.02653680443924297,
+          "steps": 9,
+          "cr": 1.70471690621774,
+          "reached": true
+        },
+        "no-dominance": {
+          "particles": 121,
+          "time": 0.04615164766896518,
+          "steps": 25,
+          "cr": 1.70471690621774,
+          "reached": true
+        },
+        "add-var-ordering": {
+          "particles": null,
+          "time": null,
+          "steps": null,
+          "cr": null,
+          "reached": false
+        }
+      }
+    },
+    "5": {
+      "domain": "molecules:hexyl",
+      "max_cr": 3.0839802399435428,
+      "target_cr": 3.053140437544107,
+      "egg_cr": 3.0516854724964744,
+      "target_fraction": 0.99,
+      "enum_point": 100000,
+      "smc_num_steps": 100,
+      "bfs": {
+        "baseline": {
+          "time": 6.294901535214802,
+          "steps": 6366,
+          "cr": 3.0839802399435428,
+          "dnf": false
+        },
+        "no-lower-bound": {
+          "time": 6.062301681176677,
+          "steps": 22257,
+          "cr": 3.0839802399435428,
+          "dnf": false
+        },
+        "no-dominance": {
+          "time": 8.374572664866369,
+          "steps": 8396,
+          "cr": 3.0839802399435428,
+          "dnf": false
+        },
+        "no-equivalence": {
+          "time": null,
+          "steps": null,
+          "cr": null,
+          "dnf": true
+        },
+        "no-var-ordering": {
+          "time": null,
+          "steps": null,
+          "cr": null,
+          "dnf": true
+        },
+        "var-ordering-l2r": {
+          "time": 13.04315680431489,
+          "steps": 13817,
+          "cr": 3.0839802399435428,
+          "dnf": false
+        }
+      },
+      "smc": {
+        "baseline": {
+          "particles": 8,
+          "time": 0.8366757563709772,
+          "steps": 42,
+          "cr": 3.0839802399435428,
+          "reached": true
+        },
+        "add-lower-bound": {
+          "particles": 12,
+          "time": 0.8736274173780201,
+          "steps": 33,
+          "cr": 3.0839802399435428,
+          "reached": true
+        },
+        "no-dominance": {
+          "particles": 16,
+          "time": 0.8911579210548204,
+          "steps": 47,
+          "cr": 3.0839802399435428,
+          "reached": true
+        },
+        "add-var-ordering": {
+          "particles": 4887,
+          "time": 0.9705100696289065,
+          "steps": 57,
+          "cr": 3.0839802399435428,
+          "reached": true
+        }
+      }
+    },
+    "7": {
+      "domain": "epfl-circuits:square",
+      "max_cr": 2.879275092936803,
+      "target_cr": 2.8504823420074348,
+      "egg_cr": 1.6786116531920825,
+      "target_fraction": 0.99,
+      "enum_point": 1000,
+      "smc_num_steps": 100,
+      "bfs": {
+        "baseline": {
+          "time": 4.00074154704378,
+          "steps": 65,
+          "cr": 2.879275092936803,
+          "dnf": false
+        },
+        "no-lower-bound": {
+          "time": 3.042164577446288,
+          "steps": 65,
+          "cr": 2.879275092936803,
+          "dnf": false
+        },
+        "no-dominance": {
+          "time": 4.071394627781405,
+          "steps": 65,
+          "cr": 2.879275092936803,
+          "dnf": false
+        },
+        "no-equivalence": {
+          "time": null,
+          "steps": null,
+          "cr": null,
+          "dnf": true
+        },
+        "no-var-ordering": {
+          "time": 59.76367058218834,
+          "steps": 503,
+          "cr": 2.877403176372248,
+          "dnf": false
+        },
+        "var-ordering-l2r": {
+          "time": 3.6672256286117535,
+          "steps": 63,
+          "cr": 2.879275092936803,
+          "dnf": false
+        }
+      },
+      "smc": {
+        "baseline": {
+          "particles": 4505,
+          "time": 16.035045856890658,
+          "steps": 59,
+          "cr": 2.878740011150344,
+          "reached": true
+        },
+        "add-lower-bound": {
+          "particles": 4612,
+          "time": 18.074921688800522,
+          "steps": 58,
+          "cr": 2.879275092936803,
+          "reached": true
+        },
+        "no-dominance": {
+          "particles": 8007,
+          "time": 16.580544339617457,
+          "steps": 59,
+          "cr": 2.879275092936803,
+          "reached": true
+        },
+        "add-var-ordering": {
+          "particles": 400,
+          "time": 1.1269717973226068,
+          "steps": 58,
+          "cr": 2.8779377612633534,
+          "reached": true
+        }
+      }
+    }
+  }
+}

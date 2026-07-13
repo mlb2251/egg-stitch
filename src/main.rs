@@ -1,49 +1,51 @@
 use clap::Parser;
-use egg_stitch::{Args, SearchKind, best_first, cost, io, lang, results, search, smc};
+use egg_stitch::{
+    Args, LanguageChoice, SearchKind, io,
+    lang::{LambdaCalc, Op, OpChildren, OpDB, StitchOp},
+    multiple_step_search, results,
+};
+
+/// Bundles everything `main` needs from a language-specialised run, so the
+/// language-generic post-processing stays out of `run`.
+struct RunOutput {
+    library: Vec<results::AbstractionResult>,
+    original_size: usize,
+    cost_at_end_of_each_iter: Option<Vec<usize>>,
+    final_cost: Option<usize>,
+    final_rewritten: Option<Vec<String>>,
+    heap_sizes_at_end: Option<Vec<usize>>,
+    cost_before_rewrites: usize,
+    original_programs: Vec<String>,
+    iteration_times: Vec<f64>,
+}
 
 fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    args.normalize();
     let start = std::time::Instant::now();
 
-    let rules = args.rules.as_deref();
-    let (egraph, root, cost_before_rewrites) = io::load_egraph(&args.input, rules);
-
-    // Dispatch to the requested search algorithm, flattening each driver's result
-    // into a common tuple so the downstream RunResult wiring stays shared.
-    #[allow(clippy::type_complexity)]
-    let (best, original_size, best_found_at, num_steps_run, result_egraph): (Option<(usize, search::SearchState)>, usize, Option<usize>, usize, lang::StitchEgraph) = match args.search {
-        SearchKind::Smc => {
-            let r = smc::smc(egraph, root, &args);
-            (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
-        }
-        SearchKind::BestFirst => {
-            let r = best_first::best_first(egraph, root, &args);
-            (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph)
-        }
+    // Pick the language family AND its leaf-Op at the boundary. LambdaCalc and
+    // OpChildrenDb get `OpDB<Op>` so `$n` parses as a real De Bruijn variable
+    // (the fv analysis and the body-ban need that). Plain OpChildren keeps `Op`:
+    // without DB-var leaves there are no free variables to track.
+    let RunOutput {
+        library,
+        original_size,
+        cost_at_end_of_each_iter,
+        final_cost,
+        final_rewritten,
+        heap_sizes_at_end,
+        cost_before_rewrites,
+        original_programs,
+        iteration_times,
+    } = match args.language {
+        LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
+        LanguageChoice::OpChildrenDb => run::<OpChildren, OpDB<Op>>(&args),
+        LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
     };
 
     let elapsed_secs = start.elapsed().as_secs_f64();
-
-    let (final_cost, compression_ratio, pattern, arity, pattern_size, num_matches, usage_matches, approx_cost, rewritten_programs) = match &best {
-        Some((cost, state)) => {
-            let pat_size = cost::compute_pattern_size(&state.pattern);
-            let usage_counts = search::compute_usage_counts(&result_egraph, root);
-            let um: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
-            let appx = original_size as i64 - pat_size as i64 * (um as i64 - 1);
-            (
-                Some(*cost),
-                Some(original_size as f64 / *cost as f64),
-                Some(state.pattern.to_string()),
-                Some(state.pattern.vars.len()),
-                Some(pat_size),
-                Some(state.matches.len()),
-                Some(um),
-                Some(appx),
-                Some(cost::extract_rewritten_programs(&result_egraph, root, state)),
-            )
-        }
-        None => (None, None, None, None, None, None, None, None, None),
-    };
+    let compression_ratio = final_cost.map(|fc| original_size as f64 / fc as f64);
 
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
 
@@ -51,6 +53,8 @@ fn main() {
         SearchKind::Smc => "smc",
         SearchKind::BestFirst => "best-first",
     };
+
+    let rewritten_programs = final_rewritten.unwrap_or_else(|| original_programs.clone());
 
     let run_result = results::RunResult {
         timestamp,
@@ -60,22 +64,38 @@ fn main() {
         elapsed_secs,
         initial_cost: cost_before_rewrites,
         cost_after_rewrites: original_size,
+        cost_at_end_of_each_iter,
         final_cost,
         compression_ratio,
-        pattern,
-        arity,
-        pattern_size,
-        num_matches,
-        usage_matches,
-        approx_cost,
-        num_expansions: best_found_at.map(|n| n + 1),
-        best_iteration: best_found_at,
-        num_steps_run,
+        heap_sizes_at_end,
+        original_programs,
         rewritten_programs,
+        library,
+        iteration_times,
     };
 
     if let Some(ref output_path) = args.output {
         let json = serde_json::to_string_pretty(&run_result).expect("Failed to serialize result");
         std::fs::write(output_path, json).expect("Failed to write output file");
+    }
+}
+
+/// Loads the egraph and runs the multi-abstraction search loop, parameterized
+/// by both the language family `F` and the leaf-Op `O`.
+fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> RunOutput {
+    let load_start = std::time::Instant::now();
+    let (data, cost_before_rewrites, original_programs) = io::load_egraph::<F, O>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, args.weights, args.iter_limit, args.node_limit);
+    println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
+    let (library, original_size, cost_at_end_of_each_iter, final_rewritten, heap_sizes_at_end, search_ends) = multiple_step_search::<F, O>(data, args);
+    RunOutput {
+        library,
+        original_size,
+        cost_at_end_of_each_iter: cost_at_end_of_each_iter.clone(),
+        final_cost: cost_at_end_of_each_iter.map(|v| v[v.len() - 1]),
+        final_rewritten,
+        heap_sizes_at_end,
+        cost_before_rewrites,
+        original_programs,
+        iteration_times: search_ends.into_iter().map(|t| t.duration_since(load_start).as_secs_f64()).collect(),
     }
 }

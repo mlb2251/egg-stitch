@@ -1,6 +1,30 @@
 /target
 /pkg
+ignored
 viz/results/
 __pycache__/
 cargo-flamegraph.trace
 profile.json.gz
+flamegraph.svg
+perf.data
+perf.data.old
+
+# LaTeX build artifacts (intermediate + output)
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.out
+*.toc
+*.nav
+*.snm
+*.vrb
+*.bbl
+*.blg
+figures/**/*.pdf
+viz/stackpath/
+viz/selections
+
+# EPFL circuit .aig blobs are reproducible via scripts/epfl-circuits/fetch_aigs.py
+scripts/epfl-circuits/*.aig

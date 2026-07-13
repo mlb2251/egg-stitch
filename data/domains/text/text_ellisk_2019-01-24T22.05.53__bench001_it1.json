@@ -1,0 +1,10 @@
+[
+  "(lam (unfold $0 (lam (char-eq? '.' (car $0))) (lam (car $0)) (lam (cdr $0))))",
+  "(lam (lam (fn_170 (cons ',' $0) $1)))",
+  "(lam (cons (car $0) (cons SPACE empty)))",
+  "(lam (fn_170 $0 STRING))",
+  "(lam (fn_170 STRING $0))",
+  "(lam (fn_170 STRING $0))",
+  "(lam (fn_170 $0 STRING))",
+  "(lam (fn_170 STRING $0))"
+]

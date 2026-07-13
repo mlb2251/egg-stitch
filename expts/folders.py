@@ -2,7 +2,7 @@
 
 Each Python session lazily creates a fresh timestamp-named folder under
 ``viz/results/`` the first time it is asked for one, and subsequent calls
-(including those from ``compress``/``runall``) reuse it. Use
+(including those from ``egg_stitch``/``runall``) reuse it. Use
 ``new_folder()`` to start a fresh one, or ``set_folder(name)`` to point at
 an existing one.
 """
@@ -11,6 +11,18 @@ import time
 from pathlib import Path
 
 RESULTS_DIR = Path(__file__).parent.parent / "viz" / "results"
+
+# Summary tableN.json files live here (checked into git, single canonical
+# copy per table). Raw per-file subprocess dumps stay under ``RESULTS_DIR``
+# above, which is .gitignored.
+SUMMARY_RESULTS_DIR = Path(__file__).parent.parent / "results"
+
+
+def summary_results_path(name: str) -> Path:
+    """Return the absolute path for a checked-in summary JSON (e.g.
+    ``results/table1.json``), creating the parent folder as needed."""
+    SUMMARY_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    return SUMMARY_RESULTS_DIR / name
 
 # Lazily initialized on first use so merely importing the module doesn't
 # create an empty folder on disk.
