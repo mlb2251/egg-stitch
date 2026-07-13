@@ -2,21 +2,50 @@ use crate::egraph_util::{build_size_minimal_extraction, compute_usage_counts};
 use crate::factor::{Factor, rebuild_factor};
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp};
 use crate::matching::{MatchAtEClass, identity_matches};
-use crate::pattern::{Pattern, VarState};
+use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
 use crate::shift_equal::shift_equal;
+use clap::ValueEnum;
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
+
+/// Which order the freeze rule ranks a pattern's metavariables in (applied by
+/// [`SearchState::compute_rank`]). Independent of *whether* the rule is on
+/// (the `freeze_rule` flag): it only picks the ordering used once it is, and is
+/// inert otherwise — so a non-default order requires the rule on, validated in
+/// [`crate::Args::normalize`].
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum VarOrder {
+    /// Rank vars by how much expanding them explodes the match set — each var's
+    /// most-exploding expansion's mean e-nodes per subst — least-exploding
+    /// first, so the freeze rule commits the cheap vars before the expensive
+    /// ones. The default (best-first's long-standing ordering).
+    #[default]
+    MeanNodesPerClass,
+    /// Keep left-to-right creation order (identity rank).
+    LeftToRight,
+}
 
 /// A candidate expansion shape: an enode's discriminant paired with its arity.
 type Shape<F, O> = (<F as LanguageFamily>::Discriminant<O>, usize);
 /// Per-eclass histogram: each distinct enode shape `(disc, arity)` with its
 /// multiplicity, in enode first-appearance order.
 type EclassShapeHist<F, O> = Vec<(<F as LanguageFamily>::Discriminant<O>, usize, usize)>;
-/// Per var, its candidate expansion shapes (enode first-appearance order), each
-/// carrying weighted support (`sup`) and matching-subst count (`hit`).
-type VarShapes<F, O> = Vec<(Shape<F, O>, usize, usize)>;
+/// A candidate expansion shape for a var together with the statistics that drive
+/// successor emission and ordering. Built by [`SearchState::expand_shapes`].
+struct VarShape<F: LanguageFamily, O: StitchOp> {
+    shape: Shape<F, O>,
+    /// Usage-weighted support `Σ_(r, σ) usage(r) n(σ)`, where `n(σ)` is the
+    /// number of enodes of this shape at the var's binding
+    support: usize,
+    /// Numerator of the explosion estimate `Σ_(r, σ) n(σ)`
+    expand_enodes: usize,
+    /// Denominator of the explosion estimate `Σ_(r, σ) 1` (total full substs)
+    substs: usize,
+}
+/// Per var, its candidate expansion shapes in enode first-appearance order.
+type VarShapes<F, O> = Vec<VarShape<F, O>>;
 
 /// Tracks already-explored canonical patterns to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
@@ -143,6 +172,11 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// precomputed once (the e-graph is static during search). Indexed by
     /// canonical eclass id — sound because no unions happen during search.
     pub eclass_shapes: Vec<EclassShapeHist<F, O>>,
+    /// `--decompose-min-rows`: min factor rows before [`Factor::decompose`]
+    /// splits. Held here so every decompose site reads one runtime value.
+    pub decompose_min_rows: usize,
+    /// `--var-order`: the metavar ordering (see [`VarOrder`]).
+    pub var_order: VarOrder,
 }
 
 impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
@@ -184,7 +218,7 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// Whether the best-first freeze rule is active. When `true`, expanding
     /// `?#k` commits `?#0..?#(k-1)` to never being expanded again, and a
     /// non-dominant `Reuse` freezes the merged var (the frozen set is tracked
-    /// per-var in `Pattern::var_state` and is no longer necessarily a prefix);
+    /// per-var in `Pattern::var_frozen` and is no longer necessarily a prefix);
     /// reuse *ordering* uses the same field's reusable cohort. `false` disables the
     /// rule — SMC uses this to dedupe purely on the pattern's `RecExpr`.
     pub freeze_rule: bool,
@@ -208,7 +242,7 @@ fn renumber_factor(f: &Factor, threshold: usize, delta: isize) -> Factor {
 /// `slots`): sets the kept slot's value to the shallow slot's value, drops the
 /// `drop_idx` column, shifts higher slots down by 1, then re-decomposes.
 /// Returns `None` when no rows survive.
-fn collapse_reuse(slots: &[usize], mut rows: Vec<Vec<Id>>, shallow_idx: usize, keep_idx: usize, drop_idx: usize) -> Option<Vec<Factor>> {
+fn collapse_reuse(slots: &[usize], mut rows: Vec<Vec<Id>>, shallow_idx: usize, keep_idx: usize, drop_idx: usize, min_rows: usize) -> Option<Vec<Factor>> {
     let pos = |s: usize| slots.iter().position(|&x| x == s).expect("reuse slot present in joint factor");
     let (pk, ps, pd) = (pos(keep_idx), pos(shallow_idx), pos(drop_idx));
     for r in &mut rows {
@@ -216,7 +250,7 @@ fn collapse_reuse(slots: &[usize], mut rows: Vec<Vec<Id>>, shallow_idx: usize, k
         r.remove(pd);
     }
     let new_slots: Vec<usize> = slots.iter().filter(|&&s| s != drop_idx).map(|&s| if s > drop_idx { s - 1 } else { s }).collect();
-    Factor::new(new_slots, rows).map(Factor::decompose)
+    Factor::new(new_slots, rows).map(|f| f.decompose(min_rows))
 }
 
 /// Shared scaffold for the per-action match builders. For each parent match,
@@ -239,6 +273,7 @@ fn rebuild_matches(parent_matches: &[MatchAtEClass], mut transform: impl FnMut(&
             }
         }
         new_factors.extend(replacement);
+        new_factors.retain(|f| !f.slots.is_empty());
         out.push(MatchAtEClass { root_eclass: m.root_eclass, factors: new_factors });
     }
     let num = total_substs(&out);
@@ -289,7 +324,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         new_slots.push(s);
                     }
                 }
-                let built = rebuild_factor(new_slots, &f.rows, |row, rows| {
+                let built = rebuild_factor(new_slots, &f.rows, shared.decompose_min_rows, |row, rows| {
                     for node in &shared.egraph[row[pos]].nodes {
                         if !node.matches(target) {
                             continue;
@@ -365,7 +400,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     }
                     (slots, rows)
                 };
-                let merged_factors = collapse_reuse(&joint_slots, joint_rows, shallow_idx, keep_idx, drop_idx)?;
+                let merged_factors = collapse_reuse(&joint_slots, joint_rows, shallow_idx, keep_idx, drop_idx, shared.decompose_min_rows)?;
                 // sf and df are the touched factors (deduped when equal).
                 let touched = if sf == df { vec![sf] } else { vec![sf, df] };
                 Some((touched, merged_factors))
@@ -411,7 +446,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         if !self.freeze_rule {
             return false;
         }
-        (0..self.pattern.vars.len()).filter(|&k| self.pattern.var_state[k] == VarState::Frozen).any(|k| self.is_useless_var(k, shared))
+        (0..self.pattern.vars.len()).filter(|&k| self.pattern.var_frozen[k]).any(|k| self.is_useless_var(k, shared))
     }
 
     /// True iff any metavar in the pattern is useless. Unlike
@@ -425,10 +460,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Total number of frozen vars. The frozen set is no longer a prefix (a
     /// non-dominant reuse can freeze a non-leading slot), so test individual
-    /// slots via `!pattern.var_state[k].is_expandable()`; this count is the
+    /// slots via `pattern.var_frozen[k]`; this count is the
     /// number of holes the stub application keeps.
     pub fn frozen_count(&self) -> usize {
-        self.pattern.var_state.iter().filter(|&&s| !s.is_expandable()).count()
+        self.pattern.var_frozen.iter().filter(|&&f| f).count()
     }
 
     /// Builds a child state by fully concretizing every useless *non-frozen*
@@ -443,7 +478,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// shifts the extraction to each occurrence's depth (sound — every surviving
     /// cross-depth reuse is a genuine shift-variant).
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
-        let mut targets: Vec<(usize, Id)> = (0..self.pattern.vars.len()).filter(|&k| self.pattern.var_state[k] != VarState::Frozen).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
+        let mut targets: Vec<(usize, Id)> = (0..self.pattern.vars.len()).filter(|&k| !self.pattern.var_frozen[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {
             return None;
         }
@@ -463,7 +498,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `useless_var_eclass` returns the eclass id iff these hold.
     ///
     /// Callers concretize only non-frozen vars; `pattern.concretize` removes the
-    /// slot's state and shifts the rest down, keeping `var_state` aligned.
+    /// slot's state and shifts the rest down, keeping `var_frozen` aligned.
     pub fn concretize(&mut self, var_idx: usize, eclass: Id, shared: &SharedSearchData<F, O>) {
         let mut extraction: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
         let mut memo: FxHashMap<Id, Id> = FxHashMap::default();
@@ -481,7 +516,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             if !new_slots.is_empty() {
                 let new_rows: Vec<Vec<Id>> = old.rows.iter().map(|r| r.iter().enumerate().filter(|&(i, _)| i != pos).map(|(_, &v)| v).collect()).collect();
                 if let Some(f) = Factor::new(new_slots, new_rows) {
-                    m.factors.extend(f.decompose());
+                    m.factors.extend(f.decompose(shared.decompose_min_rows));
                 }
             }
             for f in &mut m.factors {
@@ -539,7 +574,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// cloning the parent's matches (only the surviving transformed factor
     /// rows get allocated in the child — the parent's `Vec<Factor>` data is
     /// not cloned-then-discarded). The pattern is cloned and mutated in
-    /// place; the freeze set (`Pattern::var_state`) is index-shifted by
+    /// place; the freeze set (`Pattern::var_frozen`) is index-shifted by
     /// `expand`/`reuse` and the freeze policy is applied inline: an `Expand`
     /// freezes every var of lower rank (per `rank`), and a `Reuse` freezes the
     /// merged var when `freeze_reused` is set (the caller passes `false` for the
@@ -553,15 +588,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
                 // Commit to freezing every var of *lower rank*: expanding the
                 // var at rank `r` forbids ever expanding a lower-rank var. Set
-                // the parent's `var_state` (by rank) before `expand` shifts it
-                // into the child layout. Disabled for SMC (no freeze rule, so
-                // `rank` is `None`).
+                // the parent's `var_frozen` (by rank) before `expand` shifts it
+                // into the child layout. Off when `freeze_rule` is false (e.g.
+                // SMC by default, or `--freeze-rule off`).
                 if self.freeze_rule {
                     let rank = rank.expect("freeze_rule requires a rank");
                     let rv = rank[*var_idx];
-                    for (j, s) in new_pattern.var_state.iter_mut().enumerate() {
+                    for (j, s) in new_pattern.var_frozen.iter_mut().enumerate() {
                         if rank[j] < rv {
-                            *s = VarState::Frozen;
+                            *s = true;
                         }
                     }
                 }
@@ -589,7 +624,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // successor), where freezing would make `f(shared…)` unreachable.
                 // No-op under `freeze_rule = false`.
                 if self.freeze_rule && freeze_reused {
-                    new_pattern.var_state[var_idx.min(second_var_idx)] = VarState::Frozen;
+                    new_pattern.var_frozen[var_idx.min(second_var_idx)] = true;
                 }
                 Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
             }
@@ -631,13 +666,23 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// [`Self::forced_expansion_at`]) and early-exits at the first `r` with `≤ cap`
     /// (one match's work for a valid `p`).
     ///
+    /// Only roots that appear in the corpus's size-minimal extraction
+    /// (`usage_counts != 0`) are considered.
+    ///
     /// Sound to prune on: `ForcedExpansion(p)` is monotone non-decreasing under
     /// expand/reuse — committing a hole swaps a `Cost(r)`-minimal arg for `≥`-cost
     /// structure (`Cost(r | p)` rises, `Cost(r)` fixed) and substs only shrink — so
     /// `ForcedExpansion(p) > cap` ⇒ every descendant `> cap`.
     pub fn within_forced_expansion_cap(&self, shared: &SharedSearchData<F, O>, cap: i64) -> bool {
         let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
-        self.matches.iter().any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
+        self.matches.iter().filter(|m| shared.usage_counts.get(&m.root_eclass).is_some_and(|&u| u != 0)).any(|m| self.forced_expansion_at(shared, skel, m) <= cap)
+    }
+
+    /// Whether this state is within the `--max-match-set` row cap (`true` when
+    /// unset). The blowup guard both drivers apply when admitting a successor.
+    pub fn within_match_set_cap(&self, max_match_set: Option<usize>) -> bool {
+        let max_factor_rows = self.matches.iter().flat_map(|m| m.factors.iter()).map(|f| f.rows.len()).max().unwrap_or(0);
+        max_match_set.is_none_or(|cap| max_factor_rows <= cap)
     }
 
     /// Renders the size-minimal extraction ("min-term") of `eclass` as a string.
@@ -666,6 +711,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let skel = self.concrete_skeleton_cost(&shared.egraph.analysis.weights);
         let mut best: Option<(i64, Id)> = None;
         for m in &self.matches {
+            if shared.usage_counts.get(&m.root_eclass).is_none_or(|&u| u == 0) {
+                continue;
+            }
             let forced = self.forced_expansion_at(shared, skel, m);
             if best.is_none_or(|(b, _)| forced < b) {
                 best = Some((forced, m.root_eclass));
@@ -679,12 +727,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// The candidate expansion shapes for `?#var_idx`: every distinct
     /// `(discriminant, arity)` its bound eclass admits (free DB-var leaves above
-    /// the hole's depth excluded), each paired with its `usage·(substs/rows)`-
-    /// weighted support (`sup`) and matching-subst count (`hit`), summed over
+    /// the hole's depth excluded), each with the [`VarShape`] stats summed over
     /// every (match, factor-row) the var appears in. Reads the precomputed
     /// per-eclass shape histograms ([`SharedSearchData::eclass_shapes`]) and keeps
     /// shapes in enode first-appearance order so the emitted action order is
-    /// deterministic. (`hit` feeds the rank; the expand emission ignores it.)
+    /// deterministic.
     fn expand_shapes(&self, var_idx: usize, shared: &SharedSearchData<F, O>) -> VarShapes<F, O> {
         let d_k = self.pattern.var_depth[var_idx];
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
@@ -695,8 +742,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let f = &m.factors[fi];
             // Each row of the owning factor stands in for `total/|f.rows|`
             // full substs (the product of the other factors), so weight the
-            // per-row node contributions by that multiplier.
-            let w = usage(m.root_eclass) * (m.num_substs() / f.rows.len());
+            // per-row node contributions by that multiplier. `support` adds the
+            // usage factor on top; the rank stats deliberately omit it.
+            let w = m.num_substs() / f.rows.len();
+            let wu = usage(m.root_eclass) * w;
             for row in &f.rows {
                 for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
                     if invalid_literal_expansion(disc, d_k) {
@@ -705,12 +754,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     let key = (disc.clone(), *arity);
                     match shape_idx.get(&key) {
                         Some(&idx) => {
-                            shapes[idx].1 += count * w;
-                            shapes[idx].2 += w;
+                            shapes[idx].support += count * wu;
+                            shapes[idx].expand_enodes += count * w;
+                            shapes[idx].substs += w;
                         }
                         None => {
                             shape_idx.insert(key.clone(), shapes.len());
-                            shapes.push((key, count * w, w));
+                            shapes.push(VarShape {
+                                shape: key,
+                                support: count * wu,
+                                expand_enodes: count * w,
+                                substs: w,
+                            });
                         }
                     }
                 }
@@ -719,31 +774,48 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         shapes
     }
 
-    /// Non-expansive ordering over all vars, built from each var's [`Self::expand_shapes`].
-    /// `f(k)` = the mean enodes per *matching* subst of `k`'s most-exploding
-    /// (least-clean) expansion.
+    /// Computes each var's expansion shapes (via [`Self::expand_shapes`]) and the
+    /// `(rank, order)` the freeze rule, the `max_arity` skip, and the emission
+    /// order act on.
     ///
-    /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank
-    /// -> var) are threaded to the freeze rule, the `max_arity` skip, and the
-    /// emission order so those act on `f` rather than creation order, *without*
-    /// renumbering the pattern. SMC (`freeze_rule = false`) keeps creation order:
-    /// `rank`/`order` are the identity.
+    /// Returns `(shapes, rank, order)`. `rank` (var -> rank) / `order` (rank ->
+    /// var) act on the chosen order rather than creation order *without*
+    /// renumbering the pattern. Under the freeze rule the order comes from
+    /// [`Self::compute_rank`] (per [`SharedSearchData::var_order`]); otherwise it
+    /// is the identity.
     fn shape_pass(&self, shared: &SharedSearchData<F, O>) -> (Vec<VarShapes<F, O>>, Vec<usize>, Vec<usize>) {
         let n = self.pattern.vars.len();
         let shapes: Vec<VarShapes<F, O>> = (0..n).map(|k| self.expand_shapes(k, shared)).collect();
-        let (rank, order) = if self.freeze_rule && n > 1 {
-            let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|(_, s, h)| *s as f64 / *h as f64).fold(-f64::INFINITY, f64::max)).collect();
-            let mut order: Vec<usize> = (0..n).collect();
-            order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
-            let mut rank = vec![0usize; n];
-            for (r, &k) in order.iter().enumerate() {
-                rank[k] = r;
-            }
-            (rank, order)
-        } else {
-            ((0..n).collect(), (0..n).collect())
-        };
+        let (rank, order) = if self.freeze_rule { self.compute_rank(shared.var_order, &shapes) } else { ((0..n).collect(), (0..n).collect()) };
         (shapes, rank, order)
+    }
+
+    /// Computes `(rank, order)` for a given [`VarOrder`] from the per-var
+    /// expansion `shapes`: `rank[var] -> rank`, `order[rank] -> var`. Each
+    /// ordering is a match arm — add a new [`VarOrder`] variant here to define
+    /// how it ranks vars. Returns the identity for ≤1 var (nothing to order).
+    /// Only called under the freeze rule (see [`Self::shape_pass`]).
+    fn compute_rank(&self, var_order: VarOrder, shapes: &[VarShapes<F, O>]) -> (Vec<usize>, Vec<usize>) {
+        let n = self.pattern.vars.len();
+        if n <= 1 {
+            return ((0..n).collect(), (0..n).collect());
+        }
+        let order: Vec<usize> = match var_order {
+            VarOrder::MeanNodesPerClass => {
+                // `fval[k]` = k's most-exploding expansion's mean e-nodes per
+                // subst; sort ascending (least-exploding first, ties by index).
+                let fval: Vec<f64> = (0..n).map(|k| shapes[k].iter().map(|s| s.expand_enodes as f64 / s.substs as f64).fold(-f64::INFINITY, f64::max)).collect();
+                let mut order: Vec<usize> = (0..n).collect();
+                order.sort_by(|&a, &b| fval[a].partial_cmp(&fval[b]).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
+                order
+            }
+            VarOrder::LeftToRight => (0..n).collect(),
+        };
+        let mut rank = vec![0usize; n];
+        for (r, &k) in order.iter().enumerate() {
+            rank[k] = r;
+        }
+        (rank, order)
     }
 
     /// Returns the enumerable successors of `self`. When dominance pruning
@@ -761,10 +833,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// rest. Disabled by `--no-opt-dominance-reuse`.
     ///
     /// Expand actions are filtered against the best-first canonical-ordering
-    /// rule: any frozen `var_idx` (`self.pattern.var_state[var_idx] == Frozen`) or
+    /// rule: any frozen `var_idx` (`self.pattern.var_frozen[var_idx]`) or
     /// `var_idx > max_arity` is skipped before the action is even constructed.
-    /// SMC passes `max_arity = usize::MAX` and runs with `freeze_rule = false`,
-    /// so the filter is a no-op for it.
+    /// SMC passes `max_arity = usize::MAX`, so the arity cut is a no-op for it,
+    /// and the freeze cut only fires when the freeze rule is on (`--freeze-rule`).
     ///
     /// `support` is the (m,s)-pair count feeding the SMC weighting; it equals
     /// the surviving subst count, so `support > 0` ⇒ non-empty child.
@@ -797,22 +869,24 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // `rank`/`order`, in one egraph pass. See [`Self::shape_pass`].
         let (shapes, rank, order) = self.shape_pass(shared);
 
-        // The reusable cohort (`VarState::ReusableOrExpandable`) is a best-first
-        // canonical-ordering device, mirroring the freeze rule. SMC (freeze_rule
-        // = false) ignores it so its reuse exploration stays unrestricted. We
-        // skip `Reuse(i, j)` only when both slots are stale, which canonicalizes
-        // merges into increasing-keep order: a merge stales everything below its
-        // kept slot, so a later merge with both endpoints there is the same set
-        // of merges in a non-canonical order. Staling stops at the kept slot (not
-        // the dropped one), so slots between a merged pair stay reusable —
-        // otherwise a second, interleaved pair would be wrongly skipped even
-        // though no earlier ordering reaches it (#265).
+        // `reuse_pairs` is the best-first reuse-order canonicalization (SMC,
+        // freeze_rule = false, ignores it). It holds exactly the reuse pairs
+        // currently allowed; `Reuse(i, j)` is canonical iff `(i, j)` is in it. It
+        // is maintained in `Pattern` (see `reuse`/`expand`): a reuse stales every
+        // lexicographically-earlier pair — so within an expand level reuses run
+        // in non-decreasing pair order, killing the absorption-order duplicates —
+        // while an expand stales every pre-existing pair (both endpoints predate
+        // it, so reusing them now is a reuse<->expand diamond reachable by reusing
+        // first) and keeps only pairs that involve a new child. Together these
+        // make every reachable pattern reachable exactly once.
         let enforce_reusable = self.freeze_rule;
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                if enforce_reusable && !self.pattern.var_state[i].is_reusable() && !self.pattern.var_state[j].is_reusable() {
+                // Skip unless this pair is still allowed by the canonical
+                // reuse order (see `reuse_pairs` above).
+                if enforce_reusable && !self.pattern.reuse_pairs.contains(&(i, j)) {
                     continue;
                 }
                 // Count full substs with `shift_equal(vars[i], vars[j])` per
@@ -855,20 +929,21 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
         // Emit expands in rank order so the `max_arity` cap and heap tie-breaks
-        // act on the f-order. The freeze rule (`!is_expandable()`) and `max_arity`
+        // act on the f-order. The freeze rule (`var_frozen`) and `max_arity`
         // are no-ops for SMC (freeze_rule = false, identity order, max_arity =
         // usize::MAX).
         for &var_idx in &order {
             if rank[var_idx] > max_arity {
                 continue;
             }
-            if self.freeze_rule && !self.pattern.var_state[var_idx].is_expandable() {
+            if self.freeze_rule && self.pattern.var_frozen[var_idx] {
                 continue;
             }
             // Emit from the shapes `shape_pass` already computed (via
             // `expand_shapes`) for every var — no recomputation here.
-            for ((op, arity), support, _) in &shapes[var_idx] {
-                out.push((Action::Expand { var_idx, op: op.clone(), arity: *arity }, *support));
+            for s in &shapes[var_idx] {
+                let (op, arity) = &s.shape;
+                out.push((Action::Expand { var_idx, op: op.clone(), arity: *arity }, s.support));
             }
         }
         SuccessorEnum::All { actions: out, rank }
@@ -906,9 +981,19 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
     // each family ships its own walker.
     let follow_expr: Option<crate::pattern::PatternRecExpr<F, O>> = args.follow.as_deref().map(|s| F::parse_follow_pattern::<O>(s).unwrap_or_else(|e| panic!("failed to parse follow pattern '{}': {:?}", s, e)));
     let usage_counts = compute_usage_counts(&data.egraph, data.root);
+    // Verify the fv(c)=fv(MinTerm(c)) invariant that downstream capture decisions
+    // rely on before the search reads any eclass's `data.fv`.
+    crate::cost::assert_fv_matches_min_term(&data.egraph);
     let crate::shared::SharedData { egraph, root } = data;
     let shift_clamp = crate::shift_equal::shift_clamp(&egraph);
     let eclass_shapes = compute_eclass_shapes::<F, O>(&egraph);
+    // Require decompose_min_rows <= cap: the cap prunes factors over `cap` rows,
+    // so each must first have had a chance to decompose — else a benign
+    // independent product in `(cap, decompose_min_rows)` rows is pruned as a
+    // fake blowup.
+    if let Some(cap) = args.max_match_set {
+        assert!(args.decompose_min_rows <= cap, "--decompose-min-rows ({}) must be <= --max-match-set ({cap}); otherwise the cap prunes un-decomposed factors", args.decompose_min_rows);
+    }
     let shared = SharedSearchData {
         egraph,
         root,
@@ -917,6 +1002,8 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
         check_slow: args.check_slow,
         shift_clamp,
         eclass_shapes,
+        decompose_min_rows: args.decompose_min_rows,
+        var_order: args.var_order,
     };
     let cache = crate::cost::CostCache::new(&shared.egraph, root);
     let initial = SearchState::new(&shared, false);

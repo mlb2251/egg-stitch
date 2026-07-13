@@ -1,0 +1,35 @@
+{
+  "compression_ratio": 1.4444444444444444,
+  "cost_after_rewrites": 26,
+  "cost_at_end_of_each_iter": [
+    18
+  ],
+  "final_cost": 18,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 29,
+  "library": [
+    {
+      "approx_cost": 14,
+      "arity": 0,
+      "lambda": "(f a b c)",
+      "num_matches": 1,
+      "pattern": "fn_0: (f a b c)",
+      "pattern_size": 4,
+      "usage_matches": 4
+    }
+  ],
+  "original_programs": [
+    "(repeat (f a b c) 1 step)",
+    "(repeat (f a b c) 2 step)",
+    "(repeat (f a b c) 3 step)",
+    "(repeat (f a b c) 4 step)"
+  ],
+  "rewritten_programs": [
+    "fn_0",
+    "(repeat fn_0 2 step)",
+    "(repeat fn_0 3 step)",
+    "(repeat fn_0 4 step)"
+  ]
+}

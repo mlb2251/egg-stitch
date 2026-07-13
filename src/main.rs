@@ -20,13 +20,14 @@ struct RunOutput {
 }
 
 fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    args.normalize();
     let start = std::time::Instant::now();
 
-    // Pick the language family AND its leaf-Op at the boundary. LambdaCalc
-    // gets `OpDB<Op>` so `$n` parses as a real De Bruijn variable (the fv
-    // analysis and depth-aware extraction need that). OpChildren has no
-    // binders, so DB vars are meaningless there — keeps plain `Op`.
+    // Pick the language family AND its leaf-Op at the boundary. LambdaCalc and
+    // OpChildrenDb get `OpDB<Op>` so `$n` parses as a real De Bruijn variable
+    // (the fv analysis and the body-ban need that). Plain OpChildren keeps `Op`:
+    // without DB-var leaves there are no free variables to track.
     let RunOutput {
         library,
         original_size,
@@ -39,6 +40,7 @@ fn main() {
         iteration_times,
     } = match args.language {
         LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
+        LanguageChoice::OpChildrenDb => run::<OpChildren, OpDB<Op>>(&args),
         LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
     };
 
@@ -46,7 +48,6 @@ fn main() {
     let compression_ratio = final_cost.map(|fc| original_size as f64 / fc as f64);
 
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-    let debug_log_file = None; // debug log wiring removed; add back if needed
 
     let search_kind = match args.search {
         SearchKind::Smc => "smc",
@@ -67,7 +68,6 @@ fn main() {
         final_cost,
         compression_ratio,
         heap_sizes_at_end,
-        debug_log_file,
         original_programs,
         rewritten_programs,
         library,

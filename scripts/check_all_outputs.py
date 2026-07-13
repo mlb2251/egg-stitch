@@ -8,6 +8,10 @@ without them, β alone can't bridge cases like `(* 0 ?x) ≡ 0`.
 Fixtures whose library has no `lambda` field are skipped internally by
 `check_equiv.py` (lambda-free OpChildren runs).
 
+The epfl-circuits domain is verified by `check_circuit_equiv.py` instead
+(exhaustive boolean truth-table equivalence), which is definitive for its
+<=K-input cones where rule-saturation can't always re-derive the equivalence.
+
 Exit 0 iff every applicable file checks out.
 """
 
@@ -18,6 +22,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 CHECKER = HERE / "check_equiv.py"
+CIRCUIT_CHECKER = HERE / "check_circuit_equiv.py"
 ROOT = REPO / "data" / "expected_outputs"
 
 # Fixtures where the search was run with `-r <rules>` and β alone is not
@@ -48,10 +53,20 @@ RULES_BY_REL = {
     "simple-arithmetic/const_fold_floats.out.json": "data/domains/simple-arithmetic/const_fold_floats.rewrites",
     "simple-arithmetic/const_fold_int_as_float.out.json": "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites",
     "simple-arithmetic/fold_after_rewrite.out.json": "data/domains/simple-arithmetic/fold_after_rewrite.rewrites",
+    "simple-arithmetic/fold_ops_trig.out.json": "data/domains/simple-arithmetic/fold_ops_trig.rewrites",
+    "simple-arithmetic/fold_ops_restrict.out.json": "data/domains/simple-arithmetic/fold_ops_restrict.rewrites",
+    "simple-arithmetic/fold_round6.out.json": "data/domains/simple-arithmetic/fold_round6.rewrites",
+    "simple-arithmetic/fold_round3.out.json": "data/domains/simple-arithmetic/fold_round3.rewrites",
     "test/arith_unify.out.json": "data/test/arith.rewrites",
     "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
     "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",
     "test/if_unify.out.json": "data/test/if.rewrites",
+    # loop rolling: at-start flattens a count-1 loop to its bare body via
+    # `(repeat ?x 1 ?n) => ?x`, so only that DSR bridges orig and rewritten.
+    # Blessed by the `loop_*` cases in `tests/stitch_compat_test.rs`.
+    "test/loop_rolling_with_count1.live.out.json": "data/test/loop_rolling.rewrites",
+    "test/loop_rolling_with_count1.at_start.out.json": "data/test/loop_rolling.rewrites",
+    "test/loop_rolling_no_count1.out.json": "data/test/loop_rolling.rewrites",
     # molecule domain (op-children): re-rooting / commutativity DSRs are what
     # make the rewritten trees equivalent, so β alone can't bridge them. Blessed
     # by the `molecules_*` cases in `tests/stitch_compat_test.rs`.
@@ -62,20 +77,59 @@ RULES_BY_REL = {
     "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
 }
 
+# The plain-`op-children` half of the op-children-db contrast deliberately bakes
+# the symbol `$0` into the body (`(f (g (h ?#0)) $0)`). check_equiv reads `$0` as
+# a De Bruijn variable, so it sees an unsound rewrite — which is exactly the
+# unsoundness `op-children-db` fixes by banning free DB vars from the body. The
+# fixture only exists to pin that contrast, so skip it in the equivalence sweep;
+# the snapshot test keeps it regression-locked. (epfl-circuits fixtures aren't
+# skipped here -- `main` routes them to check_circuit_equiv.py instead.)
+SKIP_REL = {"test/op_children_db_free_var.plain.out.json"}
+
+# The cogsci `*.algebra` fixtures use our algebraic drawing rewrites
+# (drawings.rewrites), which are non-confluent and node-exploding (matmul,
+# overlay/arith commutativity, repeat-unroll) — the same blowup that forces
+# `--iter-limit` on the real search. `check_equiv` saturates without such a cap,
+# so it bails on the node limit (false negatives) and is brutally slow over the
+# 250-program corpus. These fixtures are instead pinned EXACTLY by the
+# `*_algebra` snapshot cases in `tests/cogsci_bfs_test.rs`.
+SKIP_RELS = {
+    "cogsci/dials.algebra.out.json",
+    "cogsci/furniture.algebra.out.json",
+    "cogsci/nuts-bolts.algebra.out.json",
+    "cogsci/wheels.algebra.out.json",
+}
+
+
+def is_circuit(rel):
+    return rel.startswith("epfl-circuits/")
+
 
 def main():
     paths = sorted(ROOT.rglob("*.out.json"))
     if not paths:
         print(f"no *.out.json under {ROOT}", file=sys.stderr)
         sys.exit(1)
-    # Group by rewrites file (None for β-only) so each batch becomes one
-    # check_equiv invocation.
+    overall = 0
+    # epfl-circuits: exhaustive boolean-equivalence check (see check_circuit_equiv.py).
+    circuits = [p for p in paths if is_circuit(str(p.relative_to(ROOT)))]
+    if circuits:
+        print(f"$ check_circuit_equiv.py <{len(circuits)} files>")
+        res = subprocess.run([sys.executable, str(CIRCUIT_CHECKER), *map(str, circuits)], cwd=REPO)
+        if res.returncode != 0:
+            overall = res.returncode
+    # Everything else: β-only or rule-mediated equivalence via check_equiv.
+    # Group by rewrites file (None for β-only) so each batch becomes one call.
     batches = {}
     for p in paths:
         rel = str(p.relative_to(ROOT))
+        if rel in SKIP_RELS:
+            print(f"skip (oracle-intractable, pinned by snapshot test): {rel}")
+            continue
+        if rel in SKIP_REL or is_circuit(rel):
+            continue
         rules = RULES_BY_REL.get(rel)
         batches.setdefault(rules, []).append(p)
-    overall = 0
     for rules, group in batches.items():
         cmd = [sys.executable, str(CHECKER), *[str(p) for p in group]]
         if rules:

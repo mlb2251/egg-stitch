@@ -343,17 +343,33 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
 #[derive(Default)]
 pub struct RewriteScratch {
     pub eclass_to_match_idx: FxHashMap<Id, usize>,
+    /// Captured-arg eclass → match roots that read it. Feeds `extra_parents` so a
+    /// shrunk arg re-dirties the match roots reading it via the (non-syntactic)
+    /// rewrite path. Mirrors `LowerBoundAnalysis::arg_to_match_roots`.
+    pub arg_to_match_roots: FxHashMap<Id, Vec<Id>>,
 }
 
 impl RewriteScratch {
-    /// Refills the index map from `search_state`. Clears first; retains capacity.
-    /// Match-root ids are canonical by construction (see `MatchAtEClass`): they
-    /// originate from `egraph.classes()` and propagate unchanged through
+    /// Refills the index maps from `search_state`. Clears first; retains capacity.
+    /// Match-root and row ids are canonical by construction (see `MatchAtEClass`):
+    /// they originate from `egraph.classes()` and propagate unchanged through
     /// `build_subset_matches`; the egraph isn't unioned during search.
     pub fn fill<F: LanguageFamily, O: StitchOp>(&mut self, search_state: &SearchState<F, O>) {
         self.eclass_to_match_idx.clear();
+        self.arg_to_match_roots.clear();
         for (i, m) in search_state.matches.iter().enumerate() {
             self.eclass_to_match_idx.insert(m.root_eclass, i);
+            for f in &m.factors {
+                for row in &f.rows {
+                    for &v in row {
+                        self.arg_to_match_roots.entry(v).or_default().push(m.root_eclass);
+                    }
+                }
+            }
+        }
+        for roots in self.arg_to_match_roots.values_mut() {
+            roots.sort_unstable();
+            roots.dedup();
         }
     }
 }
@@ -380,6 +396,8 @@ pub enum KeptArgs<'a> {
 pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub search_state: &'a SearchState<F, O>,
     pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
+    /// See `RewriteScratch::arg_to_match_roots`. Drives `extra_parents`.
+    pub arg_to_match_roots: &'a FxHashMap<Id, Vec<Id>>,
     pub ho_arity: &'a [u32],
     pub kept: KeptArgs<'a>,
 }
@@ -412,6 +430,9 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             }
         }
         best
+    }
+    fn extra_parents(&self, id: Id) -> &[Id] {
+        self.arg_to_match_roots.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
     }
 }
 
@@ -549,6 +570,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+        arg_to_match_roots: &scratch.rewrite.arg_to_match_roots,
         ho_arity,
         kept: match &filtered {
             Some(f) => KeptArgs::Filtered(f),
@@ -583,7 +605,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
 
 /// Optimistic analysis producing a lower bound on achievable size. At a match
 /// root, the rewrite collapses to a single stub node plus the captured
-/// arguments at frozen-var slots (those that are holes, `!var_state[k].is_expandable()`) — those holes are
+/// arguments at frozen-var slots (those that are holes, `var_frozen[k]`) — those holes are
 /// committed to staying, so their args appear verbatim at every call site and
 /// must be paid for. Non-frozen vars can still be expanded into the body, so
 /// they contribute nothing here. Min taken across substs.
@@ -601,14 +623,14 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
     fn best(sizes: &StitchAnalysisRunner<F::Apply<O>, Self>, eclass: Id) -> i64 {
         let mut best = sizes.min_enode_size(eclass);
         if let Some(&i) = sizes.analysis.eclass_to_match_idx.get(&eclass) {
-            let var_state = &sizes.analysis.search_state.pattern.var_state;
+            let var_frozen = &sizes.analysis.search_state.pattern.var_frozen;
             let weights = sizes.weights();
             let stub_size = F::stub_application_size(sizes.analysis.search_state.frozen_count(), weights) as i64;
             // Only frozen slots contribute; their arg sizes are additively
             // separable, so the min over the product factors into a sum of
             // per-factor minima (factors with no frozen slot add 0).
             let factors = &sizes.analysis.search_state.matches[i].factors;
-            let rewrite_size = stub_size + factored_min(factors, |k, v| if !var_state[k].is_expandable() { sizes.get(sizes.egraph.find(v)) } else { 0 });
+            let rewrite_size = stub_size + factored_min(factors, |k, v| if var_frozen[k] { sizes.get(sizes.egraph.find(v)) } else { 0 });
             best = best.min(rewrite_size);
         }
         best
@@ -627,13 +649,13 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for LowerBo
 /// guarantees the search tree is finite. Reuses allocations in `scratch`.
 pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> usize {
     scratch.rewrite.fill(search_state);
-    let var_state = &search_state.pattern.var_state;
+    let var_frozen = &search_state.pattern.var_frozen;
     let mut arg_to_match_roots: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
     for m in &search_state.matches {
         let root = egraph.find(m.root_eclass);
         for f in &m.factors {
             for (p, &k) in f.slots.iter().enumerate() {
-                if !var_state[k].is_expandable() {
+                if var_frozen[k] {
                     for row in &f.rows {
                         arg_to_match_roots.entry(egraph.find(row[p])).or_default().push(root);
                     }
@@ -696,13 +718,13 @@ pub struct BudgetPrune {
 pub fn compute_budget_prunable<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> BudgetPrune {
     // --- bottom-up: optimistic per-eclass lower bound (mirrors compute_lower_bound) ---
     scratch.rewrite.fill(search_state);
-    let var_state = &search_state.pattern.var_state;
+    let var_frozen = &search_state.pattern.var_frozen;
     let mut arg_to_match_roots: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
     for m in &search_state.matches {
         let r = egraph.find(m.root_eclass);
         for f in &m.factors {
             for (p, &k) in f.slots.iter().enumerate() {
-                if !var_state[k].is_expandable() {
+                if var_frozen[k] {
                     for row in &f.rows {
                         arg_to_match_roots.entry(egraph.find(row[p])).or_default().push(r);
                     }
@@ -747,7 +769,7 @@ pub fn compute_budget_prunable<F: LanguageFamily, O: StitchOp>(egraph: &StitchEg
         .matches
         .iter()
         .map(|m| {
-            let frowcosts: Vec<Vec<i64>> = m.factors.iter().map(|f| f.rows.iter().map(|row| f.slots.iter().enumerate().filter(|(_, k)| !var_state[**k].is_expandable()).map(|(p, _)| lb(row[p])).sum()).collect()).collect();
+            let frowcosts: Vec<Vec<i64>> = m.factors.iter().map(|f| f.rows.iter().map(|row| f.slots.iter().enumerate().filter(|(_, k)| var_frozen[**k]).map(|(p, _)| lb(row[p])).sum()).collect()).collect();
             let fmin: Vec<i64> = frowcosts.iter().map(|rc| *rc.iter().min().expect("factor rows are non-empty")).collect();
             let m_total: i64 = fmin.iter().sum();
             let locally_dead = stub_size + m_total >= orig(m.root_eclass);
@@ -976,4 +998,22 @@ pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected:
     let fv = recexpr_fv(expr);
     let actual = fv.last().expect("non-empty RecExpr");
     assert_eq!(actual, expected, "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", actual, expected,);
+}
+
+/// Asserts the invariant `fv(c) = fv(MinTerm(c))` for every eclass: the analysis
+/// fv `data.fv` must equal the syntactic fv of the class's size-minimal enode
+/// (computed from its children's class fv). Downstream capture decisions read
+/// `data.fv` and rely on it matching the extracted min term. Panics on the first
+/// offending class.
+pub fn assert_fv_matches_min_term<L: StitchLanguage>(egraph: &StitchEgraph<L>) {
+    let weights = egraph.analysis.weights;
+    for c in egraph.classes() {
+        let rep = c.nodes.iter().min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&ch| egraph[ch].data.size as u64).sum::<u64>()).expect("non-empty eclass");
+        let rep_fv = enode_fv(rep, |ch| &egraph[ch].data.fv);
+        assert_eq!(
+            &rep_fv, &c.data.fv,
+            "eclass {:?} data.fv {:?} differs from its min-term node fv {:?}; the fv(c)=fv(MinTerm(c)) invariant (min-size rep is fv-minimal) is violated",
+            c.id, c.data.fv, rep_fv
+        );
+    }
 }

@@ -2,10 +2,11 @@ pub mod best_first;
 pub mod candidates;
 pub mod constant_folding;
 pub mod cost;
-pub mod debug_log;
 pub mod egraph_util;
 pub mod factor;
 pub mod follow;
+pub mod footprint;
+pub mod hashing;
 pub mod io;
 pub mod lang;
 pub mod logging;
@@ -41,6 +42,64 @@ pub enum SearchKind {
     BestFirst,
 }
 
+/// `--freeze-rule`: whether the canonical variable-ordering (freeze) rule is on.
+///
+/// The rule ranks each var by how little expanding it explodes the match set,
+/// then expanding a var freezes every lower-ranked one (and enforces the
+/// canonical reuse-pair order), so a given abstraction is reached via one
+/// canonical action sequence instead of every permutation. `Default` resolves
+/// per search mode (best-first: on; SMC: off); `On`/`Off` force it.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FreezeRule {
+    /// Best-first: on; SMC: off.
+    #[default]
+    Default,
+    /// Force the freeze rule on.
+    On,
+    /// Force the freeze rule off.
+    Off,
+}
+
+impl FreezeRule {
+    /// Resolves to a concrete on/off, substituting `default_on` for `Default`.
+    /// Callers pass their search mode's default (best-first `true`, SMC `false`).
+    pub fn resolve(self, default_on: bool) -> bool {
+        match self {
+            FreezeRule::Default => default_on,
+            FreezeRule::On => true,
+            FreezeRule::Off => false,
+        }
+    }
+}
+
+/// `--lower-bound`: whether lower-bound pruning of search successors is on.
+///
+/// Each successor gets a `compute_lower_bound` estimate; if it already exceeds
+/// the current best, the full cost call is skipped. `Default` resolves per
+/// search mode (best-first: on; SMC: off); `On`/`Off` force it.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LowerBound {
+    /// Best-first: on; SMC: off.
+    #[default]
+    Default,
+    /// Force lower-bound pruning on.
+    On,
+    /// Force lower-bound pruning off.
+    Off,
+}
+
+impl LowerBound {
+    /// Resolves to a concrete on/off, substituting `default_on` for `Default`.
+    /// Callers pass their search mode's default (best-first `true`, SMC `false`).
+    pub fn resolve(self, default_on: bool) -> bool {
+        match self {
+            LowerBound::Default => default_on,
+            LowerBound::On => true,
+            LowerBound::Off => false,
+        }
+    }
+}
+
 /// `--max-forced-expansion` value: a slack bound `Some(k)`, or `none` to disable
 /// the forced-expansion prune entirely.
 #[derive(Clone, Copy, Debug)]
@@ -62,7 +121,7 @@ impl std::str::FromStr for MaxForcedExpansion {
 #[command(version)]
 pub struct Args {
     /// Search algorithm to use.
-    #[arg(long, value_enum, default_value_t = SearchKind::Smc)]
+    #[arg(long, value_enum)]
     pub search: SearchKind,
 
     /// Path to the input JSON file containing programs.
@@ -115,9 +174,17 @@ pub struct Args {
     #[arg(long)]
     pub time_limit: Option<f64>,
 
-    /// Softmax temperature for resampling weights.
-    #[arg(long, default_value_t = 100.0)]
-    pub temperature: f64,
+    /// Compression-ratio early-stop target. When set, the search stops as soon
+    /// as it finds an abstraction reaching this ratio, so a run does only as much
+    /// work as reaching that quality requires. Only supported with
+    /// `--num-abstractions 1` (there's no single ratio to stop at once
+    /// abstractions stack).
+    #[arg(long)]
+    pub compression_limit: Option<f64>,
+
+    /// Softmax temperature for resampling weights. Required for SMC search.
+    #[arg(long)]
+    pub temperature: Option<f64>,
 
     /// Stop after this many steps with no improvement.
     #[arg(long, default_value_t = 50)]
@@ -132,10 +199,14 @@ pub struct Args {
     pub no_zero_arity: bool,
 
     /// Heap priority for best-first search (only used when --search=best-first).
-    /// Default `forced-then-cost`: explore all patterns without a forced expansion,
-    /// ordered by cost, then move on to patterns with 1 forced expansion, and so on.
-    #[arg(long, value_enum, default_value_t = SearchPriority::ForcedThenCost)]
+    /// Default `cost`: explore patterns in order of cost.
+    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
+
+    /// Metavar ordering used by the freeze rule (which `--freeze-rule` toggles).
+    /// A non-default value requires the rule on.
+    #[arg(long, value_enum, default_value_t = search::VarOrder::MeanNodesPerClass)]
+    pub var_order: search::VarOrder,
 
     /// Multiplicative boost applied to reuse-action sampling weights in SMC.
     /// Each successor is weighted by its `(match, subst)` support count;
@@ -143,6 +214,14 @@ pub struct Args {
     /// while expand-action weights are left unscaled. Default 1.0 (no boost).
     #[arg(long, default_value_t = 1.0)]
     pub boost_reuse_weight: f64,
+
+    /// Whether the canonical variable-ordering (freeze) rule is on. `default`
+    /// defers to the search mode (best-first: on; SMC: off); `on`/`off` force it.
+    /// Enabling it for SMC proposes each abstraction via one canonical action
+    /// sequence instead of every permutation; disabling it for best-first turns
+    /// the canonical variable ordering off entirely.
+    #[arg(long = "freeze-rule", value_enum, default_value_t = FreezeRule::Default)]
+    pub freeze_rule: FreezeRule,
 
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]
@@ -163,6 +242,16 @@ pub struct Args {
     #[arg(long = "opt-seen", default_value_t = false)]
     pub opt_seen: bool,
 
+    /// Disable dedup-by-match (on by default).
+    /// Prunes a successor when another candidate with the same set of matches
+    /// was already seen at an equal-or-more-flexible frozen set and equal-or-smaller
+    /// pattern size.
+    /// Treats patterns that match the same e-classes binding the same argument
+    /// multisets as identical. For example `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)`
+    /// are treated as identical.
+    #[arg(long = "no-opt-dedup-by-match", action = clap::ArgAction::SetFalse)]
+    pub opt_dedup_by_match: bool,
+
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
     /// reuse as a singleton successor (no cost check — sound by construction).
@@ -171,29 +260,32 @@ pub struct Args {
 
     /// Disable the useless-frozen-variable check (on by default).
     /// When a frozen metavar `?#k` is bound to the same e-class in every
-    /// match and that e-class has no above-pattern free vars, the state
-    /// is pruned — the abstraction adds no compression at that slot.
+    /// subst and that e-class has no above-pattern free db vars, the state
+    /// is pruned.
     /// Stitch analog: "argument capture" / `is_useless_abstract`.
     #[arg(long = "no-opt-useless-frozen", action = clap::ArgAction::SetFalse)]
     pub opt_useless_frozen: bool,
 
     /// Disable the useless-non-frozen inlining short-circuit (on by default).
-    /// When a non-frozen metavar `?#k` is bound to the same e-class in every
-    /// match (and that e-class has no above-pattern free vars), this emits a
-    /// single dominant successor that one-step expands `?#k` (and any other
-    /// such non-frozen vars) to the size-minimal enode shape of its e-class —
-    /// inlining a constant arg specialises the body without giving up matches.
-    /// `frozen_count` is preserved since the move runs "before" any normal
-    /// expand in the canonical order.
+    /// Equivalent of `--no-opt-useless-frozen` but for non-frozen metavars
+    /// and instead of pruning, it just inlines it with the min term.
     #[arg(long = "no-opt-useless-inline", action = clap::ArgAction::SetFalse)]
     pub opt_useless_inline: bool,
 
-    /// Disable lower-bound pruning of best-first children (on by default).
-    /// Each child gets a `compute_lower_bound` estimate; if it already
-    /// exceeds the current best, skip the full cost call. Bounds are also
-    /// re-checked on heap pop in case the best improved meanwhile.
-    #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
-    pub opt_lower_bound: bool,
+    /// Allow "useless" pattern variables in the returned abstraction, that is
+    /// variables bound to the same e-class in every subst. Off by default,
+    /// matching stitch. Forces `opt_useless_frozen`, `opt_useless_inline`,
+    /// and `opt_dominance_reuse` off when it is set.
+    #[arg(long, default_value_t = false)]
+    pub allow_useless_vars: bool,
+
+    /// Lower-bound pruning of search successors. `default` defers to the search
+    /// mode (best-first: on; SMC: off); `on`/`off` force it. Each successor gets
+    /// a `compute_lower_bound` estimate; if it already exceeds the current best,
+    /// skip the full cost call. Bounds are also re-checked on heap pop in case
+    /// the best improved meanwhile.
+    #[arg(long = "lower-bound", value_enum, default_value_t = LowerBound::Default)]
+    pub lower_bound: LowerBound,
 
     /// Enable Version-B budget pruning (off by default). At each child a
     /// top-down budget per e-class identifies substitutions that can never be on
@@ -201,7 +293,7 @@ pub struct Args {
     /// place (factoring preserved) before the cost call and stored that way, so
     /// descendants inherit the smaller set. Reuses one optimistic fixpoint for
     /// both the per-subst filter and the whole-node lower-bound prune, so it
-    /// supersedes `--no-opt-lower-bound`'s pruner while enabled.
+    /// supersedes `--lower-bound off`'s pruner while enabled.
     #[arg(long = "opt-budget-prune", default_value_t = false)]
     pub opt_budget_prune: bool,
 
@@ -224,13 +316,20 @@ pub struct Args {
     #[arg(long = "max-forced-expansion", default_value = "none")]
     pub max_forced_expansion: MaxForcedExpansion,
 
+    /// Prune best-first/SMC successors whose largest factor exceeds
+    /// this many rows. Must be >= `--decompose-min-rows`.
+    #[arg(long = "max-match-set")]
+    pub max_match_set: Option<usize>,
+
+    /// Minimum factor rows before `Factor::decompose` attempts a split
+    /// Set higher to avoid unnecessary scans, set lower to reduce memory
+    /// pressure.
+    #[arg(long = "decompose-min-rows", default_value_t = 48)]
+    pub decompose_min_rows: usize,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
-
-    /// Enable detailed debug logging of all particles at each SMC step.
-    #[arg(long, default_value_t = false)]
-    pub debug_log: bool,
 
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
@@ -243,6 +342,11 @@ pub struct Args {
     #[arg(long = "verbose-forced-expansion", default_value_t = false)]
     pub verbose_forced_expansion: bool,
 
+    /// Print each step's match structure: the number of match roots, then the
+    /// roots with the largest factors and their per-factor row counts.
+    #[arg(long = "verbose-match-structure", default_value_t = false)]
+    pub verbose_match_structure: bool,
+
     /// Selects the language family the pipeline runs over. Patterns/programs/rules
     /// are always written in user-facing flat form; the language layer handles any
     /// conversion (e.g. currying for `lambda-calc`) at the boundary.
@@ -254,12 +358,38 @@ pub struct Args {
     pub weights: Weights,
 }
 
+impl Args {
+    /// Resolves flag interactions after parsing.
+    pub fn normalize(&mut self) {
+        if self.allow_useless_vars {
+            self.opt_useless_frozen = false;
+            self.opt_useless_inline = false;
+            self.opt_dominance_reuse = false;
+        }
+        // Enforce that `--var-order` requires the freeze rule (see `VarOrder`).
+        // Resolve `--freeze-rule` as the search drivers do (best-first defaults on).
+        let freeze_rule_on = self.freeze_rule.resolve(matches!(self.search, SearchKind::BestFirst));
+        assert!(freeze_rule_on || self.var_order == search::VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
+        // `--compression-limit` is a single-abstraction stop: with stacked
+        // abstractions there's no one ratio to stop at.
+        assert!(self.compression_limit.is_none() || self.num_abstractions == 1, "--compression-limit requires --num-abstractions 1");
+    }
+}
+
 /// Which language family `multiple_step_search` runs over.
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum LanguageChoice {
     /// Flat n-ary nodes (`(f a b c)` is a single enode). Default.
     #[value(name = "op-children")]
     OpChildren,
+    /// Flat n-ary nodes, but with `OpDB` leaves so `$n` parses as a real De
+    /// Bruijn variable. There are still no binders, so every `$n` is free
+    /// (`var_depth = 0`) and `invalid_literal_expansion` keeps it out of
+    /// abstraction bodies — it can only ever be an argument. Gives the
+    /// free-variable body-ban without `lambda-calc`'s curried partial-application
+    /// fragmentation.
+    #[value(name = "op-children-db")]
+    OpChildrenDb,
     /// Lambda-calculus shape: curried binary `App`, unary `Lam`, multi-child
     /// `Programs` root.
     #[value(name = "lambda-calc")]
