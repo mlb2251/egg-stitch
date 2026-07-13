@@ -1050,7 +1050,12 @@ mod tests {
     /// A single-shape var whose explosion estimate is `expand_enodes / 1`, so
     /// `MeanNodesPerClass`'s per-var f-value is exactly `enodes`.
     fn shape(enodes: usize) -> VarShapes<LambdaCalc, OpDB<Op>> {
-        vec![VarShape { shape: (LambdaCalcDisc::App, 2), support: 0, expand_enodes: enodes, substs: 1 }]
+        vec![VarShape {
+            shape: (LambdaCalcDisc::App, 2),
+            support: 0,
+            expand_enodes: enodes,
+            substs: 1,
+        }]
     }
 
     /// Each [`VarOrder`] ranks a 3-var pattern by its own criterion, and the
@@ -1064,7 +1069,12 @@ mod tests {
         assert_eq!(p.vars.len(), 3);
         assert_eq!(p.syntactic_var_depths(), vec![2, 2, 1]);
         let shapes = vec![shape(2), shape(1), shape(3)]; // f-values 2, 1, 3
-        let state = SearchState { pattern: p, matches: Vec::new(), num_substs: 0, freeze_rule: true };
+        let state = SearchState {
+            pattern: p,
+            matches: Vec::new(),
+            num_substs: 0,
+            freeze_rule: true,
+        };
 
         // order[rank] -> var; rank is its inverse.
         let (rank, order) = state.compute_rank(VarOrder::LeftToRight, &shapes);
