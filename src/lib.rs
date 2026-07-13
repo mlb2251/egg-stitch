@@ -163,14 +163,14 @@ pub struct Args {
     pub seed: Option<u64>,
 
     /// Number of search steps (SMC steps, or best-first heap pops).
-    /// Required for SMC. Optional for best-first: if neither --num-steps nor
-    /// --time-limit is set, best-first runs to completion.
+    /// Required for SMC. For best-first, at least one of --num-steps or
+    /// --time-limit must be provided.
     #[arg(long)]
     pub num_steps: Option<usize>,
 
     /// Wall-clock time limit in seconds for best-first search.
-    /// Optional: if neither --num-steps nor --time-limit is set, best-first
-    /// runs to completion.
+    /// At least one of --num-steps, --time-limit, or --max-forced-expansion must
+    /// be provided for best-first.
     #[arg(long)]
     pub time_limit: Option<f64>,
 
