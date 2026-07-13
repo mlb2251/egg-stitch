@@ -170,7 +170,7 @@ def _run_table(
     """Run each ``(label, runner)`` on every domain (SMC ``SMC_NUM_RUNS`` times,
     others ``NUM_RUNS``; see ``_num_runs_for``) and save JSON."""
     assert all(
-        d in ALL_DOMAINS or d.startswith(("molecules:", "epfl-circuits:", "drawings:"))
+        d in ALL_DOMAINS or d.startswith("molecules:") or d.startswith("epfl-circuits:") or d.startswith("drawings:")
         for d in domains
     ), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")

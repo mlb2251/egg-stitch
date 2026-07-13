@@ -182,8 +182,8 @@ fn check_dsr_mfe(domain: &str) {
     bless_or_check(&expected_path(domain, &tag), &v);
 }
 
-/// Algebra variant: best-first with our `drawings.rewrites` (the
-/// drawings-algebraic default) and the `--max-match-set` cap. Regression guard for that ruleset and
+/// Algebra variant: best-first with our `drawings.rewrites` (the drawings-algebraic
+/// default) and the `--max-match-set` cap. Regression guard for that ruleset and
 /// the match-set prune across the stacked rounds.
 fn check_algebra(domain: &str) {
     let v = run_bfs(domain, Some(ALGEBRA_RULES), None, Some(MMS_CAP), Some(DMR_CAP), Some(ALGEBRA_ITER_LIMIT), ALGEBRA_STEPS, "algebra");

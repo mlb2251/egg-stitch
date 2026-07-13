@@ -58,7 +58,7 @@ def methods_for_table(table: int) -> list[str]:
 
     DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add the
     dsrs-only-at-start "BFS@start" baseline; no-DSR tables (2 & 4) keep Stitch
-    and have no baseline. (Tables 5-7 render via FamilySpec, not this path.)
+    and have no baseline.
     """
     if table in TABLES_WITH_EGRAPH_MIN:
         # babble follows SMC; the BFS/MT and BFS/NR baselines are kept rightmost.
@@ -165,10 +165,6 @@ DOMAIN_PLOT_LABELS = {
     "text": "Text",
     "logo": "Logo",
     "towers": "Towers",
-    "drawings:nuts-bolts": "Nuts & Bolts",
-    "drawings:dials": "Dials",
-    "drawings:wheels": "Wheels",
-    "drawings:furniture": "Furniture",
 }
 
 
@@ -735,14 +731,13 @@ class FamilySpec:
         enum_point: int,
         enum_sweep: tuple[int, ...],
         smc_sweep: tuple[int, ...],
-        extras: tuple[tuple[str, str, str], ...] = (),
+        extras: list[tuple[str, str, str]],
     ) -> "FamilySpec":
         """Build a spec for the standard E-Stitch roster: the enum (BFS) and smc
         (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), followed by
         the family-specific ``extras`` -- each a ``(method_key, col_label,
         plot_label)`` triple (babble and/or the no-rules Enum baseline BFS/NR).
-        The
-        shared three methods -- their order, labels, colors, and the smc
+        The shared three methods -- their order, labels, colors, and the smc
         representative point -- live here so the per-family specs can't drift on
         them; only the bits that genuinely differ are args.
         """
@@ -1137,10 +1132,10 @@ def main() -> None:
         plot_geomean(saved, table, geomean_path)
         print(f"wrote {geomean_path}", file=sys.stderr)
 
-    # Tables 5 & 7 (molecule scramble / EPFL circuit subsets) share a roster shape
-    # distinct from tables 1-4 (family rows, DSR baselines, no Stitch), so they go
-    # through the FamilySpec renderers: a LaTeX table plus per-family and geomean
-    # PNGs.
+    # Tables 5 & 7 (molecule scramble / EPFL circuit subsets) share a roster
+    # shape distinct from tables 1-4 (family rows, DSR baselines, no Stitch), so
+    # they go through the FamilySpec renderers: a LaTeX table plus per-family and
+    # geomean PNGs.
     notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
     family_saved: dict[str, dict] = {}  # table5/table7, for the combined grid
     for spec in (TABLE5_SPEC, TABLE7_SPEC):

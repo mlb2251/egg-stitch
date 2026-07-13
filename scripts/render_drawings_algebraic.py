@@ -42,6 +42,7 @@ SPEC = FamilySpec.estitch_roster(
     enum_point=TABLE_BFS_STEPS,
     enum_sweep=BFS_STEP_SWEEP,
     smc_sweep=SMC_PARTICLE_SWEEP,
+    extras=[],  # no babble/no-rules columns: babble can't parse the algebraic rules
 )
 
 
