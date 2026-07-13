@@ -9,7 +9,9 @@ use std::{fs, path::Path};
 /// Returns the egraph, the root e-class Id of the programs node, the
 /// minimum AST cost of that root *before* any rewrites were applied, and
 /// the original program strings as parsed from the input file.
-pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, weights: Weights) -> (SharedData<F, O>, usize, Vec<String>) {
+/// `iter_limit` and `node_limit` cap the e-saturation iterations and egraph
+/// node count when applying rules.
+pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Option<&str>, only_use_dsrs_at_start: bool, weights: Weights, iter_limit: usize, node_limit: usize) -> (SharedData<F, O>, usize, Vec<String>) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
     println!("Loaded {} programs", exprs.len());
@@ -27,25 +29,44 @@ pub fn load_egraph<F: LanguageFamily, O: StitchOp>(filename: &str, rule_file: Op
     println!("loaded {} rules", rules.len());
 
     let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
-    runner = runner.with_egraph(egraph_before_rules).with_iter_limit(10).run(&rules);
+    runner = runner.with_egraph(egraph_before_rules).with_iter_limit(iter_limit).with_node_limit(node_limit).run(&rules);
     runner.egraph.rebuild();
     println!("Weight of root node after rules:  {}", extract_root_size(&runner.egraph, root));
     println!("Egraph size: {}", runner.egraph.classes().len());
+
+    // With `--only-use-dsrs-at-start`, the rules only serve to find a better
+    // initial representation: extract the normalized min-term and rebuild a
+    // fresh rule-free egraph for the search to run over.
+    if only_use_dsrs_at_start {
+        let programs = extract_programs::<F::Apply<O>>(&runner.egraph, root);
+        let data = egraph_from_programs::<F, O>(&programs, None, weights, iter_limit, node_limit);
+        println!("Egraph size after dropping rules: {}", data.egraph.classes().len());
+        return (data, cost_before_rewrites, exprs);
+    }
     (SharedData::new(runner.egraph, root), cost_before_rewrites, exprs)
+}
+
+/// Extracts the size-minimal program string for each child of the `programs`
+/// root e-class, using `WeightedSize` extraction.
+pub fn extract_programs<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id) -> Vec<String> {
+    let extractor = egg::Extractor::new(egraph, crate::cost::WeightedSize { weights: egraph.analysis.weights });
+    let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
+    programs_node.children().iter().map(|&child| L::display_recexpr(&extractor.find_best(child).1)).collect()
 }
 
 /// Builds a fresh egraph from program strings, applies rewrite rules, and returns it with its root.
 ///
 /// Used between abstractions: the rewritten programs are extracted as strings and fed into a
-/// clean egraph, discarding all prior equivalences.
-pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights) -> SharedData<F, O> {
+/// clean egraph, discarding all prior equivalences. `iter_limit` and `node_limit`
+/// cap the e-saturation iterations and egraph node count when applying rules.
+pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights, iter_limit: usize, node_limit: usize) -> SharedData<F, O> {
     let (egraph, root) = programs_to_egraph::<F::Apply<O>>(programs, weights);
     let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {
         Some(f) => from_file(f).expect("Failed to parse rules file"),
         None => vec![],
     };
     let mut runner: egg::Runner<F::Apply<O>, StitchAnalysis> = egg::Runner::new(StitchAnalysis::new(weights));
-    runner = runner.with_egraph(egraph).with_iter_limit(10).run(&rules);
+    runner = runner.with_egraph(egraph).with_iter_limit(iter_limit).with_node_limit(node_limit).run(&rules);
     runner.egraph.rebuild();
     SharedData::new(runner.egraph, root)
 }
@@ -75,40 +96,6 @@ fn extract_root_size<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::Id)
     cost as usize
 }
 
-/// Prints a programs term with each child on a new line.
-/// If the term is not a programs node, prints it normally.
-#[allow(dead_code)]
-pub fn print_programs<L: StitchLanguage>(term: &egg::RecExpr<L>) {
-    let root_node = &term.as_ref()[term.as_ref().len() - 1];
-    if root_node.is_programs_node() {
-        println!("(programs");
-        for &child_id in root_node.children() {
-            print!("  ");
-            print_expr(term, child_id.into());
-            println!();
-        }
-        println!(")");
-    } else {
-        println!("{}", term);
-    }
-}
-
-/// Recursively prints an s-expression starting from the given node id.
-#[allow(dead_code)]
-fn print_expr<L: StitchLanguage>(term: &egg::RecExpr<L>, id: usize) {
-    let node = &term.as_ref()[id];
-    if node.children().is_empty() {
-        print!("{}", node.discriminant());
-    } else {
-        print!("({}", node.discriminant());
-        for &child_id in node.children() {
-            print!(" ");
-            print_expr(term, child_id.into());
-        }
-        print!(")");
-    }
-}
-
 /// Loads rewrite rules from a file in `name: lhs => rhs` format.
 pub fn from_file<L, A, P>(path: P) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
@@ -120,7 +107,22 @@ where
     parse(&contents)
 }
 
-/// Parses rewrite rules from a string in `name: lhs => rhs` format.
+/// Parses rewrite rules from a string in `name: lhs => rhs` format. A rule may
+/// use `<=>` instead of `=>` to declare a bidirectional equivalence; it expands
+/// to the forward rule plus a `<name>-rev` rule with `lhs`/`rhs` swapped.
+///
+/// A `constant_folding: !<kind>` directive line adds built-in numeric rewrites:
+/// `!numbers` folds `+ - * /` over literal leaves, and `!successors` expands an
+/// integer literal `n` into `(+ 1 (n-1))` (see [`crate::constant_folding`]). The
+/// fold-mode kinds (`!integers`, `!floats`, `!integersarefloats`, `!numbers`)
+/// may carry a `(params (ops …))` block, e.g.
+/// `constant_folding: !integersarefloats (params (ops (+ * / sin cos pi)))`
+/// (with no params they default to `+ - * /`); `!round` rounds every numeric
+/// literal to `(params (places N))` decimals (default 6).
+///
+/// The `fv(c) = fv(MinTerm(c))` invariant that rules must preserve is not
+/// checked here; it is verified directly on the built egraph by
+/// [`crate::cost::assert_fv_matches_min_term`].
 pub fn parse<L, A>(file: &str) -> anyhow::Result<Vec<Rewrite<L, A>>>
 where
     L: StitchLanguage,
@@ -136,12 +138,53 @@ where
         .filter(|line| !line.is_empty())
     {
         let (name, rewrite) = line.split_once(':').ok_or(anyhow!("missing colon"))?;
-        let (lhs, rhs) = rewrite.split_once("=>").ok_or(anyhow!("missing arrow"))?;
+        // A `constant_folding: !<kind>` directive expands to a built-in family of
+        // folding rewrites rather than a single `lhs => rhs` rule.
+        if name.trim() == "constant_folding" {
+            use crate::constant_folding::{FoldMode, FoldingParams, folding_rewrites, round_rewrite, successor_expansion_rewrite};
+            // An optional `(params …)` block may follow the kind, e.g.
+            // `!integersarefloats (params (ops (+ * / sin cos pi)))` or
+            // `!round (params (places 6))`.
+            let directive = rewrite.trim();
+            let (kind, rest) = directive.split_once(char::is_whitespace).unwrap_or((directive, ""));
+            let rest = rest.trim();
+            // Only these kinds take params; the standalone appliers don't.
+            let params_allowed = matches!(kind, "!integers" | "!floats" | "!integersarefloats" | "!numbers" | "!round");
+            if !rest.is_empty() && !params_allowed {
+                return Err(anyhow!("constant_folding: {kind} does not take parameters"));
+            }
+            let params = FoldingParams::parse(rest)?;
+            match kind {
+                "!integers" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers, &params.ops)?),
+                "!floats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats, &params.ops)?),
+                "!integersarefloats" => rewrites.extend(folding_rewrites::<L, A>(FoldMode::IntegersAreFloats, &params.ops)?),
+                // `!numbers` is `!integers` and `!floats` combined (the original behaviour).
+                "!numbers" => {
+                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Integers, &params.ops)?);
+                    rewrites.extend(folding_rewrites::<L, A>(FoldMode::Floats, &params.ops)?);
+                }
+                "!successors" => rewrites.push(successor_expansion_rewrite::<L, A>(1)?),
+                // `!round` snaps numeric literals to `places` decimals (default 6),
+                // killing float noise and unifying near-equal values.
+                "!round" => rewrites.push(round_rewrite::<L, A>(params.places.unwrap_or(6))?),
+                other => return Err(anyhow!("unknown constant_folding kind {other:?} (supported: !integers, !floats, !integersarefloats, !numbers, !successors, !round)")),
+            }
+            continue;
+        }
+        // `=>` is a substring of `<=>`, so check the bidirectional arrow first.
+        let (lhs, rhs, bidirectional) = match rewrite.split_once("<=>") {
+            Some((lhs, rhs)) => (lhs, rhs, true),
+            None => {
+                let (lhs, rhs) = rewrite.split_once("=>").ok_or(anyhow!("missing arrow"))?;
+                (lhs, rhs, false)
+            }
+        };
         let name = name.trim();
-        let lhs = lhs.trim();
-        let rhs = rhs.trim();
-        let lhs: Pattern<L> = L::parse_pattern_ast(lhs)?.into();
-        let rhs: Pattern<L> = L::parse_pattern_ast(rhs)?.into();
+        let lhs: Pattern<L> = L::parse_pattern_ast(lhs.trim())?.into();
+        let rhs: Pattern<L> = L::parse_pattern_ast(rhs.trim())?.into();
+        if bidirectional {
+            rewrites.push(Rewrite::new(format!("{name}-rev"), rhs.clone(), lhs.clone()).map_err(|e| anyhow!("{}", e))?);
+        }
         rewrites.push(Rewrite::new(name, lhs, rhs).map_err(|e| anyhow!("{}", e))?);
     }
     Ok(rewrites)

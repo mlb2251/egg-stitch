@@ -1,8 +1,12 @@
 pub mod best_first;
 pub mod candidates;
+pub mod constant_folding;
 pub mod cost;
-pub mod debug_log;
+pub mod egraph_util;
+pub mod factor;
 pub mod follow;
+pub mod footprint;
+pub mod hashing;
 pub mod io;
 pub mod lang;
 pub mod logging;
@@ -18,9 +22,10 @@ pub mod shift;
 pub mod shift_equal;
 pub mod smc;
 
+use std::time::Instant;
+
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
-use egg::Language;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -37,12 +42,86 @@ pub enum SearchKind {
     BestFirst,
 }
 
+/// `--freeze-rule`: whether the canonical variable-ordering (freeze) rule is on.
+///
+/// The rule ranks each var by how little expanding it explodes the match set,
+/// then expanding a var freezes every lower-ranked one (and enforces the
+/// canonical reuse-pair order), so a given abstraction is reached via one
+/// canonical action sequence instead of every permutation. `Default` resolves
+/// per search mode (best-first: on; SMC: off); `On`/`Off` force it.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FreezeRule {
+    /// Best-first: on; SMC: off.
+    #[default]
+    Default,
+    /// Force the freeze rule on.
+    On,
+    /// Force the freeze rule off.
+    Off,
+}
+
+impl FreezeRule {
+    /// Resolves to a concrete on/off, substituting `default_on` for `Default`.
+    /// Callers pass their search mode's default (best-first `true`, SMC `false`).
+    pub fn resolve(self, default_on: bool) -> bool {
+        match self {
+            FreezeRule::Default => default_on,
+            FreezeRule::On => true,
+            FreezeRule::Off => false,
+        }
+    }
+}
+
+/// `--lower-bound`: whether lower-bound pruning of search successors is on.
+///
+/// Each successor gets a `compute_lower_bound` estimate; if it already exceeds
+/// the current best, the full cost call is skipped. `Default` resolves per
+/// search mode (best-first: on; SMC: off); `On`/`Off` force it.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LowerBound {
+    /// Best-first: on; SMC: off.
+    #[default]
+    Default,
+    /// Force lower-bound pruning on.
+    On,
+    /// Force lower-bound pruning off.
+    Off,
+}
+
+impl LowerBound {
+    /// Resolves to a concrete on/off, substituting `default_on` for `Default`.
+    /// Callers pass their search mode's default (best-first `true`, SMC `false`).
+    pub fn resolve(self, default_on: bool) -> bool {
+        match self {
+            LowerBound::Default => default_on,
+            LowerBound::On => true,
+            LowerBound::Off => false,
+        }
+    }
+}
+
+/// `--max-forced-expansion` value: a slack bound `Some(k)`, or `none` to disable
+/// the forced-expansion prune entirely.
+#[derive(Clone, Copy, Debug)]
+pub struct MaxForcedExpansion(pub Option<usize>);
+
+impl std::str::FromStr for MaxForcedExpansion {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("none") {
+            Ok(Self(None))
+        } else {
+            s.parse::<usize>().map(|n| Self(Some(n))).map_err(|_| format!("expected a non-negative integer or `none`, got {s:?}"))
+        }
+    }
+}
+
 /// E-graph based program synthesis via SMC.
 #[derive(Parser, Debug)]
 #[command(version)]
 pub struct Args {
     /// Search algorithm to use.
-    #[arg(long, value_enum, default_value_t = SearchKind::Smc)]
+    #[arg(long, value_enum)]
     pub search: SearchKind,
 
     /// Path to the input JSON file containing programs.
@@ -52,6 +131,23 @@ pub struct Args {
     /// Path to rewrite rules file.
     #[arg(short, long)]
     pub rules: Option<String>,
+
+    /// Apply DSRs (rewrite rules) only when building the initial egraph, not
+    /// during search. With this set, the initial egraph is normalized by the
+    /// rules, its min-term is extracted, and a fresh rule-free egraph is rebuilt
+    /// from that min-term for the actual search (and between abstractions).
+    #[arg(long, default_value_t = false)]
+    pub only_use_dsrs_at_start: bool,
+
+    /// Maximum number of e-saturation iterations when applying rewrite rules to
+    /// the egraph (initial build and between abstractions).
+    #[arg(long, default_value_t = 100)]
+    pub iter_limit: usize,
+
+    /// Maximum number of e-nodes the egraph may grow to during e-saturation
+    /// before the runner stops (initial build and between abstractions).
+    #[arg(long, default_value_t = 50_000_000)]
+    pub node_limit: usize,
 
     /// Follow pattern to constrain particle expansion.
     #[arg(short, long)]
@@ -78,15 +174,23 @@ pub struct Args {
     #[arg(long)]
     pub time_limit: Option<f64>,
 
-    /// Softmax temperature for resampling weights.
-    #[arg(long, default_value_t = 100.0)]
-    pub temperature: f64,
+    /// Compression-ratio early-stop target. When set, the search stops as soon
+    /// as it finds an abstraction reaching this ratio, so a run does only as much
+    /// work as reaching that quality requires. Only supported with
+    /// `--num-abstractions 1` (there's no single ratio to stop at once
+    /// abstractions stack).
+    #[arg(long)]
+    pub compression_limit: Option<f64>,
+
+    /// Softmax temperature for resampling weights. Required for SMC search.
+    #[arg(long)]
+    pub temperature: Option<f64>,
 
     /// Stop after this many steps with no improvement.
     #[arg(long, default_value_t = 50)]
     pub dead_runs: usize,
 
-    /// Maximum arity of patterns to consider as "best".
+    /// Maximum arity of patterns that can be returned by search.
     #[arg(long, default_value_t = 1000)]
     pub max_arity: usize,
 
@@ -95,8 +199,14 @@ pub struct Args {
     pub no_zero_arity: bool,
 
     /// Heap priority for best-first search (only used when --search=best-first).
+    /// Default `cost`: explore patterns in order of cost.
     #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
     pub priority: SearchPriority,
+
+    /// Metavar ordering used by the freeze rule (which `--freeze-rule` toggles).
+    /// A non-default value requires the rule on.
+    #[arg(long, value_enum, default_value_t = search::VarOrder::MeanNodesPerClass)]
+    pub var_order: search::VarOrder,
 
     /// Multiplicative boost applied to reuse-action sampling weights in SMC.
     /// Each successor is weighted by its `(match, subst)` support count;
@@ -104,6 +214,14 @@ pub struct Args {
     /// while expand-action weights are left unscaled. Default 1.0 (no boost).
     #[arg(long, default_value_t = 1.0)]
     pub boost_reuse_weight: f64,
+
+    /// Whether the canonical variable-ordering (freeze) rule is on. `default`
+    /// defers to the search mode (best-first: on; SMC: off); `on`/`off` force it.
+    /// Enabling it for SMC proposes each abstraction via one canonical action
+    /// sequence instead of every permutation; disabling it for best-first turns
+    /// the canonical variable ordering off entirely.
+    #[arg(long = "freeze-rule", value_enum, default_value_t = FreezeRule::Default)]
+    pub freeze_rule: FreezeRule,
 
     /// Enable slow rewrite check (assert fast == slow computation).
     #[arg(long, default_value_t = false)]
@@ -124,6 +242,16 @@ pub struct Args {
     #[arg(long = "opt-seen", default_value_t = false)]
     pub opt_seen: bool,
 
+    /// Disable dedup-by-match (on by default).
+    /// Prunes a successor when another candidate with the same set of matches
+    /// was already seen at an equal-or-more-flexible frozen set and equal-or-smaller
+    /// pattern size.
+    /// Treats patterns that match the same e-classes binding the same argument
+    /// multisets as identical. For example `(+ ?#0 (* ?#1 2))` and `(+ (* ?#0 2) ?#1)`
+    /// are treated as identical.
+    #[arg(long = "no-opt-dedup-by-match", action = clap::ArgAction::SetFalse)]
+    pub opt_dedup_by_match: bool,
+
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
     /// reuse as a singleton successor (no cost check — sound by construction).
@@ -132,41 +260,82 @@ pub struct Args {
 
     /// Disable the useless-frozen-variable check (on by default).
     /// When a frozen metavar `?#k` is bound to the same e-class in every
-    /// match and that e-class has no above-pattern free vars, the state
-    /// is pruned — the abstraction adds no compression at that slot.
+    /// subst and that e-class has no above-pattern free db vars, the state
+    /// is pruned.
     /// Stitch analog: "argument capture" / `is_useless_abstract`.
     #[arg(long = "no-opt-useless-frozen", action = clap::ArgAction::SetFalse)]
     pub opt_useless_frozen: bool,
 
     /// Disable the useless-non-frozen inlining short-circuit (on by default).
-    /// When a non-frozen metavar `?#k` is bound to the same e-class in every
-    /// match (and that e-class has no above-pattern free vars), this emits a
-    /// single dominant successor that one-step expands `?#k` (and any other
-    /// such non-frozen vars) to the size-minimal enode shape of its e-class —
-    /// inlining a constant arg specialises the body without giving up matches.
-    /// `frozen_count` is preserved since the move runs "before" any normal
-    /// expand in the canonical order.
+    /// Equivalent of `--no-opt-useless-frozen` but for non-frozen metavars
+    /// and instead of pruning, it just inlines it with the min term.
     #[arg(long = "no-opt-useless-inline", action = clap::ArgAction::SetFalse)]
     pub opt_useless_inline: bool,
 
-    /// Disable lower-bound pruning of best-first children (on by default).
-    /// Each child gets a `compute_lower_bound` estimate; if it already
-    /// exceeds the current best, skip the full cost call. Bounds are also
-    /// re-checked on heap pop in case the best improved meanwhile.
-    #[arg(long = "no-opt-lower-bound", action = clap::ArgAction::SetFalse)]
-    pub opt_lower_bound: bool,
+    /// Allow "useless" pattern variables in the returned abstraction, that is
+    /// variables bound to the same e-class in every subst. Off by default,
+    /// matching stitch. Forces `opt_useless_frozen`, `opt_useless_inline`,
+    /// and `opt_dominance_reuse` off when it is set.
+    #[arg(long, default_value_t = false)]
+    pub allow_useless_vars: bool,
+
+    /// Lower-bound pruning of search successors. `default` defers to the search
+    /// mode (best-first: on; SMC: off); `on`/`off` force it. Each successor gets
+    /// a `compute_lower_bound` estimate; if it already exceeds the current best,
+    /// skip the full cost call. Bounds are also re-checked on heap pop in case
+    /// the best improved meanwhile.
+    #[arg(long = "lower-bound", value_enum, default_value_t = LowerBound::Default)]
+    pub lower_bound: LowerBound,
+
+    /// Prune patterns which force "expansions" (e.g., 4 -> (+ 4 0)) at *every*
+    /// match site.
+    ///
+    /// Specifically for a match location r of p, let
+    ///     - Cost(r) = min_{t in r} Cost(t)
+    ///     - Cost(r | p) = min_{t in r, t matches p} Cost(t)
+    ///     - ForcedExpansion(r, p) = Cost(r | p) - Cost(r)
+    ///     - ForcedExpansion(p) = min_{r | p matches at r} ForcedExpansion(r, p)
+    /// Each t that matches p matches at some (r, σ), and at this point,
+    ///     Cost(t) = CostWithoutVars(p) + sum_{s in σ} Cost(s)
+    /// As such, we can compute
+    ///     Cost(r | p) = CostWithoutVars(p) + min_{σ | r matches at p with σ} sum_{s in σ} Cost(s)
+    ///
+    /// We keep only patterns with ForcedExpansion(p) ≤ `max_forced_expansion`
+    ///
+    /// Default `none`: the prune is off. Set to a non-negative integer to enable it.
+    #[arg(long = "max-forced-expansion", default_value = "none")]
+    pub max_forced_expansion: MaxForcedExpansion,
+
+    /// Prune best-first/SMC successors whose largest factor exceeds
+    /// this many rows. Must be >= `--decompose-min-rows`.
+    #[arg(long = "max-match-set")]
+    pub max_match_set: Option<usize>,
+
+    /// Minimum factor rows before `Factor::decompose` attempts a split
+    /// Set higher to avoid unnecessary scans, set lower to reduce memory
+    /// pressure.
+    #[arg(long = "decompose-min-rows", default_value_t = 48)]
+    pub decompose_min_rows: usize,
 
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
 
-    /// Enable detailed debug logging of all particles at each SMC step.
-    #[arg(long, default_value_t = false)]
-    pub debug_log: bool,
-
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+
+    /// Print each best-first expansion's forced expansion (its argmin value and
+    /// the min-term of the closest-to-minimal match root). Independent of
+    /// `--verbose`; the min-term extraction makes it non-trivial, so it's its own
+    /// flag.
+    #[arg(long = "verbose-forced-expansion", default_value_t = false)]
+    pub verbose_forced_expansion: bool,
+
+    /// Print each step's match structure: the number of match roots, then the
+    /// roots with the largest factors and their per-factor row counts.
+    #[arg(long = "verbose-match-structure", default_value_t = false)]
+    pub verbose_match_structure: bool,
 
     /// Selects the language family the pipeline runs over. Patterns/programs/rules
     /// are always written in user-facing flat form; the language layer handles any
@@ -179,32 +348,70 @@ pub struct Args {
     pub weights: Weights,
 }
 
+impl Args {
+    /// Resolves flag interactions after parsing.
+    pub fn normalize(&mut self) {
+        if self.allow_useless_vars {
+            self.opt_useless_frozen = false;
+            self.opt_useless_inline = false;
+            self.opt_dominance_reuse = false;
+        }
+        // Enforce that `--var-order` requires the freeze rule (see `VarOrder`).
+        // Resolve `--freeze-rule` as the search drivers do (best-first defaults on).
+        let freeze_rule_on = self.freeze_rule.resolve(matches!(self.search, SearchKind::BestFirst));
+        assert!(freeze_rule_on || self.var_order == search::VarOrder::MeanNodesPerClass, "--var-order requires the freeze rule to be on");
+        // `--compression-limit` is a single-abstraction stop: with stacked
+        // abstractions there's no one ratio to stop at.
+        assert!(self.compression_limit.is_none() || self.num_abstractions == 1, "--compression-limit requires --num-abstractions 1");
+    }
+}
+
 /// Which language family `multiple_step_search` runs over.
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum LanguageChoice {
     /// Flat n-ary nodes (`(f a b c)` is a single enode). Default.
     #[value(name = "op-children")]
     OpChildren,
+    /// Flat n-ary nodes, but with `OpDB` leaves so `$n` parses as a real De
+    /// Bruijn variable. There are still no binders, so every `$n` is free
+    /// (`var_depth = 0`) and `invalid_literal_expansion` keeps it out of
+    /// abstraction bodies — it can only ever be an argument. Gives the
+    /// free-variable body-ban without `lambda-calc`'s curried partial-application
+    /// fragmentation.
+    #[value(name = "op-children-db")]
+    OpChildrenDb,
     /// Lambda-calculus shape: curried binary `App`, unary `Lam`, multi-child
     /// `Programs` root.
     #[value(name = "lambda-calc")]
     LambdaCalc,
 }
 
+/// Tuple returned by [`multiple_step_search`]: `(library, corpus size after DSRs,
+/// final combined cost, final rewritten corpus, best-first heap size at stop for
+/// each abstraction iteration)`.
+type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<Vec<usize>>, Option<Vec<String>>, Option<Vec<usize>>, Vec<Instant>);
+
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
 /// the corpus size after DSRs (before any abstractions), the final combined cost,
-/// and the final rewritten corpus (`Some` once any abstraction has been applied,
-/// `None` if no abstraction was found).
+/// the final rewritten corpus (`Some` once any abstraction has been applied,
+/// `None` if no abstraction was found), and the best-first heap size at stop for
+/// each iteration (`None` for SMC).
 ///
 /// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
 /// their match roots, then the rewritten programs are extracted as strings and used to
 /// build a fresh egraph for the next round (DSR rules are re-applied there).
-pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>, Option<Vec<String>>) {
+pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> MultiStepSearchResult {
     let mut data = data;
     let mut library = Vec::new();
     let mut original_size = 0;
-    let mut final_cost = None;
+    let mut cost_at_end_of_each_iter: Option<Vec<usize>> = None; // best cost at each iteration, for summary output
     let mut final_rewritten: Option<Vec<String>> = None;
+    let mut heap_sizes_at_end: Option<Vec<usize>> = None; // best-first frontier size at stop, one per search iteration
+    let mut search_ends: Vec<Instant> = Vec::new();
+    // (fn name, cumulative corpus+library cost, usage matches in the minimal
+    // corpus, body) after each abstraction, for the end-of-run summary of cost,
+    // cumulative compression, match count, and the abstraction body.
+    let mut summary: Vec<(String, usize, usize, String)> = Vec::new();
 
     let seed = args.seed.unwrap_or_else(|| rand::rng().random());
     println!("{} {}", "rng seed:".dimmed(), seed.to_string().bold());
@@ -217,19 +424,22 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
     let fn_name_base = first_free_fn_index::<F::Apply<O>>(&data.egraph);
 
     for abstraction_idx in 0..args.num_abstractions {
-        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history) = match args.search {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_data, best_history, iter_heap_size) = match args.search {
             SearchKind::Smc => {
                 let r = smc::smc::<F, O>(data, args, &mut rng);
-                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None)
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.data, None, None)
             }
             SearchKind::BestFirst => {
                 let r = best_first::best_first(data, args);
-                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history))
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.data, Some(r.best_history), Some(r.heap_size_at_end))
             }
         };
 
         if abstraction_idx == 0 {
             original_size = iter_original_size;
+        }
+        if let Some(h) = iter_heap_size {
+            heap_sizes_at_end.get_or_insert_with(Vec::new).push(h);
         }
 
         match best {
@@ -245,24 +455,30 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_data.egraph.analysis.weights);
                 let body_str = state.pattern.display_with_ho(variable_indices);
                 let lambda = state.pattern.display_as_lambda(variable_indices);
-                let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
-                // With the `None` sentinel every match keeps every subst, so every
-                // match contributes its usage count; otherwise count only matches
-                // whose kept list is non-empty.
-                let usage_matches: usize = match &candidate.kept_substs {
-                    None => state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
-                    Some(k) => state.matches.iter().zip(k).filter(|(_, ks)| !ks.is_empty()).map(|(m, _)| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
-                };
+                let usage_counts = egraph_util::compute_usage_counts(&result_data.egraph, result_data.root);
+                // A match contributes its usage count iff it keeps at least one
+                // candidate-compatible subst (lambda-free domains keep them all).
+                let var_depth = &state.pattern.var_depth;
+                let usage_matches: usize = state
+                    .matches
+                    .iter()
+                    .filter(|m| cost::filter_factors_by_candidate(&result_data.egraph, m, variable_indices, var_depth).is_some())
+                    .map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1))
+                    .sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, args.rules.as_deref());
+                // With `--only-use-dsrs-at-start` the rules are not re-applied to
+                // the fresh egraph between abstractions.
+                let rule_file = if args.only_use_dsrs_at_start { None } else { args.rules.as_deref() };
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file, args.iter_limit, args.node_limit);
 
                 // `best_cost` is the search's score for this iteration: rewritten
                 // corpus + this abstraction's body. Earlier iterations rewrote the
                 // corpus into `fn_K(...)` call sites only — their bodies live in
                 // the library and must be added separately.
                 let prev_bodies: usize = library.iter().map(|a: &results::AbstractionResult| a.pattern_size).sum();
-                final_cost = Some(best_cost + prev_bodies);
+                cost_at_end_of_each_iter.get_or_insert_with(Vec::new).push(best_cost + prev_bodies);
+                summary.push((fn_name.clone(), best_cost + prev_bodies, usage_matches, body_str.clone()));
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
@@ -277,6 +493,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                     best_iteration: best_found_at,
                     best_history,
                 });
+                search_ends.push(Instant::now());
 
                 if abstraction_idx + 1 < args.num_abstractions {
                     data = next_data;
@@ -287,7 +504,29 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
         }
     }
 
-    (library, original_size, final_cost, final_rewritten)
+    if !summary.is_empty() {
+        // Right-align every number to its column's widest entry so the costs,
+        // ratios, and match counts line up across abstractions. Pad the plain
+        // strings *before* coloring — ANSI escapes would otherwise throw off the
+        // width counts that `format!` uses.
+        let name_w = summary.iter().map(|(n, ..)| n.len() + 1).max().unwrap_or(0);
+        let cost_w = summary.iter().map(|(_, c, ..)| c.to_string().len()).max().unwrap_or(0).max(original_size.to_string().len());
+        let ratio_w = summary.iter().map(|(_, c, ..)| format!("{:.2}x", original_size as f64 / *c as f64).len()).max().unwrap_or(0);
+        let match_w = summary.iter().map(|(.., m, _)| m.to_string().len()).max().unwrap_or(0);
+        println!("\n{}", "═══ LIBRARY SUMMARY ═══".green().bold());
+        println!("{} {}", "initial cost:".dimmed(), format!("{:>cost_w$}", original_size).bold());
+        for (name, cost, matches, body) in &summary {
+            let ratio = original_size as f64 / *cost as f64;
+            let name_s = format!("{:<name_w$}", format!("{name}:"));
+            let cost_s = format!("{cost:>cost_w$}");
+            let ratio_s = format!("{:>ratio_w$}", format!("{ratio:.2}x"));
+            let match_s = format!("{matches:>match_w$}");
+            println!("  {} cost {}  cumulative {}  matches {}", name_s.cyan().bold(), cost_s.dimmed(), ratio_s.green().bold(), match_s.bold(),);
+            println!("    {}", body.dimmed());
+        }
+    }
+
+    (library, original_size, cost_at_end_of_each_iter, final_rewritten, heap_sizes_at_end, search_ends)
 }
 
 /// Smallest `k` such that no discriminant in `egraph` renders as `fn_k`,
@@ -319,13 +558,11 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// rules re-applied).
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
-pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
+pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, iter_limit: usize, node_limit: usize) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { egraph, root } = data;
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
-    let extractor = egg::Extractor::new(&egraph, cost::WeightedSize { weights: egraph.analysis.weights });
-    let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
-    let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
+    let programs = io::extract_programs::<F::Apply<O>>(&egraph, root);
     let weights = egraph.analysis.weights;
-    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights);
+    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit);
     (fresh, programs)
 }

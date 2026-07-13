@@ -1,6 +1,6 @@
 use clap::Parser;
 use egg_stitch::{
-    Args, io,
+    Args, best_first, io,
     lang::{LambdaCalc, LanguageFamily, Op, OpChildren, OpDB, Weights},
     pattern::PatternRecExpr,
     smc,
@@ -16,15 +16,25 @@ fn fixtures_present() -> bool {
 }
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
-    let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), Weights::default());
+    let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
     smc::smc(data, args, &mut rng)
 }
 
 fn run_lambda_calc(args: &Args) -> smc::SmcResult<LambdaCalc, OpDB<Op>> {
-    let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), Weights::default());
+    let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
     let mut rng = StdRng::seed_from_u64(args.seed.unwrap_or(0));
     smc::smc(data, args, &mut rng)
+}
+
+fn run_best_first(args: &Args) -> best_first::BestFirstResult<OpChildren, Op> {
+    let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
+    best_first::best_first(data, args)
+}
+
+fn run_best_first_lambda_calc(args: &Args) -> best_first::BestFirstResult<LambdaCalc, OpDB<Op>> {
+    let (data, _, _) = io::load_egraph::<LambdaCalc, OpDB<Op>>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
+    best_first::best_first(data, args)
 }
 
 fn assert_best_matches_follow(result: &smc::SmcResult<OpChildren, Op>, follow_str: &str) {
@@ -50,7 +60,25 @@ fn follow_dials_full_baseline() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "1000", "--num-particles", "1000", "--temperature", "1000", "--follow", DIALS_FULL_FOLLOW, "--max-arity", "2"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        INPUT,
+        "--rules",
+        RULES,
+        "--num-steps",
+        "1000",
+        "--num-particles",
+        "1000",
+        "--temperature",
+        "100",
+        "--follow",
+        DIALS_FULL_FOLLOW,
+        "--max-arity",
+        "2",
+    ]);
     let result = run(&args);
     assert_best_matches_follow(&result, DIALS_FULL_FOLLOW);
 }
@@ -62,7 +90,7 @@ fn follow_shallow_no_placeholders() {
         return;
     }
     let follow = "(T l (M 1 0 -0.5 0))";
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "30", "--num-particles", "200", "--follow", follow, "--max-arity", "2"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "30", "--num-particles", "200", "--follow", follow, "--max-arity", "2", "--temperature", "100"]);
     let result = run(&args);
     assert_best_matches_follow(&result, follow);
 }
@@ -74,7 +102,25 @@ fn follow_single_placeholder() {
         return;
     }
     let follow = "(T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0))";
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "1000", "--num-particles", "1000", "--temperature", "1000", "--follow", follow, "--max-arity", "2"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        INPUT,
+        "--rules",
+        RULES,
+        "--num-steps",
+        "1000",
+        "--num-particles",
+        "1000",
+        "--temperature",
+        "100",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+    ]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -85,7 +131,7 @@ fn no_follow_still_produces_best() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -96,7 +142,7 @@ fn check_slow_matches_fast() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -107,7 +153,7 @@ fn check_slow_no_rules() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -122,7 +168,7 @@ fn check_slow_furniture() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -134,7 +180,7 @@ fn check_slow_nuts_bolts() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -146,7 +192,7 @@ fn check_slow_wheels() {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -157,7 +203,7 @@ fn check_slow_high_arity() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -168,7 +214,26 @@ fn check_slow_high_arity_multi_abstr() {
     if !fixtures_present() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--num-abstractions", "2"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        INPUT,
+        "--rules",
+        RULES,
+        "--num-steps",
+        "20",
+        "--num-particles",
+        "100",
+        "--max-arity",
+        "4",
+        "--check-slow",
+        "--num-abstractions",
+        "2",
+        "--temperature",
+        "100",
+    ]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
@@ -181,7 +246,24 @@ fn check_slow_lambda_calc_fast_slow_mismatch() {
     if !std::path::Path::new(input).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "1000", "--check-slow", "--language", "lambda-calc", "--seed", "145514431571737541"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        input,
+        "--num-steps",
+        "50",
+        "--num-particles",
+        "20",
+        "--temperature",
+        "100",
+        "--check-slow",
+        "--language",
+        "lambda-calc",
+        "--seed",
+        "145514431571737541",
+    ]);
     let _ = run_lambda_calc(&args);
 }
 
@@ -194,8 +276,62 @@ fn check_slow_intermediate_propagation() {
     if !std::path::Path::new(input).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "50", "--num-particles", "20", "--temperature", "1000", "--check-slow", "--language", "lambda-calc", "--seed", "888315200261588942"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        input,
+        "--num-steps",
+        "50",
+        "--num-particles",
+        "20",
+        "--temperature",
+        "100",
+        "--check-slow",
+        "--language",
+        "lambda-calc",
+        "--seed",
+        "888315200261588942",
+    ]);
     let _ = run_lambda_calc(&args);
+}
+
+/// Regression: op-children fast path over-counted when a nested match's rewrite
+/// shrank a captured arg but never re-dirtied the outer match root (missing
+/// `RewriteAnalysis::extra_parents`). Fixture reduced from `epfl-circuits/log2`;
+/// best-first only (SMC doesn't reliably hit the over-counting candidate). Kept
+/// in `data/test/` (not `data/domains/`) so the follow-reaches sweep doesn't feed
+/// this adversarial term to reference stitch, whose own utility assert trips on it.
+#[test]
+fn check_slow_op_children_overcount() {
+    let input = "data/test/op-children-fast-slow-overcount.json";
+    let rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites";
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
+        return;
+    }
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "best-first",
+        "--input",
+        input,
+        "--rules",
+        rules,
+        "--language",
+        "op-children",
+        "--max-arity",
+        "4",
+        "--num-abstractions",
+        "1",
+        "--iter-limit",
+        "30",
+        "--num-steps",
+        "100",
+        "--check-slow",
+    ]);
+    let result = run_best_first(&args);
+    assert!(result.best.is_some());
 }
 
 /// Exercises the lambda-calc fast/slow check against real physics corpora.
@@ -205,7 +341,7 @@ fn check_slow_physics(name: &str) {
     if !std::path::Path::new(&input).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "1000", "--language", "lambda-calc", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "100", "--language", "lambda-calc", "--check-slow"]);
     let _ = run_lambda_calc(&args);
 }
 
@@ -250,6 +386,141 @@ fn check_slow_physics_18_09_34_bench004() {
     check_slow_physics("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench004_it4.json");
 }
 
+/// Exercises the lambda-calc fast/slow check against real dreamcoder `list`
+/// corpora — the sibling dreamcoder domain to `physics`. One test per file so
+/// they parallelize and failures point at a specific input. A representative
+/// slice (the first two benchmarks of each timestamp batch) stands in for the
+/// full 59-file corpus, which is too slow to sweep under `--check-slow`.
+fn check_slow_list(name: &str) {
+    let input = format!("data/domains/list/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "100", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_list_11_26_41_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_26_41_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.26.41__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_31_39_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_31_39_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.31.39__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_35_48_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.35.48__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_35_48_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.35.48__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_39_19_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.39.19__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_39_19_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.39.19__bench001_it1.json");
+}
+#[test]
+fn check_slow_list_11_43_28_bench000() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.43.28__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_11_43_28_bench001() {
+    check_slow_list("list_hard_test_ellisk_2019-02-15T11.43.28__bench001_it1.json");
+}
+
+// --- Best-first `--check-slow` per benchmark domain ---
+//
+// The `check_slow_*` tests above (and the EPFL circuit suite) drive the
+// fast/slow cost cross-check under SMC's *stochastic* candidate stream. These
+// mirror them under best-first, whose *systematic* enumeration exercises the
+// same `compute_cost_and_select` check over a different, more exhaustive set of
+// candidate patterns. Together with the molecule best-first tests in
+// `stitch_compat_test.rs` and `check_slow_op_children_overcount` (circuit data),
+// every benchmark domain now has a best-first `--check-slow` run. These are
+// smoke runs: `--check-slow` panics on a fast/slow mismatch, so a clean run is
+// the assertion — no fixture. A small `--num-steps` budget keeps them cheap
+// while still scoring many distinct patterns.
+
+/// Best-first `--check-slow` over an op-children cogsci corpus + its DSRs.
+fn check_slow_bf_cogsci(input: &str, rules: &str) {
+    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "100", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
+    let result = run_best_first(&args);
+    assert!(result.best.is_some());
+}
+
+#[test]
+fn check_slow_bf_dials() {
+    check_slow_bf_cogsci(INPUT, RULES);
+}
+#[test]
+fn check_slow_bf_furniture() {
+    check_slow_bf_cogsci("data/domains/cogsci/furniture.json", &format!("{}/drawings.furniture.rewrites", REWRITES_DIR));
+}
+#[test]
+fn check_slow_bf_nuts_bolts() {
+    check_slow_bf_cogsci("data/domains/cogsci/nuts-bolts.json", &format!("{}/drawings.nuts-bolts.rewrites", REWRITES_DIR));
+}
+#[test]
+fn check_slow_bf_wheels() {
+    check_slow_bf_cogsci("data/domains/cogsci/wheels.json", &format!("{}/drawings.wheels.rewrites", REWRITES_DIR));
+}
+
+/// Best-first `--check-slow` over a lambda-calc physics corpus. Named
+/// `check_slow_physics_*` so CI routes it into the dedicated physics job.
+fn check_slow_physics_bf(name: &str) {
+    let input = format!("data/domains/physics/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", &input, "--num-steps", "100", "--num-abstractions", "1", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_best_first_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_physics_bf_bench000() {
+    check_slow_physics_bf("scientific_unsolved_4h_ellisk_2019-07-20T18.05.46__bench000_it0.json");
+}
+#[test]
+fn check_slow_physics_bf_bench001() {
+    check_slow_physics_bf("scientific_unsolved_4h_ellisk_2019-07-20T18.09.34__bench000_it0.json");
+}
+
+/// Best-first `--check-slow` over a lambda-calc `list` corpus. Named
+/// `check_slow_list_*` so CI routes it into the dedicated list job.
+fn check_slow_list_bf(name: &str) {
+    let input = format!("data/domains/list/{}", name);
+    if !std::path::Path::new(&input).exists() {
+        return;
+    }
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", &input, "--num-steps", "100", "--num-abstractions", "1", "--language", "lambda-calc", "--check-slow"]);
+    let _ = run_best_first_lambda_calc(&args);
+}
+
+#[test]
+fn check_slow_list_bf_bench000() {
+    check_slow_list_bf("list_hard_test_ellisk_2019-02-15T11.26.41__bench000_it0.json");
+}
+#[test]
+fn check_slow_list_bf_bench001() {
+    check_slow_list_bf("list_hard_test_ellisk_2019-02-15T11.31.39__bench000_it0.json");
+}
+
 // --- End-to-end --follow tests in the lambda-calc domain ---
 //
 // These exercise the LambdaCalc `parse_follow_pattern` override end-to-end:
@@ -271,6 +542,8 @@ fn follow_exact_match_exits_early_smc() {
     let budget = 2000;
     let args = Args::parse_from([
         "egg-stitch",
+        "--search",
+        "smc",
         "--input",
         input,
         "--num-steps",
@@ -278,7 +551,7 @@ fn follow_exact_match_exits_early_smc() {
         "--num-particles",
         "500",
         "--temperature",
-        "1000",
+        "100",
         "--follow",
         follow,
         "--max-arity",
@@ -299,7 +572,25 @@ fn follow_lambda_calc_flat_nary_app() {
         return;
     }
     let follow = "(lam (app (?#0 $0) (app (?#0 $0) empty)))";
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "200", "--num-particles", "500", "--temperature", "1000", "--follow", follow, "--max-arity", "2", "--language", "lambda-calc"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        input,
+        "--num-steps",
+        "200",
+        "--num-particles",
+        "500",
+        "--temperature",
+        "100",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+        "--language",
+        "lambda-calc",
+    ]);
     let result = run_lambda_calc(&args);
     assert_best_matches_follow_lambda(&result, follow);
 }
@@ -316,7 +607,25 @@ fn follow_lambda_calc_var_headed_smoke() {
         return;
     }
     let follow = "(?#0 (lam (?#0 ?#0)))";
-    let args = Args::parse_from(["egg-stitch", "--input", input, "--num-steps", "100", "--num-particles", "200", "--temperature", "1000", "--follow", follow, "--max-arity", "2", "--language", "lambda-calc"]);
+    let args = Args::parse_from([
+        "egg-stitch",
+        "--search",
+        "smc",
+        "--input",
+        input,
+        "--num-steps",
+        "100",
+        "--num-particles",
+        "200",
+        "--temperature",
+        "100",
+        "--follow",
+        follow,
+        "--max-arity",
+        "2",
+        "--language",
+        "lambda-calc",
+    ]);
     let result = run_lambda_calc(&args);
     if result.best.is_some() {
         assert_best_matches_follow_lambda(&result, follow);

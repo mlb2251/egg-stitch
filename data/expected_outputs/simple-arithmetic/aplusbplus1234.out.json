@@ -1,7 +1,13 @@
 {
   "compression_ratio": 1.8928571428571428,
   "cost_after_rewrites": 53,
+  "cost_at_end_of_each_iter": [
+    28
+  ],
   "final_cost": 28,
+  "heap_sizes_at_end": [
+    0
+  ],
   "initial_cost": 57,
   "library": [
     {
@@ -22,10 +28,10 @@
   ],
   "rewritten_programs": [
     "(fn_0 a b)",
-    "(fn_0 x y)",
-    "(fn_0 u v)",
-    "(fn_0 u v)",
+    "(fn_0 y x)",
+    "(fn_0 v u)",
+    "(fn_0 v u)",
     "(fn_0 p q)",
-    "(fn_0 a 0)"
+    "(fn_0 0 a)"
   ]
 }

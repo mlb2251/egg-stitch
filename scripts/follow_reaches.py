@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Verify that both search backends can reach the abstraction stitch finds.
+"""Verify that both egg-stitch search backends can reach the abstraction the
+reference `stitch` compressor finds.
 
 For a given input (and optional DSR file):
-  1. Run egg-stitch with `--search best-first` to discover an abstraction.
-  2. Strip the `fn_N: ` prefix from `library[0].pattern` to get the body.
-  3. Re-run egg-stitch with `--follow <body>` under both `smc` and
+  1. Run `stitch` (self-cloned/built under `../stitch`) to discover an
+     abstraction, rewriting its `#k` metavars to egg-stitch's `?#k` syntax.
+  2. Re-run egg-stitch with `--follow <body>` under both `smc` and
      `best-first`, asserting each run's `library[0].pattern` body matches.
 
-If step 1 produces no library entry (e.g. the corpus has no compressible
+If stitch produces no abstraction (e.g. the corpus has no compressible
 abstraction), the input is skipped with a pass — there is nothing to follow.
+
+stitch can't take DSRs, so any `--rewrites` file is applied only to the
+egg-stitch follow runs, not to discovery — the target itself is DSR-free.
 
 Any args after `--` are forwarded to every egg-stitch invocation.
 Exit 0 iff every follow run reaches the discovered pattern.
@@ -16,6 +20,7 @@ Exit 0 iff every follow run reaches the discovered pattern.
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -24,16 +29,85 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 
+# stitch lives as a sibling clone of this repo (matching expts.run_models.stitch).
+STITCH_DIR = (REPO.parent / "stitch").resolve()
+STITCH_URL = "https://github.com/mlb2251/stitch.git"
+# Cross-tool arity cap; mirror expts.bench.MAX_ARITY so the abstraction stitch
+# finds here matches what the benchmark would run.
+MAX_ARITY = 2
+
 # Fixed at 2000 steps for both backends — the follow sweep is a CI diagnostic,
 # not a quality search, so we want uniform, bounded runtime per input.
-SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "2000", "--temperature", "1000"]
-BF_DEFAULTS = ["--num-steps", "2000"]
+# `--max-arity` matches the `-a{MAX_ARITY}` stitch was run at: egg-stitch
+# searches the same arity budget and should land on stitch's (possibly lower-
+# arity) optimum on its own. (Passthrough may override it via `_drop_overridden`.)
+SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "2000", "--temperature", "100", "--max-arity", str(MAX_ARITY)]
+BF_DEFAULTS = ["--num-steps", "2000", "--max-arity", str(MAX_ARITY)]
 
 
 def cargo_binary():
     """Build the release binary once; cheap when up-to-date."""
     subprocess.run(["cargo", "build", "--release", "--quiet"], cwd=REPO, check=True)
     return REPO / "target" / "release" / "egg-stitch"
+
+
+def stitch_binary():
+    """Clone `../stitch` if missing, build the `compress` binary, return its path.
+
+    The follow sweep is a compatibility diagnostic — egg-stitch must reproduce
+    the abstraction the reference compressor finds — so it self-prepares the
+    sibling clone rather than requiring a manual checkout, which is what lets CI
+    run it with no extra setup step.
+    """
+    if not STITCH_DIR.exists():
+        print(f"cloning stitch into {STITCH_DIR} ...", file=sys.stderr)
+        subprocess.run(["git", "clone", "--depth", "1", STITCH_URL, str(STITCH_DIR)], check=True)
+    subprocess.run(["cargo", "build", "--release", "--bin", "compress", "--quiet"], cwd=STITCH_DIR, check=True)
+    return STITCH_DIR / "target" / "release" / "compress"
+
+
+def language_from_passthrough(passthrough):
+    """Return the `--language` value forwarded to egg-stitch (default lambda-calc)
+    so stitch's cost flags match egg-stitch's reading of the corpus."""
+    if "--language" in passthrough:
+        i = passthrough.index("--language")
+        if i + 1 < len(passthrough):
+            return passthrough[i + 1]
+    return "lambda-calc"
+
+
+def stitch_follow_target(stitch_bin, input_path, language, output_path):
+    """Run stitch on `input_path` and return its top abstraction as an egg-stitch
+    follow pattern (stitch's `#k` metavars rewritten to `?#k`), or None when
+    stitch finds nothing to abstract.
+
+    Cost flags mirror expts.run_models.stitch: `op-children` is the no-apps
+    weighting (non-app nodes cost 10000), everything else is apps-equal (all
+    costs 1). `--no-curried-bodies --no-curried-metavars` are passed only on
+    op-children, where curried (left-of-app) forms can't be expressed; on
+    lambda-calc both stitch and egg-stitch can represent operator-position
+    metavars, so we leave stitch unconstrained — forbidding them would only
+    handicap stitch into a worse abstraction than egg-stitch finds.
+    """
+    no_apps = language == "op-children"
+    cost = "10000" if no_apps else "1"
+    cmd = [
+        str(stitch_bin), str(input_path),
+        "-i1", f"-a{MAX_ARITY}",
+        "--out", str(output_path),
+        "--silent", "--allow-single-task",
+        "--cost-app", "1",
+        "--cost-var", cost, "--cost-ivar", cost,
+        "--cost-prim-default", cost, "--cost-lam", cost,
+    ]
+    if no_apps:
+        cmd += ["--no-curried-bodies", "--no-curried-metavars"]
+    print(f"$ {' '.join(cmd)}", file=sys.stderr)
+    subprocess.run(cmd, check=True)
+    abstractions = json.loads(Path(output_path).read_text()).get("abstractions") or []
+    if not abstractions:
+        return None
+    return re.sub(r"(?<!\?)#", "?#", abstractions[0]["body"])
 
 
 def _flag_names(args):
@@ -197,22 +271,22 @@ def main():
     args = ap.parse_args(argv)
 
     binary = cargo_binary()
+    stitch_bin = stitch_binary()
 
     with tempfile.TemporaryDirectory(prefix="follow_reaches-") as td:
         outdir = Path(td)
         stem = Path(args.input).stem
 
-        # 1) Discovery run: best-first is deterministic given the same defaults,
-        #    so the pattern we extract is reproducible.
+        # 1) Discovery run: the reference `stitch` compressor finds the
+        #    abstraction egg-stitch's follow runs must then reproduce. stitch is
+        #    deterministic, so the target is reproducible; it ignores DSRs, so
+        #    `--rewrites` (if any) is applied only to the follow runs below.
         disc_out = outdir / f"{stem}.discovery.out.json"
-        print("\n=== discovery (best-first) ===", file=sys.stderr)
-        if not run_egg_stitch(binary, "best-first", args.input, args.rewrites, disc_out, passthrough):
-            print("discovery: search failed", file=sys.stderr)
-            sys.exit(1)
-        disc = json.loads(disc_out.read_text())
-        target = pattern_body(disc)
+        print("\n=== discovery (stitch) ===", file=sys.stderr)
+        language = language_from_passthrough(passthrough)
+        target = stitch_follow_target(stitch_bin, args.input, language, disc_out)
         if target is None:
-            print(f"SKIP: no abstraction found for {args.input} — nothing to follow")
+            print(f"SKIP: stitch found no abstraction for {args.input} — nothing to follow")
             sys.exit(0)
         print(f"follow target: {target}", file=sys.stderr)
 

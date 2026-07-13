@@ -67,14 +67,47 @@ def aggregate_time(repeats: list[list[dict]]) -> float | None:
     return _geomean([repeat_time(r) for r in repeats])
 
 
+def has_dnf(repeats: list[list[dict]]) -> bool:
+    """True if any of a method's per-file records timed out / OOM'd.
+
+    A record is a DNF when ``compression_ratio is None``. Aggregation drops a
+    method with any DNF entirely (returns ``None``) rather than averaging:
+    ``repeat_cr``/``aggregate_cr`` drop DNFs while ``repeat_time``/
+    ``aggregate_time`` still sum the timed-out runs' budget, so a partial set
+    would average CR and time over inconsistent sets and silently mislead, and
+    an all-DNF set has nothing to average."""
+    return any(r["compression_ratio"] is None for per_file in repeats for r in per_file)
+
+
 def aggregate_methods_cr(runs: dict[str, list[list[dict]]]) -> dict[str, float | None]:
-    """{method: aggregated compression ratio} for every method present."""
-    return {m: aggregate_cr(repeats) for m, repeats in runs.items()}
+    """{method: aggregated compression ratio} for every method present; ``None``
+    for any method with a DNF (see ``has_dnf``)."""
+    return {m: (None if has_dnf(reps) else aggregate_cr(reps)) for m, reps in runs.items()}
 
 
 def aggregate_methods_time(runs: dict[str, list[list[dict]]]) -> dict[str, float | None]:
-    """{method: aggregated elapsed seconds} for every method present."""
-    return {m: aggregate_time(repeats) for m, repeats in runs.items()}
+    """{method: aggregated elapsed seconds} for every method present; ``None``
+    for any method with a DNF, matching ``aggregate_methods_cr``."""
+    return {m: (None if has_dnf(reps) else aggregate_time(reps)) for m, reps in runs.items()}
+
+
+def reported_sweep_point(domain_runs: list[dict[str, list[list[dict]]]], method: str,
+                         sweep: tuple[int, ...], configured: int) -> int:
+    """The sweep value a table reports for a series ``method`` (Enum/SMC).
+
+    The ``configured`` operating point if every domain's cell finishes (non-DNF)
+    there, otherwise the highest lower sweep value that finishes on *every* domain
+    — the kick-down the family tables apply when the configured point DNFs — or
+    ``configured`` when nothing finishes (the cell then renders DNF).
+    ``domain_runs`` is each domain's ``runs`` dict."""
+    reportable = [aggregate_methods_cr(runs) for runs in domain_runs]
+
+    def finishes(point: int) -> bool:
+        key = f"{method}-{point}"
+        return bool(reportable) and all(cr.get(key) is not None for cr in reportable)
+
+    return next((p for p in sorted((s for s in sweep if s <= configured), reverse=True)
+                 if finishes(p)), configured)
 
 
 def initial_size_for_domain(runs: dict[str, list[list[dict]]]) -> float | None:
