@@ -207,17 +207,15 @@ class OursSmc:
     extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
-        search_flags: dict[str, object] = {
-            "num_steps": self.num_steps,
-            "num_particles": self.num_particles,
-            "temperature": self.temperature,
-        }
         return _run(
-            rounds=rounds, input_path=input_path,
-            rewrites_path=rewrites_path,
+            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
             weighting=weighting, search="smc",
             max_arity=self.max_arity,
-            search_flags=search_flags,
+            search_flags={
+                "num_steps": self.num_steps,
+                "num_particles": self.num_particles,
+                "temperature": self.temperature,
+            },
             iter_limit=self.iter_limit,
             timeout=self.timeout, mem_limit=self.mem_limit,
             extra_args=self.extra_args,
