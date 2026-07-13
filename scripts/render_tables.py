@@ -109,10 +109,9 @@ TABLE_TITLES = {
     2: "Compression Without Rewrites",
     3: "Compression Using Rewrites, Stacked Abstractions",
     4: "Compression Without Rewrites, Stacked Abstractions",
-    6: "Compression Using Algebraic Drawing Rewrites, Stacked Abstractions",
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
-TABLES_WITH_EGRAPH_MIN = {1, 3, 6}
+TABLES_WITH_EGRAPH_MIN = {1, 3}
 # DSR tables (1 & 3) don't run Stitch (it doesn't accept DSRs) and omit the
 # Stitch column entirely (see ``render``), so neither borrows numbers from a
 # no-DSR counterpart. Kept as a map in case a future table wants to.
