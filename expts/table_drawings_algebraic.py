@@ -42,6 +42,14 @@ DECOMPOSE_MIN_ROWS = 24
 MAX_ARITY = 4
 TIMEOUT = 300.0  # seconds, per tool invocation
 
+# The match-set caps aren't part of the official runner API (this experiment
+# isn't in the paper), so they ride the generic ``extra_args`` escape hatch
+# rather than dedicated OursBf/OursSmc fields.
+_CAP_FLAGS = (
+    "--max-match-set", str(MATCH_SET_CAP),
+    "--decompose-min-rows", str(DECOMPOSE_MIN_ROWS),
+)
+
 
 def _runners() -> tuple[tuple[str, object], ...]:
     """Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start baseline, every
@@ -50,10 +58,9 @@ def _runners() -> tuple[tuple[str, object], ...]:
     common = dict(
         max_arity=MAX_ARITY,
         iter_limit=ITER_LIMIT,
-        max_match_set=MATCH_SET_CAP,
-        decompose_min_rows=DECOMPOSE_MIN_ROWS,
         timeout=TIMEOUT,
         mem_limit=MEM_LIMIT_BYTES,
+        extra_args=_CAP_FLAGS,
     )
     return (
         _sweep_runners(**common)

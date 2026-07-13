@@ -64,8 +64,7 @@ def _sweep_runners(
     mem_limit: int | None = None,
     max_arity: int = MAX_ARITY,
     iter_limit: int | None = None,
-    max_match_set: int | None = None,
-    decompose_min_rows: int | None = None,
+    extra_args: tuple[str, ...] = (),
 ) -> tuple[tuple[str, object], ...]:
     """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value.
 
@@ -74,11 +73,10 @@ def _sweep_runners(
     ``smc_particles`` override the sweeps (table5 extends them, table7 truncates).
     ``max_arity`` raises the abstraction arity cap (table7 uses 4). ``iter_limit``
     caps e-saturation iterations (table7 uses 30; None keeps the binary default).
-    ``max_match_set`` / ``decompose_min_rows`` cap the per-factor match-set on
-    every swept runner (the standalone drawings-algebraic experiment sets them
-    for the non-confluent algebra DSRs; None elsewhere).
+    ``extra_args`` are appended verbatim to every swept runner's CLI (the
+    standalone drawings-algebraic experiment passes its match-set caps here).
     """
-    common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit, max_match_set=max_match_set, decompose_min_rows=decompose_min_rows)
+    common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit, extra_args=extra_args)
     bfs = tuple((f"enum-{n}", OursBf(num_steps=n, **common)) for n in bfs_steps)
     smc = tuple((f"smc-{p}", OursSmc(num_particles=p, **common)) for p in smc_particles)
     return bfs + smc

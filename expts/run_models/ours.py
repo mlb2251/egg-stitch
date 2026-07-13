@@ -166,21 +166,11 @@ class OursBf:
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
     no_dsrs: bool = field(default=False, repr=False)
     iter_limit: int | None = field(default=None, repr=False)
-    # Caps the per-factor abstraction match-set mass; bounds the blowup the
-    # non-confluent algebraic DSRs cause (the drawings-algebraic experiment sets
-    # it). Excluded from repr so the method label is unchanged.
-    max_match_set: int | None = field(default=None, repr=False)
-    # Minimum factor rows before decomposition is attempted; must be <=
-    # max_match_set (the binary asserts it) so the row cap only prunes
-    # already-decomposed factors (pinned equal to the cap). Excluded from repr.
-    decompose_min_rows: int | None = field(default=None, repr=False)
-    # Overrides the domain's default rewrites file with a specific ruleset (the
-    # drawings-algebraic experiment pins drawings.rewrites). Excluded from repr.
-    rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
-    # Extra CLI flags appended verbatim (ablation knobs). repr=False so the
-    # method label is unchanged for the normal table runs.
+    # Extra CLI flags appended verbatim (ablation knobs; the non-official
+    # drawings-algebraic experiment passes its --max-match-set / --decompose-min-rows
+    # caps here). repr=False so the method label is unchanged for normal table runs.
     extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
@@ -189,13 +179,9 @@ class OursBf:
             search_flags["num_steps"] = self.num_steps
         if self.max_forced_expansion is not None:
             search_flags["max_forced_expansion"] = self.max_forced_expansion
-        if self.max_match_set is not None:
-            search_flags["max_match_set"] = self.max_match_set
-        if self.decompose_min_rows is not None:
-            search_flags["decompose_min_rows"] = self.decompose_min_rows
         return _run(
             rounds=rounds, input_path=input_path,
-            rewrites_path=None if self.no_dsrs else (self.rewrites_override or rewrites_path),
+            rewrites_path=None if self.no_dsrs else rewrites_path,
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
             search_flags=search_flags,
@@ -215,18 +201,11 @@ class OursSmc:
     temperature: float = 100.0
     max_arity: int = MAX_ARITY
     iter_limit: int | None = field(default=None, repr=False)
-    # Per-factor abstraction match-set cap + its decompose floor (the
-    # drawings-algebraic experiment sets both; the non-confluent algebra DSRs need
-    # them to run live). Excluded from repr so the method label is unchanged.
-    max_match_set: int | None = field(default=None, repr=False)
-    decompose_min_rows: int | None = field(default=None, repr=False)
-    # Overrides the domain's default rewrites file (the drawings-algebraic
-    # experiment pins drawings.rewrites).
-    rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
-    # Extra CLI flags appended verbatim (ablation knobs). repr=False so the
-    # method label is unchanged for the normal table runs.
+    # Extra CLI flags appended verbatim (ablation knobs; the non-official
+    # drawings-algebraic experiment passes its --max-match-set / --decompose-min-rows
+    # caps here). repr=False so the method label is unchanged for normal table runs.
     extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
@@ -235,13 +214,9 @@ class OursSmc:
             "num_particles": self.num_particles,
             "temperature": self.temperature,
         }
-        if self.max_match_set is not None:
-            search_flags["max_match_set"] = self.max_match_set
-        if self.decompose_min_rows is not None:
-            search_flags["decompose_min_rows"] = self.decompose_min_rows
         return _run(
             rounds=rounds, input_path=input_path,
-            rewrites_path=self.rewrites_override or rewrites_path,
+            rewrites_path=rewrites_path,
             weighting=weighting, search="smc",
             max_arity=self.max_arity,
             search_flags=search_flags,
