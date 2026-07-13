@@ -168,9 +168,8 @@ class OursBf:
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
-    # Extra CLI flags appended verbatim (ablation knobs; the non-official
-    # drawings-algebraic experiment passes its --max-match-set / --decompose-min-rows
-    # caps here). repr=False so the method label is unchanged for normal table runs.
+    # Extra CLI flags appended verbatim (ablation knobs). repr=False so the
+    # method label is unchanged for the normal table runs.
     extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
@@ -203,9 +202,8 @@ class OursSmc:
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
-    # Extra CLI flags appended verbatim (ablation knobs; the non-official
-    # drawings-algebraic experiment passes its --max-match-set / --decompose-min-rows
-    # caps here). repr=False so the method label is unchanged for normal table runs.
+    # Extra CLI flags appended verbatim (ablation knobs). repr=False so the
+    # method label is unchanged for the normal table runs.
     extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
