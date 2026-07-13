@@ -26,7 +26,7 @@
 //! it never fires, or over-fires) shifts these costs off their frozen values.
 //!
 //! A fourth variant (tag `algebra`) runs our algebraic drawing rewrites
-//! (`data/domains/cogsci/drawings.rewrites`, the table6 default) with the
+//! (`data/domains/cogsci/drawings.rewrites`, the drawings-algebraic default) with the
 //! `--max-match-set` per-factor cap. It guards that ruleset's behaviour and the
 //! match-set prune; unlike the `dsr` variant, the *same* rule file is used for
 //! every domain.
@@ -60,18 +60,18 @@ const MFE_CAP: &str = "3";
 
 /// Our algebraic drawing rewrite set (the recommended default), applied
 /// across every drawing domain — distinct from the per-domain babble rewrites
-/// the `dsr` variant uses. Pins the table6 ruleset's behaviour.
+/// the `dsr` variant uses. Pins the drawings-algebraic ruleset's behaviour.
 const ALGEBRA_RULES: &str = "data/domains/cogsci/drawings.rewrites";
 
 /// `--max-match-set` per-factor cap for the algebra variant, in factor *rows*.
 /// The non-confluent choice rules blow the abstraction match set up without it
-/// (and `--max-forced-expansion` can't catch that); 24 is the table6 value.
+/// (and `--max-forced-expansion` can't catch that); 24 is the drawings-algebraic value.
 const MMS_CAP: &str = "24";
 
 /// `--decompose-min-rows` for the algebra variant. Must be `<= MMS_CAP` (the
 /// binary asserts this), so factors are decomposed before the row cap can prune
 /// them — a benign independent product just under the cap isn't mistaken for an
-/// entangled blowup. Pinned equal to the cap (the table6 value).
+/// entangled blowup. Pinned equal to the cap (the drawings-algebraic value).
 const DMR_CAP: &str = "24";
 
 /// `--iter-limit` for the algebra variant. REQUIRED for these rules:
@@ -182,8 +182,8 @@ fn check_dsr_mfe(domain: &str) {
     bless_or_check(&expected_path(domain, &tag), &v);
 }
 
-/// Algebra variant: best-first with our `drawings.rewrites` (the table6
-/// default) and the `--max-match-set` cap. Regression guard for that ruleset and
+/// Algebra variant: best-first with our `drawings.rewrites` (the
+/// drawings-algebraic default) and the `--max-match-set` cap. Regression guard for that ruleset and
 /// the match-set prune across the stacked rounds.
 fn check_algebra(domain: &str) {
     let v = run_bfs(domain, Some(ALGEBRA_RULES), None, Some(MMS_CAP), Some(DMR_CAP), Some(ALGEBRA_ITER_LIMIT), ALGEBRA_STEPS, "algebra");

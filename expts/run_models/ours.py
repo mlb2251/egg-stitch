@@ -167,15 +167,15 @@ class OursBf:
     no_dsrs: bool = field(default=False, repr=False)
     iter_limit: int | None = field(default=None, repr=False)
     # Caps the per-factor abstraction match-set mass; bounds the blowup the
-    # non-confluent algebraic DSRs cause (table6 sets it). Excluded from repr so
-    # the method label is unchanged.
+    # non-confluent algebraic DSRs cause (the drawings-algebraic experiment sets
+    # it). Excluded from repr so the method label is unchanged.
     max_match_set: int | None = field(default=None, repr=False)
     # Minimum factor rows before decomposition is attempted; must be <=
     # max_match_set (the binary asserts it) so the row cap only prunes
-    # already-decomposed factors (table6 pins it equal to the cap). Excluded from repr.
+    # already-decomposed factors (pinned equal to the cap). Excluded from repr.
     decompose_min_rows: int | None = field(default=None, repr=False)
-    # Overrides the domain's default rewrites file with a specific ruleset
-    # (table6 pins drawings.rewrites). Excluded from repr.
+    # Overrides the domain's default rewrites file with a specific ruleset (the
+    # drawings-algebraic experiment pins drawings.rewrites). Excluded from repr.
     rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
@@ -215,12 +215,13 @@ class OursSmc:
     temperature: float = 100.0
     max_arity: int = MAX_ARITY
     iter_limit: int | None = field(default=None, repr=False)
-    # Per-factor abstraction match-set cap + its decompose floor (table6 sets
-    # both; the non-confluent algebra DSRs need them to run live). Excluded from
-    # repr so the method label is unchanged.
+    # Per-factor abstraction match-set cap + its decompose floor (the
+    # drawings-algebraic experiment sets both; the non-confluent algebra DSRs need
+    # them to run live). Excluded from repr so the method label is unchanged.
     max_match_set: int | None = field(default=None, repr=False)
     decompose_min_rows: int | None = field(default=None, repr=False)
-    # Overrides the domain's default rewrites file (table6 pins drawings.rewrites).
+    # Overrides the domain's default rewrites file (the drawings-algebraic
+    # experiment pins drawings.rewrites).
     rewrites_override: str | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)

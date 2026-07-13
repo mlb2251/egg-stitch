@@ -75,8 +75,8 @@ def _sweep_runners(
     ``max_arity`` raises the abstraction arity cap (table7 uses 4). ``iter_limit``
     caps e-saturation iterations (table7 uses 30; None keeps the binary default).
     ``max_match_set`` / ``decompose_min_rows`` cap the per-factor match-set on
-    every swept runner (table6 sets them for the non-confluent algebra DSRs;
-    None elsewhere).
+    every swept runner (the standalone drawings-algebraic experiment sets them
+    for the non-confluent algebra DSRs; None elsewhere).
     """
     common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit, max_match_set=max_match_set, decompose_min_rows=decompose_min_rows)
     bfs = tuple((f"enum-{n}", OursBf(num_steps=n, **common)) for n in bfs_steps)
@@ -310,72 +310,6 @@ def table5() -> Path:
         use_dsrs=True,
         folder_prefix="table5",
         output_name="table5.json",
-    )
-
-
-# Table 6: the cogsci drawing domains with our algebraic drawing DSRs
-# (data/domains/cogsci/drawings.rewrites), comparing the DSRs kept LIVE during
-# search against applied only AT START. The rules are deliberately *non-confluent*
-# (transform factoring, repeat<->unroll, overlay assoc/comm, scale/translate
-# interchange) — they expose multiple equivalent normal forms whose best choice
-# depends on the library being built. Live keeps all forms so each abstraction can
-# align to the matching one; at-start commits to a single greedy min-term up front,
-# so live wins (and the gap widens with expressiveness). Same roster shape as
-# table5/7: the Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start baseline,
-# no babble (it can't parse the constant_folding/matmul directives). The
-# commutative rules would explode the abstraction match set if left unchecked, so
-# every run carries the per-factor ``--max-match-set`` cap and an ``--iter-limit``.
-TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "furniture")]
-TABLE6_NUM_ABSTRACTIONS = 4
-TABLE6_ITER_LIMIT = 6
-# Per-factor row cap (the `--max-match-set` metric is a factor's row count): the
-# commutativity blowup is one entangled factor whose equivalent parse trees pile
-# up as rows. 24 bounds dials/furniture memory while sparing the high-usage
-# patterns; above ~64 furniture's blowup escapes the cap.
-TABLE6_MATCH_SET_CAP = 24
-# Decompose factors before the row cap can prune them: must be <= the cap (the
-# binary asserts it) so a benign independent product just under the cap isn't
-# mistaken for an entangled blowup. Pinned equal to the cap.
-TABLE6_DECOMPOSE_MIN_ROWS = 24
-# Arity 4 (vs the other tables' 2): the drawing domains have deeper repeated
-# part-hierarchies, and higher arity both raises absolute compression and widens
-# the live-vs-at-start gap (more holes => more normal-form alignment that live can
-# exploit but at-start commits away). May revert to 2 for cross-table parity.
-TABLE6_MAX_ARITY = 4
-TABLE6_TIMEOUT = 300.0  # seconds, per tool invocation
-
-
-def _table6_runners() -> tuple[tuple[str, object], ...]:
-    """Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start baseline, every
-    runner at arity 4 with the per-factor match-set cap + iter-limit the
-    non-confluent algebra needs (no babble — it can't parse the rules)."""
-    common = dict(
-        max_arity=TABLE6_MAX_ARITY,
-        iter_limit=TABLE6_ITER_LIMIT,
-        max_match_set=TABLE6_MATCH_SET_CAP,
-        decompose_min_rows=TABLE6_DECOMPOSE_MIN_ROWS,
-        timeout=TABLE6_TIMEOUT,
-        mem_limit=MEM_LIMIT_BYTES,
-    )
-    return (
-        _sweep_runners(**common)
-        + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
-    )
-
-
-def table6() -> Path:
-    """Run the cogsci drawing domains with the non-confluent affine-algebra DSRs:
-    the table5/7 roster (Enum/SMC sweeps + dsrs-only-at-start baseline, no babble)
-    at arity 4 with the per-factor match-set cap. Demonstrates live > at-start on
-    a non-confluent rule set."""
-    _require_free_memory("table6")
-    return _run_table(
-        domains=TABLE6_DOMAINS,
-        runners=_table6_runners(),
-        num_abstractions=TABLE6_NUM_ABSTRACTIONS,
-        use_dsrs=True,
-        folder_prefix="table6",
-        output_name="table6.json",
     )
 
 

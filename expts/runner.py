@@ -84,7 +84,8 @@ class FamilyDomain:
 # ``drawings:<cogsci-domain>`` is a pseudo-domain (same input corpus as the
 # plain cogsci domain) that runs with our algebraic drawing DSRs
 # (``data/domains/cogsci/drawings.rewrites``) instead of babble's per-domain
-# rewrites. Used by table6; mirrors the ``molecules:<family>`` convention.
+# rewrites. Used by the drawings-algebraic experiment; mirrors the
+# ``molecules:<family>`` convention.
 DRAWINGS_PREFIX = "drawings:"
 
 
@@ -169,10 +170,10 @@ def rewrites_path(domain: str) -> str | None:
     if fam is not None:
         return fam.rewrites
     if domain_type(domain) == "drawings":
-        # Our algebraic drawing DSRs (the table6 default). Only our own
-        # runners use these — table6 has no babble column: babble can't parse
-        # the constant_folding/matmul directives, and giving it its own rewrites
-        # instead would confound the rule set with the search method.
+        # Our algebraic drawing DSRs (the drawings-algebraic experiment's
+        # default). Only our own runners use these — the experiment has no babble
+        # column: babble can't parse the constant_folding/matmul directives, and
+        # giving it its own rewrites would confound the rule set with the search.
         return "data/domains/cogsci/drawings.rewrites"
     if domain_type(domain) == "dreamcoder":
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"

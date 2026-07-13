@@ -47,9 +47,6 @@ FIGURES_DIR = PROJECT_ROOT / "figures"
 # theory; tables 2/4 (no-DSR runs) include text/logo/towers as well.
 TABLE_DOMAINS_DSR = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
 TABLE_DOMAINS_NO_DSR = TABLE_DOMAINS_DSR + ["text", "logo", "towers"]
-# Table 6: the four drawing domains run with our algebraic drawing DSRs. Keys are
-# ``drawings:<domain>`` to match the table6.json results (see expts/tables.py).
-TABLE6_DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "furniture")]
 
 
 def domains_for_table(table: int) -> list[str]:
@@ -744,8 +741,8 @@ class FamilySpec:
         """Build a spec for the standard E-Stitch roster: the enum (BFS) and smc
         (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), followed by
         the family-specific ``extras`` -- each a ``(method_key, col_label,
-        plot_label)`` triple (babble and/or the no-rules Enum baseline BFS/NR;
-        empty for table6, where babble can't parse the algebraic rules). The
+        plot_label)`` triple (babble and/or the no-rules Enum baseline BFS/NR).
+        The
         shared three methods -- their order, labels, colors, and the smc
         representative point -- live here so the per-family specs can't drift on
         them; only the bits that genuinely differ are args.
@@ -843,25 +840,6 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
         ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
     ],
-)
-
-# table6: cogsci drawing domains with our algebraic drawing DSRs. Same shape as
-# table5/7 -- the two ours sweeps (live DSRs) and the dsrs-only-at-start baseline
-# -- but no fourth method: babble can't parse the constant_folding/matmul rules,
-# so it has no column here. The live-vs-at-start contrast is BFS vs BFS/MT.
-TABLE6_SPEC = FamilySpec.estitch_roster(
-    title="Drawing-Domain Compression (Algebraic DSRs)",
-    fig_subdir="table6",
-    domains=TABLE6_DOMAINS,
-    domain_labels={
-        "drawings:nuts-bolts": "Nuts \\& Bolts",
-        "drawings:dials": "Dials",
-        "drawings:wheels": "Wheels",
-        "drawings:furniture": "Furniture",
-    },
-    enum_point=TABLE_BFS_STEPS,
-    enum_sweep=BFS_STEP_SWEEP,
-    smc_sweep=SMC_PARTICLE_SWEEP,
 )
 
 
@@ -1160,13 +1138,13 @@ def main() -> None:
         plot_geomean(saved, table, geomean_path)
         print(f"wrote {geomean_path}", file=sys.stderr)
 
-    # Tables 5, 6 & 7 (molecule scramble / drawing / EPFL circuit subsets) share a
-    # roster shape distinct from tables 1-4 (family rows, DSR baselines, no Stitch),
-    # so they go through the FamilySpec renderers: a LaTeX table plus per-family and
-    # geomean PNGs.
+    # Tables 5 & 7 (molecule scramble / EPFL circuit subsets) share a roster shape
+    # distinct from tables 1-4 (family rows, DSR baselines, no Stitch), so they go
+    # through the FamilySpec renderers: a LaTeX table plus per-family and geomean
+    # PNGs.
     notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
     family_saved: dict[str, dict] = {}  # table5/table7, for the combined grid
-    for spec in (TABLE5_SPEC, TABLE6_SPEC, TABLE7_SPEC):
+    for spec in (TABLE5_SPEC, TABLE7_SPEC):
         path = RESULTS_DIR / f"{spec.fig_subdir}.json"
         if not path.exists():
             print(f"skipping {spec.fig_subdir}: {path} not present", file=sys.stderr)
