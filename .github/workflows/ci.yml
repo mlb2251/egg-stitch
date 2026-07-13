@@ -65,8 +65,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
-      - name: cargo nextest check_slow (excluding physics)
-        run: cargo nextest run --release -E 'test(/check_slow/) and not test(/check_slow_physics/)'
+      - name: cargo nextest check_slow (excluding physics and list)
+        run: cargo nextest run --release -E 'test(/check_slow/) and not test(/check_slow_physics/) and not test(/check_slow_list/)'
 
   test-check-slow-physics:
     runs-on: ubuntu-latest
@@ -77,6 +77,18 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - name: cargo nextest check_slow_physics
         run: cargo nextest run --release -E 'test(/check_slow_physics/)'
+
+  # Sibling dreamcoder domain to physics; split into its own job for the same
+  # reason (SMC rollouts at 10 000 particles are heavier than the shared job's).
+  test-check-slow-list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest check_slow_list
+        run: cargo nextest run --release -E 'test(/check_slow_list/)'
 
   smc-fv-crash:
     runs-on: ubuntu-latest

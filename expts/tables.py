@@ -26,7 +26,16 @@ from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
 from .runner import EPFL_CIRCUITS, MOLECULES
 
-NUM_RUNS = 10
+# SMC is stochastic, so it needs more repeats to average out run-to-run noise;
+# every other method here is deterministic and only needs a few for timing noise.
+SMC_NUM_RUNS = 10
+NUM_RUNS = 3
+
+
+def _num_runs_for(label: str) -> int:
+    """Repeats to run for a method: ``SMC_NUM_RUNS`` for the stochastic SMC
+    sweep (``smc-<particles>``), ``NUM_RUNS`` for every deterministic method."""
+    return SMC_NUM_RUNS if label.startswith("smc") else NUM_RUNS
 
 # Table 1 / 3: babble has no equational theory for text/logo/towers, so the
 # "with DSRs" comparison excludes them.
@@ -38,11 +47,14 @@ TABLE2_DOMAINS = TABLE1_DOMAINS + ["text", "logo", "towers"]
 # Hyperparameter sweeps for the two ours-search modes. Each value gets its
 # own runner / cache file, labelled ``enum-<num_steps>`` /
 # ``smc-<num_particles>`` so the renderer can group sweep points back into
-# a single line per base method. The table cells still show one canonical
-# point per method (see ``TABLE_BFS_STEPS`` / ``TABLE_SMC_PARTICLES`` in
-# ``scripts/render_tables.py``).
+# a single line per base method, at the one canonical point below.
 BFS_STEP_SWEEP: tuple[int, ...] = (200, 500, 1000, 2000, 5000, 10000, 20000, 50000)
 SMC_PARTICLE_SWEEP: tuple[int, ...] = (20, 50, 100, 200, 500, 1000, 2000, 5000)
+
+# The single sweep point each base method contributes to the table cells.
+# Plots use the full sweep regardless.
+TABLE_BFS_STEPS = 10000
+TABLE_SMC_PARTICLES = 1000
 
 
 def _sweep_runners(
@@ -74,8 +86,9 @@ def _sweep_runners(
 BASELINE_BFS_STEPS = 10_000_000
 
 # Runner rosters — Table 2/4 share the with-Stitch roster; Table 1/3 (DSRs,
-# no Stitch) add a "dsrs-only-at-start" baseline: best-first that canonicalises
-# with the DSRs once instead of keeping them live (the BFS@start column).
+# no Stitch) add two best-first baselines: "dsrs-only-at-start" (BFS/MT), which
+# canonicalises with the DSRs once instead of keeping them live, and
+# "enum-baseline" (BFS/NR), which turns the DSRs off entirely.
 BASE_RUNNERS: tuple[tuple[str, object], ...] = _sweep_runners() + (
     ("babble", Babble()),
 )
@@ -84,6 +97,7 @@ RUNNERS_WITH_STITCH: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
 )
 DSR_RUNNERS: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
     ("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True)),
+    ("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True)),
 )
 
 
@@ -97,25 +111,27 @@ def _run_method_for_table(
     cache_path: Path,
     bar: tqdm,
 ) -> dict[str, list[list[dict]]]:
-    """Run one method across all domains × ``NUM_RUNS`` for a single table.
+    """Run one method across all domains × its repeat count for a single table.
 
-    Returns ``{domain: [run0_per_file_dicts, run1_per_file_dicts, ...]}``.
-    Cached as a single JSON file per (table, method); delete the file to
-    force a recompute.
+    The repeat count is ``SMC_NUM_RUNS`` for SMC and ``NUM_RUNS`` otherwise (see
+    ``_num_runs_for``). Returns ``{domain: [run0_per_file_dicts, ...]}``. Cached
+    as a single JSON file per (table, method); delete the file to force a
+    recompute.
     """
     from .runner import run_method  # local import: runner pulls heavy deps
 
+    num_runs = _num_runs_for(label)
     if cache_path.exists():
         with open(cache_path) as fh:
             out = json.load(fh)
-        bar.update(len(domains) * NUM_RUNS)
+        bar.update(len(domains) * num_runs)
         return out
 
     out: dict[str, list[list[dict]]] = {}
     for domain in domains:
         runs: list[list[dict]] = []
-        for i in range(NUM_RUNS):
-            bar.set_description(f"{domain} {label} rep {i+1}/{NUM_RUNS}")
+        for i in range(num_runs):
+            bar.set_description(f"{domain} {label} rep {i+1}/{num_runs}")
             per_file = run_method(
                 runner,
                 domain,
@@ -129,7 +145,7 @@ def _run_method_for_table(
             # domain (the renderer drops a method with any DNF), so the remaining
             # replicates can only repeat an expensive timeout — skip them.
             if any(r["compression_ratio"] is None for r in run):
-                bar.update(NUM_RUNS - (i + 1))
+                bar.update(num_runs - (i + 1))
                 break
         out[domain] = runs
 
@@ -148,7 +164,8 @@ def _run_table(
     folder_prefix: str,
     output_name: str,
 ) -> Path:
-    """Run each ``(label, runner)`` on every domain ``NUM_RUNS`` times and save JSON."""
+    """Run each ``(label, runner)`` on every domain (SMC ``SMC_NUM_RUNS`` times,
+    others ``NUM_RUNS``; see ``_num_runs_for``) and save JSON."""
     assert all(
         d in ALL_DOMAINS or d.startswith("molecules:") or d.startswith("epfl-circuits:")
         for d in domains
@@ -160,7 +177,7 @@ def _run_table(
     }
     cache_root = SUMMARY_RESULTS_DIR / Path(output_name).stem
 
-    total = len(domains) * NUM_RUNS * len(runners)
+    total = len(domains) * sum(_num_runs_for(label) for label, _ in runners)
     with tqdm(total=total, unit="run", smoothing=0.05) as bar:
         for label, runner in runners:
             by_domain = _run_method_for_table(
@@ -183,8 +200,8 @@ def _run_table(
 
 
 def table1() -> Path:
-    """Run Enum, SMC, babble, and the dsrs-only-at-start baseline on the
-    Table 1 domains with DSRs."""
+    """Run Enum, SMC, babble, and the dsrs-only-at-start (BFS/MT) and no-rules
+    (BFS/NR) baselines on the Table 1 domains with DSRs."""
     return _run_table(
         domains=TABLE1_DOMAINS,
         runners=DSR_RUNNERS,
@@ -291,10 +308,10 @@ def table5() -> Path:
     )
 
 
-# Table 7: the EPFL circuits with the factoring DSRs. Table 5's roster (Enum/SMC
-# sweeps + dsrs-only-at-start) at max-arity 4, plus a no-rules Enum baseline so the
-# three-way baseline/live/at-start shows. babble/Stitch have no theory for these
-# boolean circuits, so they're dropped.
+# Table 7: the EPFL circuits with the factoring DSRs. Table 5's full roster
+# (Enum/SMC sweeps + dsrs-only-at-start + babble + no-rules Enum baseline), at
+# max-arity 4. babble runs via its ``circuits`` binary (boolean and/or/not over
+# ``$N`` inputs); Stitch has no circuit frontend, so it stays dropped.
 TABLE7_DOMAINS = EPFL_CIRCUITS.domains
 TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE7_NUM_ABSTRACTIONS = 4
@@ -316,20 +333,26 @@ TABLE7_SMC_SWEEP = tuple(p for p in SMC_PARTICLE_SWEEP if p <= 2000)
 
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:
-    """Enum/SMC sweeps (live DSRs) plus the dsrs-only-at-start and no-rules Enum
-    baselines, every runner at max-arity 4 and capped at :data:`TABLE7_TIMEOUT` /
-    :data:`MEM_LIMIT_BYTES`."""
+    """Enum/SMC sweeps (live DSRs), the dsrs-only-at-start and no-rules Enum
+    baselines, and babble, every runner at max-arity 4 and capped at
+    :data:`TABLE7_TIMEOUT` / :data:`MEM_LIMIT_BYTES`.
+
+    ``iter_limit`` is an ours-only knob (egg-stitch's e-saturation cap); babble
+    runs its DSR saturation for a fixed 3 iterations internally, so it only
+    takes the arity / resource caps."""
     common = dict(max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
     return (
         _sweep_runners(bfs_steps=TABLE7_BFS_SWEEP, smc_particles=TABLE7_SMC_SWEEP, **common)
         + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
+        + (("babble", Babble(max_arity=TABLE7_MAX_ARITY, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)),)
         + (("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **common)),)
     )
 
 
 def table7() -> Path:
-    """Run the EPFL circuits with the factoring DSRs: table5 roster + a no-rules
-    Enum baseline, max-arity 4, 4 abstractions, each capped at 300s and 20 GiB."""
+    """Run the EPFL circuits with the factoring DSRs: table5's full roster
+    (Enum/SMC + babble + the dsrs-only-at-start and no-rules Enum baselines),
+    max-arity 4, 4 abstractions, each capped at 300s and 20 GiB."""
     _require_free_memory("table7")
     return _run_table(
         domains=TABLE7_DOMAINS,

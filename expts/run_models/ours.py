@@ -64,7 +64,8 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
          only_use_dsrs_at_start: bool = False,
          iter_limit: int | None = None,
          timeout: float | None = None,
-         mem_limit: int | None = None) -> BenchResult:
+         mem_limit: int | None = None,
+         extra_args: tuple[str, ...] = ()) -> BenchResult:
     """Shared subprocess body for the SMC/best-first runners.
 
     ``search_flags`` carries only the runner-specific dials (num_steps,
@@ -72,7 +73,9 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     search modes. ``only_use_dsrs_at_start`` switches DSRs from live-during-
     search to a one-shot canonicalisation pass; ``iter_limit`` caps e-saturation
     iterations (None = the binary default, 100); ``timeout`` caps wall-clock;
-    ``mem_limit`` caps address space.
+    ``mem_limit`` caps address space. ``extra_args`` are appended verbatim to
+    the CLI (the ablation harness passes e.g. ``--no-opt-lower-bound``,
+    ``--var-order``/``--compression-limit`` pairs).
     """
     output_path = unique_path(
         current_folder_path() / f"{input_path.stem}_{search.replace('-', '_')}.json"
@@ -105,6 +108,7 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
                 cmd.append(flag)
         else:
             cmd += [flag, str(v)]
+    cmd += list(extra_args)
     start = time.time()
     _subproc_run(cmd, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"),
                  timeout=timeout, mem_limit=mem_limit)
@@ -118,6 +122,13 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         s = a["pattern"]
         name, _, body = s.partition(": ")
         abstractions.append(Abstraction(name=name or f"fn_{i}", body=body or s))
+    # Search work for the first abstraction (best-first heap pops, cut short by
+    # --compression-limit, or SMC steps run); None when no abstraction was found.
+    library = data.get("library", [])
+    num_steps_run = library[0].get("num_steps_run") if library else None
+    # egg-stitch's own reported compression ratio — the exact metric
+    # `--compression-limit` checks; None when no abstraction was found.
+    egg_compression_ratio = data.get("compression_ratio") if library else None
     return BenchResult(
         # Wall-clock from the wrapper (incl. process spawn + corpus read + JSON
         # write), not egg-stitch's internal ``elapsed_secs``, so the time is
@@ -130,6 +141,8 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         # propagates through the cross-file sum in the runner.
         cost_after_rewrites=float(data["cost_after_rewrites"]) if rewrites_path is not None else math.nan,
         cost_at_end_of_each_iter=data.get("cost_at_end_of_each_iter"),
+        num_steps_run=num_steps_run,
+        egg_compression_ratio=egg_compression_ratio,
     )
 
 
@@ -155,6 +168,9 @@ class OursBf:
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
+    # Extra CLI flags appended verbatim (ablation knobs). repr=False so the
+    # method label is unchanged for the normal table runs.
+    extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         search_flags: dict[str, object] = {}
@@ -171,6 +187,7 @@ class OursBf:
             only_use_dsrs_at_start=self.only_use_dsrs_at_start,
             iter_limit=self.iter_limit,
             timeout=self.timeout, mem_limit=self.mem_limit,
+            extra_args=self.extra_args,
         )
 
 
@@ -180,11 +197,14 @@ class OursSmc:
 
     num_steps: int = 100
     num_particles: int = 1000
-    temperature: float = 1000.0
+    temperature: float = 100.0
     max_arity: int = MAX_ARITY
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
+    # Extra CLI flags appended verbatim (ablation knobs). repr=False so the
+    # method label is unchanged for the normal table runs.
+    extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
@@ -198,4 +218,5 @@ class OursSmc:
             },
             iter_limit=self.iter_limit,
             timeout=self.timeout, mem_limit=self.mem_limit,
+            extra_args=self.extra_args,
         )

@@ -82,7 +82,7 @@ fn run_backend_steps(search: &str, input: &str, bf_steps: &str, extra_args: &[&s
     if search == "best-first" {
         cmd.args(["--num-steps", bf_steps]);
     } else {
-        cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
+        cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "100"]);
     }
     cmd.args(extra_args);
     let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
@@ -277,6 +277,27 @@ fn fn_name_collision() {
 #[test]
 fn cex() {
     check_fixture("data/domains/stitch/cex.json", &[], true);
+}
+
+/// Parallel to [`cex`] with `--allow-useless-vars`. The default gate rejects
+/// the arity-1 `(a b c d e f g h #0 #0 #0 #0)` — its `#0` is useless (every
+/// slot binds the same closed `(A B C)`) — and falls back to the arity-0 body.
+/// The flag lifts that gate (and forces the useless/dominance prunes off), so
+/// the search returns the reused-useless-var abstraction instead. Best-first is
+/// deterministic, so its body is pinned exactly; SMC may settle on an
+/// equivalent alternate optimum, so there we only require some var reused 4×.
+#[test]
+fn cex_allow_useless_vars() {
+    let input = "data/domains/stitch/cex.json";
+    let flag = &["--allow-useless-vars"];
+    let bf = run_backend("best-first", input, flag);
+    assert_eq!(abstraction_bodies(&bf), vec!["(a b c d e f g h #0 #0 #0 #0)".to_string()], "best-first should return the useless-var abstraction the default gate forbids");
+    let smc = run_backend("smc", input, flag);
+    for r in [&bf, &smc] {
+        let bodies = abstraction_bodies(r);
+        assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
+        assert!(max_var_reuse(&bodies[0]) >= 4, "expected a useless var reused 4×, got body: {}", bodies[0]);
+    }
 }
 
 #[test]
@@ -489,8 +510,8 @@ fn common_start() {
 
 /// Regression for the `shift_equal` binder-cycle non-termination
 /// (`src/shift_equal.rs`). The rules `a => (lambda a)` / `b => (lambda b)` carry
-/// no metavariables, so `rule_fv_verdict` accepts them, yet each concrete RHS
-/// hashconses back into the matched class — equality saturation closes two
+/// no metavariables, so they preserve `fv(c)=fv(MinTerm(c))`, yet each concrete
+/// RHS hashconses back into the matched class — equality saturation closes two
 /// distinct cycles *through the `lambda` binder*. Best-first then reaches a
 /// pattern with two metavars at different binder depths capturing those cyclic
 /// classes and calls `shift_equal(a, b, 0, 1)`.
@@ -538,6 +559,16 @@ fn abstraction_bodies(run: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Largest number of times any single metavar `#k` is reused in `body` (in
+/// stitch notation, as returned by [`abstraction_bodies`]). A "useless" var —
+/// bound to the same closed arg at every call site — surfaces here as a high
+/// reuse count on a body the default `has_useless_var` gate would reject. Only
+/// scans `#0..#7`; these corpora cap arity well below the point where `#1`
+/// would substring-match `#10`.
+fn max_var_reuse(body: &str) -> usize {
+    (0..8).map(|k| body.matches(&format!("#{k}")).count()).max().unwrap_or(0)
 }
 
 /// Returns the top-level rewritten corpus, falling back to the supplied
@@ -785,6 +816,18 @@ fn cross_depth_useless_inline() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_useless_inline.json", LAMBDA, true);
 }
 
+/// Parallel to [`cross_depth_useless_inline`] with `--allow-useless-vars`, which
+/// forces `opt_useless_inline` off. The unsound cross-depth inline the original
+/// test guards against can therefore never fire, so best-first settles on the
+/// same sound arity-1 mod-pattern `(lam (map #0 $0))` — no useless var, no
+/// cross-depth collapse. Confirms disabling the inline short-circuit doesn't
+/// reintroduce the bug (the fix isn't load-bearing only when the opt is on).
+#[test]
+fn cross_depth_useless_inline_allow_useless_vars() {
+    let bf = run_backend("best-first", "data/domains/ho-bugs/cross_depth_useless_inline.json", &["--language", "lambda-calc", "--allow-useless-vars"]);
+    assert_eq!(abstraction_bodies(&bf), vec!["(lam (map #0 $0))".to_string()], "inline off should still yield the sound arity-1 pattern");
+}
+
 /// Regression (minimised from the `logo` domain): a cross-depth reuse that
 /// over-shifts a concrete DB-var leaf on inline. The three programs share the
 /// skeleton `(lam (logo_forLoop ?N (lam (lam (logo_FWRT ?A ?B $0))) $0))`,
@@ -955,9 +998,25 @@ fn nuts_bolts_dominance_three_way_reuse() {
     let v = run_backend("best-first", input, args);
     let bodies = abstraction_bodies(&v);
     assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
-    let body = &bodies[0];
-    let max_reuse = (0..8).map(|k| body.matches(&format!("#{k}")).count()).max().unwrap_or(0);
-    assert!(max_reuse >= 3, "expected a metavar reused 3× (the 3-way reuse), got max {max_reuse} in body: {body}");
+    let max_reuse = max_var_reuse(&bodies[0]);
+    assert!(max_reuse >= 3, "expected a metavar reused 3× (the 3-way reuse), got max {max_reuse} in body: {}", bodies[0]);
+}
+
+/// Parallel to [`nuts_bolts_dominance_three_way_reuse`] with `--allow-useless-vars`,
+/// which forces `opt_dominance_reuse` off. The 3-way-reused `?#0` is *not*
+/// useless (it binds a different value at each call site), so the optimum is
+/// unchanged — but reaching it now goes through the "late" post-expand merge
+/// path (option (b) in the original's doc) instead of the dominance
+/// force-merge. Pins that the 3-way stays reachable with dominance disabled.
+#[test]
+fn nuts_bolts_dominance_three_way_reuse_allow_useless_vars() {
+    let input = "data/test/nuts_bolts_3way_reuse.json";
+    let args = &["--rules", "data/test/nuts_bolts_3way_reuse.rewrites", "--max-arity", "2", "--allow-useless-vars"];
+    let v = run_backend("best-first", input, args);
+    let bodies = abstraction_bodies(&v);
+    assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
+    let max_reuse = max_var_reuse(&bodies[0]);
+    assert!(max_reuse >= 3, "3-way reuse should survive dominance-off, got max {max_reuse} in body: {}", bodies[0]);
 }
 
 /// Hand-built `data/test/` corpora whose rule sets each introduce an identity
