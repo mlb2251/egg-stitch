@@ -71,6 +71,8 @@ RULES_BY_REL = {
     # make the rewritten trees equivalent, so β alone can't bridge them. Blessed
     # by the `molecules_*` cases in `tests/stitch_compat_test.rs`.
     "test/ethanol_two_rootings.out.json": "data/domains/molecules/molecules.rewrites",
+    "test/roll_over_glycol.default.out.json": "data/domains/molecules/molecules.rewrites",
+    "test/roll_over_glycol.roll.out.json": "data/domains/molecules/molecules.rewrites",
     "domains/molecules/molecules.out.json": "data/domains/molecules/molecules.rewrites",
     "molecules/scramble/hexyl.scram.out.json": "data/domains/molecules/molecules.rewrites",
     "molecules/scramble/ester.scram.out.json": "data/domains/molecules/molecules.rewrites",
