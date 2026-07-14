@@ -35,6 +35,12 @@ fn args(num_abstractions: usize) -> Args {
     Args::parse_from(["egg-stitch", "--search", "best-first", "--max-arity", "2", "--num-abstractions", &num_abstractions.to_string()])
 }
 
+/// Same as [`args`] but with `--roll-over`: the rewritten egraph is reused between
+/// abstractions instead of being rebuilt from the extracted program strings.
+fn roll_args(num_steps: usize, num_abstractions: usize) -> Args {
+    Args::parse_from(["egg-stitch", "--search", "best-first", "--num-steps", &num_steps.to_string(), "--max-arity", "2", "--num-abstractions", &num_abstractions.to_string(), "--roll-over"])
+}
+
 const FIRST_REWRITTEN: &[&str] = &["(+ (fn_0 (h a) (h b)) 2 2 2)", "(+ (fn_0 (a e) (b f)) 3 3 3)", "(+ (fn_0 (e i) (f j)) 4 4 4)", "(* (fn_0 (k m) (l n)) 5)"];
 
 /// Baseline: num_abstractions=0 gives an empty library and no rewritten corpus.
@@ -82,6 +88,43 @@ fn two_abstractions() {
 
     // Second search ran on the rewritten corpus; with max-arity=2 and flat (fn_0 x y)
     // programs the best it can find is the leaf `a`.
+    let second = &library[1];
+    assert_eq!(second.pattern, "fn_1: (+ ?#0 ?#1 ?#1 ?#1)");
+    assert_eq!(second.arity, 2);
+    assert_eq!(second.pattern_size, 5);
+    assert_eq!(second.num_matches, 3);
+}
+
+/// `--roll-over` only changes what is threaded into the *next* round, so a single
+/// abstraction run is unaffected: same library and same rewritten corpus as the
+/// default rebuild path.
+#[test]
+fn roll_over_single_abstraction_matches_default() {
+    let (eg, root) = load::<OpChildrenLanguage>();
+    let (library, _original_size, _final_cost, final_rewritten, _heap, _) = multiple_step_search::<OpChildren, Op>(SharedData::new(eg, root), &roll_args(500, 1));
+    assert_eq!(library.len(), 1);
+    assert_eq!(library[0].pattern, "fn_0: (f (g ?#0) (g ?#1))");
+    assert_eq!(final_rewritten.expect("one abstraction → rewritten corpus"), FIRST_REWRITTEN);
+}
+
+/// Two-abstraction run with `--roll-over`: the second search runs over the reused
+/// egraph (original nodes + the unioned `fn_0(...)` applications) rather than a fresh
+/// egraph rebuilt from the extracted strings. This exercises feeding
+/// `build_rewritten_egraph`'s output straight back into the search — the path that
+/// would trip a stale root, an fv-assertion, or hashcons corruption if reuse were
+/// mishandled. Here the captured args are closed and rule-free, so the rolled-over
+/// egraph offers no equivalence the rebuild path lacks and the second abstraction
+/// matches [`two_abstractions`] exactly; the assertions pin that parity.
+#[test]
+fn roll_over_two_abstractions() {
+    let (eg, root) = load::<OpChildrenLanguage>();
+    let (library, original_size, final_cost, _final_rewritten, _heap, _) = multiple_step_search::<OpChildren, Op>(SharedData::new(eg, root), &roll_args(500, 2));
+
+    assert_eq!(original_size, 43);
+    assert_eq!(final_cost, Some(Vec::from([40, 39])));
+    assert_eq!(library.len(), 2);
+    assert_eq!(library[0].pattern, "fn_0: (f (g ?#0) (g ?#1))");
+
     let second = &library[1];
     assert_eq!(second.pattern, "fn_1: (+ ?#0 ?#1 ?#1 ?#1)");
     assert_eq!(second.arity, 2);

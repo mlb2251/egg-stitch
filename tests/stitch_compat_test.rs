@@ -190,6 +190,38 @@ fn bless_bf_run(input: &str, extra_args: &[&str], fixture: &str, label: &str) {
     bless_or_check(fixture, &bf, label);
 }
 
+/// Runs best-first with an explicit `--num-abstractions` and returns the stripped
+/// output JSON. The `run_backend*` helpers are fixed at one abstraction; the
+/// roll-over comparison needs a stacked run (roll-over only affects rounds 2+).
+fn run_bf_abstractions(input: &str, num_abstractions: &str, bf_steps: &str, extra_args: &[&str]) -> Value {
+    let out = temp_output_path(input, "best-first");
+    let out_str = out.to_str().expect("utf-8 temp path");
+    let mut cmd = Command::new(BIN);
+    cmd.args(["--search", "best-first", "--input", input, "--num-abstractions", num_abstractions, "--num-steps", bf_steps, "--output", out_str]);
+    cmd.args(extra_args);
+    let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
+    assert!(status.success(), "best-first run failed for {input}");
+
+    let text = fs::read_to_string(&out).unwrap_or_else(|e| panic!("read {}: {e}", out.display()));
+    let _ = fs::remove_file(&out);
+    let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
+    if let Some(obj) = v.as_object_mut() {
+        for k in ["timestamp", "elapsed_secs", "iteration_times", "input_file", "rules_file", "search"] {
+            obj.remove(k);
+        }
+    }
+    if let Some(library) = v.get_mut("library").and_then(|l| l.as_array_mut()) {
+        for entry in library {
+            if let Some(obj) = entry.as_object_mut() {
+                for k in ["num_steps_run", "num_expansions", "best_iteration", "best_history"] {
+                    obj.remove(k);
+                }
+            }
+        }
+    }
+    v
+}
+
 /// Shared blessing/checking step for the two `check_fixture*` helpers.
 fn bless_or_check(path: &str, value: &Value, input: &str) {
     let value = common::sorted(value);
@@ -1224,4 +1256,42 @@ fn loop_no_count1_both_roll() {
     let fixture = "data/expected_outputs/test/loop_rolling_no_count1.out.json";
     bless_bf_run(input, LOOP_RULES, fixture, "loop_rolling_no_count1 (live)");
     bless_bf_run(input, LOOP_RULES_AT_START, fixture, "loop_rolling_no_count1 (at-start)");
+}
+
+// `--roll-over` reuses the rewritten e-graph between abstractions instead of
+// extracting the rewritten programs to strings and rebuilding. The payoff shows
+// up when a later abstraction wants to re-cut structure that an earlier one baked
+// into its body: rebuilding commits each program to one min-size spelling, and
+// once round-1's fn_0 bakes in the CH2/O structure the re-rooting DSRs can no
+// longer regenerate a molecule's other spellings, so the finer round-2 motif is
+// under-counted. Roll-over keeps every spelling in the e-graph, so the finer
+// motif keeps all its match sites and wins.
+
+/// Minimized (2-molecule) form of the PR's glycol scramble: `--roll-over` reaches
+/// a strictly lower final cost than the default rebuild at 2 abstractions (28 vs
+/// 31). Both pick the CH2 unit `fn_0 = (s4 C (s1 H) (s1 H) ?#0)` in round 1. The
+/// default then extracts one spelling per molecule to a string and rebuilds, and
+/// round-1's fn_0 baking blocks the re-rooting DSRs from regenerating the other
+/// spellings, so round 2 can only stack fn_0 within that frozen spelling
+/// (`fn_1 = (fn_0 (fn_0 (s1 ?#0)))`). Roll-over keeps every spelling live, so round
+/// 2 can re-cut across the O-linker that fn_0 straddled
+/// (`fn_1 = (fn_0 (s2 O (fn_0 (fn_0 (s1 H)))))`) and lands lower. The two molecules
+/// carry a Cl and a C=O: those heteroatom decorations are what make greedy fn_0 cut
+/// the two backbones differently — an all-CH2/O polyether is too uniform to diverge.
+/// The strict-inequality assertion is the behavioural claim; the fixtures pin the
+/// exact stacks on each side.
+#[test]
+fn roll_over_finds_cheaper_stack() {
+    let input = "data/test/roll_over_glycol.json";
+    let default_out = run_bf_abstractions(input, "2", "2000", SYMMETRIES);
+    let mut roll_args = SYMMETRIES.to_vec();
+    roll_args.push("--roll-over");
+    let roll_out = run_bf_abstractions(input, "2", "2000", &roll_args);
+
+    let default_cost = default_out["final_cost"].as_u64().expect("final_cost present");
+    let roll_cost = roll_out["final_cost"].as_u64().expect("final_cost present");
+    assert!(roll_cost < default_cost, "expected --roll-over to beat the default rebuild, got roll={roll_cost} default={default_cost}");
+
+    bless_or_check("data/expected_outputs/test/roll_over_glycol.default.out.json", &default_out, input);
+    bless_or_check("data/expected_outputs/test/roll_over_glycol.roll.out.json", &roll_out, input);
 }
