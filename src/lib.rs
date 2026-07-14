@@ -257,7 +257,7 @@ pub struct Args {
     /// one is contained — under a single global variable renaming — in an
     /// already-seen pattern with one fewer variable. Such a `Q` is a vacuous
     /// wrapper dominated by that smaller pattern, so exploring it is redundant.
-    #[arg(long = "opt-var-subset", default_value_t = false)]
+    #[arg(long = "opt-var-subset", default_value_t = true)]
     pub opt_var_subset: bool,
 
     /// Disable dominance pruning for the reuse branch (on by default).
