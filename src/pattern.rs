@@ -360,11 +360,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         depth
     }
 
-    /// Per-var minimum syntactic depth: `depth[k]` = the fewest edges from the
-    /// pattern root to any occurrence of `?#k`. Every node counts (unlike the
-    /// binder-only [`Self::occurrence_depths`]), so this is the var's distance
-    /// from the top of the tree. Min over occurrences (a var can repeat after
-    /// `reuse`). Same parents-before-children `RevExpr` walk.
+    /// `depth[k]` = the fewest edges from the pattern root to any occurrence of `?#k`.
     pub fn syntactic_var_depths(&self) -> Vec<u32> {
         let nodes = &self.pattern.nodes;
         let mut depth = vec![0u32; nodes.len()];
