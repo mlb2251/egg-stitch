@@ -192,18 +192,16 @@ struct Node<F: LanguageFamily, O: StitchOp> {
 /// Maintains a min-heap keyed by `(cost, insertion_order)`. Each pop enumerates
 /// every deterministic successor of the node, deduplicates against the set of
 /// previously-seen canonical patterns, applies `max_arity` and `follow` filters,
-/// and pushes the survivors back onto the heap. Stops at `num_steps` pops or an
-/// empty heap. (No `dead_runs` cutoff: the search is systematic, so "no recent
-/// improvement" just means we're grinding through a less promising branch.)
+/// and pushes the survivors back onto the heap. Stops at `num_steps` pops, the
+/// `time_limit`, or an empty heap (completion). If neither budget is set, runs
+/// to completion. (No `dead_runs` cutoff: the search is systematic, so "no
+/// recent improvement" just means we're grinding through a less promising branch.)
 pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> BestFirstResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
     let budget = args.num_steps;
     let time_limit = args.time_limit.map(std::time::Duration::from_secs_f64);
-    if budget.is_none() && time_limit.is_none() && args.max_forced_expansion.0.is_none() {
-        panic!("best-first search requires at least one of --num-steps, --time-limit, or --max-forced-expansion");
-    }
     let max_arity = args.max_arity;
     let no_zero_arity = args.no_zero_arity;
     // ForcedThenCost reduces to Cost when the e-graph is cost-balanced
