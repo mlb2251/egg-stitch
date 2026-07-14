@@ -5,7 +5,7 @@ file, then verify each produced output is equivalent to the input using
 
 Any args after `--` are appended to both invocations (e.g.
 `-- --sym-var-cost 100 --max-arity 1`). Search-specific defaults
-(`--num-steps`, `--num-particles`, …) match `tests/stitch_compat_test.rs`
+(`--num-steps`, `--num-particles`, …) match the stitch cases in `tests/snapshots.toml`
 and can be overridden by passing them through.
 
 Exit 0 only when both runs complete and both pass the equivalence check.
@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 CHECKER = HERE / "check_equiv.py"
 
-# Match the defaults used in tests/stitch_compat_test.rs.
+# Match the defaults used by the stitch cases in tests/snapshots.toml.
 SMC_DEFAULTS = ["--num-particles", "1000", "--num-steps", "1000", "--temperature", "100"]
 BF_DEFAULTS = ["--num-steps", "50000"]
 
