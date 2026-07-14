@@ -25,6 +25,17 @@ wasm-bindgen = { version = "0.2", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
 
+[dev-dependencies]
+libtest-mimic = "0.8"
+toml = "0.8"
+
+# The snapshot (bless/check) suite is data-driven: `tests/snapshots.toml` lists
+# every case and `tests/snapshots.rs` emits one libtest-mimic trial per case, so
+# it needs a custom (non-libtest) harness.
+[[test]]
+name = "snapshots"
+harness = false
+
 [features]
 default = []
 wasm = ["wasm-bindgen", "serde-wasm-bindgen", "getrandom"]

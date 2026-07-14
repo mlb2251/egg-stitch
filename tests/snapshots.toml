@@ -1,0 +1,902 @@
+# Snapshot (bless/check) case manifest — the single source of truth for the
+# suite. Each `[[case]]` becomes one libtest-mimic trial (see tests/snapshots.rs)
+# and one fixture under data/expected_outputs/. `scripts/check_all_outputs.py`
+# reads the same file for each fixture's equivalence-oracle spec (`oracle`).
+#
+# Fields (see tests/common/mod.rs for the full schema):
+#   name          unique, `/`-structured trial name
+#   kind          run recipe: stitch | cogsci | dreamcoder | epfl
+#   input / glob  corpus file, or (dreamcoder) a `dir/*.json` glob to aggregate
+#   fixture       fixture path under data/expected_outputs/ (no .out.json);
+#                 defaults to the input path minus `data/[domains/]` and `.json`
+#   backends      stitch only: bf (default) | both  (both → collapse if they agree)
+#   steps         best-first --num-steps override
+#   rules         --rules <path> (also the default equivalence-oracle rules)
+#   at_start      epfl only: pass --only-use-dsrs-at-start
+#   check_pattern stitch only: keep the abstraction pattern/lambda (default true)
+#   args          extra CLI args appended verbatim
+#   oracle        equivalence check: "beta" (default) | "circuit" |
+#                 { rules = "..." } | { skip = "reason" }
+#
+# Re-bless everything:  BLESS=1 cargo test --release --test snapshots
+
+# ─── cogsci drawing domains (best-first, 3 stacked abstractions) ──────────────
+# Four variants per domain: no-DSR, the per-domain babble DSRs, those DSRs under
+# a --max-forced-expansion cap, and our algebraic drawings.rewrites under the
+# --max-match-set cap. See the (former) tests/cogsci_bfs_test.rs header for the
+# rationale behind each variant's budget.
+
+[[case]]
+name = "cogsci/dials.nodsr"
+kind = "cogsci"
+input = "data/domains/cogsci/dials.json"
+fixture = "cogsci/dials.nodsr"
+oracle = "beta"
+
+[[case]]
+name = "cogsci/dials.dsr"
+kind = "cogsci"
+input = "data/domains/cogsci/dials.json"
+fixture = "cogsci/dials.dsr"
+rules = "data/domains/cogsci/dials.rewrites"
+oracle = { rules = "data/domains/cogsci/dials.rewrites" }
+
+# dsr-mfe3: the forced-expansion prune fires on wheels/furniture (changing the
+# result vs. the uncapped DSR run) and is a no-op on dials/nuts-bolts.
+[[case]]
+name = "cogsci/dials.dsr-mfe3"
+kind = "cogsci"
+input = "data/domains/cogsci/dials.json"
+fixture = "cogsci/dials.dsr-mfe3"
+rules = "data/domains/cogsci/dials.rewrites"
+args = ["--max-forced-expansion", "3"]
+oracle = { rules = "data/domains/cogsci/dials.rewrites" }
+
+# algebra: our non-confluent drawings.rewrites under the per-factor match-set cap
+# (24) + --decompose-min-rows 24 + --iter-limit 6, at a reduced 10000-step budget
+# (50000 OOMs CI when the four domains run concurrently). Oracle-intractable
+# (check_equiv saturates without the cap), so pinned only by this snapshot.
+[[case]]
+name = "cogsci/dials.algebra"
+kind = "cogsci"
+input = "data/domains/cogsci/dials.json"
+fixture = "cogsci/dials.algebra"
+rules = "data/domains/cogsci/drawings.rewrites"
+steps = "10000"
+args = ["--max-match-set", "24", "--decompose-min-rows", "24", "--iter-limit", "6"]
+oracle = { skip = "oracle-intractable (non-confluent algebra rules); pinned by snapshot" }
+
+[[case]]
+name = "cogsci/wheels.nodsr"
+kind = "cogsci"
+input = "data/domains/cogsci/wheels.json"
+fixture = "cogsci/wheels.nodsr"
+oracle = "beta"
+
+[[case]]
+name = "cogsci/wheels.dsr"
+kind = "cogsci"
+input = "data/domains/cogsci/wheels.json"
+fixture = "cogsci/wheels.dsr"
+rules = "data/domains/cogsci/wheels.rewrites"
+oracle = { rules = "data/domains/cogsci/wheels.rewrites" }
+
+[[case]]
+name = "cogsci/wheels.dsr-mfe3"
+kind = "cogsci"
+input = "data/domains/cogsci/wheels.json"
+fixture = "cogsci/wheels.dsr-mfe3"
+rules = "data/domains/cogsci/wheels.rewrites"
+args = ["--max-forced-expansion", "3"]
+oracle = { rules = "data/domains/cogsci/wheels.rewrites" }
+
+[[case]]
+name = "cogsci/wheels.algebra"
+kind = "cogsci"
+input = "data/domains/cogsci/wheels.json"
+fixture = "cogsci/wheels.algebra"
+rules = "data/domains/cogsci/drawings.rewrites"
+steps = "10000"
+args = ["--max-match-set", "24", "--decompose-min-rows", "24", "--iter-limit", "6"]
+oracle = { skip = "oracle-intractable (non-confluent algebra rules); pinned by snapshot" }
+
+[[case]]
+name = "cogsci/furniture.nodsr"
+kind = "cogsci"
+input = "data/domains/cogsci/furniture.json"
+fixture = "cogsci/furniture.nodsr"
+oracle = "beta"
+
+[[case]]
+name = "cogsci/furniture.dsr"
+kind = "cogsci"
+input = "data/domains/cogsci/furniture.json"
+fixture = "cogsci/furniture.dsr"
+rules = "data/domains/cogsci/furniture.rewrites"
+oracle = { rules = "data/domains/cogsci/furniture.rewrites" }
+
+[[case]]
+name = "cogsci/furniture.dsr-mfe3"
+kind = "cogsci"
+input = "data/domains/cogsci/furniture.json"
+fixture = "cogsci/furniture.dsr-mfe3"
+rules = "data/domains/cogsci/furniture.rewrites"
+args = ["--max-forced-expansion", "3"]
+oracle = { rules = "data/domains/cogsci/furniture.rewrites" }
+
+[[case]]
+name = "cogsci/furniture.algebra"
+kind = "cogsci"
+input = "data/domains/cogsci/furniture.json"
+fixture = "cogsci/furniture.algebra"
+rules = "data/domains/cogsci/drawings.rewrites"
+steps = "10000"
+args = ["--max-match-set", "24", "--decompose-min-rows", "24", "--iter-limit", "6"]
+oracle = { skip = "oracle-intractable (non-confluent algebra rules); pinned by snapshot" }
+
+[[case]]
+name = "cogsci/nuts-bolts.nodsr"
+kind = "cogsci"
+input = "data/domains/cogsci/nuts-bolts.json"
+fixture = "cogsci/nuts-bolts.nodsr"
+oracle = "beta"
+
+[[case]]
+name = "cogsci/nuts-bolts.dsr"
+kind = "cogsci"
+input = "data/domains/cogsci/nuts-bolts.json"
+fixture = "cogsci/nuts-bolts.dsr"
+rules = "data/domains/cogsci/nuts-bolts.rewrites"
+oracle = { rules = "data/domains/cogsci/nuts-bolts.rewrites" }
+
+[[case]]
+name = "cogsci/nuts-bolts.dsr-mfe3"
+kind = "cogsci"
+input = "data/domains/cogsci/nuts-bolts.json"
+fixture = "cogsci/nuts-bolts.dsr-mfe3"
+rules = "data/domains/cogsci/nuts-bolts.rewrites"
+args = ["--max-forced-expansion", "3"]
+oracle = { rules = "data/domains/cogsci/nuts-bolts.rewrites" }
+
+[[case]]
+name = "cogsci/nuts-bolts.algebra"
+kind = "cogsci"
+input = "data/domains/cogsci/nuts-bolts.json"
+fixture = "cogsci/nuts-bolts.algebra"
+rules = "data/domains/cogsci/drawings.rewrites"
+steps = "10000"
+args = ["--max-match-set", "24", "--decompose-min-rows", "24", "--iter-limit", "6"]
+oracle = { skip = "oracle-intractable (non-confluent algebra rules); pinned by snapshot" }
+
+# ─── dreamcoder list / physics (best-first lambda-calc, glob-aggregated) ──────
+# Many per-benchmark files per domain; each fixture aggregates the per-file
+# results into one object keyed by file name.
+
+[[case]]
+name = "dreamcoder/list.nodsr"
+kind = "dreamcoder"
+glob = "data/domains/list/*.json"
+fixture = "list/list.nodsr"
+oracle = "beta"
+
+[[case]]
+name = "dreamcoder/list.dsr"
+kind = "dreamcoder"
+glob = "data/domains/list/*.json"
+fixture = "list/list.dsr"
+rules = "data/domains/list/list.rewrites"
+oracle = { rules = "data/domains/list/list.rewrites" }
+
+[[case]]
+name = "dreamcoder/physics.nodsr"
+kind = "dreamcoder"
+glob = "data/domains/physics/*.json"
+fixture = "physics/physics.nodsr"
+oracle = "beta"
+
+[[case]]
+name = "dreamcoder/physics.dsr"
+kind = "dreamcoder"
+glob = "data/domains/physics/*.json"
+fixture = "physics/physics.dsr"
+rules = "data/domains/physics/physics.rewrites"
+oracle = { rules = "data/domains/physics/physics.rewrites" }
+
+# Oracle-only: the full ~5000-molecule corpus is too slow to search in a unit
+# test, so it has no snapshot trial — but its committed rewritten output is still
+# β/DSR-equivalence-checked by check_all_outputs.py. Declared here so coverage
+# stays a bijection.
+[[case]]
+name = "domains/molecules/molecules"
+kind = "stitch"
+fixture = "domains/molecules/molecules"
+snapshot = false
+oracle = { rules = "data/domains/molecules/molecules.rewrites" }
+
+# ─── EPFL circuits (fixed 4-abstraction SMC rollout, seed 1) ──────────────────
+# Per circuit, three configs: no-rules `baseline`, De Morgan + factoring `live`,
+# and the same rules `at-start`. Verified by exhaustive boolean truth-table
+# equivalence (check_circuit_equiv.py), so oracle = "circuit". The `.aig`
+# corpus-regeneration check lives in tests/snapshot_asserts.rs (no fixture).
+# hyp.factoring.live sits near an SMC basin boundary at 500 particles — its
+# fixture reflects a fragile low-particle trajectory (see the former suite doc).
+
+[[case]]
+name = "epfl/hyp.baseline"
+kind = "epfl"
+input = "data/domains/epfl-circuits/hyp.json"
+fixture = "epfl-circuits/hyp.baseline"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/hyp.factoring.live"
+kind = "epfl"
+input = "data/domains/epfl-circuits/hyp.json"
+fixture = "epfl-circuits/hyp.factoring.live"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/hyp.factoring.at-start"
+kind = "epfl"
+input = "data/domains/epfl-circuits/hyp.json"
+fixture = "epfl-circuits/hyp.factoring.at-start"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+at_start = true
+oracle = "circuit"
+
+[[case]]
+name = "epfl/log2.baseline"
+kind = "epfl"
+input = "data/domains/epfl-circuits/log2.json"
+fixture = "epfl-circuits/log2.baseline"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/log2.factoring.live"
+kind = "epfl"
+input = "data/domains/epfl-circuits/log2.json"
+fixture = "epfl-circuits/log2.factoring.live"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/log2.factoring.at-start"
+kind = "epfl"
+input = "data/domains/epfl-circuits/log2.json"
+fixture = "epfl-circuits/log2.factoring.at-start"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+at_start = true
+oracle = "circuit"
+
+[[case]]
+name = "epfl/multiplier.baseline"
+kind = "epfl"
+input = "data/domains/epfl-circuits/multiplier.json"
+fixture = "epfl-circuits/multiplier.baseline"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/multiplier.factoring.live"
+kind = "epfl"
+input = "data/domains/epfl-circuits/multiplier.json"
+fixture = "epfl-circuits/multiplier.factoring.live"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/multiplier.factoring.at-start"
+kind = "epfl"
+input = "data/domains/epfl-circuits/multiplier.json"
+fixture = "epfl-circuits/multiplier.factoring.at-start"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+at_start = true
+oracle = "circuit"
+
+[[case]]
+name = "epfl/square.baseline"
+kind = "epfl"
+input = "data/domains/epfl-circuits/square.json"
+fixture = "epfl-circuits/square.baseline"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/square.factoring.live"
+kind = "epfl"
+input = "data/domains/epfl-circuits/square.json"
+fixture = "epfl-circuits/square.factoring.live"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/square.factoring.at-start"
+kind = "epfl"
+input = "data/domains/epfl-circuits/square.json"
+fixture = "epfl-circuits/square.factoring.at-start"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+at_start = true
+oracle = "circuit"
+
+[[case]]
+name = "epfl/voter.baseline"
+kind = "epfl"
+input = "data/domains/epfl-circuits/voter.json"
+fixture = "epfl-circuits/voter.baseline"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/voter.factoring.live"
+kind = "epfl"
+input = "data/domains/epfl-circuits/voter.json"
+fixture = "epfl-circuits/voter.factoring.live"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+oracle = "circuit"
+
+[[case]]
+name = "epfl/voter.factoring.at-start"
+kind = "epfl"
+input = "data/domains/epfl-circuits/voter.json"
+fixture = "epfl-circuits/voter.factoring.at-start"
+rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites"
+at_start = true
+oracle = "circuit"
+
+# ─── stitch-compat (basic corpora ported from Stitch.jl / stitch) ─────────────
+# best-first, or best-first + SMC collapsed to one fixture when they agree;
+# all run with --check-slow. See git history of tests/stitch_compat_test.rs for
+# the per-case rationale (each was a documented regression or feature pin).
+
+[[case]]
+name = "stitch/identical"
+kind = "stitch"
+input = "data/domains/stitch/identical.json"
+backends = "both"
+oracle = "beta"
+
+[[case]]
+name = "stitch/ho_arity2_capture"
+kind = "stitch"
+input = "data/domains/ho-bugs/arity2_capture.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/fn_name_collision"
+kind = "stitch"
+input = "data/domains/ho-bugs/fn_name_collision.json"
+backends = "both"
+oracle = "beta"
+
+[[case]]
+name = "stitch/cex"
+kind = "stitch"
+input = "data/domains/stitch/cex.json"
+backends = "both"
+oracle = "beta"
+
+[[case]]
+name = "stitch/minimum_matches"
+kind = "stitch"
+input = "data/domains/stitch/minimum-matches.json"
+backends = "both"
+oracle = "beta"
+
+[[case]]
+name = "stitch/simple1"
+kind = "stitch"
+input = "data/domains/stitch/simple1.json"
+backends = "both"
+oracle = "beta"
+
+[[case]]
+name = "stitch/simple2"
+kind = "stitch"
+input = "data/domains/stitch/simple2.json"
+backends = "both"
+oracle = "beta"
+
+[[case]]
+name = "stitch/simple3"
+kind = "stitch"
+input = "data/domains/stitch/simple3.json"
+backends = "both"
+oracle = "beta"
+
+[[case]]
+name = "stitch/tmp_minimal"
+kind = "stitch"
+input = "data/domains/stitch/tmp_minimal.json"
+backends = "both"
+oracle = "beta"
+
+[[case]]
+name = "stitch/reuse_at_different_depths"
+kind = "stitch"
+input = "data/domains/stitch/reuse-at-different-depths.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/same_leaf_different_depths"
+kind = "stitch"
+input = "data/domains/stitch/same-leaf-different-depths.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/nested"
+kind = "stitch"
+input = "data/domains/stitch/nested.json"
+backends = "both"
+rules = "data/domains/stitch/nested.rewrites"
+oracle = { rules = "data/domains/stitch/nested.rewrites" }
+
+[[case]]
+name = "stitch/arithmetic_aplusbplusc"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/aplusbplusc.json"
+backends = "both"
+rules = "data/domains/simple-arithmetic/arithmetic.rewrites"
+check_pattern = false
+oracle = "beta"
+
+[[case]]
+name = "stitch/common_start"
+kind = "stitch"
+input = "data/domains/basic-apps/common-start.json"
+backends = "both"
+rules = "data/domains/simple-arithmetic/arithmetic.rewrites"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/varying_head"
+kind = "stitch"
+input = "data/domains/basic-apps/varying-head.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/multiple_with_apps"
+kind = "stitch"
+input = "data/domains/basic-apps/multiple-with-apps.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/drop_fv_minus_arm"
+kind = "stitch"
+input = "data/domains/ho-bugs/drop_fv_minus.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/drop_fv_plus_arm"
+kind = "stitch"
+input = "data/domains/ho-bugs/drop_fv_plus.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/cross_slot_shift_memo"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_slot_shift_memo.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/cross_depth_fv_outside_gap"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_fv_outside_gap.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/arithmetic_aplusbplus1234"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/aplusbplus1234.json"
+rules = "data/domains/simple-arithmetic/arithmetic.rewrites"
+check_pattern = false
+oracle = "beta"
+
+[[case]]
+name = "stitch/constant_folding_unifies_literal"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/const_fold.json"
+rules = "data/domains/simple-arithmetic/const_fold.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/const_fold.rewrites" }
+
+[[case]]
+name = "stitch/constant_folding_after_rewrites"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/fold_after_rewrite.json"
+rules = "data/domains/simple-arithmetic/fold_after_rewrite.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/fold_after_rewrite.rewrites" }
+
+[[case]]
+name = "stitch/constant_folding_integers"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/const_fold_integers.json"
+rules = "data/domains/simple-arithmetic/const_fold_integers.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/const_fold_integers.rewrites" }
+
+[[case]]
+name = "stitch/constant_folding_floats"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/const_fold_floats.json"
+rules = "data/domains/simple-arithmetic/const_fold_floats.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/const_fold_floats.rewrites" }
+
+[[case]]
+name = "stitch/constant_folding_integers_are_floats"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/const_fold_int_as_float.json"
+rules = "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites" }
+
+[[case]]
+name = "stitch/constant_folding_ops_list_trig"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/fold_ops_trig.json"
+rules = "data/domains/simple-arithmetic/fold_ops_trig.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/fold_ops_trig.rewrites" }
+
+[[case]]
+name = "stitch/constant_folding_ops_list_restricts"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/fold_ops_restrict.json"
+rules = "data/domains/simple-arithmetic/fold_ops_restrict.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/fold_ops_restrict.rewrites" }
+
+[[case]]
+name = "stitch/constant_folding_round_places6"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/fold_round6.json"
+rules = "data/domains/simple-arithmetic/fold_round6.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/fold_round6.rewrites" }
+
+[[case]]
+name = "stitch/constant_folding_round_places3"
+kind = "stitch"
+input = "data/domains/simple-arithmetic/fold_round3.json"
+rules = "data/domains/simple-arithmetic/fold_round3.rewrites"
+oracle = { rules = "data/domains/simple-arithmetic/fold_round3.rewrites" }
+
+[[case]]
+name = "stitch/map_minimal"
+kind = "stitch"
+input = "data/domains/stitch/map_minimal.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/ctx_thread_1"
+kind = "stitch"
+input = "data/domains/stitch/ctx_thread_1.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/ctx_thread_2"
+kind = "stitch"
+input = "data/domains/stitch/ctx_thread_2.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/ctx_thread_twice"
+kind = "stitch"
+input = "data/domains/stitch/ctx_thread_twice.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/hof"
+kind = "stitch"
+input = "data/domains/stitch/hof.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/map"
+kind = "stitch"
+input = "data/domains/stitch/map.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/map2"
+kind = "stitch"
+input = "data/domains/stitch/map2.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/no_invention_cons_car"
+kind = "stitch"
+input = "data/domains/stitch/no_invention_cons_car.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/safe_ctx_thread_bug"
+kind = "stitch"
+input = "data/domains/stitch/safe_ctx_thread_bug.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/fv_overapprox_annihilator"
+kind = "stitch"
+input = "data/domains/fv-overapprox/annihilator.json"
+rules = "data/domains/fv-overapprox/annihilator.rewrites"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100", "--max-arity", "1"]
+oracle = { rules = "data/domains/fv-overapprox/annihilator.rewrites" }
+
+[[case]]
+name = "stitch/simple_hof"
+kind = "stitch"
+input = "data/domains/stitch/simple_hof.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/free_no_args"
+kind = "stitch"
+input = "data/domains/stitch/free-no-args.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/free_no_args_huge_lam_stack"
+kind = "stitch"
+input = "data/domains/stitch/free-no-args-huge-lam-stack.json"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/ho_shared_lam_uniform_bottom"
+kind = "stitch"
+input = "data/domains/higher-order/uniform-bottom.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/ho_shared_lam_varying_bottom"
+kind = "stitch"
+input = "data/domains/higher-order/varying-bottom.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/ho_minimal_lam_varying_head"
+kind = "stitch"
+input = "data/domains/higher-order/minimal-head.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/ho_shared_lam_with_outer_context"
+kind = "stitch"
+input = "data/domains/higher-order/outer-context.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/cross_depth_useless_inline"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_useless_inline.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/cross_depth_forloop_db_var_inline"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_forloop_db_var_inline.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/conditional_branch_unify"
+kind = "stitch"
+input = "data/domains/conditional/if_branch_unify.json"
+rules = "data/domains/conditional/if_branch.rewrites"
+oracle = { rules = "data/domains/conditional/if_branch.rewrites" }
+
+[[case]]
+name = "stitch/crossed_wrap_collapse"
+kind = "stitch"
+input = "data/test/crossed_wrap_collapse.json"
+rules = "data/test/crossed_wrap_collapse.rewrites"
+args = ["--language", "op-children", "--max-arity", "3"]
+oracle = { rules = "data/test/crossed_wrap_collapse.rewrites" }
+
+[[case]]
+name = "stitch/cross_depth_ho_capture"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_ho_capture.json"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/self_loop_arith_unify"
+kind = "stitch"
+input = "data/test/arith_unify.json"
+rules = "data/test/arith.rewrites"
+args = ["--max-arity", "2"]
+oracle = { rules = "data/test/arith.rewrites" }
+
+[[case]]
+name = "stitch/self_loop_converge_tower"
+kind = "stitch"
+input = "data/test/converge_tower.json"
+rules = "data/test/converge_tower.rewrites"
+args = ["--max-arity", "2"]
+oracle = { rules = "data/test/converge_tower.rewrites" }
+
+[[case]]
+name = "stitch/self_loop_nested_loop_tower"
+kind = "stitch"
+input = "data/test/nested_loop_tower.json"
+rules = "data/test/nested_loop_tower.rewrites"
+args = ["--max-arity", "2"]
+oracle = { rules = "data/test/nested_loop_tower.rewrites" }
+
+[[case]]
+name = "stitch/self_loop_if_unify"
+kind = "stitch"
+input = "data/test/if_unify.json"
+rules = "data/test/if.rewrites"
+args = ["--max-arity", "2"]
+oracle = { rules = "data/test/if.rewrites" }
+
+[[case]]
+name = "stitch/molecules_ethanol_same_rooting"
+kind = "stitch"
+input = "data/test/ethanol_same_rooting.json"
+oracle = "beta"
+
+[[case]]
+name = "stitch/molecules_ethanol_rerooted"
+kind = "stitch"
+input = "data/test/ethanol_two_rootings.json"
+rules = "data/domains/molecules/molecules.rewrites"
+oracle = { rules = "data/domains/molecules/molecules.rewrites" }
+
+[[case]]
+name = "stitch/molecules_scramble_hexyl_canon"
+kind = "stitch"
+input = "data/domains/molecules/scramble/hexyl.canon.json"
+oracle = "beta"
+
+[[case]]
+name = "stitch/molecules_scramble_ester_canon"
+kind = "stitch"
+input = "data/domains/molecules/scramble/ester.canon.json"
+oracle = "beta"
+
+[[case]]
+name = "stitch/molecules_scramble_glycol_canon"
+kind = "stitch"
+input = "data/domains/molecules/scramble/glycol.canon.json"
+oracle = "beta"
+
+[[case]]
+name = "stitch/binder_cycle_terminates"
+kind = "stitch"
+input = "data/domains/cyclic-binder/lam_self_cycle.json"
+steps = "300"
+rules = "data/domains/cyclic-binder/lam_self_cycle.rewrites"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/molecules_scramble_hexyl_dsr"
+kind = "stitch"
+input = "data/domains/molecules/scramble/hexyl.scram.json"
+steps = "2000"
+rules = "data/domains/molecules/molecules.rewrites"
+oracle = { rules = "data/domains/molecules/molecules.rewrites" }
+
+[[case]]
+name = "stitch/molecules_scramble_ester_dsr"
+kind = "stitch"
+input = "data/domains/molecules/scramble/ester.scram.json"
+steps = "2000"
+rules = "data/domains/molecules/molecules.rewrites"
+oracle = { rules = "data/domains/molecules/molecules.rewrites" }
+
+[[case]]
+name = "stitch/molecules_scramble_glycol_dsr"
+kind = "stitch"
+input = "data/domains/molecules/scramble/glycol.scram.json"
+steps = "2000"
+rules = "data/domains/molecules/molecules.rewrites"
+oracle = { rules = "data/domains/molecules/molecules.rewrites" }
+
+[[case]]
+name = "stitch/conditional_branch_unify_cap5"
+kind = "stitch"
+input = "data/domains/conditional/if_branch_unify.json"
+fixture = "conditional/if_branch_unify.cap5"
+rules = "data/domains/conditional/if_branch.rewrites"
+args = ["--max-forced-expansion", "5"]
+oracle = { rules = "data/domains/conditional/if_branch.rewrites" }
+
+[[case]]
+name = "stitch/conditional_branch_unify_cap10"
+kind = "stitch"
+input = "data/domains/conditional/if_branch_unify.json"
+fixture = "conditional/if_branch_unify.cap10"
+rules = "data/domains/conditional/if_branch.rewrites"
+args = ["--max-forced-expansion", "10"]
+oracle = { rules = "data/domains/conditional/if_branch.rewrites" }
+
+[[case]]
+name = "stitch/loop_count1_live"
+kind = "stitch"
+input = "data/test/loop_rolling_with_count1.json"
+fixture = "test/loop_rolling_with_count1.live"
+rules = "data/test/loop_rolling.rewrites"
+oracle = { rules = "data/test/loop_rolling.rewrites" }
+
+[[case]]
+name = "stitch/loop_count1_at_start"
+kind = "stitch"
+input = "data/test/loop_rolling_with_count1.json"
+fixture = "test/loop_rolling_with_count1.at_start"
+rules = "data/test/loop_rolling.rewrites"
+args = ["--only-use-dsrs-at-start"]
+oracle = { rules = "data/test/loop_rolling.rewrites" }
+
+[[case]]
+name = "stitch/loop_no_count1"
+kind = "stitch"
+input = "data/test/loop_rolling_no_count1.json"
+fixture = "test/loop_rolling_no_count1"
+rules = "data/test/loop_rolling.rewrites"
+oracle = { rules = "data/test/loop_rolling.rewrites" }
+
+[[case]]
+name = "stitch/op_children_db_free_var"
+kind = "stitch"
+input = "data/test/op_children_db_free_var.json"
+args = ["--language", "op-children-db"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/op_children_plain_free_var"
+kind = "stitch"
+input = "data/test/op_children_db_free_var.json"
+fixture = "test/op_children_db_free_var.plain"
+oracle = { skip = "plain op-children bakes $0 into the body; check_equiv reads it as a De Bruijn var and flags the (intended) unsoundness. Pinned by snapshot + assert." }
+
+[[case]]
+name = "stitch/roll_over_glycol_default"
+kind = "stitch"
+input = "data/test/roll_over_glycol.json"
+fixture = "test/roll_over_glycol.default"
+num_abstractions = "2"
+check_slow = false
+steps = "2000"
+rules = "data/domains/molecules/molecules.rewrites"
+oracle = { rules = "data/domains/molecules/molecules.rewrites" }
+
+[[case]]
+name = "stitch/roll_over_glycol_roll"
+kind = "stitch"
+input = "data/test/roll_over_glycol.json"
+fixture = "test/roll_over_glycol.roll"
+num_abstractions = "2"
+check_slow = false
+steps = "2000"
+rules = "data/domains/molecules/molecules.rewrites"
+args = ["--roll-over"]
+oracle = { rules = "data/domains/molecules/molecules.rewrites" }
+
+# 74 stitch cases
