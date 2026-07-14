@@ -79,6 +79,58 @@ fn cost_balanced<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<
     egraph.classes().all(|c| c.nodes.iter().all(|n| n.discriminant().intrinsic_size(&weights) + n.children().iter().map(|&ch| egraph[ch].data.size).sum::<u32>() == c.data.size))
 }
 
+/// A match footprint: `(root, variable bindings in fixed variable order)` tuples.
+type Footprint = rustc_hash::FxHashSet<(egg::Id, Vec<egg::Id>)>;
+
+/// A pattern's match footprint as a set of `(root, variable bindings in fixed
+/// variable order)` tuples, optionally projecting *out* one variable (`drop`).
+/// Returns `None` when the full-substitution count exceeds `cap` (materializing
+/// it would blow up). Bindings are kept in variable order rather than sorted, so
+/// [`contained_under_renaming`] can decide variable renaming exactly (a single
+/// global permutation) instead of over-approximating with a per-tuple multiset.
+fn footprint_set<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>, drop: Option<usize>, cap: usize) -> Option<Footprint> {
+    let arity = state.pattern.vars.len();
+    let total: usize = state.matches.iter().map(|m| m.num_substs()).sum();
+    if total > cap {
+        return None;
+    }
+    let mut set = rustc_hash::FxHashSet::default();
+    for m in &state.matches {
+        for full in crate::factor::factors_product(&m.factors) {
+            let b: Vec<egg::Id> = (0..arity).filter(|k| Some(*k) != drop).map(|k| full[k]).collect();
+            set.insert((m.root_eclass, b));
+        }
+    }
+    Some(set)
+}
+
+/// All permutations of `0..n` (recursive; `n` is small — a pattern's arity).
+fn permutations(n: usize) -> Vec<Vec<usize>> {
+    fn rec(perm: &mut Vec<usize>, k: usize, out: &mut Vec<Vec<usize>>) {
+        if k == perm.len() {
+            out.push(perm.clone());
+            return;
+        }
+        for i in k..perm.len() {
+            perm.swap(k, i);
+            rec(perm, k + 1, out);
+            perm.swap(k, i);
+        }
+    }
+    let mut out = Vec::new();
+    rec(&mut (0..n).collect(), 0, &mut out);
+    out
+}
+
+/// Exact variable-subset containment: is `proj ⊆ seen` under *some single global*
+/// variable renaming? For each permutation `π` of the shared variables, every
+/// `(root, b) ∈ proj` must have `(root, b∘π) ∈ seen`. A single `π` must work for
+/// *all* tuples — this is what makes a firing a genuine domination (a per-tuple
+/// renaming would over-approximate and could prune unsoundly).
+fn contained_under_renaming(proj: &Footprint, seen: &Footprint, perms: &[Vec<usize>]) -> bool {
+    proj.len() <= seen.len() && perms.iter().any(|perm| proj.iter().all(|(root, b)| seen.contains(&(*root, perm.iter().map(|&i| b[i]).collect()))))
+}
+
 /// One "new best" event recorded during search.
 #[derive(Serialize, Clone)]
 pub struct BestHistoryEntry {
@@ -160,6 +212,25 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut heap: BinaryHeap<Reverse<((usize, usize), usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
     let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
+    // `--opt-var-subset`: already-seen patterns' footprints, keyed by variable
+    // count, serve as reduct candidates. `vsp_hits` counts prunes. The caps bound
+    // memory/materialization on domains with very large match sets.
+    const VSP_CAP: usize = 20_000;
+    const VSP_MAX_CANDIDATES: usize = 20_000;
+    let mut vsp_seen: rustc_hash::FxHashMap<usize, Vec<Footprint>> = rustc_hash::FxHashMap::default();
+    let mut vsp_hits: usize = 0;
+    let vsp_register = |state: &SearchState<F, O>, seen: &mut rustc_hash::FxHashMap<usize, Vec<Footprint>>| {
+        if !args.opt_var_subset {
+            return;
+        }
+        let arity = state.pattern.vars.len();
+        let entry = seen.entry(arity).or_default();
+        if entry.len() < VSP_MAX_CANDIDATES
+            && let Some(fp) = footprint_set(state, None, VSP_CAP)
+        {
+            entry.push(fp);
+        }
+    };
 
     nodes.push(Node {
         state: initial_state.clone(),
@@ -168,6 +239,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         forced: initial_forced,
     });
     heap.push(Reverse((initial_prio, 0)));
+    vsp_register(&initial_state, &mut vsp_seen);
     if let Some(s) = seen.as_mut() {
         s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.frozen_mask());
     }
@@ -271,6 +343,28 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
 
+            // Variable-subset footprint pruning: prune `Q` if projecting its
+            // footprint onto its variables minus one is contained (under a single
+            // global renaming) in an already-seen pattern with one fewer variable.
+            // Any `arity >= 1` is a candidate, including the 0-variable projection
+            // (compare a lone-variable pattern to a seen concrete one): containment
+            // forces `P ∈ R` at every match root `R`, and `Q[σ] ∈ R` too, so
+            // `Q[σ] ≡ P` — the dropped variable is vacuous and `Q` is dominated.
+            if args.opt_var_subset {
+                let arity = child_state.pattern.vars.len();
+                if arity >= 1
+                    && arity - 1 <= 6
+                    && let Some(cands) = vsp_seen.get(&(arity - 1))
+                {
+                    let perms = permutations(arity - 1);
+                    let dominated = (0..arity).any(|v| footprint_set(&child_state, Some(v), VSP_CAP).is_some_and(|proj| cands.iter().any(|seen| contained_under_renaming(&proj, seen, &perms))));
+                    if dominated {
+                        vsp_hits += 1;
+                        continue;
+                    }
+                }
+            }
+
             // Useless-frozen pruning: a frozen metavar bound to the same
             // (closed-under-pattern-binders) arg in every match adds no
             // compression. Stitch analog: argument-capture pruning.
@@ -363,6 +457,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // "fix" this by guarding the overwrite on `child_cost < best.cost`.
             let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
 
+            vsp_register(&child_state, &mut vsp_seen);
             nodes.push(Node {
                 state: child_state,
                 depth: child_depth,
@@ -407,6 +502,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let (fp_len, fp_hits, fp_skips, fp_capped, fp_secs) = footprints.as_ref().map_or((0, 0, 0, 0, 0.0), |f| (f.len(), f.hits, f.proxy_skips, f.capped, f.time.as_secs_f64()));
     println!("{} {}", "footprint-set size:".dimmed(), fp_len.to_string().bold());
     println!("{} {} {}", "footprint-set hits:".dimmed(), fp_hits.to_string().bold(), format!("(proxy-skips: {}, capped: {}, time: {:.3}s)", fp_skips, fp_capped, fp_secs).dimmed());
+    if args.opt_var_subset {
+        println!("{} {}", "var-subset hits:".dimmed(), vsp_hits.to_string().bold());
+    }
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());

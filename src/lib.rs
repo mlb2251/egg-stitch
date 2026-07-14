@@ -252,6 +252,14 @@ pub struct Args {
     #[arg(long = "no-opt-dedup-by-match", action = clap::ArgAction::SetFalse)]
     pub opt_dedup_by_match: bool,
 
+    /// Variable-subset footprint pruning (best-first; off by default). Prunes a
+    /// successor `Q` when projecting its match footprint onto its variables minus
+    /// one is contained — under a single global variable renaming — in an
+    /// already-seen pattern with one fewer variable. Such a `Q` is a vacuous
+    /// wrapper dominated by that smaller pattern, so exploring it is redundant.
+    #[arg(long = "opt-var-subset", default_value_t = false)]
+    pub opt_var_subset: bool,
+
     /// Disable dominance pruning for the reuse branch (on by default).
     /// Reuse dominance: when reuse(i,j) preserves num_substs, return that
     /// reuse as a singleton successor (no cost check — sound by construction).
