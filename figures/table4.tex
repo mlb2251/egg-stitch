@@ -1,21 +1,21 @@
 % source: /home/kavi/mit/egg-stitch/results/table4.json
 % Compression Without Rewrites, Stacked Abstractions: generated from results JSON
-\begin{tabular}{l r  rrrr rrrr}
+\begin{tabular}{l r rrrr rrrr}
 \toprule
 & \multicolumn{1}{c}{Size} & \multicolumn{4}{c}{Compression Ratio} & \multicolumn{4}{c}{Time (s)} \\
 \cmidrule(lr){2-2} \cmidrule(lr){3-6} \cmidrule(lr){7-10}
-Domain & Original & Enum & SMC & babble & Stitch & Enum & SMC & babble & Stitch \\
+Domain & Original & BFS & SMC & Babble & Stitch & BFS & SMC & Babble & Stitch \\
 \midrule
-Nuts \& Bolts & 19008 & \textbf{14.86} & 13.43 & 9.40 & \textbf{14.86} & \textbf{0.061} & 0.165 & 14.081 & 0.095 \\
-Dials & 35712 & \textbf{7.94} & \textbf{7.94} & 5.62 & \textbf{7.94} & \textbf{0.321} & 2.460 & 76.972 & 0.447 \\
-Wheels & 35426 & 6.17 & 6.17 & 5.56 & \textbf{6.17} & 0.436 & 5.537 & 61.829 & \textbf{0.413} \\
-Furniture & 42935 & 6.60 & 6.60 & 4.02 & \textbf{6.64} & 0.644 & 6.963 & 126.492 & \textbf{0.582} \\
-List & 523 & \textbf{1.19} & 1.19 & 1.09 & 1.18 & 3.214 & 6.572 & 152.708 & \textbf{1.654} \\
-Physics & 518 & 1.44 & \textbf{1.44} & 1.43 & 1.43 & 0.716 & 1.910 & 13.092 & \textbf{0.369} \\
-Text & 387 & \textbf{1.38} & 1.38 & 1.24 & 1.36 & 1.622 & 3.234 & 85.885 & \textbf{1.086} \\
-Logo & 908 & 1.63 & 1.63 & 1.37 & \textbf{1.64} & 0.939 & 2.457 & 51.159 & \textbf{0.383} \\
-Towers & 495 & \textbf{1.64} & 1.64 & 1.42 & 1.63 & 0.519 & 1.240 & 23.139 & \textbf{0.284} \\
+Nuts \& Bolts & 19008 & 14.86 & \textbf{15.03} & 9.40 & 14.86 & 0.105 & 0.129 & 13.834 & \textbf{0.097} \\
+Dials & 35712 & \textbf{7.94} & 6.60 & 5.62 & \textbf{7.94} & 0.538 & 1.103 & 76.582 & \textbf{0.450} \\
+Wheels & 35426 & \textbf{6.17} & 6.05 & 5.56 & \textbf{6.17} & 0.848 & 1.914 & 62.911 & \textbf{0.416} \\
+Furniture & 42935 & 6.60 & 6.02 & 4.02 & \textbf{6.64} & 1.188 & 2.826 & 128.972 & \textbf{0.590} \\
+List & 523 & \textbf{1.19} & \textbf{1.19} & 1.09 & 1.18 & 5.030 & 11.395 & 154.409 & \textbf{1.664} \\
+Physics & 518 & 1.44 & \textbf{1.45} & 1.43 & 1.43 & 1.092 & 3.387 & 13.660 & \textbf{0.366} \\
+Text & 387 & \textbf{1.38} & \textbf{1.38} & 1.24 & 1.36 & 2.526 & 7.275 & 86.119 & \textbf{1.086} \\
+Logo & 908 & 1.63 & 1.63 & 1.37 & \textbf{1.64} & 1.494 & 2.828 & 51.154 & \textbf{0.392} \\
+Towers & 495 & \textbf{1.64} & \textbf{1.64} & 1.42 & 1.63 & 0.804 & 2.056 & 23.364 & \textbf{0.289} \\
 \midrule
-Geo. mean &  & \textbf{3.15} & 3.11 & 2.54 & 3.14 & 0.600 & 2.318 & 49.308 & \textbf{0.449} \\
+Geo. mean &  & \textbf{3.15} & 3.05 & 2.54 & 3.14 & 0.994 & 2.209 & 49.747 & \textbf{0.453} \\
 \bottomrule
 \end{tabular}

@@ -31,7 +31,15 @@
 //! ```
 
 use serde_json::{Map, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{fs, path::PathBuf, process::Command};
+
+/// Process-global counter for unique temp-file names. `list_*` and `physics_*`
+/// of the same variant run as parallel threads in one test process (same pid),
+/// share the same `tag`, and iterate the same `idx` range — so a `{pid}-{tag}-{idx}`
+/// path collides across them, racing one thread's write against another's
+/// read/remove. A monotonic counter makes every output path unique.
+static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 mod common;
 
@@ -63,7 +71,8 @@ fn input_files(domain: &str) -> Vec<PathBuf> {
 /// strips the non-deterministic / bookkeeping fields so the result is a stable
 /// snapshot.
 fn run_bfs_file(input: &str, rules: Option<&str>, tag: &str, idx: usize) -> Value {
-    let out = std::env::temp_dir().join(format!("egg-stitch-dreamcoder-{}-{}-{}.json", std::process::id(), tag, idx));
+    let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let out = std::env::temp_dir().join(format!("egg-stitch-dreamcoder-{}-{}-{}-{}.json", std::process::id(), tag, idx, seq));
     let out_str = out.to_str().expect("utf-8 temp path");
     let mut cmd = Command::new(BIN);
     cmd.args(["--search", "best-first", "--input", input, "--language", "lambda-calc", "--num-steps", "50000", "--num-abstractions", NUM_ABSTRACTIONS, "--max-arity", "2", "--output", out_str]);
@@ -77,7 +86,7 @@ fn run_bfs_file(input: &str, rules: Option<&str>, tag: &str, idx: usize) -> Valu
     let _ = fs::remove_file(&out);
     let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
     if let Some(obj) = v.as_object_mut() {
-        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search"] {
+        for k in ["timestamp", "elapsed_secs", "iteration_times", "input_file", "rules_file", "search"] {
             obj.remove(k);
         }
     }

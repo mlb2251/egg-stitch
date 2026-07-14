@@ -10,31 +10,37 @@ use egg_stitch::{
 struct RunOutput {
     library: Vec<results::AbstractionResult>,
     original_size: usize,
+    cost_at_end_of_each_iter: Option<Vec<usize>>,
     final_cost: Option<usize>,
     final_rewritten: Option<Vec<String>>,
     heap_sizes_at_end: Option<Vec<usize>>,
     cost_before_rewrites: usize,
     original_programs: Vec<String>,
+    iteration_times: Vec<f64>,
 }
 
 fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    args.normalize();
     let start = std::time::Instant::now();
 
-    // Pick the language family AND its leaf-Op at the boundary. LambdaCalc
-    // gets `OpDB<Op>` so `$n` parses as a real De Bruijn variable (the fv
-    // analysis and depth-aware extraction need that). OpChildren has no
-    // binders, so DB vars are meaningless there — keeps plain `Op`.
+    // Pick the language family AND its leaf-Op at the boundary. LambdaCalc and
+    // OpChildrenDb get `OpDB<Op>` so `$n` parses as a real De Bruijn variable
+    // (the fv analysis and the body-ban need that). Plain OpChildren keeps `Op`:
+    // without DB-var leaves there are no free variables to track.
     let RunOutput {
         library,
         original_size,
+        cost_at_end_of_each_iter,
         final_cost,
         final_rewritten,
         heap_sizes_at_end,
         cost_before_rewrites,
         original_programs,
+        iteration_times,
     } = match args.language {
         LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
+        LanguageChoice::OpChildrenDb => run::<OpChildren, OpDB<Op>>(&args),
         LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
     };
 
@@ -42,7 +48,6 @@ fn main() {
     let compression_ratio = final_cost.map(|fc| original_size as f64 / fc as f64);
 
     let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-    let debug_log_file = None; // debug log wiring removed; add back if needed
 
     let search_kind = match args.search {
         SearchKind::Smc => "smc",
@@ -59,13 +64,14 @@ fn main() {
         elapsed_secs,
         initial_cost: cost_before_rewrites,
         cost_after_rewrites: original_size,
+        cost_at_end_of_each_iter,
         final_cost,
         compression_ratio,
         heap_sizes_at_end,
-        debug_log_file,
         original_programs,
         rewritten_programs,
         library,
+        iteration_times,
     };
 
     if let Some(ref output_path) = args.output {
@@ -78,16 +84,18 @@ fn main() {
 /// by both the language family `F` and the leaf-Op `O`.
 fn run<F: egg_stitch::lang::LanguageFamily, O: StitchOp>(args: &Args) -> RunOutput {
     let load_start = std::time::Instant::now();
-    let (data, cost_before_rewrites, original_programs) = io::load_egraph::<F, O>(&args.input, args.rules.as_deref(), args.weights);
+    let (data, cost_before_rewrites, original_programs) = io::load_egraph::<F, O>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, args.weights, args.iter_limit, args.node_limit);
     println!("load_egraph took {:.3}s", load_start.elapsed().as_secs_f64());
-    let (library, original_size, final_cost, final_rewritten, heap_sizes_at_end) = multiple_step_search::<F, O>(data, args);
+    let (library, original_size, cost_at_end_of_each_iter, final_rewritten, heap_sizes_at_end, search_ends) = multiple_step_search::<F, O>(data, args);
     RunOutput {
         library,
         original_size,
-        final_cost,
+        cost_at_end_of_each_iter: cost_at_end_of_each_iter.clone(),
+        final_cost: cost_at_end_of_each_iter.map(|v| v[v.len() - 1]),
         final_rewritten,
         heap_sizes_at_end,
         cost_before_rewrites,
         original_programs,
+        iteration_times: search_ends.into_iter().map(|t| t.duration_since(load_start).as_secs_f64()).collect(),
     }
 }

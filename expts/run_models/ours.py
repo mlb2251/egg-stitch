@@ -8,7 +8,8 @@ hyperparameters as fields rather than mutating module-level state.
 import json
 import math
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
@@ -59,12 +60,22 @@ def egg_stitch(input, output="out.json", rewrites=None, **kwargs) -> Path:
 
 def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
          weighting: Weighting, search: str, max_arity: int,
-         search_flags: dict[str, object]) -> BenchResult:
+         search_flags: dict[str, object],
+         only_use_dsrs_at_start: bool = False,
+         iter_limit: int | None = None,
+         timeout: float | None = None,
+         mem_limit: int | None = None,
+         extra_args: tuple[str, ...] = ()) -> BenchResult:
     """Shared subprocess body for the SMC/best-first runners.
 
     ``search_flags`` carries only the runner-specific dials (num_steps,
     particles, temperature, …); the rest is identical between the two
-    search modes.
+    search modes. ``only_use_dsrs_at_start`` switches DSRs from live-during-
+    search to a one-shot canonicalisation pass; ``iter_limit`` caps e-saturation
+    iterations (None = the binary default, 100); ``timeout`` caps wall-clock;
+    ``mem_limit`` caps address space. ``extra_args`` are appended verbatim to
+    the CLI (the ablation harness passes e.g. ``--no-opt-lower-bound``,
+    ``--var-order``/``--compression-limit`` pairs).
     """
     output_path = unique_path(
         current_folder_path() / f"{input_path.stem}_{search.replace('-', '_')}.json"
@@ -79,6 +90,8 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         "--max-arity", str(max_arity),
         "--num-abstractions", str(rounds),
     ]
+    if iter_limit is not None:
+        cmd += ["--iter-limit", str(iter_limit)]
     # 0-arity (constant) abstractions are allowed: stitch finds them by
     # default, babble's dreamcoder ``benchmark`` binary hardcodes
     # ``learn_constants=true``, and our cogsci ``Babble`` wrapper passes
@@ -86,6 +99,8 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     # handicap the comparison, so we don't pass ``--no-zero-arity``.
     if rewrites_path is not None:
         cmd += ["-r", rewrites_path]
+    if only_use_dsrs_at_start:
+        cmd.append("--only-use-dsrs-at-start")
     for k, v in search_flags.items():
         flag = "--" + k.replace("_", "-")
         if isinstance(v, bool):
@@ -93,7 +108,11 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
                 cmd.append(flag)
         else:
             cmd += [flag, str(v)]
-    _subproc_run(cmd, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"))
+    cmd += list(extra_args)
+    start = time.time()
+    _subproc_run(cmd, cwd=EGG_STITCH_DIR, env=dict(os.environ, RUST_BACKTRACE="1"),
+                 timeout=timeout, mem_limit=mem_limit)
+    elapsed = time.time() - start
     with open(output_path) as f:
         data = json.load(f)
     # egg-stitch's RunResult serialises ``pattern`` as ``"<fn_name>: <body>"``
@@ -103,30 +122,72 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
         s = a["pattern"]
         name, _, body = s.partition(": ")
         abstractions.append(Abstraction(name=name or f"fn_{i}", body=body or s))
+    # Search work for the first abstraction (best-first heap pops, cut short by
+    # --compression-limit, or SMC steps run); None when no abstraction was found.
+    library = data.get("library", [])
+    num_steps_run = library[0].get("num_steps_run") if library else None
+    # egg-stitch's own reported compression ratio — the exact metric
+    # `--compression-limit` checks; None when no abstraction was found.
+    egg_compression_ratio = data.get("compression_ratio") if library else None
     return BenchResult(
-        elapsed_secs=float(data["elapsed_secs"]),
+        # Wall-clock from the wrapper (incl. process spawn + corpus read + JSON
+        # write), not egg-stitch's internal ``elapsed_secs``, so the time is
+        # comparable to babble (which also reports wrapper wall-clock).
+        elapsed_secs=elapsed,
         initial_corpus=list(data["original_programs"]),
         final_corpus=list(data["rewritten_programs"]),
         abstractions=abstractions,
         # Only meaningful when DSRs were applied; leave NaN otherwise so it
         # propagates through the cross-file sum in the runner.
         cost_after_rewrites=float(data["cost_after_rewrites"]) if rewrites_path is not None else math.nan,
+        cost_at_end_of_each_iter=data.get("cost_at_end_of_each_iter"),
+        num_steps_run=num_steps_run,
+        egg_compression_ratio=egg_compression_ratio,
     )
 
 
 @dataclass(frozen=True)
 class OursBf:
-    """Egg-stitch in best-first ("enum") search mode, on a single input file."""
+    """Egg-stitch in best-first ("enum") search mode, on a single input file.
 
-    num_steps: int = 500
+    Best-first needs at least one cutoff. ``num_steps`` is the expansion-count
+    budget; ``max_forced_expansion`` is the self-draining forced-expansion cap
+    (the heap bounds to the ``{forced ≤ cap}`` subspace and empties, so the
+    search runs to *convergence* instead of being clipped). Set either or both
+    (whichever is not None is forwarded as a flag).
+    """
+
+    num_steps: int | None = 500
+    max_forced_expansion: int | None = None
     max_arity: int = MAX_ARITY
+    # only_use_dsrs_at_start = canonicalise once up front (dsrs-only-at-start
+    # baseline); no_dsrs = drop DSRs entirely (no-rules baseline). repr=False keeps
+    # the method label unchanged.
+    only_use_dsrs_at_start: bool = field(default=False, repr=False)
+    no_dsrs: bool = field(default=False, repr=False)
+    iter_limit: int | None = field(default=None, repr=False)
+    timeout: float | None = field(default=None, repr=False)
+    mem_limit: int | None = field(default=None, repr=False)
+    # Extra CLI flags appended verbatim (ablation knobs). repr=False so the
+    # method label is unchanged for the normal table runs.
+    extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
+        search_flags: dict[str, object] = {}
+        if self.num_steps is not None:
+            search_flags["num_steps"] = self.num_steps
+        if self.max_forced_expansion is not None:
+            search_flags["max_forced_expansion"] = self.max_forced_expansion
         return _run(
-            rounds=rounds, input_path=input_path, rewrites_path=rewrites_path,
+            rounds=rounds, input_path=input_path,
+            rewrites_path=None if self.no_dsrs else rewrites_path,
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
-            search_flags={"num_steps": self.num_steps},
+            search_flags=search_flags,
+            only_use_dsrs_at_start=self.only_use_dsrs_at_start,
+            iter_limit=self.iter_limit,
+            timeout=self.timeout, mem_limit=self.mem_limit,
+            extra_args=self.extra_args,
         )
 
 
@@ -136,8 +197,14 @@ class OursSmc:
 
     num_steps: int = 100
     num_particles: int = 1000
-    temperature: float = 1000.0
+    temperature: float = 100.0
     max_arity: int = MAX_ARITY
+    iter_limit: int | None = field(default=None, repr=False)
+    timeout: float | None = field(default=None, repr=False)
+    mem_limit: int | None = field(default=None, repr=False)
+    # Extra CLI flags appended verbatim (ablation knobs). repr=False so the
+    # method label is unchanged for the normal table runs.
+    extra_args: tuple[str, ...] = field(default=(), repr=False)
 
     def __call__(self, rounds: int, input_path: Path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
         return _run(
@@ -149,4 +216,7 @@ class OursSmc:
                 "num_particles": self.num_particles,
                 "temperature": self.temperature,
             },
+            iter_limit=self.iter_limit,
+            timeout=self.timeout, mem_limit=self.mem_limit,
+            extra_args=self.extra_args,
         )

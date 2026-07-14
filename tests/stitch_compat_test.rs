@@ -50,11 +50,17 @@ fn expected_path(input: &str) -> String {
     format!("data/expected_outputs/{stem}.out.json")
 }
 
-/// Path for the temporary `--output` JSON of a single backend run. Includes
-/// pid + input stem + search to stay unique across parallel tests.
+/// Path for the temporary `--output` JSON of a single backend run. Uses pid +
+/// a process-global atomic counter so it's unique per *call*, not just per
+/// (input, search): several tests run best-first on the same input (e.g. tests
+/// that vary only CLI flags), and a shared path would let parallel tests race
+/// on the same file. Stem + search are kept only for human readability.
 fn temp_output_path(input: &str, search: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let stem = Path::new(input).file_stem().and_then(|s| s.to_str()).unwrap_or("input");
-    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}.json", std::process::id(), stem, search))
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("egg-stitch-compat-{}-{}-{}-{}.json", std::process::id(), stem, search, n))
 }
 
 /// Invokes the cargo-built binary, writes its `--output` JSON to a temp file,
@@ -76,7 +82,7 @@ fn run_backend_steps(search: &str, input: &str, bf_steps: &str, extra_args: &[&s
     if search == "best-first" {
         cmd.args(["--num-steps", bf_steps]);
     } else {
-        cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "1000"]);
+        cmd.args(["--num-particles", "1000", "--num-steps", "1000", "--temperature", "100"]);
     }
     cmd.args(extra_args);
     let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
@@ -86,7 +92,7 @@ fn run_backend_steps(search: &str, input: &str, bf_steps: &str, extra_args: &[&s
     let _ = fs::remove_file(&out);
     let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
     if let Some(obj) = v.as_object_mut() {
-        for k in ["timestamp", "elapsed_secs", "input_file", "rules_file", "search"] {
+        for k in ["timestamp", "elapsed_secs", "iteration_times", "input_file", "rules_file", "search"] {
             obj.remove(k);
         }
     }
@@ -172,6 +178,48 @@ fn check_fixture_bf_only_steps(input: &str, bf_steps: &str, extra_args: &[&str],
         strip_library_patterns(&mut bf);
     }
     bless_or_check(&expected_path(input), &bf, input);
+}
+
+/// Blesses/checks a single best-first run against an *explicit* fixture path,
+/// keeping the abstraction pattern. Use when several configs (varying only CLI
+/// flags) run on one input and so can't share the input-derived fixture path —
+/// the differing patterns are the point of the comparison.
+fn bless_bf_run(input: &str, extra_args: &[&str], fixture: &str, label: &str) {
+    let mut bf = run_backend("best-first", input, extra_args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check(fixture, &bf, label);
+}
+
+/// Runs best-first with an explicit `--num-abstractions` and returns the stripped
+/// output JSON. The `run_backend*` helpers are fixed at one abstraction; the
+/// roll-over comparison needs a stacked run (roll-over only affects rounds 2+).
+fn run_bf_abstractions(input: &str, num_abstractions: &str, bf_steps: &str, extra_args: &[&str]) -> Value {
+    let out = temp_output_path(input, "best-first");
+    let out_str = out.to_str().expect("utf-8 temp path");
+    let mut cmd = Command::new(BIN);
+    cmd.args(["--search", "best-first", "--input", input, "--num-abstractions", num_abstractions, "--num-steps", bf_steps, "--output", out_str]);
+    cmd.args(extra_args);
+    let status = cmd.status().unwrap_or_else(|e| panic!("spawn {BIN}: {e}"));
+    assert!(status.success(), "best-first run failed for {input}");
+
+    let text = fs::read_to_string(&out).unwrap_or_else(|e| panic!("read {}: {e}", out.display()));
+    let _ = fs::remove_file(&out);
+    let mut v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", out.display()));
+    if let Some(obj) = v.as_object_mut() {
+        for k in ["timestamp", "elapsed_secs", "iteration_times", "input_file", "rules_file", "search"] {
+            obj.remove(k);
+        }
+    }
+    if let Some(library) = v.get_mut("library").and_then(|l| l.as_array_mut()) {
+        for entry in library {
+            if let Some(obj) = entry.as_object_mut() {
+                for k in ["num_steps_run", "num_expansions", "best_iteration", "best_history"] {
+                    obj.remove(k);
+                }
+            }
+        }
+    }
+    v
 }
 
 /// Shared blessing/checking step for the two `check_fixture*` helpers.
@@ -261,6 +309,27 @@ fn fn_name_collision() {
 #[test]
 fn cex() {
     check_fixture("data/domains/stitch/cex.json", &[], true);
+}
+
+/// Parallel to [`cex`] with `--allow-useless-vars`. The default gate rejects
+/// the arity-1 `(a b c d e f g h #0 #0 #0 #0)` — its `#0` is useless (every
+/// slot binds the same closed `(A B C)`) — and falls back to the arity-0 body.
+/// The flag lifts that gate (and forces the useless/dominance prunes off), so
+/// the search returns the reused-useless-var abstraction instead. Best-first is
+/// deterministic, so its body is pinned exactly; SMC may settle on an
+/// equivalent alternate optimum, so there we only require some var reused 4×.
+#[test]
+fn cex_allow_useless_vars() {
+    let input = "data/domains/stitch/cex.json";
+    let flag = &["--allow-useless-vars"];
+    let bf = run_backend("best-first", input, flag);
+    assert_eq!(abstraction_bodies(&bf), vec!["(a b c d e f g h #0 #0 #0 #0)".to_string()], "best-first should return the useless-var abstraction the default gate forbids");
+    let smc = run_backend("smc", input, flag);
+    for r in [&bf, &smc] {
+        let bodies = abstraction_bodies(r);
+        assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
+        assert!(max_var_reuse(&bodies[0]) >= 4, "expected a useless var reused 4×, got body: {}", bodies[0]);
+    }
 }
 
 #[test]
@@ -371,6 +440,101 @@ fn arithmetic_aplusbplus1234() {
     check_fixture_bf_only("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES], false);
 }
 
+/// End-to-end check of the `constant_folding: !numbers` directive. The corpus
+/// writes one program's literal as `(+ 1 2)` and the other two as `3`; folding
+/// saturates them into the same e-class, so the winning abstraction bakes the
+/// constant in — `(f (g 3 x y z) ?#0)`, arity 1 — instead of having to pass the
+/// differing literal as a second parameter. Best-first finds this
+/// deterministically; the fixture pins that folding (parse → saturation →
+/// search) actually changes the output.
+#[test]
+fn constant_folding_unifies_literal() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold.json", &["-r", "data/domains/simple-arithmetic/const_fold.rewrites"], true);
+}
+
+/// Folding firing *after* non-minimizing rewrites. The corpus writes one angle
+/// as `(* 4 pi)` and another as `(* 2 tau)`; unifying them needs the whole
+/// chain: `tau => (* 2 pi)` (expands, growing the term), multiplicative
+/// associativity (`(* 2 (* 2 pi)) => (* (* 2 2) pi)`), then `!numbers` folding
+/// (`(* 2 2) => 4`) to reach `(* 4 pi)`. The folded subterm `(* 2 2)` exists in
+/// neither input — it's created mid-saturation — so this pins that folding
+/// composes with other DSRs rather than only collapsing literals already
+/// written adjacently. Best-first then bakes the shared angle into an arity-1
+/// abstraction `(seg (rot (* 2 tau)) ?#0)`.
+#[test]
+fn constant_folding_after_rewrites() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_after_rewrite.json", &["-r", "data/domains/simple-arithmetic/fold_after_rewrite.rewrites"], true);
+}
+
+/// `!integers`: folds `(+ 1 2) => 3` so the abstraction bakes in `3`, while the
+/// float operation `(+ 1.5 2.5)` is out of scope and stays unfolded in the body
+/// `(f (g 3 (+ 1.5 2.5) z) ?#0)`.
+#[test]
+fn constant_folding_integers() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_integers.json", &["-r", "data/domains/simple-arithmetic/const_fold_integers.rewrites"], true);
+}
+
+/// `!floats`: folds `(+ 1.5 2.5) => 4.0` (float result, decimal preserved) to
+/// unify with the literal `4.0`, while the integer operation `(+ 1 2)` is out of
+/// scope and stays unfolded in the body `(f (g 4.0 (+ 1 2) z) ?#0)`.
+#[test]
+fn constant_folding_floats() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_floats.json", &["-r", "data/domains/simple-arithmetic/const_fold_floats.rewrites"], true);
+}
+
+/// `!integersarefloats`: reads every literal as a float, so the integer operation
+/// `(+ 1 2)` folds to `3.0` and the integer literal `4` unifies with `4.0` (via
+/// `n => n.0`) — one abstraction `(f (g 3.0 4.0 z) ?#0)` covers programs written
+/// in either form.
+#[test]
+fn constant_folding_integers_are_floats() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/const_fold_int_as_float.json", &["-r", "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites"], true);
+}
+
+/// `(params (ops (cos pi)))`: the operator list pulls in the unary trig function
+/// `cos` and the constant `pi`. `(cos pi)` folds — `pi => 3.141592653589793`,
+/// then `cos(…) => -1.0` — unifying the first program with the literal `-1.0` the
+/// others write, so the abstraction bakes the angle in: `(f (g -1.0 y z) ?#0)`.
+/// Pins that the operator list reaches `sin`/`cos`/`pi`, not just arithmetic.
+#[test]
+fn constant_folding_ops_list_trig() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_trig.json", &["-r", "data/domains/simple-arithmetic/fold_ops_trig.rewrites"], true);
+}
+
+/// `(params (ops (+)))`: the operator list restricts folding to `+` only. `(+ 1 2)`
+/// folds to `3` (unifying with the literal `3`, baked into the abstraction), but
+/// `(* 4 5)` — its operator left out of the list — does NOT fold, so it fails to
+/// unify with the literal `20` the other programs write and must be passed as an
+/// argument (arity 2). Pins that the list is honored as an allowlist: the `+`
+/// side bakes in, the excluded `*` side does not.
+#[test]
+fn constant_folding_ops_list_restricts() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_ops_restrict.json", &["-r", "data/domains/simple-arithmetic/fold_ops_restrict.rewrites"], true);
+}
+
+/// `!round (params (places 6))`, exercising both directions. POSITIVE: the first
+/// `g` arg (`0.7071067811865476` vs `0.707107`) rounds to the same value, so all
+/// three programs unify on it (`matches 3`) and it is baked into the abstraction.
+/// NEGATIVE: the second arg (`0.1234561` vs `0.1234567`) is close but rounds to
+/// `0.123456` vs `0.123457` at 6 places, so it does NOT unify and stays a parameter
+/// — giving the arity-2 `(f (g 0.7071067811865476 ?#0 z) ?#1)` (the baked literal
+/// is one representative of the unified e-class).
+#[test]
+fn constant_folding_round_places6() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_round6.json", &["-r", "data/domains/simple-arithmetic/fold_round6.rewrites"], true);
+}
+
+/// `!round (params (places 3))`: the `places` argument controls granularity, again
+/// both directions. POSITIVE: the first `g` arg (`0.7071`/`0.7072`/`0.707`) all
+/// collapse to `0.707` at 3 places (they would NOT unify at 6), so all three unify
+/// and it is baked in. NEGATIVE: the second arg (`0.1114` vs `0.1116`) is close but
+/// rounds to `0.111` vs `0.112`, so it stays a parameter — giving the arity-2
+/// `(f (g 0.7072 ?#0 z) ?#1)`.
+#[test]
+fn constant_folding_round_places3() {
+    check_fixture_bf_only("data/domains/simple-arithmetic/fold_round3.json", &["-r", "data/domains/simple-arithmetic/fold_round3.rewrites"], true);
+}
+
 #[test]
 fn common_start() {
     check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
@@ -378,8 +542,8 @@ fn common_start() {
 
 /// Regression for the `shift_equal` binder-cycle non-termination
 /// (`src/shift_equal.rs`). The rules `a => (lambda a)` / `b => (lambda b)` carry
-/// no metavariables, so `rule_fv_verdict` accepts them, yet each concrete RHS
-/// hashconses back into the matched class — equality saturation closes two
+/// no metavariables, so they preserve `fv(c)=fv(MinTerm(c))`, yet each concrete
+/// RHS hashconses back into the matched class — equality saturation closes two
 /// distinct cycles *through the `lambda` binder*. Best-first then reaches a
 /// pattern with two metavars at different binder depths capturing those cyclic
 /// classes and calls `shift_equal(a, b, 0, 1)`.
@@ -427,6 +591,16 @@ fn abstraction_bodies(run: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Largest number of times any single metavar `#k` is reused in `body` (in
+/// stitch notation, as returned by [`abstraction_bodies`]). A "useless" var —
+/// bound to the same closed arg at every call site — surfaces here as a high
+/// reuse count on a body the default `has_useless_var` gate would reject. Only
+/// scans `#0..#7`; these corpora cap arity well below the point where `#1`
+/// would substring-match `#10`.
+fn max_var_reuse(body: &str) -> usize {
+    (0..8).map(|k| body.matches(&format!("#{k}")).count()).max().unwrap_or(0)
 }
 
 /// Returns the top-level rewritten corpus, falling back to the supplied
@@ -674,6 +848,18 @@ fn cross_depth_useless_inline() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_useless_inline.json", LAMBDA, true);
 }
 
+/// Parallel to [`cross_depth_useless_inline`] with `--allow-useless-vars`, which
+/// forces `opt_useless_inline` off. The unsound cross-depth inline the original
+/// test guards against can therefore never fire, so best-first settles on the
+/// same sound arity-1 mod-pattern `(lam (map #0 $0))` — no useless var, no
+/// cross-depth collapse. Confirms disabling the inline short-circuit doesn't
+/// reintroduce the bug (the fix isn't load-bearing only when the opt is on).
+#[test]
+fn cross_depth_useless_inline_allow_useless_vars() {
+    let bf = run_backend("best-first", "data/domains/ho-bugs/cross_depth_useless_inline.json", &["--language", "lambda-calc", "--allow-useless-vars"]);
+    assert_eq!(abstraction_bodies(&bf), vec!["(lam (map #0 $0))".to_string()], "inline off should still yield the sound arity-1 pattern");
+}
+
 /// Regression (minimised from the `logo` domain): a cross-depth reuse that
 /// over-shifts a concrete DB-var leaf on inline. The three programs share the
 /// skeleton `(lam (logo_forLoop ?N (lam (lam (logo_FWRT ?A ?B $0))) $0))`,
@@ -703,17 +889,57 @@ fn cross_depth_forloop_db_var_inline() {
 /// `(f ?#0 ?#1)` would have to pass that subterm at every site, so the
 /// condition-parameterized `if` genuinely wins.
 ///
-/// This pins that the equivalence-driven unification is found (cost 39). It is
-/// a deliberate counter-example to a tempting "self-loop / re-nesting" prune of
-/// identity DSRs: because `(if true x y) => x` unions the `if` node into `x`'s
-/// e-class, that node looks like a self-loop, yet the abstraction containing it
-/// is the optimum — any prune keyed purely on self-loop nesting must not
-/// discard it.
+/// The `--max-forced-expansion` prune interacts with this optimum. Because
+/// `(if true x y) => x` unions the `if` node into the bare branch's e-class, the
+/// minimal extraction there is the branch itself — so the `if`-wrapped match is
+/// non-minimal at every site, forcing a fixed 7 units of expansion (the extra
+/// `if` node plus the unselected 5-node branch, less the 1-token condition). The
+/// three tests below pin this: at the default (`none`, prune off) the optimum is
+/// found (cost 39); a cap below the forcing (5) prunes it and a worse arity-1
+/// abstraction wins (cost 44); a cap at or above it (10) clears the prune and
+/// recovers the optimum (cost 39). (This is exactly the incompleteness of the
+/// forced-expansion prune — kept cheap to spot.)
+const IF_INPUT: &str = "data/domains/conditional/if_branch_unify.json";
 const IF_RULES: &[&str] = &["--rules", "data/domains/conditional/if_branch.rewrites"];
 
+/// Default (`--max-forced-expansion none`, prune off): the equivalence-driven
+/// `if`-unification optimum is found (cost 39). Owns the plain fixture.
 #[test]
 fn conditional_branch_unify() {
-    check_fixture_bf_only("data/domains/conditional/if_branch_unify.json", IF_RULES, true);
+    check_fixture_bf_only(IF_INPUT, IF_RULES, true);
+}
+
+/// `--max-forced-expansion 5`: the `if`-wrapped match forces 7 units of expansion
+/// at every site, over the cap, so the prune drops the optimum and a worse arity-1
+/// abstraction wins (cost 44). Pins the `.cap5` fixture.
+#[test]
+fn conditional_branch_unify_cap5_drops_if_abstraction() {
+    let args = &["--rules", "data/domains/conditional/if_branch.rewrites", "--max-forced-expansion", "5"];
+    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap5.out.json", &bf, "if_branch_unify (cap 5)");
+}
+
+/// `--max-forced-expansion 10`: raising the cap past the forced expansion (7)
+/// recovers the equivalence-driven `if`-unification optimum (cost 39). Pins the
+/// `.cap10` fixture.
+#[test]
+fn conditional_branch_unify_cap10_recovers_if_abstraction() {
+    let args = &["--rules", "data/domains/conditional/if_branch.rewrites", "--max-forced-expansion", "10"];
+    let mut bf = run_backend_steps("best-first", IF_INPUT, "50000", args);
+    strip_library_field(&mut bf, "best_history");
+    bless_or_check("data/expected_outputs/conditional/if_branch_unify.cap10.out.json", &bf, "if_branch_unify (cap 10)");
+}
+
+/// Crossed-spin wrap collapse: the optimum
+/// `(g (da³(P ?#0 ?#1)) (db³(Q ?#0 ?#2)))` reuses `?#0` across two independent
+/// wrappers that collapse on disjoint match families (`P` at the r1 roots, `Q`
+/// at the r2 roots). Pins that the search recovers this cross-wrapper reuse
+/// optimum (cost 54) rather than settling for a per-wrapper abstraction.
+#[test]
+fn crossed_wrap_collapse() {
+    let args = &["--language", "op-children", "--rules", "data/test/crossed_wrap_collapse.rewrites", "--max-arity", "3"];
+    check_fixture_bf_only("data/test/crossed_wrap_collapse.json", args, true);
 }
 
 /// Regression: a metavar reused across binder depths keeps a genuine
@@ -742,6 +968,87 @@ fn conditional_branch_unify() {
 #[test]
 fn cross_depth_ho_capture() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_ho_capture.json", LAMBDA, true);
+}
+
+/// Regression (minimised from `cogsci/dials` DSR + `--max-forced-expansion 3`):
+/// a 3-way metavar reuse whose three occurrences are an *early single* and a
+/// *later sibling pair* at a deeper level. The optimal abstraction reuses `?#1`
+/// three times:
+///
+/// ```text
+/// (C ?#0 (T (T (T l (M 1 0 -0.5 0)) (M ?#1 (/ pi 4) 0 0))
+///           (M 1 0 (* ?#1 (* 0.5 (cos (/ pi 4)))) (* ?#1 (* 0.5 (sin (/ pi 4)))))))
+/// ```
+///
+/// The DSRs (`reroll_2_x_r` / `r3roll_2_x`) re-root the corpus through `repeat`
+/// wrappers, so best-first reaches the bare `(C ?#0 …)` form via a path that has
+/// already merged some other vars. A reuse canonical-ordering that stales *every*
+/// lower-indexed var on each merge then marks the middle (`cos`) occurrence
+/// non-absorbable before it can be merged — stranding it, so the search settles
+/// for a worse 2-way abstraction (the `M`-position merged with `sin`, `cos` left
+/// alone). This pins that the 3-way stays reachable: the body must reuse one
+/// metavar three times. Best-first is deterministic, so this is exact.
+#[test]
+fn dials_reroll_three_way_reuse() {
+    let input = "data/test/dials_reroll_3way.json";
+    let args = &["--rules", "data/test/dials_reroll_3way.rewrites", "--max-forced-expansion", "3", "--max-arity", "2"];
+    let v = run_backend("best-first", input, args);
+    let bodies = abstraction_bodies(&v);
+    assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
+    // The 3-way reuse means one metavar (`#1`) occurs three times in the body;
+    // the regressed 2-way abstraction has a max of two.
+    let body = &bodies[0];
+    let max_reuse = (0..8).map(|k| body.matches(&format!("#{k}")).count()).max().unwrap_or(0);
+    assert!(max_reuse >= 3, "expected a metavar reused 3× (the 3-way reuse), got max {max_reuse} in body: {body}");
+}
+
+/// Regression (minimised from `cogsci/nuts-bolts` DSR): a 3-way reuse that the
+/// search can only reach via a *non-canonical* merge order, because dominance and
+/// expand order force the hand. The optimal abstraction reuses `?#0` three times:
+///
+/// ```text
+/// (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))
+/// ```
+///
+/// Two of the three occurrences — the `repeat` count and the `(/ (* 2 pi) ?#0)`
+/// angle — are always equal, so reuse *dominance* force-merges them as a single
+/// successor the moment they exist, which is *before* the third occurrence
+/// (`(tan (/ pi ?#0))`, created by a deeper, later expand) is even present. So the
+/// 3-way can only be completed by either (a) prepending the late `tan` occurrence
+/// to the already-merged count/angle block, or (b) — with dominance off — a
+/// "late" merge of two post-expand-stale slots. This distinguishes it from
+/// `dials_reroll_three_way_reuse`, whose 3-way *is* reachable in canonical order:
+/// a reuse canonicalization can pass dials yet still strand this one.
+///
+/// Pins that the 3-way stays reachable (one metavar reused three times) despite
+/// the forced non-canonical order. The lone `scale_1_T` self-loop rule supplies
+/// the `(T … (M 1.0 0 0 0))` wrapper nesting that sets up the expand order.
+#[test]
+fn nuts_bolts_dominance_three_way_reuse() {
+    let input = "data/test/nuts_bolts_3way_reuse.json";
+    let args = &["--rules", "data/test/nuts_bolts_3way_reuse.rewrites", "--max-arity", "2"];
+    let v = run_backend("best-first", input, args);
+    let bodies = abstraction_bodies(&v);
+    assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
+    let max_reuse = max_var_reuse(&bodies[0]);
+    assert!(max_reuse >= 3, "expected a metavar reused 3× (the 3-way reuse), got max {max_reuse} in body: {}", bodies[0]);
+}
+
+/// Parallel to [`nuts_bolts_dominance_three_way_reuse`] with `--allow-useless-vars`,
+/// which forces `opt_dominance_reuse` off. The 3-way-reused `?#0` is *not*
+/// useless (it binds a different value at each call site), so the optimum is
+/// unchanged — but reaching it now goes through the "late" post-expand merge
+/// path (option (b) in the original's doc) instead of the dominance
+/// force-merge. Pins that the 3-way stays reachable with dominance disabled.
+#[test]
+fn nuts_bolts_dominance_three_way_reuse_allow_useless_vars() {
+    let input = "data/test/nuts_bolts_3way_reuse.json";
+    let args = &["--rules", "data/test/nuts_bolts_3way_reuse.rewrites", "--max-arity", "2", "--allow-useless-vars"];
+    let v = run_backend("best-first", input, args);
+    let bodies = abstraction_bodies(&v);
+    assert_eq!(bodies.len(), 1, "expected one abstraction, got {bodies:?}");
+    let max_reuse = max_var_reuse(&bodies[0]);
+    assert!(max_reuse >= 3, "3-way reuse should survive dominance-off, got max {max_reuse} in body: {}", bodies[0]);
 }
 
 /// Hand-built `data/test/` corpora whose rule sets each introduce an identity
@@ -778,4 +1085,213 @@ fn self_loop_nested_loop_tower() {
 #[test]
 fn self_loop_if_unify() {
     check_self_loop("if_unify", "if");
+}
+
+// === op-children-db (flat n-ary nodes with De Bruijn `$n` leaves) ===
+//
+// `--language op-children-db` keeps OpChildren's flat n-ary shape but parses
+// `$n` as a real free De Bruijn variable (the leaf-Op becomes `OpDB<Op>`).
+// There are no binders, so every `$n` is free and `invalid_literal_expansion`
+// bans it from any abstraction body — it can only ever be captured as an
+// argument. The corpus below shares the skeleton `(f (g (h _)) $0)` across four
+// programs, so the body-ban is the only thing that distinguishes the two
+// languages' output.
+
+const OP_CHILDREN_DB_INPUT: &str = "data/test/op_children_db_free_var.json";
+
+/// op-children-db: the free `$0` is illegal in an abstraction body, so it is
+/// lifted to a second parameter — the arity-2 `(f (g (h ?#0)) ?#1)`, with no
+/// `$` anywhere in the body. The inline assertion is the feature invariant; the
+/// fixture pins the exact (deterministic best-first) result.
+#[test]
+fn op_children_db_bans_free_var_from_body() {
+    let mut bf = run_backend("best-first", OP_CHILDREN_DB_INPUT, &["--language", "op-children-db"]);
+    strip_library_field(&mut bf, "best_history");
+    for body in abstraction_bodies(&bf) {
+        assert!(!body.contains('$'), "op-children-db must keep free DB vars out of the abstraction body, got `{body}`");
+    }
+    bless_or_check(&expected_path(OP_CHILDREN_DB_INPUT), &bf, OP_CHILDREN_DB_INPUT);
+}
+
+/// Contrast: the same corpus under plain `op-children` parses `$0` as an
+/// ordinary symbol leaf (leaf-Op `Op`, no DB awareness), so it stays baked into
+/// the arity-1 body `(f (g (h ?#0)) $0)`. Pins that the body-ban is the
+/// leaf-op's doing, not the corpus's. Blessed to a separate `.plain` fixture to
+/// avoid the shared-input path collision with the test above.
+#[test]
+fn op_children_plain_keeps_free_var_in_body() {
+    let mut bf = run_backend("best-first", OP_CHILDREN_DB_INPUT, &[]);
+    strip_library_field(&mut bf, "best_history");
+    let bodies = abstraction_bodies(&bf);
+    assert!(bodies.iter().any(|b| b.contains("$0")), "plain op-children should keep `$0` baked into the body, got {bodies:?}");
+    bless_or_check("data/expected_outputs/test/op_children_db_free_var.plain.out.json", &bf, "op_children_db_free_var (plain)");
+}
+
+// === molecule domain (op-children) ===
+//
+// Molecules are rooted trees over `(<bond><degree> E n1 n2 ...)` atom nodes
+// (see `data/domains/molecules/molecules.rewrites` for the encoding). They run
+// under the default `op-children` language — no `--language` flag. These pins
+// guard the two molecule-specific behaviours: the re-rooting + commutativity
+// DSRs that recover cross-molecule alignment, and the scramble benchmark
+// (`data/domains/molecules/scramble/`) where those DSRs stand in for a canonical
+// SMILES encoding. All are best-first only (op-children SMC isn't pinned here);
+// the full 5000-molecule `molecules.json` corpus is left out as too slow for a
+// unit test (its β-equivalence is covered by `scripts/check_all_outputs.py`).
+
+/// Two byte-identical ethanol trees, same rooting. With no rules the only
+/// shared structure is the whole molecule, so the search abstracts it wholesale
+/// — the trivial baseline before any symmetry DSR is in play.
+#[test]
+fn molecules_ethanol_same_rooting() {
+    check_fixture_bf_only("data/test/ethanol_same_rooting.json", &[], true);
+}
+
+/// The *same* ethanol molecule written from two different roots (carbon-rooted
+/// vs oxygen-rooted). Without rules the two trees share nothing structurally;
+/// the re-rooting DSRs in `molecules.rewrites` make them a single e-class, so
+/// the search recovers one whole-molecule abstraction covering both. This pins
+/// that re-rooting alignment fires — the core molecule-domain feature.
+#[test]
+fn molecules_ethanol_rerooted() {
+    check_fixture_bf_only("data/test/ethanol_two_rootings.json", &["-r", "data/domains/molecules/molecules.rewrites"], true);
+}
+
+/// The general molecule symmetry DSRs (re-rooting, proper rotations, and
+/// witness-guarded transpositions) — the same file the main corpus uses.
+const SYMMETRIES: &[&str] = &["-r", "data/domains/molecules/molecules.rewrites"];
+
+/// Canonical-rooted scramble corpora, no rules — the reference encoding the
+/// benchmark compares against. Best-first converges (heap drains) so the default
+/// budget suffices and the result is exact. Each pins the single best
+/// abstraction the canonical alignment admits.
+#[test]
+fn molecules_scramble_hexyl_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/hexyl.canon.json", &[], true);
+}
+
+#[test]
+fn molecules_scramble_ester_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/ester.canon.json", &[], true);
+}
+
+#[test]
+fn molecules_scramble_glycol_canon() {
+    check_fixture_bf_only("data/domains/molecules/scramble/glycol.canon.json", &[], true);
+}
+
+// The scrambled corpora (random root + child order) only realign once the
+// symmetry DSRs saturate, which makes the e-graph large enough that best-first
+// never drains its heap — so, like the self-loop fixtures above, these are
+// pinned at a fixed `--num-steps` budget (the optimum is reached early; the
+// budget just bounds the otherwise-unbounded tail). `check_all_outputs.py`
+// re-checks each rewritten corpus for equivalence under the same DSRs.
+
+/// Scrambled hexyl recovered by the DSRs: the re-rooting rules realign the
+/// scrambled trees onto the shared 6-carbon backbone, so the abstraction is the
+/// re-rooted alkyl chain `(m1 H (s4 C ...))` — the DSR-as-canonicaliser payoff.
+#[test]
+fn molecules_scramble_hexyl_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/hexyl.scram.json", "2000", SYMMETRIES, true);
+}
+
+/// Scrambled ester. Its shared motif (`CC(=O)OC`) is small, so under
+/// single-abstraction search the plain `(s1 H)` leaf still wins on raw count —
+/// pinned as the current behaviour (the larger ester-group abstraction only
+/// surfaces in the multi-abstraction benchmark run).
+#[test]
+fn molecules_scramble_ester_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/ester.scram.json", "2000", SYMMETRIES, true);
+}
+
+/// Scrambled glycol recovered by the DSRs onto its re-rooted polyether backbone
+/// `(s2 O (s4 C ...))`.
+#[test]
+fn molecules_scramble_glycol_dsr() {
+    check_fixture_bf_only_steps("data/domains/molecules/scramble/glycol.scram.json", "2000", SYMMETRIES, true);
+}
+
+// === loop rolling: live DSRs roll a loop --only-use-dsrs-at-start can't ===
+//
+// A minimal domain showing the qualitative win of applying rewrite rules live
+// (during abstraction search) over applying them once up-front
+// (`--only-use-dsrs-at-start`, which normalizes the egraph, extracts a single
+// min-term per program, and searches a fresh rule-free egraph built from it).
+// `(repeat body count step)` is a counted loop; the only rule,
+// `(repeat ?x 1 ?n) => ?x` in `data/test/loop_rolling.rewrites`, says a count-1
+// loop is just its body. The corpus shares one body across loops of *different*
+// counts, so a single count-parameterized abstraction `(repeat (f a b c) ?#0
+// step)` rolls them all — but only while the count-1 loop still looks like a
+// loop, which min-term extraction destroys.
+
+/// The shared count-1-flatten rule, applied live vs only at start.
+const LOOP_RULES: &[&str] = &["--rules", "data/test/loop_rolling.rewrites"];
+const LOOP_RULES_AT_START: &[&str] = &["--rules", "data/test/loop_rolling.rewrites", "--only-use-dsrs-at-start"];
+
+/// Corpus mixes a count-1 loop with counts 2-4, so live and at-start *diverge*.
+/// Live keeps the count-1 program's `(repeat (f a b c) 1 step)` form in the
+/// e-class and rolls every program into the count-parameterized loop abstraction
+/// `(repeat (f a b c) ?#0 step)` (cost 16, the `.live` fixture). But at-start's
+/// min-term extraction fires `rep_1` on the count-1 program, flattening it to
+/// the bare body `(f a b c)` *before* search — the loop skeleton is gone — so
+/// the only thing left to share across all four programs is the body itself, and
+/// at-start abstracts `(f a b c)` (cost 18, the `.at_start` fixture). The loop is
+/// "otherwise not rollable": only live abstractions can roll it.
+#[test]
+fn loop_count1_flattens_so_only_live_rolls() {
+    let input = "data/test/loop_rolling_with_count1.json";
+    bless_bf_run(input, LOOP_RULES, "data/expected_outputs/test/loop_rolling_with_count1.live.out.json", "loop_rolling_with_count1 (live)");
+    bless_bf_run(input, LOOP_RULES_AT_START, "data/expected_outputs/test/loop_rolling_with_count1.at_start.out.json", "loop_rolling_with_count1 (at-start)");
+}
+
+/// Control: drop the count-1 loop (counts 2-5), so `rep_1` never fires during
+/// min-term extraction and the loop skeleton survives for both modes. Now both
+/// roll the same count-parameterized abstraction `(repeat (f a b c) ?#0 step)`,
+/// checked against a *single* shared fixture. This pins that the divergence
+/// above is specifically the count-1 min-term flattening, not a general
+/// inability of at-start to roll loops.
+#[test]
+fn loop_no_count1_both_roll() {
+    let input = "data/test/loop_rolling_no_count1.json";
+    let fixture = "data/expected_outputs/test/loop_rolling_no_count1.out.json";
+    bless_bf_run(input, LOOP_RULES, fixture, "loop_rolling_no_count1 (live)");
+    bless_bf_run(input, LOOP_RULES_AT_START, fixture, "loop_rolling_no_count1 (at-start)");
+}
+
+// `--roll-over` reuses the rewritten e-graph between abstractions instead of
+// extracting the rewritten programs to strings and rebuilding. The payoff shows
+// up when a later abstraction wants to re-cut structure that an earlier one baked
+// into its body: rebuilding commits each program to one min-size spelling, and
+// once round-1's fn_0 bakes in the CH2/O structure the re-rooting DSRs can no
+// longer regenerate a molecule's other spellings, so the finer round-2 motif is
+// under-counted. Roll-over keeps every spelling in the e-graph, so the finer
+// motif keeps all its match sites and wins.
+
+/// Minimized (2-molecule) form of the PR's glycol scramble: `--roll-over` reaches
+/// a strictly lower final cost than the default rebuild at 2 abstractions (28 vs
+/// 31). Both pick the CH2 unit `fn_0 = (s4 C (s1 H) (s1 H) ?#0)` in round 1. The
+/// default then extracts one spelling per molecule to a string and rebuilds, and
+/// round-1's fn_0 baking blocks the re-rooting DSRs from regenerating the other
+/// spellings, so round 2 can only stack fn_0 within that frozen spelling
+/// (`fn_1 = (fn_0 (fn_0 (s1 ?#0)))`). Roll-over keeps every spelling live, so round
+/// 2 can re-cut across the O-linker that fn_0 straddled
+/// (`fn_1 = (fn_0 (s2 O (fn_0 (fn_0 (s1 H)))))`) and lands lower. The two molecules
+/// carry a Cl and a C=O: those heteroatom decorations are what make greedy fn_0 cut
+/// the two backbones differently — an all-CH2/O polyether is too uniform to diverge.
+/// The strict-inequality assertion is the behavioural claim; the fixtures pin the
+/// exact stacks on each side.
+#[test]
+fn roll_over_finds_cheaper_stack() {
+    let input = "data/test/roll_over_glycol.json";
+    let default_out = run_bf_abstractions(input, "2", "2000", SYMMETRIES);
+    let mut roll_args = SYMMETRIES.to_vec();
+    roll_args.push("--roll-over");
+    let roll_out = run_bf_abstractions(input, "2", "2000", &roll_args);
+
+    let default_cost = default_out["final_cost"].as_u64().expect("final_cost present");
+    let roll_cost = roll_out["final_cost"].as_u64().expect("final_cost present");
+    assert!(roll_cost < default_cost, "expected --roll-over to beat the default rebuild, got roll={roll_cost} default={default_cost}");
+
+    bless_or_check("data/expected_outputs/test/roll_over_glycol.default.out.json", &default_out, input);
+    bless_or_check("data/expected_outputs/test/roll_over_glycol.roll.out.json", &roll_out, input);
 }

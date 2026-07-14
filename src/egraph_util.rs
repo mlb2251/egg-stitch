@@ -16,18 +16,32 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// pattern leaf-op via `OpWithVar::Node` so the result splices into a
 /// `Pattern<F, O>::pattern` directly.
 pub fn build_size_minimal_extraction<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, eclass: Id, out: &mut Vec<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>) -> Id {
+    let mut on_stack = FxHashSet::default();
+    build_size_minimal_extraction_rec::<F, O>(egraph, eclass, out, memo, &mut on_stack)
+}
+
+/// Recursive worker for [`build_size_minimal_extraction`]. `on_stack` holds the
+/// e-classes currently being built; the min-cost rep is chosen only among
+/// e-nodes whose children are all off-stack, so a cyclic e-class (e.g. one a
+/// non-shrinking rule like `(* ?x 0) => 0` makes self-referential) can never
+/// recurse forever. An acyclic e-node always exists because `data.size` is the
+/// finite minimal tree size.
+fn build_size_minimal_extraction_rec<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, eclass: Id, out: &mut Vec<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<Id, Id>, on_stack: &mut FxHashSet<Id>) -> Id {
     let canonical = egraph.find(eclass);
     if let Some(&id) = memo.get(&canonical) {
         return id;
     }
+    on_stack.insert(canonical);
     let weights = egraph.analysis.weights;
     let rep = egraph[canonical]
         .nodes
         .iter()
+        .filter(|n| n.children().iter().all(|&c| !on_stack.contains(&egraph.find(c))))
         .min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>())
-        .expect("non-empty eclass")
+        .expect("acyclic enode exists (data.size is finite)")
         .clone();
-    let children: Vec<Id> = rep.children().iter().map(|&c| build_size_minimal_extraction::<F, O>(egraph, c, out, memo)).collect();
+    let children: Vec<Id> = rep.children().iter().map(|&c| build_size_minimal_extraction_rec::<F, O>(egraph, c, out, memo, on_stack)).collect();
+    on_stack.remove(&canonical);
     let node = F::make(F::map_discriminant(rep.discriminant(), OpWithVar::Node), children);
     out.push(node);
     let id = Id::from(out.len() - 1);
