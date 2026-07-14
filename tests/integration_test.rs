@@ -9,7 +9,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 const INPUT: &str = "data/domains/cogsci/dials.json";
-const RULES: &str = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
+const RULES: &str = "data/domains/cogsci/dials.rewrites";
 
 fn fixtures_present() -> bool {
     std::path::Path::new(INPUT).exists() && std::path::Path::new(RULES).exists()
@@ -158,13 +158,13 @@ fn check_slow_no_rules() {
     assert!(result.best.is_some());
 }
 
-const REWRITES_DIR: &str = "../babble/harness/data/benchmark-dsrs";
+const REWRITES_DIR: &str = "data/domains/cogsci";
 
 /// Verify fast == slow across multiple domains with their rewrite rules.
 #[test]
 fn check_slow_furniture() {
     let input = "data/domains/cogsci/furniture.json";
-    let rules = &format!("{}/drawings.furniture.rewrites", REWRITES_DIR);
+    let rules = &format!("{}/furniture.rewrites", REWRITES_DIR);
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
@@ -176,7 +176,7 @@ fn check_slow_furniture() {
 #[test]
 fn check_slow_nuts_bolts() {
     let input = "data/domains/cogsci/nuts-bolts.json";
-    let rules = &format!("{}/drawings.nuts-bolts.rewrites", REWRITES_DIR);
+    let rules = &format!("{}/nuts-bolts.rewrites", REWRITES_DIR);
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
@@ -188,7 +188,7 @@ fn check_slow_nuts_bolts() {
 #[test]
 fn check_slow_wheels() {
     let input = "data/domains/cogsci/wheels.json";
-    let rules = &format!("{}/drawings.wheels.rewrites", REWRITES_DIR);
+    let rules = &format!("{}/wheels.rewrites", REWRITES_DIR);
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
@@ -455,11 +455,15 @@ fn check_slow_list_11_43_28_bench001() {
 // while still scoring many distinct patterns.
 
 /// Best-first `--check-slow` over an op-children cogsci corpus + its DSRs.
+///
+/// Budget is 200 expansions: `wheels` doesn't reach its first positive-utility
+/// abstraction until expansion 110 (the other domains find one before 100), so a
+/// smaller budget leaves `result.best` empty and trips the sanity assert below.
 fn check_slow_bf_cogsci(input: &str, rules: &str) {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "100", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "200", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
     let result = run_best_first(&args);
     assert!(result.best.is_some());
 }
@@ -470,15 +474,15 @@ fn check_slow_bf_dials() {
 }
 #[test]
 fn check_slow_bf_furniture() {
-    check_slow_bf_cogsci("data/domains/cogsci/furniture.json", &format!("{}/drawings.furniture.rewrites", REWRITES_DIR));
+    check_slow_bf_cogsci("data/domains/cogsci/furniture.json", &format!("{}/furniture.rewrites", REWRITES_DIR));
 }
 #[test]
 fn check_slow_bf_nuts_bolts() {
-    check_slow_bf_cogsci("data/domains/cogsci/nuts-bolts.json", &format!("{}/drawings.nuts-bolts.rewrites", REWRITES_DIR));
+    check_slow_bf_cogsci("data/domains/cogsci/nuts-bolts.json", &format!("{}/nuts-bolts.rewrites", REWRITES_DIR));
 }
 #[test]
 fn check_slow_bf_wheels() {
-    check_slow_bf_cogsci("data/domains/cogsci/wheels.json", &format!("{}/drawings.wheels.rewrites", REWRITES_DIR));
+    check_slow_bf_cogsci("data/domains/cogsci/wheels.json", &format!("{}/wheels.rewrites", REWRITES_DIR));
 }
 
 /// Best-first `--check-slow` over a lambda-calc physics corpus. Named
