@@ -350,6 +350,13 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // (compare a lone-variable pattern to a seen concrete one): containment
             // forces `P ∈ R` at every match root `R`, and `Q[σ] ∈ R` too, so
             // `Q[σ] ≡ P` — the dropped variable is vacuous and `Q` is dominated.
+            //
+            // MUST stay before the `FootprintTracker` check below: that check is
+            // deliberately last and hands the tracker `id = nodes.len()` on the
+            // contract that a surviving child is pushed at that index (its deferred
+            // representative reads the match set back by id). A prune placed *after*
+            // it would break that contract — a later child would take the id — so
+            // any successor prune has to happen first.
             if args.opt_var_subset {
                 let arity = child_state.pattern.vars.len();
                 if arity >= 1
