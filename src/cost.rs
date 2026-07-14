@@ -434,6 +434,14 @@ pub struct RewriteScratch {
     /// shrunk arg re-dirties the match roots reading it via the (non-syntactic)
     /// rewrite path. Mirrors `LowerBoundAnalysis::arg_to_match_roots`.
     pub arg_to_match_roots: FxHashMap<Id, Vec<Id>>,
+    /// Memoised `resolve_subst_arg` results keyed by its full determinants
+    /// `(arg, d_k, vis)`. The shift walk reads only the (fixed) corpus egraph, so
+    /// a result is valid for this scratch's whole lifetime — the same
+    /// `(arg, d_k, vis)` recurs across candidates and search states, and the walk
+    /// (many `egraph.lookup`s) is the λ-calc hot spot. Not cleared by `fill`
+    /// (the egraph never changes within a search); a fresh scratch per
+    /// abstraction gives a fresh cache.
+    pub shift_cache: ShiftCache,
 }
 
 impl RewriteScratch {
@@ -441,6 +449,8 @@ impl RewriteScratch {
     /// Match-root and row ids are canonical by construction (see `MatchAtEClass`):
     /// they originate from `egraph.classes()` and propagate unchanged through
     /// `build_subset_matches`; the egraph isn't unioned during search.
+    /// `shift_cache` is intentionally *not* cleared — it's keyed on egraph facts
+    /// that outlive any single `search_state`.
     pub fn fill<F: LanguageFamily, O: StitchOp>(&mut self, search_state: &SearchState<F, O>) {
         self.eclass_to_match_idx.clear();
         self.arg_to_match_roots.clear();
@@ -477,6 +487,9 @@ pub struct ResolvedArg {
 type ResolvedArgs = FxHashMap<(usize, Id), ResolvedArg>;
 /// Dirty-propagation edges: operand eclass → the match roots that read it.
 type MatchRootEdges = FxHashMap<Id, Vec<Id>>;
+/// Cross-candidate cache of `resolve_subst_arg`, keyed by its determinants
+/// `(arg, d_k, vis)`. Lives on `RewriteScratch` (see there).
+type ShiftCache = FxHashMap<(Id, u32, Box<[i32]>), ResolvedArg>;
 
 /// Resolve the exact cost `fixed + Σ get(reads)` of the depth-shifted, λ-wrapped
 /// operand `wrap_subst_args` builds for slot `k` (`vis = variable_indices[k]`,
@@ -544,7 +557,7 @@ fn for_each_kept_slot<F: LanguageFamily, O: StitchOp>(search_state: &SearchState
 ///   dirty-propagation re-dirty the root and the single `solve()` converge.
 ///   `None` for non-shifting (every lambda-free) candidates, so callers reuse
 ///   the shared, built-once `arg_to_match_roots` and pay nothing.
-fn resolve_folds<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, filtered: &Option<Vec<Option<Vec<Factor>>>>, variable_indices: &[Vec<i32>], var_depth: &[u32]) -> (ResolvedArgs, Option<MatchRootEdges>) {
+fn resolve_folds<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, filtered: &Option<Vec<Option<Vec<Factor>>>>, variable_indices: &[Vec<i32>], var_depth: &[u32], cache: &mut ShiftCache) -> (ResolvedArgs, Option<MatchRootEdges>) {
     let shifts = |k: usize| !variable_indices[k].is_empty() || var_depth[k] > 0;
     let any_shift = (0..variable_indices.len()).any(shifts);
     let mut resolved: ResolvedArgs = FxHashMap::default();
@@ -552,7 +565,11 @@ fn resolve_folds<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<
         let mut seen: FxHashSet<(usize, Id)> = FxHashSet::default();
         for_each_kept_slot(search_state, filtered, |_root, k, v| {
             if shifts(k) && seen.insert((k, v)) {
-                resolved.insert((k, v), resolve_subst_arg::<F, O>(egraph, v, &variable_indices[k], var_depth[k]));
+                let r = cache
+                    .entry((v, var_depth[k], Box::from(&variable_indices[k][..])))
+                    .or_insert_with(|| resolve_subst_arg::<F, O>(egraph, v, &variable_indices[k], var_depth[k]))
+                    .clone();
+                resolved.insert((k, v), r);
             }
         });
     }
@@ -783,7 +800,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
     // Resolve each shifting slot's depth-shifted arg cost and, when the candidate
     // shifts, the extra dirty-edges the solver needs so a single `solve()`
     // converges (see `resolve_folds`).
-    let (resolved, fold_edges) = resolve_folds::<F, O>(egraph, search_state, &filtered, &candidate.variable_indices, var_depth);
+    let (resolved, fold_edges) = resolve_folds::<F, O>(egraph, search_state, &filtered, &candidate.variable_indices, var_depth, &mut scratch.rewrite.shift_cache);
     let arg_to_match_roots = fold_edges.as_ref().unwrap_or(&scratch.rewrite.arg_to_match_roots);
     let analysis = RewriteAnalysis {
         search_state,
