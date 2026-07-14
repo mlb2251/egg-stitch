@@ -120,11 +120,14 @@ fn check_config(circuit: &str, rules: Option<&str>, at_start: bool, tag: &str) {
 }
 
 /// Regenerate `<circuit>.json` from `<circuit>.aig` and assert byte-identity.
-/// The `.aig` is gitignored (run `fetch_aigs.py`); skip when absent — CI fetches
-/// first, so it always runs there.
+/// The `.aig` is gitignored (run `fetch_aigs.py`). Locally it's skipped when
+/// absent, but under CI (`$CI` set) a missing `.aig` is a hard failure — CI's
+/// fetch step must have run, so absence there means the suite silently lost
+/// coverage rather than a dev simply not fetching.
 fn check_regen(circuit: &str) {
     let aig = format!("scripts/epfl-circuits/{circuit}.aig");
     if !Path::new(&aig).exists() {
+        assert!(std::env::var_os("CI").is_none(), "{aig} absent under CI (scripts/epfl-circuits/fetch_aigs.py must run first)");
         eprintln!("skipping {circuit} regen: {aig} absent (run scripts/epfl-circuits/fetch_aigs.py)");
         return;
     }

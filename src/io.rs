@@ -56,9 +56,10 @@ pub fn extract_programs<L: StitchLanguage>(egraph: &StitchEgraph<L>, root: egg::
 
 /// Builds a fresh egraph from program strings, applies rewrite rules, and returns it with its root.
 ///
-/// Used between abstractions: the rewritten programs are extracted as strings and fed into a
-/// clean egraph, discarding all prior equivalences. `iter_limit` and `node_limit`
-/// cap the e-saturation iterations and egraph node count when applying rules.
+/// The default between-abstractions path (i.e. without `--roll-over`): the rewritten
+/// programs are extracted as strings and fed into a clean egraph, discarding all prior
+/// equivalences. `iter_limit` and `node_limit` cap the e-saturation iterations and
+/// egraph node count when applying rules.
 pub fn egraph_from_programs<F: LanguageFamily, O: StitchOp>(programs: &[String], rule_file: Option<&str>, weights: Weights, iter_limit: usize, node_limit: usize) -> SharedData<F, O> {
     let (egraph, root) = programs_to_egraph::<F::Apply<O>>(programs, weights);
     let rules: Vec<egg::Rewrite<F::Apply<O>, StitchAnalysis>> = match rule_file {
