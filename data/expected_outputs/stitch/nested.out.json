@@ -1,73 +1,37 @@
 {
-  "best-first": {
-    "compression_ratio": 1.2857142857142858,
-    "cost_after_rewrites": 36,
-    "cost_at_end_of_each_iter": [
-      28
-    ],
-    "final_cost": 28,
-    "heap_sizes_at_end": [
-      0
-    ],
-    "initial_cost": 36,
-    "library": [
-      {
-        "approx_cost": -14,
-        "arity": 2,
-        "lambda": "(lam (lam (+ $1 (* $0 $0))))",
-        "num_matches": 11,
-        "pattern": "fn_0: (+ ?#0 (* ?#1 ?#1))",
-        "pattern_size": 5,
-        "usage_matches": 11
-      }
-    ],
-    "original_programs": [
-      "(+ u (* (/ v 6) (/ v 6)))",
-      "(+ a (* y y))",
-      "(+ b (* z z))",
-      "(+ (+ v (* v v)) (* u u))",
-      "(* 7 (* (- v) (- v)))"
-    ],
-    "rewritten_programs": [
-      "(fn_0 u (/ v 6))",
-      "(fn_0 a y)",
-      "(fn_0 b z)",
-      "(fn_0 (fn_0 v v) u)",
-      "(* 7 (fn_0 0 (- v)))"
-    ]
-  },
-  "smc": {
-    "compression_ratio": 1.2,
-    "cost_after_rewrites": 36,
-    "cost_at_end_of_each_iter": [
-      30
-    ],
-    "final_cost": 30,
-    "initial_cost": 36,
-    "library": [
-      {
-        "approx_cost": 21,
-        "arity": 1,
-        "lambda": "(lam (* $0 $0))",
-        "num_matches": 6,
-        "pattern": "fn_0: (* ?#0 ?#0)",
-        "pattern_size": 3,
-        "usage_matches": 6
-      }
-    ],
-    "original_programs": [
-      "(+ u (* (/ v 6) (/ v 6)))",
-      "(+ a (* y y))",
-      "(+ b (* z z))",
-      "(+ (+ v (* v v)) (* u u))",
-      "(* 7 (* (- v) (- v)))"
-    ],
-    "rewritten_programs": [
-      "(+ u (fn_0 (/ v 6)))",
-      "(+ a (fn_0 y))",
-      "(+ b (fn_0 z))",
-      "(+ (+ v (fn_0 v)) (fn_0 u))",
-      "(* 7 (fn_0 (- v)))"
-    ]
-  }
+  "compression_ratio": 1.2857142857142858,
+  "cost_after_rewrites": 36,
+  "cost_at_end_of_each_iter": [
+    28
+  ],
+  "final_cost": 28,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 36,
+  "library": [
+    {
+      "approx_cost": -14,
+      "arity": 2,
+      "lambda": "(lam (lam (+ $1 (* $0 $0))))",
+      "num_matches": 11,
+      "pattern": "fn_0: (+ ?#0 (* ?#1 ?#1))",
+      "pattern_size": 5,
+      "usage_matches": 11
+    }
+  ],
+  "original_programs": [
+    "(+ u (* (/ v 6) (/ v 6)))",
+    "(+ a (* y y))",
+    "(+ b (* z z))",
+    "(+ (+ v (* v v)) (* u u))",
+    "(* 7 (* (- v) (- v)))"
+  ],
+  "rewritten_programs": [
+    "(fn_0 u (/ v 6))",
+    "(fn_0 a y)",
+    "(fn_0 b z)",
+    "(fn_0 (fn_0 v v) u)",
+    "(* 7 (fn_0 0 (- v)))"
+  ]
 }
