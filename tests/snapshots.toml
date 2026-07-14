@@ -231,6 +231,25 @@ steps = "100000"
 args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
 oracle = "beta"
 
+# Exactness of the shifted-arg cost, beyond the upper bound above. When a
+# captured arg re-indexes onto a match root, its lifted form collides with a
+# cheaper (stubbed) e-class: sizing it structurally is a valid upper bound but
+# over-counts, so the analytic cost lands strictly above the exact rewritten
+# size. Here program 0 nests a `(lam (cons $0 ?#0))` site whose captured tail
+# `(lam (cons $0 (foo $2)))` lifts (d_k=1) to `(lam (cons $0 (foo $1)))` —
+# exactly program 1's match root. The fold-aware walk reads that stub's size, so
+# `--check-slow` holds as an equality (cost 33 / 1.45x); a purely structural
+# walk would report 36 / 1.33x.
+
+[[case]]
+name = "fast_cost_upper_bound/depth_shift_overlap"
+kind = "stitch"
+input = "data/domains/stitch/depth_shift_overlap.json"
+fixture = "fast_cost_upper_bound/depth_shift_overlap"
+steps = "100000"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
 # ─── EPFL circuits (fixed 4-abstraction SMC rollout, seed 1) ──────────────────
 # Per circuit, three configs: no-rules `baseline`, De Morgan + factoring `live`,
 # and the same rules `at-start`. Verified by exhaustive boolean truth-table

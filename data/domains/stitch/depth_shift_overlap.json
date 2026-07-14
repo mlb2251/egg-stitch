@@ -1,0 +1,8 @@
+[
+  "(lam (lam (cons $0 (lam (cons $0 (foo $2))))))",
+  "(lam (lam (cons $0 (foo $1))))",
+  "(lam (cons $0 a))",
+  "(lam (cons $0 b))",
+  "(lam (cons $0 c))",
+  "(lam (cons $0 d))"
+]
