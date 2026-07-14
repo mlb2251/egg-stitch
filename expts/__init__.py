@@ -30,3 +30,5 @@ from .run_models import *
 from .tables import *
 from .arity import *
 from .ablation_study import ablation
+# Standalone experiment, kept off the paper table/render pipeline (see the module).
+from .table_drawings_algebraic import table_drawings_algebraic
