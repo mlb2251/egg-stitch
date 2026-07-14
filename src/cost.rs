@@ -374,6 +374,104 @@ impl RewriteScratch {
     }
 }
 
+/// Pre-resolved capture for one `?#k` slot at one subst: the eclass id to sum
+/// from the analysis plus any lambda binders that still need to be charged
+/// because no existing eclass realizes them. `extra_lams` is zero when the
+/// wrapped+shifted form was found in the egraph (and thus may share with
+/// another match-root's rewrite); otherwise it equals the unrealized wraps so
+/// the cost matches `lams_cost(extra_lams) + size(arg)`.
+#[derive(Clone, Copy, Debug)]
+pub struct ResolvedArg {
+    pub eclass: Id,
+    pub extra_lams: u32,
+}
+
+/// Per-candidate folded HO slots: `(slot k, arg-eclass v) → ResolvedArg`.
+type ResolvedArgs = FxHashMap<(usize, Id), ResolvedArg>;
+/// Dirty-propagation edges: operand eclass → the match roots that read it.
+type MatchRootEdges = FxHashMap<Id, Vec<Id>>;
+
+/// Resolve one `(arg, h, d_k)` triple to a `ResolvedArg`. When the shifted
+/// arg's eclass would not change (shift is a no-op), we run a non-mutating
+/// `try_lookup_wrap_lams` to fold as many of the `h` lambda wraps as already
+/// exist in the egraph into a real eclass id. Wraps that don't already exist
+/// remain as `extra_lams` cost. Shifts with actual movement bail and behave
+/// like the pre-fix formula (eclass = arg, all `h` wraps unrealized).
+fn resolve_subst_arg<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, arg: Id, h: u32, d_k: u32) -> ResolvedArg {
+    if h == 0 {
+        return ResolvedArg { eclass: arg, extra_lams: 0 };
+    }
+    let by = h as i32 - d_k as i32;
+    let shift_is_noop = by == 0 || egraph[arg].data.fv.iter().all(|&i| i < d_k as i32);
+    if !shift_is_noop {
+        return ResolvedArg { eclass: arg, extra_lams: h };
+    }
+    let (eclass, extra_lams) = F::try_lookup_wrap_lams::<O>(arg, h, egraph);
+    ResolvedArg { eclass, extra_lams }
+}
+
+/// Visit `(match-root, slot k, arg-eclass v)` for every slot `best` will score
+/// under this candidate: the kept factor rows (`filtered`) or, for lambda-free
+/// candidates that keep everything, all rows. Matches whose factors filtered
+/// empty are skipped, matching the dirty-set seeding in the solver.
+fn for_each_kept_slot<F: LanguageFamily, O: StitchOp>(search_state: &SearchState<F, O>, filtered: &Option<Vec<Option<Vec<Factor>>>>, mut visit: impl FnMut(Id, usize, Id)) {
+    for (i, m) in search_state.matches.iter().enumerate() {
+        let factors: &[Factor] = match filtered {
+            Some(per) => match &per[i] {
+                Some(ff) => ff,
+                None => continue,
+            },
+            None => &m.factors,
+        };
+        for f in factors {
+            for row in &f.rows {
+                for (&k, &v) in f.slots.iter().zip(row) {
+                    visit(m.root_eclass, k, v);
+                }
+            }
+        }
+    }
+}
+
+/// Per-candidate fold resolution for the cost analysis. Returns:
+/// - `resolved`: the HO slots whose wrapped-λ form *folded* into a pre-existing
+///   eclass (`eclass != v`); `arg_cost` reads it and falls back to the inline
+///   `lams_cost(h) + get(v)` for every other slot, so no-fold candidates get an
+///   empty map.
+/// - `fold_edges`: `Some(operand → match-roots)` over the kept rows when any
+///   fold exists — `best` reads a folded operand's size off the egraph, and that
+///   operand isn't a syntactic parent of the root, so this edge lets normal
+///   dirty-propagation re-dirty the root and the single `solve()` converge.
+///   `None` when nothing folded (every lambda-free candidate included), so
+///   callers reuse the shared, built-once `arg_to_match_roots` and pay nothing.
+fn resolve_folds<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, filtered: &Option<Vec<Option<Vec<Factor>>>>, ho_arity: &[u32], var_depth: &[u32]) -> (ResolvedArgs, Option<MatchRootEdges>) {
+    let mut resolved: ResolvedArgs = FxHashMap::default();
+    if ho_arity.iter().any(|&h| h > 0) {
+        let mut seen: FxHashSet<(usize, Id)> = FxHashSet::default();
+        for_each_kept_slot(search_state, filtered, |_root, k, v| {
+            if ho_arity[k] > 0 && seen.insert((k, v)) {
+                let r = resolve_subst_arg::<F, O>(egraph, v, ho_arity[k], var_depth[k]);
+                if r.eclass != v {
+                    resolved.insert((k, v), r);
+                }
+            }
+        });
+    }
+    let fold_edges = (!resolved.is_empty()).then(|| {
+        let mut edges: MatchRootEdges = FxHashMap::default();
+        for_each_kept_slot(search_state, filtered, |root, k, v| {
+            let dep = resolved.get(&(k, v)).map_or(v, |r| r.eclass);
+            edges.entry(dep).or_default().push(root);
+        });
+        for roots in edges.values_mut() {
+            roots.sort_unstable();
+            roots.dedup();
+        }
+        edges
+    });
+    (resolved, fold_edges)
+}
+
 /// How a candidate restricts the substs eligible to rewrite at each match.
 ///
 /// Either way the rewrite cost is evaluated *factored* — `min over ∏factors of
@@ -400,6 +498,11 @@ pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub arg_to_match_roots: &'a FxHashMap<Id, Vec<Id>>,
     pub ho_arity: &'a [u32],
     pub kept: KeptArgs<'a>,
+    /// Pre-resolved `(slot, arg-eclass)` → `ResolvedArg` for every HO slot
+    /// (`ho_arity[k] > 0`) appearing in a kept factor row. Built once per
+    /// candidate so `arg_cost` folds wrapped-λ operands to real eclasses (and
+    /// thus counts their transitive rewrites) with only a map lookup in `best`.
+    pub resolved: &'a FxHashMap<(usize, Id), ResolvedArg>,
 }
 
 impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for RewriteAnalysis<'a, F, O> {
@@ -411,13 +514,22 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             let weights = sizes.weights();
             let ho_arity = sizes.analysis.ho_arity;
             let stub_size = F::stub_application_size(ho_arity.len(), weights) as i64;
-            // Per-slot arg cost: the captured eclass size plus, for HO slots,
-            // the cost of the `h` wrap-λs. Additively separable across slots,
-            // which is exactly what lets the min factor over independent groups.
+            let resolved = sizes.analysis.resolved;
+            // Per-slot arg cost. `resolved` holds only the HO slots whose wrapped
+            // form was *folded* into a pre-existing eclass — there `get(eclass)`
+            // picks up any rewrite at that wrapped operand plus the `extra_lams`
+            // wraps that don't exist. Every other slot (non-HO, or HO with no
+            // fold) computes the flat `lams_cost(h) + get(v)` inline, which for
+            // `h == 0` is just `get(v)`. Additively separable across slots, which
+            // is what lets the min factor over independent groups.
             let arg_cost = |k: usize, v: Id| -> i64 {
-                let h = ho_arity[k];
-                let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
-                wrap + sizes.get(v)
+                match resolved.get(&(k, v)) {
+                    Some(r) => F::lams_cost(r.extra_lams, weights) as i64 + sizes.get(r.eclass),
+                    None => {
+                        let wrap = if ho_arity[k] > 0 { F::lams_cost(ho_arity[k], weights) as i64 } else { 0 };
+                        wrap + sizes.get(v)
+                    }
+                }
             };
             // Separable min over a factor list: stub + Σfactors (min over rows of Σslots).
             let min_over = |factors: &[Factor]| -> i64 { stub_size + factored_min(factors, arg_cost) };
@@ -567,15 +679,20 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
     let var_depth = &search_state.pattern.var_depth;
     let lambda_free = var_depth.iter().all(|&d| d == 0);
     let filtered: Option<Vec<Option<Vec<Factor>>>> = (!lambda_free).then(|| search_state.matches.iter().map(|m| filter_factors_by_candidate(egraph, m, &candidate.variable_indices, var_depth)).collect());
+    // Resolve HO-slot folds and, when any fold occurs, the extra dirty-edges the
+    // solver needs so a single `solve()` converges (see `resolve_folds`).
+    let (resolved, fold_edges) = resolve_folds::<F, O>(egraph, search_state, &filtered, ho_arity, var_depth);
+    let arg_to_match_roots = fold_edges.as_ref().unwrap_or(&scratch.rewrite.arg_to_match_roots);
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
-        arg_to_match_roots: &scratch.rewrite.arg_to_match_roots,
+        arg_to_match_roots,
         ho_arity,
         kept: match &filtered {
             Some(f) => KeptArgs::Filtered(f),
             None => KeptArgs::AllFactored,
         },
+        resolved: &resolved,
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for (i, m) in search_state.matches.iter().enumerate() {
@@ -593,7 +710,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
     if check_slow {
         let rewritten = build_rewritten_egraph::<F, O>(egraph.clone(), search_state, candidate, "inv_0");
         let slow_size = rewritten[root].data.size as i64;
-        F::check_fast_vs_slow(final_size, slow_size);
+        assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
         // Semantic guard: rewriting must preserve the free-variable set at the
         // root. A mismatch means `wrap_subst_args` is shifting captured args
         // incorrectly and the abstraction's call site no longer agrees with the
