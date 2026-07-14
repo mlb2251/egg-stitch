@@ -82,6 +82,11 @@ fn cost_balanced<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<
 /// A match footprint: `(root, variable bindings in fixed variable order)` tuples.
 type Footprint = rustc_hash::FxHashSet<(egg::Id, Vec<egg::Id>)>;
 
+/// A seen reduct candidate: its footprint plus its variable-frozen mask (one
+/// bool per variable, in variable order — the freeze-rule flexibility that the
+/// containment check must respect so pruning stays sound).
+type Reduct = (Footprint, Vec<bool>);
+
 /// A pattern's match footprint as a set of `(root, variable bindings in fixed
 /// variable order)` tuples, optionally projecting *out* one variable (`drop`).
 /// Returns `None` when the full-substitution count exceeds `cap` (materializing
@@ -122,13 +127,22 @@ fn permutations(n: usize) -> Vec<Vec<usize>> {
     out
 }
 
-/// Exact variable-subset containment: is `proj ⊆ seen` under *some single global*
-/// variable renaming? For each permutation `π` of the shared variables, every
-/// `(root, b) ∈ proj` must have `(root, b∘π) ∈ seen`. A single `π` must work for
-/// *all* tuples — this is what makes a firing a genuine domination (a per-tuple
-/// renaming would over-approximate and could prune unsoundly).
-fn contained_under_renaming(proj: &Footprint, seen: &Footprint, perms: &[Vec<usize>]) -> bool {
-    proj.len() <= seen.len() && perms.iter().any(|perm| proj.iter().all(|(root, b)| seen.contains(&(*root, perm.iter().map(|&i| b[i]).collect()))))
+/// Exact variable-subset containment under *some single global* variable
+/// renaming `π` of the shared variables. `Q` (the projection `proj`) is dominated
+/// by the seen reduct `P` (`seen`) iff one `π` satisfies both: footprint
+/// containment (every `(root, b) ∈ proj` has `(root, b∘π) ∈ seen`) and `P` being
+/// at least as flexible as `Q` (wherever `P` freezes a shared variable, `Q`
+/// freezes the corresponding one — `seen_frozen[j] ⇒ proj_frozen[π(j)]`).
+///
+/// Both must hold under the *same* `π`. The flexibility condition is essential:
+/// under the freeze rule a more-frozen `P` reaches fewer expansions than `Q`, so
+/// it would not actually dominate `Q` and pruning would lose an optimum. (Mirrors
+/// `SeenTracker`'s `frozen_subset`, threaded through the renaming.)
+fn contained_under_renaming(proj: &Footprint, proj_frozen: &[bool], seen: &Footprint, seen_frozen: &[bool], perms: &[Vec<usize>]) -> bool {
+    proj.len() <= seen.len()
+        && perms
+            .iter()
+            .any(|perm| seen_frozen.iter().enumerate().all(|(j, &pf)| !pf || proj_frozen[perm[j]]) && proj.iter().all(|(root, b)| seen.contains(&(*root, perm.iter().map(|&i| b[i]).collect()))))
 }
 
 /// One "new best" event recorded during search.
@@ -217,9 +231,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     // memory/materialization on domains with very large match sets.
     const VSP_CAP: usize = 20_000;
     const VSP_MAX_CANDIDATES: usize = 20_000;
-    let mut vsp_seen: rustc_hash::FxHashMap<usize, Vec<Footprint>> = rustc_hash::FxHashMap::default();
+    let mut vsp_seen: rustc_hash::FxHashMap<usize, Vec<Reduct>> = rustc_hash::FxHashMap::default();
     let mut vsp_hits: usize = 0;
-    let vsp_register = |state: &SearchState<F, O>, seen: &mut rustc_hash::FxHashMap<usize, Vec<Footprint>>| {
+    let vsp_register = |state: &SearchState<F, O>, seen: &mut rustc_hash::FxHashMap<usize, Vec<Reduct>>| {
         if !args.opt_var_subset {
             return;
         }
@@ -228,7 +242,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         if entry.len() < VSP_MAX_CANDIDATES
             && let Some(fp) = footprint_set(state, None, VSP_CAP)
         {
-            entry.push(fp);
+            entry.push((fp, state.pattern.var_frozen.clone()));
         }
     };
 
@@ -364,7 +378,11 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                     && let Some(cands) = vsp_seen.get(&(arity - 1))
                 {
                     let perms = permutations(arity - 1);
-                    let dominated = (0..arity).any(|v| footprint_set(&child_state, Some(v), VSP_CAP).is_some_and(|proj| cands.iter().any(|seen| contained_under_renaming(&proj, seen, &perms))));
+                    let frozen = &child_state.pattern.var_frozen;
+                    let dominated = (0..arity).any(|v| {
+                        let proj_frozen: Vec<bool> = (0..arity).filter(|&k| k != v).map(|k| frozen[k]).collect();
+                        footprint_set(&child_state, Some(v), VSP_CAP).is_some_and(|proj| cands.iter().any(|(seen, sf)| contained_under_renaming(&proj, &proj_frozen, seen, sf, &perms)))
+                    });
                     if dominated {
                         vsp_hits += 1;
                         continue;
