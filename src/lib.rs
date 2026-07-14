@@ -439,6 +439,8 @@ pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedDat
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
     let programs = io::extract_programs::<F::Apply<O>>(&egraph, root);
     let next_data = if roll_over {
+        // Deliberately skip re-running the DSRs (`rule_file`): another saturation pass
+        // would keep growing an egraph that may not have saturated in the first place.
         shared::SharedData::new(egraph, root)
     } else {
         let weights = egraph.analysis.weights;
