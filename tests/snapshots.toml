@@ -482,6 +482,7 @@ oracle = "beta"
 name = "stitch/cross_depth_fv_outside_gap"
 kind = "stitch"
 input = "data/domains/ho-bugs/cross_depth_fv_outside_gap.json"
+backends = "both"
 args = ["--language", "lambda-calc"]
 oracle = "beta"
 
@@ -843,12 +844,24 @@ rules = "data/test/loop_rolling.rewrites"
 args = ["--only-use-dsrs-at-start"]
 oracle = { rules = "data/test/loop_rolling.rewrites" }
 
+# Drop the count-1 loop (counts 2-5): min-term extraction never fires `rep_1`, so
+# the loop skeleton survives and live *and* at-start roll the SAME abstraction —
+# both configs check against this one shared fixture (two cases, one fixture).
 [[case]]
 name = "stitch/loop_no_count1"
 kind = "stitch"
 input = "data/test/loop_rolling_no_count1.json"
 fixture = "test/loop_rolling_no_count1"
 rules = "data/test/loop_rolling.rewrites"
+oracle = { rules = "data/test/loop_rolling.rewrites" }
+
+[[case]]
+name = "stitch/loop_no_count1_at_start"
+kind = "stitch"
+input = "data/test/loop_rolling_no_count1.json"
+fixture = "test/loop_rolling_no_count1"
+rules = "data/test/loop_rolling.rewrites"
+args = ["--only-use-dsrs-at-start"]
 oracle = { rules = "data/test/loop_rolling.rewrites" }
 
 [[case]]
@@ -887,5 +900,3 @@ steps = "2000"
 rules = "data/domains/molecules/molecules.rewrites"
 args = ["--roll-over"]
 oracle = { rules = "data/domains/molecules/molecules.rewrites" }
-
-# 74 stitch cases
