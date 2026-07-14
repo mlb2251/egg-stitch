@@ -142,6 +142,93 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
     new_id
 }
 
+/// Cost contribution of a subtree once `shift_free_egraph` would lift it, split
+/// as `fixed + Σ get(reads)`. `whole` is the eclass the *entire* subtree folds
+/// onto (so a parent can extend the lookup through it), or `None` when the
+/// subtree is genuinely fresh under the lift.
+#[derive(Clone)]
+struct ShiftAcc {
+    fixed: i64,
+    reads: Vec<Id>,
+    whole: Option<Id>,
+}
+
+/// Non-mutating twin of [`shift_free_egraph`]: instead of `add`-ing each
+/// re-indexed node it *looks it up*. A subtree that lands on an existing eclass
+/// `g` folds (`whole = Some(g)`), so `best` later reads its rewritten size
+/// `get(g)` — picking up any abstraction rewrite or cheaper collision there,
+/// exactly what the slow path's rebuild + congruence produces. A subtree with no
+/// existing eclass is fresh (the slow path would `add` it), so it is sized
+/// structurally: its intrinsic goes to `fixed`, its children recurse.
+///
+/// A re-indexed enode is congruent to an existing eclass iff `lookup` finds it,
+/// and `data.size` is a tree size (no DAG discount) with rewrites confined to
+/// enumerated match roots, so `fixed + Σ get(reads)` equals the slow rewritten
+/// size of the lifted subtree exactly — closing the `size(shift(e)) < size(e)`
+/// overlap that a purely structural walk misses. Memoised per
+/// `(eclass, initial_depth)` like its mutating twin.
+fn shift_lookup_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, eclass: Id, d_k: u32, rank_map: &FxHashMap<i32, u32>, h: u32, initial_depth: u32, memo: &mut FxHashMap<(Id, u32), ShiftAcc>) -> ShiftAcc {
+    let canonical = egraph.find(eclass);
+    if let Some(cached) = memo.get(&(canonical, initial_depth)) {
+        return cached.clone();
+    }
+    let acc = if egraph[canonical].data.fv.iter().all(|&i| i < initial_depth as i32) {
+        // Closed under the lift: shift is the identity, the eclass is unchanged,
+        // and `best` reads its rewritten size directly.
+        ShiftAcc {
+            fixed: 0,
+            reads: vec![canonical],
+            whole: Some(canonical),
+        }
+    } else {
+        let weights = egraph.analysis.weights;
+        // Same size-minimal representative `shift_free_egraph` re-indexes, so the
+        // fold lookups below key on exactly the enodes the slow path would add.
+        let rep = egraph[canonical]
+            .nodes
+            .iter()
+            .min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>())
+            .expect("non-empty eclass")
+            .clone();
+        let disc = rep.discriminant();
+        if let Some(n) = disc.de_bruijn_index() {
+            let r = n - initial_depth as i32;
+            let new_n = if r < d_k as i32 {
+                *rank_map.get(&r).unwrap_or_else(|| panic!("captured DB index r={} for d_k={} not in slot's variable_indices map {:?}", r, d_k, rank_map)) as i32 + initial_depth as i32
+            } else {
+                r - d_k as i32 + h as i32 + initial_depth as i32
+            };
+            // A re-indexed leaf costs the same intrinsic wherever it lands.
+            let leaf_size = disc.intrinsic_size(&weights) as i64;
+            let new_disc = F::map_discriminant(disc, |_| O::make_db_var(new_n).expect("higher-order capture requires a DB-var-bearing leaf op"));
+            match egraph.lookup(F::make(new_disc, vec![])) {
+                Some(g) => ShiftAcc { fixed: 0, reads: vec![g], whole: Some(g) },
+                None => ShiftAcc { fixed: leaf_size, reads: vec![], whole: None },
+            }
+        } else {
+            let mut fixed = disc.intrinsic_size(&weights) as i64;
+            let mut reads = Vec::new();
+            let mut child_ids: Vec<Option<Id>> = Vec::with_capacity(rep.children().len());
+            for (j, &c) in rep.children().iter().enumerate() {
+                let child_depth = initial_depth + if disc.binds_child(j) { 1 } else { 0 };
+                let ca = shift_lookup_cost::<F, O>(egraph, c, d_k, rank_map, h, child_depth, memo);
+                fixed += ca.fixed;
+                reads.extend(ca.reads);
+                child_ids.push(ca.whole);
+            }
+            // Fold only when every child folded — a fresh (un-added) child means
+            // the parent enode can't exist, so lookup would be pointless.
+            let folded = child_ids.iter().all(Option::is_some).then(|| egraph.lookup(F::make(disc, child_ids.iter().map(|c| c.unwrap()).collect()))).flatten();
+            match folded {
+                Some(g) => ShiftAcc { fixed: 0, reads: vec![g], whole: Some(g) },
+                None => ShiftAcc { fixed, reads, whole: None },
+            }
+        }
+    };
+    memo.insert((canonical, initial_depth), acc.clone());
+    acc
+}
+
 /// Precomputed egraph topology for fast cost computation.
 /// Built once from the egraph and reused across all `compute_cost` calls.
 pub struct CostCache {
@@ -314,36 +401,6 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
         let weights = &self.egraph.analysis.weights;
         self.egraph[eclass].nodes.iter().map(|enode| enode.discriminant().intrinsic_size(weights) as i64 + self.sum(enode.children())).min().unwrap()
     }
-    /// Size a captured arg contributes after `wrap_subst_args` lifts it to the
-    /// call site (`init_depth` = binders entered so far in the lift, 0 at the top).
-    ///
-    /// A subtree closed under the lift (all `fv < init_depth`) is shift-invariant,
-    /// so its rewritten size `get(..)` carries over. One with a free index is
-    /// re-indexed onto a fresh e-class where the abstraction's rewrite can't fire,
-    /// so it's sized structurally, recursing with the per-binder depth bump. Plain
-    /// `get(eclass)` would count a rewrite the shifted arg never gets, undercounting
-    /// and breaking the `fast >= slow` contract. Mirrors `shift_free_egraph`'s walk;
-    /// an upper bound, exact unless a re-indexed operand collides with a cheaper
-    /// e-class. Only called for shifting slots (`var_depth > 0` or HO arity `> 0`).
-    pub fn shifted_arg_size(&self, eclass: Id, init_depth: u32) -> i64 {
-        let canonical = self.egraph.find(eclass);
-        if self.egraph[canonical].data.fv.iter().all(|&i| i < init_depth as i32) {
-            return self.get(canonical);
-        }
-        let weights = &self.egraph.analysis.weights;
-        let rep = self.egraph[canonical]
-            .nodes
-            .iter()
-            .min_by_key(|n| n.discriminant().intrinsic_size(weights) as u64 + n.children().iter().map(|&c| self.egraph[c].data.size as u64).sum::<u64>())
-            .expect("non-empty eclass");
-        let disc = rep.discriminant();
-        let mut size = disc.intrinsic_size(weights) as i64;
-        for (j, &c) in rep.children().iter().enumerate() {
-            let child_depth = init_depth + if disc.binds_child(j) { 1 } else { 0 };
-            size += self.shifted_arg_size(c, child_depth);
-        }
-        size
-    }
     pub fn weights(&self) -> &Weights {
         &self.egraph.analysis.weights
     }
@@ -404,6 +461,120 @@ impl RewriteScratch {
     }
 }
 
+/// Pre-resolved cost of one captured arg at a shifting `?#k` slot, read by
+/// `best` as `fixed + Σ get(reads)`. `fixed` is the shift-invariant structural
+/// part (intrinsics of re-indexed nodes with no existing eclass, plus
+/// `lams_cost` of wrap-λs that don't already exist); `reads` are the existing
+/// eclasses the lifted arg folds onto, whose *rewritten* size is summed fresh
+/// each solve iteration so nested abstraction rewrites are counted.
+#[derive(Clone, Debug, Default)]
+pub struct ResolvedArg {
+    pub fixed: i64,
+    pub reads: Vec<Id>,
+}
+
+/// Per-candidate resolved cost for each shifting slot: `(slot k, arg-eclass v) → ResolvedArg`.
+type ResolvedArgs = FxHashMap<(usize, Id), ResolvedArg>;
+/// Dirty-propagation edges: operand eclass → the match roots that read it.
+type MatchRootEdges = FxHashMap<Id, Vec<Id>>;
+
+/// Resolve the exact cost `fixed + Σ get(reads)` of the depth-shifted, λ-wrapped
+/// operand `wrap_subst_args` builds for slot `k` (`vis = variable_indices[k]`,
+/// `d_k = var_depth[k]`, `h = vis.len()`). The body is walked by
+/// `shift_lookup_cost`, folding each re-indexed subtree onto an existing eclass
+/// where one exists; the `h` wrap-λs are then folded on top via
+/// `try_lookup_wrap_lams` when the whole body folded, else charged flat. Exact
+/// against the slow rewritten size (see `shift_lookup_cost`).
+fn resolve_subst_arg<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, arg: Id, vis: &[i32], d_k: u32) -> ResolvedArg {
+    let weights = &egraph.analysis.weights;
+    let h = vis.len() as u32;
+    let rank_map: FxHashMap<i32, u32> = vis.iter().enumerate().map(|(r, &i)| (i, r as u32)).collect();
+    let mut memo: FxHashMap<(Id, u32), ShiftAcc> = FxHashMap::default();
+    let body = shift_lookup_cost::<F, O>(egraph, arg, d_k, &rank_map, h, 0, &mut memo);
+    match body.whole {
+        // Whole body folded to `g`: fold as many of the `h` wrap-λs onto existing
+        // eclasses as we can, so `get(top)` picks up any rewrite at the wrapped
+        // operand; the rest cost a flat `lams_cost`.
+        Some(g) if h > 0 => {
+            let (top, extra) = F::try_lookup_wrap_lams::<O>(g, h, egraph);
+            ResolvedArg {
+                fixed: F::lams_cost(extra, weights) as i64,
+                reads: vec![top],
+            }
+        }
+        // Fresh (partially un-added) body, or `h == 0`: no wrap-λ folding possible.
+        _ => ResolvedArg {
+            fixed: body.fixed + F::lams_cost(h, weights) as i64,
+            reads: body.reads,
+        },
+    }
+}
+
+/// Visit `(match-root, slot k, arg-eclass v)` for every slot `best` will score
+/// under this candidate: the kept factor rows (`filtered`) or, for lambda-free
+/// candidates that keep everything, all rows. Matches whose factors filtered
+/// empty are skipped, matching the dirty-set seeding in the solver.
+fn for_each_kept_slot<F: LanguageFamily, O: StitchOp>(search_state: &SearchState<F, O>, filtered: &Option<Vec<Option<Vec<Factor>>>>, mut visit: impl FnMut(Id, usize, Id)) {
+    for (i, m) in search_state.matches.iter().enumerate() {
+        let factors: &[Factor] = match filtered {
+            Some(per) => match &per[i] {
+                Some(ff) => ff,
+                None => continue,
+            },
+            None => &m.factors,
+        };
+        for f in factors {
+            for row in &f.rows {
+                for (&k, &v) in f.slots.iter().zip(row) {
+                    visit(m.root_eclass, k, v);
+                }
+            }
+        }
+    }
+}
+
+/// Per-candidate resolution for the cost analysis. Returns:
+/// - `resolved`: every *shifting* slot (`ho_arity[k] > 0 || var_depth[k] > 0`)
+///   mapped to its `fixed + Σ get(reads)` cost split (see `resolve_subst_arg`).
+///   Non-shifting slots are absent — `arg_cost` reads their un-lifted `get(v)`
+///   directly — so lambda-free candidates get an empty map.
+/// - `fold_edges`: `Some(operand → match-roots)` when the candidate shifts —
+///   `best` reads each shifted arg's `reads` off the egraph, and those eclasses
+///   aren't syntactic parents of the root, so these edges let normal
+///   dirty-propagation re-dirty the root and the single `solve()` converge.
+///   `None` for non-shifting (every lambda-free) candidates, so callers reuse
+///   the shared, built-once `arg_to_match_roots` and pay nothing.
+fn resolve_folds<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, filtered: &Option<Vec<Option<Vec<Factor>>>>, variable_indices: &[Vec<i32>], var_depth: &[u32]) -> (ResolvedArgs, Option<MatchRootEdges>) {
+    let shifts = |k: usize| !variable_indices[k].is_empty() || var_depth[k] > 0;
+    let any_shift = (0..variable_indices.len()).any(shifts);
+    let mut resolved: ResolvedArgs = FxHashMap::default();
+    if any_shift {
+        let mut seen: FxHashSet<(usize, Id)> = FxHashSet::default();
+        for_each_kept_slot(search_state, filtered, |_root, k, v| {
+            if shifts(k) && seen.insert((k, v)) {
+                resolved.insert((k, v), resolve_subst_arg::<F, O>(egraph, v, &variable_indices[k], var_depth[k]));
+            }
+        });
+    }
+    let fold_edges = any_shift.then(|| {
+        let mut edges: MatchRootEdges = FxHashMap::default();
+        for_each_kept_slot(search_state, filtered, |root, k, v| {
+            // A shifting slot re-dirties the root through every eclass its
+            // `reads` land on; a non-shifting slot through its raw arg `v`.
+            match resolved.get(&(k, v)) {
+                Some(r) => r.reads.iter().for_each(|&dep| edges.entry(dep).or_default().push(root)),
+                None => edges.entry(v).or_default().push(root),
+            }
+        });
+        for roots in edges.values_mut() {
+            roots.sort_unstable();
+            roots.dedup();
+        }
+        edges
+    });
+    (resolved, fold_edges)
+}
+
 /// How a candidate restricts the substs eligible to rewrite at each match.
 ///
 /// Either way the rewrite cost is evaluated *factored* — `min over ∏factors of
@@ -430,10 +601,12 @@ pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub arg_to_match_roots: &'a FxHashMap<Id, Vec<Id>>,
     pub ho_arity: &'a [u32],
     pub kept: KeptArgs<'a>,
-    /// Precomputed `∃ slot: var_depth > 0 || ho_arity > 0` — whether any captured
-    /// arg is re-indexed at the call site. When false, the per-arg shift handling
-    /// is skipped entirely (the common case; see `best`).
-    pub any_shift: bool,
+    /// Pre-resolved `(slot, arg-eclass)` → `ResolvedArg` for every shifting slot
+    /// (`ho_arity[k] > 0 || var_depth[k] > 0`) appearing in a kept factor row.
+    /// Built once per candidate so `arg_cost` scores the depth-shifted,
+    /// λ-wrapped operand — folded onto existing eclasses where possible — with
+    /// only a map lookup plus its `reads` sum in `best`.
+    pub resolved: &'a FxHashMap<(usize, Id), ResolvedArg>,
 }
 
 impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for RewriteAnalysis<'a, F, O> {
@@ -445,20 +618,19 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             let weights = sizes.weights();
             let ho_arity = sizes.analysis.ho_arity;
             let stub_size = F::stub_application_size(ho_arity.len(), weights) as i64;
-            let var_depth = &sizes.analysis.search_state.pattern.var_depth;
-            // Precomputed once per candidate; false for op-children / binder-free
-            // patterns, where every slot takes the plain un-shifted `get(v)` below.
-            let any_shift = sizes.analysis.any_shift;
-            // Per-slot arg cost: captured eclass size plus the `h` wrap-λs for HO
-            // slots. Shifting slots (`h > 0` or `var_depth > 0`) score the
-            // depth-shifted arg via `shifted_arg_size`; others use `get(v)`.
+            let resolved = sizes.analysis.resolved;
+            // Per-slot arg cost. Shifting slots (`ho_arity[k] > 0 ||
+            // var_depth[k] > 0`) are pre-resolved to `fixed + Σ get(reads)` — the
+            // exact size of the depth-shifted, λ-wrapped operand, folded onto
+            // existing eclasses so nested rewrites are counted. Non-shifting
+            // slots aren't lifted, so their un-shifted `get(v)` is exact.
             // Additively separable across slots, which lets the min factor over
             // independent groups.
             let arg_cost = |k: usize, v: Id| -> i64 {
-                let h = ho_arity[k];
-                let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
-                let arg = if !any_shift || (h == 0 && var_depth[k] == 0) { sizes.get(v) } else { sizes.shifted_arg_size(v, 0) };
-                wrap + arg
+                match resolved.get(&(k, v)) {
+                    Some(r) => r.fixed + r.reads.iter().map(|&id| sizes.get(id)).sum::<i64>(),
+                    None => sizes.get(v),
+                }
             };
             // Separable min over a factor list: stub + Σfactors (min over rows of Σslots).
             let min_over = |factors: &[Factor]| -> i64 { stub_size + factored_min(factors, arg_cost) };
@@ -608,19 +780,21 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
     let var_depth = &search_state.pattern.var_depth;
     let lambda_free = var_depth.iter().all(|&d| d == 0);
     let filtered: Option<Vec<Option<Vec<Factor>>>> = (!lambda_free).then(|| search_state.matches.iter().map(|m| filter_factors_by_candidate(egraph, m, &candidate.variable_indices, var_depth)).collect());
-    // Any slot that re-indexes its captured arg forces the depth-shift walk in
-    // `best`; lambda-free candidates never do (all `var_depth`/`ho_arity` zero).
-    let any_shift = ho_arity.iter().any(|&h| h > 0) || var_depth.iter().any(|&d| d > 0);
+    // Resolve each shifting slot's depth-shifted arg cost and, when the candidate
+    // shifts, the extra dirty-edges the solver needs so a single `solve()`
+    // converges (see `resolve_folds`).
+    let (resolved, fold_edges) = resolve_folds::<F, O>(egraph, search_state, &filtered, &candidate.variable_indices, var_depth);
+    let arg_to_match_roots = fold_edges.as_ref().unwrap_or(&scratch.rewrite.arg_to_match_roots);
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
-        arg_to_match_roots: &scratch.rewrite.arg_to_match_roots,
+        arg_to_match_roots,
         ho_arity,
         kept: match &filtered {
             Some(f) => KeptArgs::Filtered(f),
             None => KeptArgs::AllFactored,
         },
-        any_shift,
+        resolved: &resolved,
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for (i, m) in search_state.matches.iter().enumerate() {
@@ -638,7 +812,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
     if check_slow {
         let rewritten = build_rewritten_egraph::<F, O>(egraph.clone(), search_state, candidate, "inv_0");
         let slow_size = rewritten[root].data.size as i64;
-        F::check_fast_vs_slow(final_size, slow_size);
+        assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
         // Semantic guard: rewriting must preserve the free-variable set at the
         // root. A mismatch means `wrap_subst_args` is shifting captured args
         // incorrectly and the abstraction's call site no longer agrees with the
