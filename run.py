@@ -10,9 +10,10 @@ def dials_compress():
     egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        search="smc",
         num_steps=10,
         num_particles=100,
-        debug_log=False,
+        temperature=100,
     )
 
 
@@ -20,9 +21,10 @@ def dials_follow():
     egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
+        search="smc",
         num_steps=10,
         num_particles=100,
-        debug_log=False,
+        temperature=100,
         follow="(T (T (T l (M 1 0 -0.5 0)) (M #0 (/ pi 4) 0 0)) (M 1 0 (* #0 (* 0.5 (cos (/ pi 4)))) (* #0 (* 0.5 (sin (/ pi 4))))))",
     )
 
@@ -35,7 +37,7 @@ def temp_sweep():
     for t in [1, 10, 100, 1000, 10000]:
         rows.append(dict(
             name=f"T{t}",
-            config=dict(num_steps=100, num_particles=1000, temperature=t, max_arity=2, ),
+            config=dict(search="smc", num_steps=100, num_particles=1000, temperature=t, max_arity=2, ),
             output=None
         ))
 
@@ -67,7 +69,6 @@ def bf_dfs():
         search="best-first",
         priority="depth-first",
         num_steps=500,
-        debug_log=True,
         max_arity=2,
     )
 
@@ -81,7 +82,6 @@ def bf_bfs():
         search="best-first",
         priority="breadth-first",
         num_steps=500,
-        debug_log=True,
         max_arity=2,
     )
 
@@ -95,7 +95,6 @@ def bf_matches():
         search="best-first",
         priority="most-matches",
         num_steps=500,
-        debug_log=True,
         max_arity=2,
     )
 
@@ -108,7 +107,6 @@ def best_first():
         search="best-first",
         # priority="cost",
         num_steps=5000,
-        # debug_log=True,
         max_arity=2,
         # replay="/Users/maddy/proj/rust/egg-stitch/viz/results/2026-04-12_17-29-35/dials_bf_cost_replay.json",
     )

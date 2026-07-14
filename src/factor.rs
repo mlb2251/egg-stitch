@@ -1,13 +1,6 @@
 use egg::Id;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-/// Minimum factor row count before [`Factor::decompose`] attempts a split.
-/// Detecting independence costs `O(slots² · rows)`; below this the saved
-/// cost-evaluation work doesn't repay that scan, so we keep the factor whole
-/// (correctness is independent of factoring granularity). Large factors — the
-/// ones whose `∏` blow-up actually hurts — are well above this.
-const DECOMPOSE_MIN_ROWS: usize = 48;
-
 /// One factor of a match location's substitution set: a relation over a subset
 /// of the pattern's variable slots. The full substitution set at a match
 /// location is the cartesian product of its factors (see
@@ -51,16 +44,20 @@ impl Factor {
     /// cartesian product equals `self.rows` (as a set), returning `[self]` when
     /// the relation doesn't decompose (the common small-factor case).
     ///
+    /// Factors with fewer than `min_rows` rows are kept whole unscanned: the
+    /// `O(slots² · rows)` detection doesn't repay itself that small (correctness
+    /// is independent of granularity). Set by `--decompose-min-rows`.
+    ///
     /// Two slot-positions are "entangled" when their joint projection has fewer
     /// rows than the product of their individual projections (i.e. not every
     /// value-pair occurs). Connected components of the pairwise-entanglement
     /// graph are the candidate blocks; the split is committed only after the
     /// exact check `∏|proj_block| == |rows|` (which holds iff `rows` equals the
     /// product of the blocks' projections, since `rows ⊆ ∏ proj` always).
-    pub fn decompose(self) -> Vec<Factor> {
+    pub fn decompose(self, min_rows: usize) -> Vec<Factor> {
         let n = self.slots.len();
         let nrows = self.rows.len();
-        if n <= 1 || nrows < DECOMPOSE_MIN_ROWS {
+        if n <= 1 || nrows < min_rows {
             return vec![self];
         }
         // Packed-int projections on the hot pairwise scan: an `Id` is a `u32`,
@@ -183,7 +180,7 @@ pub fn factors_product(factors: &[Factor]) -> Vec<Vec<Id>> {
 /// slot to an enode's children can't collide two rows, since an enode lives in a
 /// single e-class — so this skips the sort/dedup `Factor::new` does. (Row order
 /// is unobservable: every consumer treats the rows as a set.)
-pub fn rebuild_factor(slots: Vec<usize>, src_rows: &[Vec<Id>], mut build: impl FnMut(&[Id], &mut Vec<Vec<Id>>)) -> Option<Vec<Factor>> {
+pub fn rebuild_factor(slots: Vec<usize>, src_rows: &[Vec<Id>], min_rows: usize, mut build: impl FnMut(&[Id], &mut Vec<Vec<Id>>)) -> Option<Vec<Factor>> {
     let mut rows: Vec<Vec<Id>> = Vec::new();
     for r in src_rows {
         build(r, &mut rows);
@@ -191,7 +188,7 @@ pub fn rebuild_factor(slots: Vec<usize>, src_rows: &[Vec<Id>], mut build: impl F
     if rows.is_empty() {
         return None;
     }
-    Some(Factor { slots, rows }.decompose())
+    Some(Factor { slots, rows }.decompose(min_rows))
 }
 
 #[cfg(test)]
@@ -224,12 +221,12 @@ mod tests {
         assert_eq!(f.pos_of(2), None);
     }
 
-    /// Small factors (`< DECOMPOSE_MIN_ROWS`) are kept whole — the scan cost
-    /// wouldn't repay itself, and correctness is independent of granularity.
+    /// Small factors (`< min_rows`) are kept whole — the scan cost wouldn't
+    /// repay itself, and correctness is independent of granularity.
     #[test]
     fn decompose_keeps_small_factor_whole() {
         let rows: Vec<Vec<Id>> = (0..8).map(|a| ids(&[a, a + 100])).collect();
-        let out = Factor::new(vec![0, 1], rows).unwrap().decompose();
+        let out = Factor::new(vec![0, 1], rows).unwrap().decompose(48);
         assert_eq!(out.len(), 1);
     }
 
@@ -238,7 +235,7 @@ mod tests {
     #[test]
     fn decompose_splits_independent_columns() {
         let rows: Vec<Vec<Id>> = (0..8).flat_map(|a| (0..8).map(move |b| ids(&[a, b]))).collect();
-        let out = Factor::new(vec![0, 1], rows).unwrap().decompose();
+        let out = Factor::new(vec![0, 1], rows).unwrap().decompose(48);
         let cols: Vec<Vec<u32>> = (0..8).map(|x| vec![x]).collect();
         assert_eq!(shape(&out), vec![(vec![0], cols.clone()), (vec![1], cols)]);
     }
@@ -249,7 +246,7 @@ mod tests {
     fn decompose_separates_coupled_block_from_free_column() {
         // slot0 == slot1 (a coupled diagonal), slot2 free over 0..8.
         let rows: Vec<Vec<Id>> = (0..8).flat_map(|a| (0..8).map(move |b| ids(&[a, a, b]))).collect();
-        let out = Factor::new(vec![0, 1, 2], rows).unwrap().decompose();
+        let out = Factor::new(vec![0, 1, 2], rows).unwrap().decompose(48);
         let diag: Vec<Vec<u32>> = (0..8).map(|a| vec![a, a]).collect();
         let free: Vec<Vec<u32>> = (0..8).map(|b| vec![b]).collect();
         assert_eq!(shape(&out), vec![(vec![0, 1], diag), (vec![2], free)]);
@@ -260,7 +257,7 @@ mod tests {
     #[test]
     fn decompose_keeps_entangled_relation_whole() {
         let rows: Vec<Vec<Id>> = (0..50).map(|a| ids(&[a, a])).collect();
-        let out = Factor::new(vec![0, 1], rows).unwrap().decompose();
+        let out = Factor::new(vec![0, 1], rows).unwrap().decompose(48);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].slots, vec![0, 1]);
     }
@@ -273,7 +270,7 @@ mod tests {
     fn decompose_rejects_higher_order_split_via_exact_check() {
         let rows: Vec<Vec<Id>> = (0..8).flat_map(|a| (0..8).map(move |b| ids(&[a, b, (a + b) % 8]))).collect();
         assert_eq!(rows.len(), 64);
-        let out = Factor::new(vec![0, 1, 2], rows).unwrap().decompose();
+        let out = Factor::new(vec![0, 1, 2], rows).unwrap().decompose(48);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].slots, vec![0, 1, 2]);
     }
@@ -313,7 +310,7 @@ mod tests {
     #[test]
     fn rebuild_factor_expands_rows() {
         let src = vec![ids(&[1]), ids(&[2])];
-        let out = rebuild_factor(vec![0], &src, |row, rows| {
+        let out = rebuild_factor(vec![0], &src, 48, |row, rows| {
             rows.push(row.to_vec());
             rows.push(vec![Id::from(usize::from(row[0]) + 10)]);
         })
@@ -328,6 +325,6 @@ mod tests {
     #[test]
     fn rebuild_factor_drops_when_empty() {
         let src = vec![ids(&[1]), ids(&[2])];
-        assert!(rebuild_factor(vec![0], &src, |_, _| {}).is_none());
+        assert!(rebuild_factor(vec![0], &src, 48, |_, _| {}).is_none());
     }
 }

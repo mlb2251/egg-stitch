@@ -48,9 +48,6 @@ pub struct RunResult {
     /// `num_steps` cap. `None` for SMC (no heap).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub heap_sizes_at_end: Option<Vec<usize>>,
-    /// Filename of the debug log (in the same directory), if debug logging was enabled.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub debug_log_file: Option<String>,
     /// Programs as loaded from the input file (verbatim s-expression strings).
     pub original_programs: Vec<String>,
     /// Programs after all abstractions have been applied. Equal to `original_programs`

@@ -49,19 +49,13 @@ async function load() {
     };
 
     // Top-level (ungrouped / legacy) runs.
-    const topPromises = topFiles
-      .filter(f => !f.endsWith('_debug.json'))
-      .map(f => loadRun('', f).then(r => add('', r)));
+    const topPromises = topFiles.map(f => loadRun('', f).then(r => add('', r)));
 
     // One pass per subfolder, in parallel.
     const subPromises = dirs.map(async d => {
       const sub = await fetch(`results/${d}/`).then(r => r.text());
       const { files } = extractLinks(sub);
-      await Promise.all(
-        files
-          .filter(f => !f.endsWith('_debug.json'))
-          .map(f => loadRun(d, f).then(r => add(d, r)))
-      );
+      await Promise.all(files.map(f => loadRun(d, f).then(r => add(d, r))));
     });
 
     await Promise.all([...topPromises, ...subPromises]);
@@ -86,7 +80,6 @@ const COLUMNS = [
   [null, ''],
   ['timestamp', 'when'],
   ['name', 'run'],
-  [null, 'debug'],
   ['rewrites', 'rewrites'],
   ['initial_cost', 'pre-dsr', 'dim'],
   ['cost_after_rewrites', 'post-dsr', 'dim'],
@@ -111,16 +104,12 @@ async function deletePath(path, label) {
   return true;
 }
 
-/** Delete a single run JSON (and its _debug.json sibling if present). */
+/** Delete a single run JSON. */
 async function deleteRun(r) {
   const base = r.folder ? `results/${r.folder}/${r.name}` : `results/${r.name}`;
   if (!confirm(`Delete run "${r.name}"${r.folder ? ` in ${r.folder}` : ''}?`)) return;
   const res = await fetch(`${base}.json`, { method: 'DELETE' });
   if (!res.ok) { alert(`delete failed (${res.status}): ${await res.text()}`); return; }
-  if (r.debug_log_file) {
-    // Best-effort: ignore 404 if there's no debug file.
-    await fetch(r.folder ? `results/${r.folder}/${r.debug_log_file}` : `results/${r.debug_log_file}`, { method: 'DELETE' });
-  }
   await load();
 }
 
@@ -177,14 +166,10 @@ function renderGroup(g, maxRatio) {
     const tr = document.createElement('tr');
     tr.className = 'run';
     const barW = Math.round(60 * (r.compression_ratio || 0) / maxRatio);
-    const debugPath = r.debug_log_file
-      ? (r.folder ? `${r.folder}/${r.debug_log_file}` : r.debug_log_file)
-      : null;
     tr.innerHTML = `
       <td><button class="del del-run" title="delete run">×</button></td>
       <td>${fmtTime(r.timestamp)}</td>
       <td><b>${r.name}</b></td>
-      <td>${debugPath ? `<a class="debug-link" href="${r.search === 'best-first' ? 'tree.html' : 'debug.html'}?file=${encodeURIComponent(debugPath)}" onclick="event.stopPropagation()">view</a>` : ''}</td>
       <td>${r.rewrites ? '<span class="pill">yes</span>' : '<span class="pill no">no</span>'}</td>
       <td class="dim">${fmt(r.initial_cost)}</td>
       <td class="dim">${fmt(r.cost_after_rewrites)}</td>

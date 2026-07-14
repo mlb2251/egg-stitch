@@ -20,6 +20,10 @@ const NUM_ABSTRACTIONS: &str = "4";
 
 /// Lower than table7's 5000 to keep CI fast (~7x); lands on the same final cost.
 /// This suite is a regression guard, not the headline measurement (that's table7).
+///
+/// Caveat: `hyp.factoring.live` sits near an SMC basin boundary at 500 particles,
+/// so its fixture reflects a fragile low-particle trajectory (final_cost ~11077).
+/// At table7's 5000 particles it lands at ~8716 like every other seed.
 const NUM_PARTICLES: &str = "500";
 
 fn corpus_path(circuit: &str) -> String {
@@ -46,7 +50,7 @@ fn run_smc(circuit: &str, rules: Option<&str>, at_start: bool, tag: &str) -> Val
         "--search",
         "smc",
         "--language",
-        "op-children",
+        "op-children-db",
         "--max-arity",
         "4",
         "--num-abstractions",
@@ -56,7 +60,7 @@ fn run_smc(circuit: &str, rules: Option<&str>, at_start: bool, tag: &str) -> Val
         "--num-steps",
         "100",
         "--temperature",
-        "1000",
+        "100",
         "--seed",
         "1",
         "--iter-limit",

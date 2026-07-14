@@ -21,12 +21,21 @@ from tqdm import tqdm
 
 from . import ALL_DOMAINS
 from ._subproc import available_memory_bytes
-from .bench import MEM_LIMIT_BYTES
+from .bench import MAX_ARITY, MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
-from .runner import MOLECULE_FAMILIES
+from .runner import EPFL_CIRCUITS, MOLECULES
 
-NUM_RUNS = 10
+# SMC is stochastic, so it needs more repeats to average out run-to-run noise;
+# every other method here is deterministic and only needs a few for timing noise.
+SMC_NUM_RUNS = 10
+NUM_RUNS = 3
+
+
+def _num_runs_for(label: str) -> int:
+    """Repeats to run for a method: ``SMC_NUM_RUNS`` for the stochastic SMC
+    sweep (``smc-<particles>``), ``NUM_RUNS`` for every deterministic method."""
+    return SMC_NUM_RUNS if label.startswith("smc") else NUM_RUNS
 
 # Table 1 / 3: babble has no equational theory for text/logo/towers, so the
 # "with DSRs" comparison excludes them.
@@ -38,26 +47,35 @@ TABLE2_DOMAINS = TABLE1_DOMAINS + ["text", "logo", "towers"]
 # Hyperparameter sweeps for the two ours-search modes. Each value gets its
 # own runner / cache file, labelled ``enum-<num_steps>`` /
 # ``smc-<num_particles>`` so the renderer can group sweep points back into
-# a single line per base method. The table cells still show one canonical
-# point per method (see ``TABLE_BFS_STEPS`` / ``TABLE_SMC_PARTICLES`` in
-# ``scripts/render_tables.py``).
+# a single line per base method, at the one canonical point below.
 BFS_STEP_SWEEP: tuple[int, ...] = (200, 500, 1000, 2000, 5000, 10000, 20000, 50000)
 SMC_PARTICLE_SWEEP: tuple[int, ...] = (20, 50, 100, 200, 500, 1000, 2000, 5000)
+
+# The single sweep point each base method contributes to the table cells.
+# Plots use the full sweep regardless.
+TABLE_BFS_STEPS = 10000
+TABLE_SMC_PARTICLES = 1000
 
 
 def _sweep_runners(
     timeout: float | None = None,
     bfs_steps: tuple[int, ...] = BFS_STEP_SWEEP,
+    smc_particles: tuple[int, ...] = SMC_PARTICLE_SWEEP,
     mem_limit: int | None = None,
+    max_arity: int = MAX_ARITY,
+    iter_limit: int | None = None,
 ) -> tuple[tuple[str, object], ...]:
     """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value.
 
     ``timeout`` (seconds) caps each tool invocation's wall-clock and
-    ``mem_limit`` (bytes) its address space; None means no cap. ``bfs_steps``
-    overrides the best-first step sweep (table5 extends it).
+    ``mem_limit`` (bytes) its address space; None means no cap. ``bfs_steps`` /
+    ``smc_particles`` override the sweeps (table5 extends them, table7 truncates).
+    ``max_arity`` raises the abstraction arity cap (table7 uses 4). ``iter_limit``
+    caps e-saturation iterations (table7 uses 30; None keeps the binary default).
     """
-    bfs = tuple((f"enum-{n}", OursBf(num_steps=n, timeout=timeout, mem_limit=mem_limit)) for n in bfs_steps)
-    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, timeout=timeout, mem_limit=mem_limit)) for p in SMC_PARTICLE_SWEEP)
+    common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit)
+    bfs = tuple((f"enum-{n}", OursBf(num_steps=n, **common)) for n in bfs_steps)
+    smc = tuple((f"smc-{p}", OursSmc(num_particles=p, **common)) for p in smc_particles)
     return bfs + smc
 
 
@@ -68,8 +86,9 @@ def _sweep_runners(
 BASELINE_BFS_STEPS = 10_000_000
 
 # Runner rosters — Table 2/4 share the with-Stitch roster; Table 1/3 (DSRs,
-# no Stitch) add a "dsrs-only-at-start" baseline: best-first that canonicalises
-# with the DSRs once instead of keeping them live (the BFS@start column).
+# no Stitch) add two best-first baselines: "dsrs-only-at-start" (BFS/MT), which
+# canonicalises with the DSRs once instead of keeping them live, and
+# "enum-baseline" (BFS/NR), which turns the DSRs off entirely.
 BASE_RUNNERS: tuple[tuple[str, object], ...] = _sweep_runners() + (
     ("babble", Babble()),
 )
@@ -78,6 +97,7 @@ RUNNERS_WITH_STITCH: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
 )
 DSR_RUNNERS: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
     ("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True)),
+    ("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True)),
 )
 
 
@@ -91,33 +111,42 @@ def _run_method_for_table(
     cache_path: Path,
     bar: tqdm,
 ) -> dict[str, list[list[dict]]]:
-    """Run one method across all domains × ``NUM_RUNS`` for a single table.
+    """Run one method across all domains × its repeat count for a single table.
 
-    Returns ``{domain: [run0_per_file_dicts, run1_per_file_dicts, ...]}``.
-    Cached as a single JSON file per (table, method); delete the file to
-    force a recompute.
+    The repeat count is ``SMC_NUM_RUNS`` for SMC and ``NUM_RUNS`` otherwise (see
+    ``_num_runs_for``). Returns ``{domain: [run0_per_file_dicts, ...]}``. Cached
+    as a single JSON file per (table, method); delete the file to force a
+    recompute.
     """
     from .runner import run_method  # local import: runner pulls heavy deps
 
+    num_runs = _num_runs_for(label)
     if cache_path.exists():
         with open(cache_path) as fh:
             out = json.load(fh)
-        bar.update(len(domains) * NUM_RUNS)
+        bar.update(len(domains) * num_runs)
         return out
 
     out: dict[str, list[list[dict]]] = {}
     for domain in domains:
         runs: list[list[dict]] = []
-        for i in range(NUM_RUNS):
-            bar.set_description(f"{domain} {label} rep {i+1}/{NUM_RUNS}")
+        for i in range(num_runs):
+            bar.set_description(f"{domain} {label} rep {i+1}/{num_runs}")
             per_file = run_method(
                 runner,
                 domain,
                 rounds=num_abstractions,
                 use_dsrs=use_dsrs,
             )
-            runs.append([r.to_dict() for r in per_file])
+            run = [r.to_dict() for r in per_file]
+            runs.append(run)
             bar.update()
+            # A single timed-out/OOM'd replicate makes the method a DNF for this
+            # domain (the renderer drops a method with any DNF), so the remaining
+            # replicates can only repeat an expensive timeout — skip them.
+            if any(r["compression_ratio"] is None for r in run):
+                bar.update(num_runs - (i + 1))
+                break
         out[domain] = runs
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -135,8 +164,12 @@ def _run_table(
     folder_prefix: str,
     output_name: str,
 ) -> Path:
-    """Run each ``(label, runner)`` on every domain ``NUM_RUNS`` times and save JSON."""
-    assert all(d in ALL_DOMAINS or d.startswith("molecules:") for d in domains), "domain typo"
+    """Run each ``(label, runner)`` on every domain (SMC ``SMC_NUM_RUNS`` times,
+    others ``NUM_RUNS``; see ``_num_runs_for``) and save JSON."""
+    assert all(
+        d in ALL_DOMAINS or d.startswith("molecules:") or d.startswith("epfl-circuits:")
+        for d in domains
+    ), "domain typo"
     set_folder(f"{folder_prefix}/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {
         "config": {"num_abstractions": num_abstractions},
@@ -144,7 +177,7 @@ def _run_table(
     }
     cache_root = SUMMARY_RESULTS_DIR / Path(output_name).stem
 
-    total = len(domains) * NUM_RUNS * len(runners)
+    total = len(domains) * sum(_num_runs_for(label) for label, _ in runners)
     with tqdm(total=total, unit="run", smoothing=0.05) as bar:
         for label, runner in runners:
             by_domain = _run_method_for_table(
@@ -167,8 +200,8 @@ def _run_table(
 
 
 def table1() -> Path:
-    """Run Enum, SMC, babble, and the dsrs-only-at-start baseline on the
-    Table 1 domains with DSRs."""
+    """Run Enum, SMC, babble, and the dsrs-only-at-start (BFS/MT) and no-rules
+    (BFS/NR) baselines on the Table 1 domains with DSRs."""
     return _run_table(
         domains=TABLE1_DOMAINS,
         runners=DSR_RUNNERS,
@@ -219,7 +252,7 @@ def table4() -> Path:
 # Table 3 (Enum/SMC sweeps + babble) plus a "dsrs-only-at-start" baseline
 # (best-first that canonicalises with the DSRs once instead of keeping them
 # live). Every algorithm gets a hard wall-clock cap.
-TABLE5_DOMAINS = [f"molecules:{fam}" for fam in MOLECULE_FAMILIES]
+TABLE5_DOMAINS = MOLECULES.domains
 TABLE5_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE5_NUM_ABSTRACTIONS = 4
 # Live DSRs inflate the e-graph with every symmetry-equivalent orientation, so
@@ -235,32 +268,36 @@ TABLE5_SMC_POINT = 1_000
 
 def _table5_runners() -> tuple[tuple[str, object], ...]:
     """Table 3's roster (Enum/SMC sweeps + babble) plus the dsrs-only-at-start
-    baseline, every runner capped at :data:`TABLE5_TIMEOUT` and
-    :data:`MEM_LIMIT_BYTES`."""
+    and no-rules Enum (BFS/NR) baselines, every runner capped at
+    :data:`TABLE5_TIMEOUT` and :data:`MEM_LIMIT_BYTES`."""
+    capped = dict(timeout=TABLE5_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
     return (
         _sweep_runners(timeout=TABLE5_TIMEOUT, bfs_steps=TABLE5_BFS_SWEEP, mem_limit=MEM_LIMIT_BYTES)
-        + (("babble", Babble(timeout=TABLE5_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)),)
+        + (("babble", Babble(**capped)),)
         + (("enum-dsrs-at-start", OursBf(
-            num_steps=BASELINE_BFS_STEPS,
-            only_use_dsrs_at_start=True,
-            timeout=TABLE5_TIMEOUT,
-            mem_limit=MEM_LIMIT_BYTES,
-        )),)
+            num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **capped)),)
+        + (("enum-baseline", OursBf(
+            num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **capped)),)
     )
+
+
+def _require_free_memory(name: str) -> None:
+    """Refuse to start table run `name` unless the machine has MEM_LIMIT_BYTES
+    free: the per-tool memory cap is only a consistent control if that much is
+    actually available."""
+    free = available_memory_bytes()
+    if free < MEM_LIMIT_BYTES:
+        raise SystemExit(
+            f"{name}: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
+            f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
+            f"available. Free up memory or lower MEM_LIMIT_BYTES."
+        )
 
 
 def table5() -> Path:
     """Run the molecule scramble subset with DSRs, Table 3 roster + the
     dsrs-only-at-start baseline, each algorithm capped at 300s and 20 GiB."""
-    # Preflight: the per-tool memory cap is only a consistent control if the
-    # machine actually has that much free, so refuse to start otherwise.
-    free = available_memory_bytes()
-    if free < MEM_LIMIT_BYTES:
-        raise SystemExit(
-            f"table5: need >= {MEM_LIMIT_BYTES / 2**30:.0f} GiB free to apply a "
-            f"consistent per-tool memory cap, but only {free / 2**30:.1f} GiB is "
-            f"available. Free up memory or lower MEM_LIMIT_BYTES."
-        )
+    _require_free_memory("table5")
     return _run_table(
         domains=TABLE5_DOMAINS,
         runners=_table5_runners(),
@@ -268,4 +305,60 @@ def table5() -> Path:
         use_dsrs=True,
         folder_prefix="table5",
         output_name="table5.json",
+    )
+
+
+# Table 7: the EPFL circuits with the factoring DSRs. Table 5's full roster
+# (Enum/SMC sweeps + dsrs-only-at-start + babble + no-rules Enum baseline), at
+# max-arity 4. babble runs via its ``circuits`` binary (boolean and/or/not over
+# ``$N`` inputs); Stitch has no circuit frontend, so it stays dropped.
+TABLE7_DOMAINS = EPFL_CIRCUITS.domains
+TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
+TABLE7_NUM_ABSTRACTIONS = 4
+TABLE7_MAX_ARITY = 4
+# Cap e-saturation at 30 iterations (vs the binary default 100). The factoring
+# DSRs blow the e-graph up on these cones, and 100 iterations runs ~4-5x slower
+# for no better result -- past the timeout at the high sweep points.
+TABLE7_ITER_LIMIT = 30
+# Enum needs ~2300 expansions of leaf-enumeration warmup before it forms any
+# abstraction on these wide corpora, so below that it finishes with an empty
+# library (a misleading 1.0); above it, the rule-saturated e-graph never
+# converges and it times out. Sweep up to 10k so the representative point is
+# past the warmup and lands on a real result (here: DNF). SMC caps at 2000.
+# Both representative table/marker points are the renderer's canonical ones
+# (TABLE_BFS_STEPS=10000, TABLE_SMC_PARTICLES=1000) -- table7 needs no custom
+# point, unlike table5's extended enum sweep (TABLE5_ENUM_POINT=100k).
+TABLE7_BFS_SWEEP = tuple(n for n in BFS_STEP_SWEEP if n <= 10000)
+TABLE7_SMC_SWEEP = tuple(p for p in SMC_PARTICLE_SWEEP if p <= 2000)
+
+
+def _table7_runners() -> tuple[tuple[str, object], ...]:
+    """Enum/SMC sweeps (live DSRs), the dsrs-only-at-start and no-rules Enum
+    baselines, and babble, every runner at max-arity 4 and capped at
+    :data:`TABLE7_TIMEOUT` / :data:`MEM_LIMIT_BYTES`.
+
+    ``iter_limit`` is an ours-only knob (egg-stitch's e-saturation cap); babble
+    runs its DSR saturation for a fixed 3 iterations internally, so it only
+    takes the arity / resource caps."""
+    common = dict(max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
+    return (
+        _sweep_runners(bfs_steps=TABLE7_BFS_SWEEP, smc_particles=TABLE7_SMC_SWEEP, **common)
+        + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
+        + (("babble", Babble(max_arity=TABLE7_MAX_ARITY, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)),)
+        + (("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **common)),)
+    )
+
+
+def table7() -> Path:
+    """Run the EPFL circuits with the factoring DSRs: table5's full roster
+    (Enum/SMC + babble + the dsrs-only-at-start and no-rules Enum baselines),
+    max-arity 4, 4 abstractions, each capped at 300s and 20 GiB."""
+    _require_free_memory("table7")
+    return _run_table(
+        domains=TABLE7_DOMAINS,
+        runners=_table7_runners(),
+        num_abstractions=TABLE7_NUM_ABSTRACTIONS,
+        use_dsrs=True,
+        folder_prefix="table7",
+        output_name="table7.json",
     )
