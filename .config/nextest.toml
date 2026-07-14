@@ -6,14 +6,9 @@ fail-fast = false
 filter = "test(/check_slow/)"
 slow-timeout = "2m"
 
-# epfl_circuits_test runs SMC rollouts that can exceed the 2m default; warn at 4m,
-# kill at 12m (hang backstop).
+# The data-driven snapshot suite (tests/snapshots.toml) runs the search
+# end-to-end — SMC rollouts on the EPFL circuits and the algebra cogsci variants
+# are heavier than the 2m default. Warn at 4m, kill at 20m (hang backstop).
 [[profile.default.overrides]]
-filter = "binary(epfl_circuits_test)"
-slow-timeout = { period = "4m", terminate-after = 3 }
-
-# The cogsci `*_algebra` cases run the algebraic drawing rewrites and can exceed
-# the 2m default; warn at 4m, kill at 12m (hang backstop).
-[[profile.default.overrides]]
-filter = "test(/_algebra$/)"
-slow-timeout = { period = "4m", terminate-after = 3 }
+filter = "binary(snapshots)"
+slow-timeout = { period = "4m", terminate-after = 5 }
