@@ -23,12 +23,11 @@ pub enum VarOrder {
     /// ones. The default (best-first's long-standing ordering).
     #[default]
     MeanNodesPerClass,
-    /// Keep left-to-right creation order (identity rank).
+    /// Keep left-to-right creation order (identity rank). Effectively a depth-first ordering
+    /// where newer vars are frozen before older ones.
     LeftToRight,
-    /// Rank vars by syntactic depth in the pattern tree — distance from the root
-    /// counting every node, not just binders — shallowest first (ties by index).
-    /// Committing vars closest to the top before deeper ones makes expansion grow
-    /// the pattern breadth-first (see issue #183).
+    /// Rank vars by how shallowly they occur in the pattern, effectively a breadth
+    /// first ordering where older vars are frozen before younger ones.
     Shallowest,
 }
 
