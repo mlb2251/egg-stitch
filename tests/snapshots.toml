@@ -202,17 +202,6 @@ fixture = "physics/physics.dsr"
 rules = "data/domains/physics/physics.rewrites"
 oracle = { rules = "data/domains/physics/physics.rewrites" }
 
-# Oracle-only: the full ~5000-molecule corpus is too slow to search in a unit
-# test, so it has no snapshot trial — but its committed rewritten output is still
-# β/DSR-equivalence-checked by check_all_outputs.py. Declared here so coverage
-# stays a bijection.
-[[case]]
-name = "domains/molecules/molecules"
-kind = "stitch"
-fixture = "domains/molecules/molecules"
-snapshot = false
-oracle = { rules = "data/domains/molecules/molecules.rewrites" }
-
 # ─── EPFL circuits (fixed 4-abstraction SMC rollout, seed 1) ──────────────────
 # Per circuit, three configs: no-rules `baseline`, De Morgan + factoring `live`,
 # and the same rules `at-start`. Verified by exhaustive boolean truth-table

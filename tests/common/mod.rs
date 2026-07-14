@@ -262,11 +262,6 @@ pub struct Case {
     /// Whether to keep the abstraction `pattern`/`lambda` fields (stitch only).
     #[serde(default = "default_true")]
     pub check_pattern: bool,
-    /// When false, this is an oracle-only entry: `check_all_outputs.py` still
-    /// checks the fixture, but no snapshot trial runs it (e.g. a corpus too
-    /// large to search in a unit test). Keeps coverage a bijection.
-    #[serde(default = "default_true")]
-    pub snapshot: bool,
     /// Extra CLI args appended verbatim.
     #[serde(default)]
     pub args: Vec<String>,

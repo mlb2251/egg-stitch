@@ -27,7 +27,6 @@ fn main() {
     let mut trials: Vec<Trial> = manifest
         .cases
         .into_iter()
-        .filter(|case| case.snapshot) // oracle-only entries have no trial
         .map(|case| {
             // `foo/bar` → `foo::bar` so trials group like modules in output.
             let name = case.name.replace('/', "::");
