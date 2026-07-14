@@ -518,6 +518,24 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
 
+            // Useless-frozen pruning: a frozen metavar bound to the same
+            // (closed-under-pattern-binders) arg in every match adds no
+            // compression. Stitch analog: argument-capture pruning.
+            if args.opt_useless_frozen && child_state.is_useless_frozen(&shared) {
+                useless_frozen_hits += 1;
+                continue;
+            }
+
+            // Optimistic lower bound on this child's descendants — every match
+            // collapses to one node. Skip the full cost call (and the descent)
+            // when the bound already exceeds the current best.
+            let cost_to_beat = best.as_ref().map_or(usize::MAX, |(c, _, _)| *c);
+            let child_lower_bound = match lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, cost_to_beat) {
+                PruneResult::Pruned => continue,
+                PruneResult::Keep(lb) => Some(lb),
+                PruneResult::Disabled => None,
+            };
+
             // Variable-subset footprint pruning: prune `Q` if projecting its
             // footprint onto its variables minus one is contained (under a single
             // global renaming) in an already-seen pattern with one fewer variable.
@@ -526,12 +544,13 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // forces `P ∈ R` at every match root `R`, and `Q[σ] ∈ R` too, so
             // `Q[σ] ≡ P` — the dropped variable is vacuous and `Q` is dominated.
             //
-            // MUST stay before the `FootprintTracker` check below: that check is
+            // Ordered after the cheap `useless_frozen` / `lower_bound` prunes (so
+            // children they reject never pay for the footprint materialization or
+            // the scan) but before the `FootprintTracker` check below: that check is
             // deliberately last and hands the tracker `id = nodes.len()` on the
             // contract that a surviving child is pushed at that index (its deferred
             // representative reads the match set back by id). A prune placed *after*
-            // it would break that contract — a later child would take the id — so
-            // any successor prune has to happen first.
+            // it would break that contract, so any successor prune has to precede it.
             // The child's footprint is materialized once here and reused both for
             // this check (over every dropped variable) and for registration below.
             let child_reduct = if args.opt_var_subset { make_reduct(&child_state, VSP_CAP) } else { None };
@@ -578,24 +597,6 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                     }
                 }
             }
-
-            // Useless-frozen pruning: a frozen metavar bound to the same
-            // (closed-under-pattern-binders) arg in every match adds no
-            // compression. Stitch analog: argument-capture pruning.
-            if args.opt_useless_frozen && child_state.is_useless_frozen(&shared) {
-                useless_frozen_hits += 1;
-                continue;
-            }
-
-            // Optimistic lower bound on this child's descendants — every match
-            // collapses to one node. Skip the full cost call (and the descent)
-            // when the bound already exceeds the current best.
-            let cost_to_beat = best.as_ref().map_or(usize::MAX, |(c, _, _)| *c);
-            let child_lower_bound = match lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, cost_to_beat) {
-                PruneResult::Pruned => continue,
-                PruneResult::Keep(lb) => Some(lb),
-                PruneResult::Disabled => None,
-            };
 
             // Placed last as it is very expensive. `nodes.len()` is the index this
             // child will occupy (it is pushed unconditionally below if it survives),
