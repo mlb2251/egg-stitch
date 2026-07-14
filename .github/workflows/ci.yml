@@ -37,13 +37,27 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
-      - name: cargo nextest (excluding check_slow and epfl_circuits)
-        run: cargo nextest run --release -E 'not test(/check_slow/) and not binary(epfl_circuits_test)'
+      - name: cargo nextest (excluding check_slow and the snapshot suites)
+        run: cargo nextest run --release -E 'not test(/check_slow/) and not binary(snapshots) and not binary(snapshot_asserts)'
 
-  # EPFL-circuit snapshot suite (tests/epfl_circuits_test.rs), in its own
-  # single-threaded job (the SMC rollouts are heavier than the `test` job's cases).
-  # Needs python (the regen check) and the gitignored .aig blobs, fetched first.
-  test-epfl-circuits:
+  # Data-driven snapshot (bless/check) suite: every case in tests/snapshots.toml.
+  # Heavier than the `test` job's cases (SMC rollouts on EPFL circuits, the
+  # algebra cogsci variants), so it runs on its own. Reads only in-repo corpora
+  # (no python, no .aig blobs).
+  test-snapshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest snapshots
+        run: cargo nextest run --release -E 'binary(snapshots)'
+
+  # Feature-invariant assertions on top of the snapshots (tests/snapshot_asserts.rs),
+  # including the EPFL `.aig` corpus-regeneration checks — those need python and
+  # the gitignored .aig blobs, fetched first.
+  test-snapshot-asserts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,8 +69,8 @@ jobs:
           python-version: "3.11"
       - name: fetch vendored .aig circuits
         run: python3 scripts/epfl-circuits/fetch_aigs.py
-      - name: cargo nextest epfl-circuits (single-threaded)
-        run: cargo nextest run --release -E 'binary(epfl_circuits_test)' --test-threads=1
+      - name: cargo nextest snapshot-asserts
+        run: cargo nextest run --release -E 'binary(snapshot_asserts)'
 
   test-check-slow:
     runs-on: ubuntu-latest

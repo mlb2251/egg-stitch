@@ -163,14 +163,14 @@ pub struct Args {
     pub seed: Option<u64>,
 
     /// Number of search steps (SMC steps, or best-first heap pops).
-    /// Required for SMC. For best-first, at least one of --num-steps or
-    /// --time-limit must be provided.
+    /// Required for SMC. Optional for best-first: if neither --num-steps nor
+    /// --time-limit is set, best-first runs to completion.
     #[arg(long)]
     pub num_steps: Option<usize>,
 
     /// Wall-clock time limit in seconds for best-first search.
-    /// At least one of --num-steps, --time-limit, or --max-forced-expansion must
-    /// be provided for best-first.
+    /// Optional: if neither --num-steps nor --time-limit is set, best-first
+    /// runs to completion.
     #[arg(long)]
     pub time_limit: Option<f64>,
 
@@ -230,6 +230,15 @@ pub struct Args {
     /// Number of abstractions to find sequentially (each stacks on the previous).
     #[arg(long, default_value_t = 1)]
     pub num_abstractions: usize,
+
+    /// Roll the egraph over between abstractions instead of extracting the
+    /// rewritten programs and rebuilding a fresh egraph. When set, the rewritten
+    /// egraph (original nodes + the new `fn_N(...)` applications unioned into
+    /// their match roots) is reused directly for the next abstraction round,
+    /// preserving every accumulated equivalence. Default: off (extract the
+    /// rewritten programs and rebuild a clean egraph, re-applying DSR rules).
+    #[arg(long, default_value_t = false)]
+    pub roll_over: bool,
 
     /// Enable the `seen` set in best-first search (canonical-pattern dedup).
     /// Off by default: the canonical-ordering rule (`frozen_count`) and the
@@ -408,8 +417,10 @@ type MultiStepSearchResult = (Vec<results::AbstractionResult>, usize, Option<Vec
 /// each iteration (`None` for SMC).
 ///
 /// After each abstraction is found, `fn_N(args...)` enodes are added and unioned with
-/// their match roots, then the rewritten programs are extracted as strings and used to
-/// build a fresh egraph for the next round (DSR rules are re-applied there).
+/// their match roots, then the rewritten programs are extracted as strings. By default
+/// those strings build a fresh egraph for the next round (DSR rules are re-applied
+/// there); with `--roll-over` the rewritten egraph is instead reused directly, carrying
+/// all accumulated equivalences into the next round.
 pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, args: &Args) -> MultiStepSearchResult {
     let mut data = data;
     let mut library = Vec::new();
@@ -480,7 +491,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 // With `--only-use-dsrs-at-start` the rules are not re-applied to
                 // the fresh egraph between abstractions.
                 let rule_file = if args.only_use_dsrs_at_start { None } else { args.rules.as_deref() };
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file, args.iter_limit, args.node_limit);
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, rule_file, args.iter_limit, args.node_limit, args.roll_over);
 
                 // `best_cost` is the search's score for this iteration: rewritten
                 // corpus + this abstraction's body. Earlier iterations rewrote the
@@ -563,16 +574,22 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 }
 
 /// Applies an abstraction to the egraph: adds `fn_name(args...)` enodes for every
-/// match substitution and unions each with its match root, rebuilds, extracts the
-/// rewritten programs as strings, and feeds them into a fresh egraph (with DSR
-/// rules re-applied).
+/// match substitution and unions each with its match root, rebuilds, then extracts
+/// the rewritten programs as strings.
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
-pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, iter_limit: usize, node_limit: usize) -> (shared::SharedData<F, O>, Vec<String>) {
+#[allow(clippy::too_many_arguments)]
+pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, iter_limit: usize, node_limit: usize, roll_over: bool) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { egraph, root } = data;
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
     let programs = io::extract_programs::<F::Apply<O>>(&egraph, root);
-    let weights = egraph.analysis.weights;
-    let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit);
-    (fresh, programs)
+    let next_data = if roll_over {
+        // Deliberately skip re-running the DSRs (`rule_file`): another saturation pass
+        // would keep growing an egraph that may not have saturated in the first place.
+        shared::SharedData::new(egraph, root)
+    } else {
+        let weights = egraph.analysis.weights;
+        io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit)
+    };
+    (next_data, programs)
 }

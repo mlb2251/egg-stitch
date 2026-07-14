@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
-"""Run `check_equiv.py` on every `*.out.json` under `data/expected_outputs/`.
+"""Run the equivalence oracle on every `*.out.json` under `data/expected_outputs/`.
 
-Each fixture is run β-only by default. Fixtures that the search produced
-*with* a DSR file get checked against those same DSRs via `RULES_BY_PATH`;
-without them, β alone can't bridge cases like `(* 0 ?x) ≡ 0`.
+Each fixture's oracle is declared in `tests/snapshots.toml` (the same manifest
+that drives the Rust snapshot suite), via each case's `oracle` field:
 
-Fixtures whose library has no `lambda` field are skipped internally by
-`check_equiv.py` (lambda-free OpChildren runs).
+  * "beta"            — β-only equivalence (the default)
+  * { rules = "..." } — β + the given DSR file (β alone can't bridge e.g.
+                        `(* 0 ?x) ≡ 0`)
+  * "circuit"         — exhaustive boolean truth-table equivalence
+                        (check_circuit_equiv.py), definitive for the EPFL cones
+  * { skip = "..." }  — oracle-intractable / intentionally-unsound fixture,
+                        pinned by its snapshot test instead
 
-The epfl-circuits domain is verified by `check_circuit_equiv.py` instead
-(exhaustive boolean truth-table equivalence), which is definitive for its
-<=K-input cones where rule-saturation can't always re-derive the equivalence.
+The Rust `coverage` trial guarantees the manifest and the on-disk fixture tree
+are in exact correspondence, so every `*.out.json` here has exactly one entry.
 
 Exit 0 iff every applicable file checks out.
 """
 
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -24,112 +28,68 @@ REPO = HERE.parent
 CHECKER = HERE / "check_equiv.py"
 CIRCUIT_CHECKER = HERE / "check_circuit_equiv.py"
 ROOT = REPO / "data" / "expected_outputs"
-
-# Fixtures where the search was run with `-r <rules>` and β alone is not
-# enough to bridge the DSR-mediated equivalence in the rewritten programs.
-# Keep in sync with the suites that bless these fixtures: the stitch/arith/
-# conditional/fv-overapprox/test entries come from `tests/stitch_compat_test.rs`,
-# the `cogsci/*.dsr` ones from `tests/cogsci_bfs_test.rs`, and the
-# `list`/`physics` ones from `tests/dreamcoder_bfs_test.rs`.
-RULES_BY_REL = {
-    "fv-overapprox/annihilator.out.json": "data/domains/fv-overapprox/annihilator.rewrites",
-    "stitch/nested.out.json": "data/domains/stitch/nested.rewrites",
-    "conditional/if_branch_unify.out.json": "data/domains/conditional/if_branch.rewrites",
-    "conditional/if_branch_unify.cap5.out.json": "data/domains/conditional/if_branch.rewrites",
-    "conditional/if_branch_unify.cap10.out.json": "data/domains/conditional/if_branch.rewrites",
-    "test/crossed_wrap_collapse.out.json": "data/test/crossed_wrap_collapse.rewrites",
-    "cogsci/dials.dsr.out.json": "data/domains/cogsci/dials.rewrites",
-    "cogsci/dials.dsr-mfe3.out.json": "data/domains/cogsci/dials.rewrites",
-    "cogsci/furniture.dsr.out.json": "data/domains/cogsci/furniture.rewrites",
-    "cogsci/furniture.dsr-mfe3.out.json": "data/domains/cogsci/furniture.rewrites",
-    "cogsci/nuts-bolts.dsr.out.json": "data/domains/cogsci/nuts-bolts.rewrites",
-    "cogsci/nuts-bolts.dsr-mfe3.out.json": "data/domains/cogsci/nuts-bolts.rewrites",
-    "cogsci/wheels.dsr.out.json": "data/domains/cogsci/wheels.rewrites",
-    "cogsci/wheels.dsr-mfe3.out.json": "data/domains/cogsci/wheels.rewrites",
-    "list/list.dsr.out.json": "data/domains/list/list.rewrites",
-    "physics/physics.dsr.out.json": "data/domains/physics/physics.rewrites",
-    "simple-arithmetic/const_fold.out.json": "data/domains/simple-arithmetic/const_fold.rewrites",
-    "simple-arithmetic/const_fold_integers.out.json": "data/domains/simple-arithmetic/const_fold_integers.rewrites",
-    "simple-arithmetic/const_fold_floats.out.json": "data/domains/simple-arithmetic/const_fold_floats.rewrites",
-    "simple-arithmetic/const_fold_int_as_float.out.json": "data/domains/simple-arithmetic/const_fold_int_as_float.rewrites",
-    "simple-arithmetic/fold_after_rewrite.out.json": "data/domains/simple-arithmetic/fold_after_rewrite.rewrites",
-    "simple-arithmetic/fold_ops_trig.out.json": "data/domains/simple-arithmetic/fold_ops_trig.rewrites",
-    "simple-arithmetic/fold_ops_restrict.out.json": "data/domains/simple-arithmetic/fold_ops_restrict.rewrites",
-    "simple-arithmetic/fold_round6.out.json": "data/domains/simple-arithmetic/fold_round6.rewrites",
-    "simple-arithmetic/fold_round3.out.json": "data/domains/simple-arithmetic/fold_round3.rewrites",
-    "test/arith_unify.out.json": "data/test/arith.rewrites",
-    "test/converge_tower.out.json": "data/test/converge_tower.rewrites",
-    "test/nested_loop_tower.out.json": "data/test/nested_loop_tower.rewrites",
-    "test/if_unify.out.json": "data/test/if.rewrites",
-    # loop rolling: at-start flattens a count-1 loop to its bare body via
-    # `(repeat ?x 1 ?n) => ?x`, so only that DSR bridges orig and rewritten.
-    # Blessed by the `loop_*` cases in `tests/stitch_compat_test.rs`.
-    "test/loop_rolling_with_count1.live.out.json": "data/test/loop_rolling.rewrites",
-    "test/loop_rolling_with_count1.at_start.out.json": "data/test/loop_rolling.rewrites",
-    "test/loop_rolling_no_count1.out.json": "data/test/loop_rolling.rewrites",
-    # molecule domain (op-children): re-rooting / commutativity DSRs are what
-    # make the rewritten trees equivalent, so β alone can't bridge them. Blessed
-    # by the `molecules_*` cases in `tests/stitch_compat_test.rs`.
-    "test/ethanol_two_rootings.out.json": "data/domains/molecules/molecules.rewrites",
-    "domains/molecules/molecules.out.json": "data/domains/molecules/molecules.rewrites",
-    "molecules/scramble/hexyl.scram.out.json": "data/domains/molecules/molecules.rewrites",
-    "molecules/scramble/ester.scram.out.json": "data/domains/molecules/molecules.rewrites",
-    "molecules/scramble/glycol.scram.out.json": "data/domains/molecules/molecules.rewrites",
-}
-
-# The plain-`op-children` half of the op-children-db contrast deliberately bakes
-# the symbol `$0` into the body (`(f (g (h ?#0)) $0)`). check_equiv reads `$0` as
-# a De Bruijn variable, so it sees an unsound rewrite — which is exactly the
-# unsoundness `op-children-db` fixes by banning free DB vars from the body. The
-# fixture only exists to pin that contrast, so skip it in the equivalence sweep;
-# the snapshot test keeps it regression-locked. (epfl-circuits fixtures aren't
-# skipped here -- `main` routes them to check_circuit_equiv.py instead.)
-SKIP_REL = {"test/op_children_db_free_var.plain.out.json"}
-
-# The cogsci `*.algebra` fixtures use our algebraic drawing rewrites
-# (drawings.rewrites), which are non-confluent and node-exploding (matmul,
-# overlay/arith commutativity, repeat-unroll) — the same blowup that forces
-# `--iter-limit` on the real search. `check_equiv` saturates without such a cap,
-# so it bails on the node limit (false negatives) and is brutally slow over the
-# 250-program corpus. These fixtures are instead pinned EXACTLY by the
-# `*_algebra` snapshot cases in `tests/cogsci_bfs_test.rs`.
-SKIP_RELS = {
-    "cogsci/dials.algebra.out.json",
-    "cogsci/furniture.algebra.out.json",
-    "cogsci/nuts-bolts.algebra.out.json",
-    "cogsci/wheels.algebra.out.json",
-}
+MANIFEST = REPO / "tests" / "snapshots.toml"
 
 
-def is_circuit(rel):
-    return rel.startswith("epfl-circuits/")
+def fixture_rel(case):
+    """The fixture path a case owns, relative to ROOT (matches Case::fixture_path)."""
+    if "fixture" in case:
+        return f"{case['fixture']}.out.json"
+    rel = case["input"]
+    for prefix in ("data/domains/", "data/"):
+        if rel.startswith(prefix):
+            rel = rel[len(prefix):]
+            break
+    return rel.removesuffix(".json") + ".out.json"
+
+
+def load_oracles():
+    """Map each fixture rel-path to its oracle spec from the manifest."""
+    manifest = tomllib.loads(MANIFEST.read_text())
+    oracles = {}
+    for case in manifest.get("case", []):
+        # dreamcoder cases use `glob` (no single input) but always set `fixture`.
+        if "fixture" not in case and "input" not in case:
+            raise SystemExit(f"manifest case {case['name']!r} has neither fixture nor input")
+        oracles[fixture_rel(case)] = case.get("oracle", "beta")
+    return oracles
 
 
 def main():
+    oracles = load_oracles()
     paths = sorted(ROOT.rglob("*.out.json"))
     if not paths:
         print(f"no *.out.json under {ROOT}", file=sys.stderr)
         sys.exit(1)
+
+    circuits = []
+    # check_equiv batches, keyed by the rules file (None for β-only) so each
+    # batch is a single subprocess call.
+    batches = {}
+    for p in paths:
+        rel = str(p.relative_to(ROOT))
+        oracle = oracles.get(rel)
+        if oracle is None:
+            print(f"no manifest case owns fixture {rel} (add a [[case]] to tests/snapshots.toml)", file=sys.stderr)
+            sys.exit(1)
+        if oracle == "circuit":
+            circuits.append(p)
+        elif isinstance(oracle, dict) and "skip" in oracle:
+            print(f"skip ({oracle['skip']}): {rel}")
+        elif isinstance(oracle, dict) and "rules" in oracle:
+            batches.setdefault(oracle["rules"], []).append(p)
+        elif oracle == "beta":
+            batches.setdefault(None, []).append(p)
+        else:
+            print(f"unknown oracle {oracle!r} for {rel}", file=sys.stderr)
+            sys.exit(1)
+
     overall = 0
-    # epfl-circuits: exhaustive boolean-equivalence check (see check_circuit_equiv.py).
-    circuits = [p for p in paths if is_circuit(str(p.relative_to(ROOT)))]
     if circuits:
         print(f"$ check_circuit_equiv.py <{len(circuits)} files>")
         res = subprocess.run([sys.executable, str(CIRCUIT_CHECKER), *map(str, circuits)], cwd=REPO)
         if res.returncode != 0:
             overall = res.returncode
-    # Everything else: β-only or rule-mediated equivalence via check_equiv.
-    # Group by rewrites file (None for β-only) so each batch becomes one call.
-    batches = {}
-    for p in paths:
-        rel = str(p.relative_to(ROOT))
-        if rel in SKIP_RELS:
-            print(f"skip (oracle-intractable, pinned by snapshot test): {rel}")
-            continue
-        if rel in SKIP_REL or is_circuit(rel):
-            continue
-        rules = RULES_BY_REL.get(rel)
-        batches.setdefault(rules, []).append(p)
     for rules, group in batches.items():
         cmd = [sys.executable, str(CHECKER), *[str(p) for p in group]]
         if rules:

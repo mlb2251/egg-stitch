@@ -9,11 +9,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 const INPUT: &str = "data/domains/cogsci/dials.json";
-const RULES: &str = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
-
-fn fixtures_present() -> bool {
-    std::path::Path::new(INPUT).exists() && std::path::Path::new(RULES).exists()
-}
+const RULES: &str = "data/domains/cogsci/dials.rewrites";
 
 fn run(args: &Args) -> smc::SmcResult<OpChildren, Op> {
     let (data, _, _) = io::load_egraph::<OpChildren, Op>(&args.input, args.rules.as_deref(), args.only_use_dsrs_at_start, Weights::default(), args.iter_limit, args.node_limit);
@@ -57,9 +53,6 @@ const DIALS_FULL_FOLLOW: &str = "(T (T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0)
 /// Full follow baseline — needs high temperature.
 #[test]
 fn follow_dials_full_baseline() {
-    if !fixtures_present() {
-        return;
-    }
     let args = Args::parse_from([
         "egg-stitch",
         "--search",
@@ -86,9 +79,6 @@ fn follow_dials_full_baseline() {
 /// Shallow follow with no variables — fast.
 #[test]
 fn follow_shallow_no_placeholders() {
-    if !fixtures_present() {
-        return;
-    }
     let follow = "(T l (M 1 0 -0.5 0))";
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "30", "--num-particles", "200", "--follow", follow, "--max-arity", "2", "--temperature", "100"]);
     let result = run(&args);
@@ -98,9 +88,6 @@ fn follow_shallow_no_placeholders() {
 /// Follow with a `?#0` variable — verifies the search doesn't crash.
 #[test]
 fn follow_single_placeholder() {
-    if !fixtures_present() {
-        return;
-    }
     let follow = "(T (T l (M 1 0 -0.5 0)) (M ?#0 (/ pi 4) 0 0))";
     let args = Args::parse_from([
         "egg-stitch",
@@ -128,9 +115,6 @@ fn follow_single_placeholder() {
 /// No follow — sanity check.
 #[test]
 fn no_follow_still_produces_best() {
-    if !fixtures_present() {
-        return;
-    }
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
@@ -139,9 +123,6 @@ fn no_follow_still_produces_best() {
 /// Verify fast rewrite cost matches slow (egraph-based) cost.
 #[test]
 fn check_slow_matches_fast() {
-    if !fixtures_present() {
-        return;
-    }
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
@@ -150,24 +131,18 @@ fn check_slow_matches_fast() {
 /// Verify fast == slow on dials without rewrite rules (no high-id children).
 #[test]
 fn check_slow_no_rules() {
-    if !fixtures_present() {
-        return;
-    }
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
 }
 
-const REWRITES_DIR: &str = "../babble/harness/data/benchmark-dsrs";
+const REWRITES_DIR: &str = "data/domains/cogsci";
 
 /// Verify fast == slow across multiple domains with their rewrite rules.
 #[test]
 fn check_slow_furniture() {
     let input = "data/domains/cogsci/furniture.json";
-    let rules = &format!("{}/drawings.furniture.rewrites", REWRITES_DIR);
-    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
-        return;
-    }
+    let rules = &format!("{}/furniture.rewrites", REWRITES_DIR);
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
@@ -176,10 +151,7 @@ fn check_slow_furniture() {
 #[test]
 fn check_slow_nuts_bolts() {
     let input = "data/domains/cogsci/nuts-bolts.json";
-    let rules = &format!("{}/drawings.nuts-bolts.rewrites", REWRITES_DIR);
-    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
-        return;
-    }
+    let rules = &format!("{}/nuts-bolts.rewrites", REWRITES_DIR);
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
@@ -188,10 +160,7 @@ fn check_slow_nuts_bolts() {
 #[test]
 fn check_slow_wheels() {
     let input = "data/domains/cogsci/wheels.json";
-    let rules = &format!("{}/drawings.wheels.rewrites", REWRITES_DIR);
-    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
-        return;
-    }
+    let rules = &format!("{}/wheels.rewrites", REWRITES_DIR);
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", input, "--rules", rules, "--num-steps", "20", "--num-particles", "100", "--max-arity", "2", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
@@ -200,9 +169,6 @@ fn check_slow_wheels() {
 /// Verify fast == slow with higher arity.
 #[test]
 fn check_slow_high_arity() {
-    if !fixtures_present() {
-        return;
-    }
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", INPUT, "--rules", RULES, "--num-steps", "20", "--num-particles", "100", "--max-arity", "4", "--check-slow", "--temperature", "100"]);
     let result = run(&args);
     assert!(result.best.is_some());
@@ -211,9 +177,6 @@ fn check_slow_high_arity() {
 /// Verify fast == slow with higher arity.
 #[test]
 fn check_slow_high_arity_multi_abstr() {
-    if !fixtures_present() {
-        return;
-    }
     let args = Args::parse_from([
         "egg-stitch",
         "--search",
@@ -243,9 +206,6 @@ fn check_slow_high_arity_multi_abstr() {
 #[test]
 fn check_slow_lambda_calc_fast_slow_mismatch() {
     let input = "data/domains/stitch/lambda-calc-fast-slow-mismatch.json";
-    if !std::path::Path::new(input).exists() {
-        return;
-    }
     let args = Args::parse_from([
         "egg-stitch",
         "--search",
@@ -273,9 +233,6 @@ fn check_slow_lambda_calc_fast_slow_mismatch() {
 #[test]
 fn check_slow_intermediate_propagation() {
     let input = "data/domains/stitch/intermediate-propagation.json";
-    if !std::path::Path::new(input).exists() {
-        return;
-    }
     let args = Args::parse_from([
         "egg-stitch",
         "--search",
@@ -307,9 +264,6 @@ fn check_slow_intermediate_propagation() {
 fn check_slow_op_children_overcount() {
     let input = "data/test/op-children-fast-slow-overcount.json";
     let rules = "data/domains/epfl-circuits/and_or_demorgan_factor.rewrites";
-    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
-        return;
-    }
     let args = Args::parse_from([
         "egg-stitch",
         "--search",
@@ -338,9 +292,6 @@ fn check_slow_op_children_overcount() {
 /// One test per file so they parallelize and failures point at a specific input.
 fn check_slow_physics(name: &str) {
     let input = format!("data/domains/physics/{}", name);
-    if !std::path::Path::new(&input).exists() {
-        return;
-    }
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "100", "--language", "lambda-calc", "--check-slow"]);
     let _ = run_lambda_calc(&args);
 }
@@ -393,9 +344,6 @@ fn check_slow_physics_18_09_34_bench004() {
 /// full 59-file corpus, which is too slow to sweep under `--check-slow`.
 fn check_slow_list(name: &str) {
     let input = format!("data/domains/list/{}", name);
-    if !std::path::Path::new(&input).exists() {
-        return;
-    }
     let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", &input, "--num-steps", "100", "--num-particles", "10000", "--temperature", "100", "--language", "lambda-calc", "--check-slow"]);
     let _ = run_lambda_calc(&args);
 }
@@ -455,11 +403,12 @@ fn check_slow_list_11_43_28_bench001() {
 // while still scoring many distinct patterns.
 
 /// Best-first `--check-slow` over an op-children cogsci corpus + its DSRs.
+///
+/// Budget is 200 expansions: `wheels` doesn't reach its first positive-utility
+/// abstraction until expansion 110 (the other domains find one before 100), so a
+/// smaller budget leaves `result.best` empty and trips the sanity assert below.
 fn check_slow_bf_cogsci(input: &str, rules: &str) {
-    if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
-        return;
-    }
-    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "100", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "200", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
     let result = run_best_first(&args);
     assert!(result.best.is_some());
 }
@@ -470,24 +419,21 @@ fn check_slow_bf_dials() {
 }
 #[test]
 fn check_slow_bf_furniture() {
-    check_slow_bf_cogsci("data/domains/cogsci/furniture.json", &format!("{}/drawings.furniture.rewrites", REWRITES_DIR));
+    check_slow_bf_cogsci("data/domains/cogsci/furniture.json", &format!("{}/furniture.rewrites", REWRITES_DIR));
 }
 #[test]
 fn check_slow_bf_nuts_bolts() {
-    check_slow_bf_cogsci("data/domains/cogsci/nuts-bolts.json", &format!("{}/drawings.nuts-bolts.rewrites", REWRITES_DIR));
+    check_slow_bf_cogsci("data/domains/cogsci/nuts-bolts.json", &format!("{}/nuts-bolts.rewrites", REWRITES_DIR));
 }
 #[test]
 fn check_slow_bf_wheels() {
-    check_slow_bf_cogsci("data/domains/cogsci/wheels.json", &format!("{}/drawings.wheels.rewrites", REWRITES_DIR));
+    check_slow_bf_cogsci("data/domains/cogsci/wheels.json", &format!("{}/wheels.rewrites", REWRITES_DIR));
 }
 
 /// Best-first `--check-slow` over a lambda-calc physics corpus. Named
 /// `check_slow_physics_*` so CI routes it into the dedicated physics job.
 fn check_slow_physics_bf(name: &str) {
     let input = format!("data/domains/physics/{}", name);
-    if !std::path::Path::new(&input).exists() {
-        return;
-    }
     let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", &input, "--num-steps", "100", "--num-abstractions", "1", "--language", "lambda-calc", "--check-slow"]);
     let _ = run_best_first_lambda_calc(&args);
 }
@@ -505,9 +451,6 @@ fn check_slow_physics_bf_bench001() {
 /// `check_slow_list_*` so CI routes it into the dedicated list job.
 fn check_slow_list_bf(name: &str) {
     let input = format!("data/domains/list/{}", name);
-    if !std::path::Path::new(&input).exists() {
-        return;
-    }
     let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", &input, "--num-steps", "100", "--num-abstractions", "1", "--language", "lambda-calc", "--check-slow"]);
     let _ = run_best_first_lambda_calc(&args);
 }
@@ -535,9 +478,6 @@ fn check_slow_list_bf_bench001() {
 #[test]
 fn follow_exact_match_exits_early_smc() {
     let input = "data/domains/stitch/hof.json";
-    if !std::path::Path::new(input).exists() {
-        return;
-    }
     let follow = "(lam (app (?#0 $0) (app (?#0 $0) empty)))";
     let budget = 2000;
     let args = Args::parse_from([
@@ -568,9 +508,6 @@ fn follow_exact_match_exits_early_smc() {
 #[test]
 fn follow_lambda_calc_flat_nary_app() {
     let input = "data/domains/stitch/hof.json";
-    if !std::path::Path::new(input).exists() {
-        return;
-    }
     let follow = "(lam (app (?#0 $0) (app (?#0 $0) empty)))";
     let args = Args::parse_from([
         "egg-stitch",
@@ -603,9 +540,6 @@ fn follow_lambda_calc_flat_nary_app() {
 #[test]
 fn follow_lambda_calc_var_headed_smoke() {
     let input = "data/domains/stitch/simple2.json";
-    if !std::path::Path::new(input).exists() {
-        return;
-    }
     let follow = "(?#0 (lam (?#0 ?#0)))";
     let args = Args::parse_from([
         "egg-stitch",

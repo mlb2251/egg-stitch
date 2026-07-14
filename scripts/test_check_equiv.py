@@ -6,7 +6,7 @@ failure. Kept tiny and dependency-free so CI can invoke it without pytest.
 
 Covers the bits most likely to silently degrade:
   - de Bruijn shift/subst correctness across binders
-  - the HO-arity-2 capture case from `tests/stitch_compat_test.rs`
+  - the HO-arity-2 capture case (`stitch/ho_arity2_capture` in `tests/snapshots.toml`)
     (`($0 $1)` vs `($1 $0)` under a wrap — must NOT be β-equivalent)
   - library inlining + β-equivalence end-to-end
   - DSR-mediated equivalence via the e-graph mode (`(* 0 ?x) <=> 0`)
@@ -86,7 +86,7 @@ def test_K_combinator():
 
 
 def test_argument_order_matters():
-    # The exact bug the test-comment in stitch_compat_test.rs flagged: under
+    # The exact bug the ho_arity2_capture snapshot flagged: under
     # a (lam (lam …)) wrap, swapping the application order is observable.
     # ($0 $1) vs ($1 $0) inside two binders must NOT be β-equivalent.
     a = nf("(lam (lam (@ $0 $1)))")
