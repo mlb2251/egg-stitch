@@ -79,6 +79,229 @@ fn cost_balanced<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<
     egraph.classes().all(|c| c.nodes.iter().all(|n| n.discriminant().intrinsic_size(&weights) + n.children().iter().map(|&ch| egraph[ch].data.size).sum::<u32>() == c.data.size))
 }
 
+/// A match footprint: `(root, variable bindings in fixed variable order)` tuples.
+type Footprint = rustc_hash::FxHashSet<(egg::Id, Vec<egg::Id>)>;
+
+/// A variable's *column*: the set of `(root, value)` pairs it takes across a
+/// footprint. Renaming variable `i` of one pattern onto variable `j` of another
+/// requires `column[i] ⊆ column[j]` — a per-variable necessary condition that
+/// collapses the renaming search from factorial to a constrained bipartite
+/// matching (the containment analogue of a marginal hash).
+type Column = rustc_hash::FxHashSet<(egg::Id, egg::Id)>;
+
+/// A per-tuple *value multiset* signature: `(root, commutative hash of bindings)`.
+/// Column renaming only permutes a tuple's bindings, so it preserves this
+/// signature. Containment `proj ⊆ seen` under any renaming therefore requires every
+/// projected tuple's signature to be an actual `seen` tuple — a hash-lookup
+/// necessary condition that rejects non-dominators with no renaming search. The
+/// hash is a *sum* of per-value hashes, so it is order-independent and a projected
+/// tuple's signature is the full tuple's minus the dropped value's hash — computed
+/// in O(1) with no allocation. Hash collisions only admit extra candidates, which
+/// the exact renaming verify then rejects, so pruning stays sound.
+type TupleSig = (egg::Id, u64);
+
+/// Hash of a single binding value (used additively to build [`TupleSig`]).
+fn value_hash(id: egg::Id) -> u64 {
+    (usize::from(id) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+}
+
+/// Commutative (sum) hash of a tuple's bindings — the multiset signature body.
+fn multiset_hash(bindings: &[egg::Id]) -> u64 {
+    bindings.iter().copied().map(value_hash).fold(0u64, u64::wrapping_add)
+}
+
+/// A seen reduct candidate: its footprint, its variable-frozen mask (one bool per
+/// variable, in variable order — the freeze-rule flexibility that the containment
+/// check must respect so pruning stays sound), its per-variable columns (used to
+/// prune the renaming search in [`dominated_any_drop`]), and a *multiset* of its
+/// per-tuple value-multiset signatures — how many tuples carry each signature.
+/// Since a renaming is a bijection, distinct `Q` tuples map to distinct `P` tuples,
+/// so `P` must hold at least as many tuples of each signature as the projection;
+/// the counts make that the necessary-condition filter (strictly stronger than set
+/// membership).
+type Reduct = (Footprint, Vec<bool>, Vec<Column>, rustc_hash::FxHashMap<TupleSig, u32>);
+
+/// Seen reducts of one arity, with an inverted index from each per-tuple value
+/// multiset ([`TupleSig`]) to the reducts whose footprint contains a tuple with
+/// that signature. A projection `Q` can be dominated by `P` only if every tuple of
+/// `Q` matches a `seen` tuple signature, so the candidate scan only visits reducts
+/// sharing one of `Q`'s tuple signatures — turning an O(bin size) scan into
+/// O(posting list). Signatures are far more selective than single bindings, so the
+/// lists stay short even on dense domains. See [`best_first`]'s check.
+#[derive(Default)]
+struct VspBin {
+    reducts: Vec<Reduct>,
+    index: rustc_hash::FxHashMap<TupleSig, Vec<u32>>,
+}
+
+/// Per-variable columns of a footprint: `columns(fp)[i]` is the set of
+/// `(root, value)` pairs that variable `i` takes across every footprint tuple.
+fn columns(fp: &Footprint, arity: usize) -> Vec<Column> {
+    let mut cols = vec![Column::default(); arity];
+    for (root, b) in fp {
+        for (i, v) in b.iter().enumerate() {
+            cols[i].insert((*root, *v));
+        }
+    }
+    cols
+}
+
+/// A pattern's match footprint as a set of `(root, variable bindings in fixed
+/// variable order)` tuples, or `None` when the substitution count exceeds `cap`
+/// (materializing it would blow up). Bindings are kept in variable order rather
+/// than sorted, so [`dominated_any_drop`] can decide variable renaming exactly (a
+/// single global permutation) instead of over-approximating with a per-tuple
+/// multiset. A single materialization serves every dropped variable — projections
+/// are taken by omitting a column, never re-materialized.
+fn footprint_set<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>, cap: usize) -> Option<Footprint> {
+    let arity = state.pattern.vars.len();
+    let total: usize = state.matches.iter().map(|m| m.num_substs()).sum();
+    if total > cap {
+        return None;
+    }
+    let mut set = rustc_hash::FxHashSet::default();
+    for m in &state.matches {
+        for full in crate::factor::factors_product(&m.factors) {
+            set.insert((m.root_eclass, (0..arity).map(|k| full[k]).collect()));
+        }
+    }
+    Some(set)
+}
+
+/// The variable-subset reduct of a pattern: its full match footprint, its
+/// variable-frozen mask, and its per-variable columns — or `None` when it is too
+/// expensive to build/check. Materialized once per pattern and reused for both the
+/// domination check (as a candidate over every dropped variable) and, if the
+/// pattern survives, its registration as a seen reduct.
+///
+/// `cap` bounds the substitution count so materializing the footprint can't blow
+/// up; a pattern above it is skipped (neither checked nor registered). Also
+/// precomputes the per-tuple value-multiset signatures ([`TupleSig`]) used to
+/// reject non-dominators cheaply.
+fn make_reduct<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>, cap: usize) -> Option<Reduct> {
+    let arity = state.pattern.vars.len();
+    let fp = footprint_set(state, cap)?;
+    let cols = columns(&fp, arity);
+    let mut sigs: rustc_hash::FxHashMap<TupleSig, u32> = rustc_hash::FxHashMap::default();
+    for (root, b) in &fp {
+        *sigs.entry((*root, multiset_hash(b))).or_insert(0) += 1;
+    }
+    Some((fp, state.pattern.var_frozen.clone(), cols, sigs))
+}
+
+/// Whether the seen reduct `P` (`seen`) dominates the projection of `full` under
+/// *some single global* variable renaming `π`, for *some* dropped variable. For a
+/// fixed `drop`, the projection `Q` (omitting variable `drop`) is dominated iff
+/// one `π` satisfies both: footprint containment (every projected tuple
+/// `(root, b) ∈ Q` has `(root, b∘π) ∈ seen`) and `P` being at least as flexible as
+/// `Q` (wherever `P` freezes a shared variable, `Q` freezes the corresponding one
+/// — `seen_frozen[j] ⇒ full_frozen[π(j)]`).
+///
+/// Both must hold under the *same* `π`. The flexibility condition is essential:
+/// under the freeze rule a more-frozen `P` reaches fewer expansions than `Q`, so
+/// it would not actually dominate `Q` and pruning would lose an optimum. (Mirrors
+/// `SeenTracker`'s `frozen_subset`, threaded through the renaming.)
+///
+/// The heavy lifting is avoided by a **value-multiset necessary condition**: a
+/// column renaming only permutes a tuple's bindings, so for `Q ⊆ seen` to hold,
+/// every projected tuple's multiset signature ([`TupleSig`]) must be an actual
+/// `seen` tuple. This is a hash lookup per tuple, and it rejects the overwhelming
+/// majority of candidates — which share some bindings but no whole tuple — without
+/// any renaming search. It is exact (up to hash collisions, which the verify below
+/// rejects): if a projected tuple's multiset is absent from `seen`, no `π` can
+/// place it there.
+///
+/// Only when the filter passes do we search for `π`: the per-column test
+/// `full_col[i] ⊆ seen_col[j]` (with the flexibility condition) is independent of
+/// the dropped variable, so it is computed once into the compatibility matrix
+/// `compat[i][j]`; then for each `drop` we find *one* compat-respecting bijection
+/// from `seen`'s slots to `full`'s surviving variables by augmenting-path bipartite
+/// matching (Kuhn's algorithm — polynomial) and verify that single renaming. We
+/// deliberately do not enumerate alternative matchings: checking one keeps the cost
+/// bounded with no tuning knob, at the price of occasionally declining an ambiguous
+/// domination (sound — declining to prune never changes correctness).
+///
+/// `full`/`full_hash` are the child's footprint tuples and their multiset hashes
+/// (parallel slices, precomputed once by the caller); a projected tuple's hash is
+/// `full_hash[t] − value_hash(dropped binding)`, computed here in O(1).
+#[allow(clippy::too_many_arguments)]
+fn dominated_any_drop(full: &[(egg::Id, Vec<egg::Id>)], full_hash: &[u64], full_cols: &[Column], full_frozen: &[bool], seen: &Footprint, seen_cols: &[Column], seen_frozen: &[bool], seen_sigs: &rustc_hash::FxHashMap<TupleSig, u32>) -> bool {
+    let arity = full_frozen.len();
+    let n = seen_frozen.len(); // = arity - 1
+    // Value-multiset filter first (pure hash lookups): a dropped variable can only
+    // yield containment if the projection's tuples embed into `seen`'s. Because a
+    // renaming is a bijection, distinct projected tuples need distinct seen tuples,
+    // so `seen` must carry at least as many tuples of each signature as the
+    // projection. We count over the child's *full* footprint, which over-counts by
+    // a uniform fiber (the tuples that collapse together when `drop` is projected
+    // out), so we divide the counts by their GCD to recover the true per-signature
+    // multiplicity before comparing to `seen`. Any missing signature rejects
+    // immediately; the GCD pass runs only once every signature is present. Drops
+    // failing this are rejected before the far more expensive compatibility matrix,
+    // so `compat` is computed lazily only once some drop survives.
+    fn gcd(a: u32, b: u32) -> u32 {
+        if b == 0 { a } else { gcd(b, a % b) }
+    }
+    let mut need: rustc_hash::FxHashMap<TupleSig, u32> = rustc_hash::FxHashMap::default();
+    let mut passes = |drop: usize| {
+        need.clear();
+        for ((root, b), &h) in full.iter().zip(full_hash) {
+            let sig = (*root, h.wrapping_sub(value_hash(b[drop])));
+            if !seen_sigs.contains_key(&sig) {
+                return false; // a projected tuple's multiset is absent: no domination
+            }
+            *need.entry(sig).or_insert(0) += 1;
+        }
+        let g = need.values().copied().reduce(gcd).unwrap_or(1).max(1);
+        need.iter().all(|(sig, &cnt)| cnt <= g * seen_sigs[sig])
+    };
+    let mut compat: Option<Vec<bool>> = None;
+    (0..arity).filter(|&drop| passes(drop)).any(|drop| {
+        let compat = compat.get_or_insert_with(|| {
+            // Drop-independent compatibility: `c[i * n + j]` iff `full` variable `i`
+            // may rename onto `seen` slot `j`.
+            let mut c = vec![false; arity * n];
+            for i in 0..arity {
+                for j in 0..n {
+                    c[i * n + j] = (!seen_frozen[j] || full_frozen[i]) && full_cols[i].len() <= seen_cols[j].len() && full_cols[i].iter().all(|t| seen_cols[j].contains(t));
+                }
+            }
+            c
+        });
+        // Find *one* compat-respecting bijection from seen slots to surviving `full`
+        // variables via augmenting-path bipartite matching (Kuhn's algorithm —
+        // polynomial), then verify that single renaming. We deliberately do not
+        // backtrack over alternative matchings: verifying one keeps the work bounded
+        // with no tuning knob, at the cost of occasionally declining an ambiguous
+        // domination (sound — declining never changes correctness).
+        let mut slot_of_col = vec![usize::MAX; arity]; // full column -> matched seen slot
+        #[allow(clippy::too_many_arguments)]
+        fn augment(j: usize, drop: usize, arity: usize, n: usize, compat: &[bool], slot_of_col: &mut [usize], visited: &mut [bool]) -> bool {
+            for i in 0..arity {
+                if i == drop || !compat[i * n + j] || visited[i] {
+                    continue;
+                }
+                visited[i] = true;
+                if slot_of_col[i] == usize::MAX || augment(slot_of_col[i], drop, arity, n, compat, slot_of_col, visited) {
+                    slot_of_col[i] = j;
+                    return true;
+                }
+            }
+            false
+        }
+        if !(0..n).all(|j| augment(j, drop, arity, n, compat, &mut slot_of_col, &mut vec![false; arity])) {
+            return false; // no perfect matching: no renaming exists for this drop
+        }
+        let mut perm = vec![0usize; n];
+        for (i, &j) in slot_of_col.iter().enumerate() {
+            if j != usize::MAX {
+                perm[j] = i;
+            }
+        }
+        full.iter().all(|(root, b)| seen.contains(&(*root, perm.iter().map(|&i| b[i]).collect())))
+    })
+}
+
 /// One "new best" event recorded during search.
 #[derive(Serialize, Clone)]
 pub struct BestHistoryEntry {
@@ -158,6 +381,27 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut heap: BinaryHeap<Reverse<((usize, usize), usize)>> = BinaryHeap::new();
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
     let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
+    // `--opt-var-subset`: already-seen patterns' footprints, keyed by variable
+    // count, serve as reduct candidates. `vsp_hits` counts prunes. The caps bound
+    // memory/materialization on domains with very large match sets.
+    const VSP_CAP: usize = 20_000;
+    const VSP_MAX_CANDIDATES: usize = 20_000;
+    let mut vsp_seen: rustc_hash::FxHashMap<usize, VspBin> = rustc_hash::FxHashMap::default();
+    let mut vsp_hits: usize = 0;
+    // Registers an already-computed reduct (see `make_reduct`) as a seen candidate,
+    // binned by its variable count. Reuses the materialization done for the
+    // domination check rather than recomputing the footprint, and adds the reduct
+    // to the bin's inverted tuple-signature index (once per distinct signature).
+    let vsp_register = |reduct: Reduct, seen: &mut rustc_hash::FxHashMap<usize, VspBin>| {
+        let bin = seen.entry(reduct.1.len()).or_default();
+        if bin.reducts.len() < VSP_MAX_CANDIDATES {
+            let idx = bin.reducts.len() as u32;
+            for sig in reduct.3.keys() {
+                bin.index.entry(*sig).or_default().push(idx);
+            }
+            bin.reducts.push(reduct);
+        }
+    };
 
     nodes.push(Node {
         state: initial_state.clone(),
@@ -166,6 +410,11 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         forced: initial_forced,
     });
     heap.push(Reverse((initial_prio, 0)));
+    if args.opt_var_subset
+        && let Some(reduct) = make_reduct(&initial_state, VSP_CAP)
+    {
+        vsp_register(reduct, &mut vsp_seen);
+    }
     if let Some(s) = seen.as_mut() {
         s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.frozen_mask());
     }
@@ -287,6 +536,68 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 PruneResult::Disabled => None,
             };
 
+            // Variable-subset footprint pruning: prune `Q` if projecting its
+            // footprint onto its variables minus one is contained (under a single
+            // global renaming) in an already-seen pattern with one fewer variable.
+            // Any `arity >= 1` is a candidate, including the 0-variable projection
+            // (compare a lone-variable pattern to a seen concrete one): containment
+            // forces `P ∈ R` at every match root `R`, and `Q[σ] ∈ R` too, so
+            // `Q[σ] ≡ P` — the dropped variable is vacuous and `Q` is dominated.
+            //
+            // Ordered after the cheap `useless_frozen` / `lower_bound` prunes (so
+            // children they reject never pay for the footprint materialization or
+            // the scan) but before the `FootprintTracker` check below: that check is
+            // deliberately last and hands the tracker `id = nodes.len()` on the
+            // contract that a surviving child is pushed at that index (its deferred
+            // representative reads the match set back by id). A prune placed *after*
+            // it would break that contract, so any successor prune has to precede it.
+            // The child's footprint is materialized once here and reused both for
+            // this check (over every dropped variable) and for registration below.
+            let child_reduct = if args.opt_var_subset { make_reduct(&child_state, VSP_CAP) } else { None };
+            if let Some((ref fp, ref vf, ref cols, _)) = child_reduct {
+                let arity = vf.len();
+                if arity >= 1
+                    && let Some(bin) = vsp_seen.get(&(arity - 1))
+                {
+                    // Footprint tuples and their multiset hashes, once, for the
+                    // value-multiset filter (a renaming preserves the multiset).
+                    let full: Vec<(egg::Id, Vec<egg::Id>)> = fp.iter().cloned().collect();
+                    let full_hash: Vec<u64> = full.iter().map(|(_, b)| multiset_hash(b)).collect();
+                    // Gather candidates via the tuple-signature index: a dominator of
+                    // the projection dropping `v` must contain *every* projected tuple,
+                    // so it lies in the *intersection* of the projection's tuple-signature
+                    // posting lists. We intersect up to `VSP_GATHER_TUPLES` of them —
+                    // enough to narrow sharply even when individual multisets are common,
+                    // without scanning the whole footprint. Any dominating drop is still
+                    // covered (it must contain all of these tuples), so this is complete.
+                    // Posting lists are sorted (indices pushed in increasing order), so
+                    // membership is a binary search; we walk the shortest list.
+                    const VSP_GATHER_TUPLES: usize = 4;
+                    let mut cand: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+                    let sig_v = |t: usize, v: usize| (full[t].0, full_hash[t].wrapping_sub(value_hash(full[t].1[v])));
+                    let m = full.len().min(VSP_GATHER_TUPLES);
+                    for v in 0..arity {
+                        // Every one of the first `m` projected tuples must be present;
+                        // if any is absent no seen reduct can dominate this drop.
+                        let Some(lists) = (0..m).map(|t| bin.index.get(&sig_v(t, v)).map(Vec::as_slice)).collect::<Option<Vec<_>>>() else {
+                            continue;
+                        };
+                        let Some(shortest) = lists.iter().min_by_key(|l| l.len()) else {
+                            continue;
+                        };
+                        cand.extend(shortest.iter().copied().filter(|idx| lists.iter().all(|l| l.binary_search(idx).is_ok())));
+                    }
+                    let dominated = cand.iter().any(|&idx| {
+                        let (sfp, sf, sc, ssig) = &bin.reducts[idx as usize];
+                        dominated_any_drop(&full, &full_hash, cols, vf, sfp, sc, sf, ssig)
+                    });
+                    if dominated {
+                        vsp_hits += 1;
+                        continue;
+                    }
+                }
+            }
+
             // Placed last as it is very expensive. `nodes.len()` is the index this
             // child will occupy (it is pushed unconditionally below if it survives),
             // letting a deferred representative re-read its match set on a collision.
@@ -361,6 +672,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // "fix" this by guarding the overwrite on `child_cost < best.cost`.
             let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
 
+            if let Some(reduct) = child_reduct {
+                vsp_register(reduct, &mut vsp_seen);
+            }
             nodes.push(Node {
                 state: child_state,
                 depth: child_depth,
@@ -405,6 +719,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let (fp_len, fp_hits, fp_skips, fp_capped, fp_secs) = footprints.as_ref().map_or((0, 0, 0, 0, 0.0), |f| (f.len(), f.hits, f.proxy_skips, f.capped, f.time.as_secs_f64()));
     println!("{} {}", "footprint-set size:".dimmed(), fp_len.to_string().bold());
     println!("{} {} {}", "footprint-set hits:".dimmed(), fp_hits.to_string().bold(), format!("(proxy-skips: {}, capped: {}, time: {:.3}s)", fp_skips, fp_capped, fp_secs).dimmed());
+    if args.opt_var_subset {
+        println!("{} {}", "var-subset hits:".dimmed(), vsp_hits.to_string().bold());
+    }
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     lower_bound_pruner.print_stats();
     println!("{} {}", "useless-frozen hits:".dimmed(), useless_frozen_hits.to_string().bold());
