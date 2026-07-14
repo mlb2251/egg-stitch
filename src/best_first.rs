@@ -82,18 +82,50 @@ fn cost_balanced<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<
 /// A match footprint: `(root, variable bindings in fixed variable order)` tuples.
 type Footprint = rustc_hash::FxHashSet<(egg::Id, Vec<egg::Id>)>;
 
-/// A seen reduct candidate: its footprint plus its variable-frozen mask (one
-/// bool per variable, in variable order — the freeze-rule flexibility that the
-/// containment check must respect so pruning stays sound).
-type Reduct = (Footprint, Vec<bool>);
+/// A variable's *column*: the set of `(root, value)` pairs it takes across a
+/// footprint. Renaming variable `i` of one pattern onto variable `j` of another
+/// requires `column[i] ⊆ column[j]` — a per-variable necessary condition that
+/// collapses the renaming search from factorial to a constrained bipartite
+/// matching (the containment analogue of a marginal hash).
+type Column = rustc_hash::FxHashSet<(egg::Id, egg::Id)>;
+
+/// A seen reduct candidate: its footprint, its variable-frozen mask (one bool per
+/// variable, in variable order — the freeze-rule flexibility that the containment
+/// check must respect so pruning stays sound), and its per-variable columns (used
+/// to prune the renaming search in [`dominated_any_drop`]).
+type Reduct = (Footprint, Vec<bool>, Vec<Column>);
+
+/// Seen reducts of one arity, with an inverted index from each `(root, value)`
+/// pair to the reducts whose footprint contains it. A projection `Q` can be
+/// dominated by `P` only if every pair of `Q` lies in `P`'s footprint, so the
+/// candidate scan only visits reducts sharing `Q`'s rarest pair — turning an
+/// O(bin size) scan into O(shortest posting list). See [`best_first`]'s check.
+#[derive(Default)]
+struct VspBin {
+    reducts: Vec<Reduct>,
+    index: rustc_hash::FxHashMap<(egg::Id, egg::Id), Vec<u32>>,
+}
+
+/// Per-variable columns of a footprint: `columns(fp)[i]` is the set of
+/// `(root, value)` pairs that variable `i` takes across every footprint tuple.
+fn columns(fp: &Footprint, arity: usize) -> Vec<Column> {
+    let mut cols = vec![Column::default(); arity];
+    for (root, b) in fp {
+        for (i, v) in b.iter().enumerate() {
+            cols[i].insert((*root, *v));
+        }
+    }
+    cols
+}
 
 /// A pattern's match footprint as a set of `(root, variable bindings in fixed
-/// variable order)` tuples, optionally projecting *out* one variable (`drop`).
-/// Returns `None` when the full-substitution count exceeds `cap` (materializing
-/// it would blow up). Bindings are kept in variable order rather than sorted, so
-/// [`contained_under_renaming`] can decide variable renaming exactly (a single
-/// global permutation) instead of over-approximating with a per-tuple multiset.
-fn footprint_set<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>, drop: Option<usize>, cap: usize) -> Option<Footprint> {
+/// variable order)` tuples. Returns `None` when the full-substitution count
+/// exceeds `cap` (materializing it would blow up). Bindings are kept in variable
+/// order rather than sorted, so [`dominated_any_drop`] can decide variable
+/// renaming exactly (a single global permutation) instead of over-approximating
+/// with a per-tuple multiset. A single materialization serves every dropped
+/// variable — projections are taken by omitting a column, never re-materialized.
+fn footprint_set<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>, cap: usize) -> Option<Footprint> {
     let arity = state.pattern.vars.len();
     let total: usize = state.matches.iter().map(|m| m.num_substs()).sum();
     if total > cap {
@@ -102,47 +134,96 @@ fn footprint_set<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>, drop
     let mut set = rustc_hash::FxHashSet::default();
     for m in &state.matches {
         for full in crate::factor::factors_product(&m.factors) {
-            let b: Vec<egg::Id> = (0..arity).filter(|k| Some(*k) != drop).map(|k| full[k]).collect();
-            set.insert((m.root_eclass, b));
+            set.insert((m.root_eclass, (0..arity).map(|k| full[k]).collect()));
         }
     }
     Some(set)
 }
 
-/// All permutations of `0..n` (recursive; `n` is small — a pattern's arity).
-fn permutations(n: usize) -> Vec<Vec<usize>> {
-    fn rec(perm: &mut Vec<usize>, k: usize, out: &mut Vec<Vec<usize>>) {
-        if k == perm.len() {
-            out.push(perm.clone());
-            return;
-        }
-        for i in k..perm.len() {
-            perm.swap(k, i);
-            rec(perm, k + 1, out);
-            perm.swap(k, i);
-        }
-    }
-    let mut out = Vec::new();
-    rec(&mut (0..n).collect(), 0, &mut out);
-    out
+/// The variable-subset reduct of a pattern: its full match footprint, its
+/// variable-frozen mask, and its per-variable columns — or `None` when the
+/// footprint exceeds `cap`. Materialized once per pattern and reused for both the
+/// domination check (as a candidate over every dropped variable) and, if the
+/// pattern survives, its registration as a seen reduct.
+fn make_reduct<F: LanguageFamily, O: StitchOp>(state: &SearchState<F, O>, cap: usize) -> Option<Reduct> {
+    let arity = state.pattern.vars.len();
+    let fp = footprint_set(state, cap)?;
+    let cols = columns(&fp, arity);
+    Some((fp, state.pattern.var_frozen.clone(), cols))
 }
 
-/// Exact variable-subset containment under *some single global* variable
-/// renaming `π` of the shared variables. `Q` (the projection `proj`) is dominated
-/// by the seen reduct `P` (`seen`) iff one `π` satisfies both: footprint
-/// containment (every `(root, b) ∈ proj` has `(root, b∘π) ∈ seen`) and `P` being
-/// at least as flexible as `Q` (wherever `P` freezes a shared variable, `Q`
-/// freezes the corresponding one — `seen_frozen[j] ⇒ proj_frozen[π(j)]`).
+/// Whether the seen reduct `P` (`seen`) dominates the projection of `full` under
+/// *some single global* variable renaming `π`, for *some* dropped variable. For a
+/// fixed `drop`, the projection `Q` (omitting variable `drop`) is dominated iff
+/// one `π` satisfies both: footprint containment (every projected tuple
+/// `(root, b) ∈ Q` has `(root, b∘π) ∈ seen`) and `P` being at least as flexible as
+/// `Q` (wherever `P` freezes a shared variable, `Q` freezes the corresponding one
+/// — `seen_frozen[j] ⇒ full_frozen[π(j)]`).
 ///
 /// Both must hold under the *same* `π`. The flexibility condition is essential:
 /// under the freeze rule a more-frozen `P` reaches fewer expansions than `Q`, so
 /// it would not actually dominate `Q` and pruning would lose an optimum. (Mirrors
 /// `SeenTracker`'s `frozen_subset`, threaded through the renaming.)
-fn contained_under_renaming(proj: &Footprint, proj_frozen: &[bool], seen: &Footprint, seen_frozen: &[bool], perms: &[Vec<usize>]) -> bool {
-    proj.len() <= seen.len()
-        && perms
-            .iter()
-            .any(|perm| seen_frozen.iter().enumerate().all(|(j, &pf)| !pf || proj_frozen[perm[j]]) && proj.iter().all(|(root, b)| seen.contains(&(*root, perm.iter().map(|&i| b[i]).collect()))))
+///
+/// The per-column renaming test `full_col[i] ⊆ seen_col[j]` (with the flexibility
+/// condition) is *independent of which variable is dropped*, so it is computed
+/// once into the compatibility matrix `compat[i][j]` and reused for every `drop`.
+/// For each `drop`, a feasible renaming is a bijection from `seen`'s slots to
+/// `full`'s surviving variables respecting `compat`; we backtrack over it (most-
+/// constrained slot first) and verify full tuple containment at each complete
+/// renaming — iterating `full` directly, so no per-drop projection is materialized.
+/// When columns are distinct the matching is near-unique; `budget` bounds the
+/// degenerate case (many equal columns), on exhaustion returning `false`
+/// (declining to prune is always sound).
+fn dominated_any_drop(full: &Footprint, full_cols: &[Column], full_frozen: &[bool], seen: &Footprint, seen_cols: &[Column], seen_frozen: &[bool]) -> bool {
+    let arity = full_frozen.len();
+    let n = seen_frozen.len(); // = arity - 1
+    // Drop-independent compatibility: `compat[i * n + j]` iff `full` variable `i`
+    // may rename onto `seen` slot `j`. The column-containment probe short-circuits
+    // on the size gate, so incompatible pairs are cheap.
+    let mut compat = vec![false; arity * n];
+    for i in 0..arity {
+        for j in 0..n {
+            compat[i * n + j] = (!seen_frozen[j] || full_frozen[i]) && full_cols[i].len() <= seen_cols[j].len() && full_cols[i].iter().all(|t| seen_cols[j].contains(t));
+        }
+    }
+    (0..arity).any(|drop| {
+        // Feasibility: every seen slot needs an admissible surviving variable.
+        if (0..n).any(|j| !(0..arity).any(|i| i != drop && compat[i * n + j])) {
+            return false;
+        }
+        // Fill the most-constrained slots first so backtracking fails fast.
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by_key(|&j| (0..arity).filter(|&i| i != drop && compat[i * n + j]).count());
+        let mut perm = vec![0usize; n];
+        let mut used = vec![false; arity];
+        used[drop] = true; // the dropped variable is not part of the renaming
+        let mut budget = 10_000usize;
+        #[allow(clippy::too_many_arguments)]
+        fn rec(k: usize, n: usize, order: &[usize], compat: &[bool], arity: usize, used: &mut [bool], perm: &mut [usize], full: &Footprint, seen: &Footprint, budget: &mut usize) -> bool {
+            if k == order.len() {
+                return full.iter().all(|(root, b)| seen.contains(&(*root, perm.iter().map(|&i| b[i]).collect())));
+            }
+            let j = order[k];
+            for i in 0..arity {
+                if used[i] || !compat[i * n + j] {
+                    continue;
+                }
+                if *budget == 0 {
+                    return false;
+                }
+                *budget -= 1;
+                used[i] = true;
+                perm[j] = i;
+                if rec(k + 1, n, order, compat, arity, used, perm, full, seen, budget) {
+                    return true;
+                }
+                used[i] = false;
+            }
+            false
+        }
+        rec(0, n, &order, &compat, arity, &mut used, &mut perm, full, seen, &mut budget)
+    })
 }
 
 /// One "new best" event recorded during search.
@@ -229,18 +310,21 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     // memory/materialization on domains with very large match sets.
     const VSP_CAP: usize = 20_000;
     const VSP_MAX_CANDIDATES: usize = 20_000;
-    let mut vsp_seen: rustc_hash::FxHashMap<usize, Vec<Reduct>> = rustc_hash::FxHashMap::default();
+    let mut vsp_seen: rustc_hash::FxHashMap<usize, VspBin> = rustc_hash::FxHashMap::default();
     let mut vsp_hits: usize = 0;
-    let vsp_register = |state: &SearchState<F, O>, seen: &mut rustc_hash::FxHashMap<usize, Vec<Reduct>>| {
-        if !args.opt_var_subset {
-            return;
-        }
-        let arity = state.pattern.vars.len();
-        let entry = seen.entry(arity).or_default();
-        if entry.len() < VSP_MAX_CANDIDATES
-            && let Some(fp) = footprint_set(state, None, VSP_CAP)
-        {
-            entry.push((fp, state.pattern.var_frozen.clone()));
+    // Registers an already-computed reduct (see `make_reduct`) as a seen candidate,
+    // binned by its variable count. Reuses the materialization done for the
+    // domination check rather than recomputing the footprint, and adds the reduct
+    // to the bin's inverted `(root, value)`-pair index (once per distinct pair).
+    let vsp_register = |reduct: Reduct, seen: &mut rustc_hash::FxHashMap<usize, VspBin>| {
+        let bin = seen.entry(reduct.1.len()).or_default();
+        if bin.reducts.len() < VSP_MAX_CANDIDATES {
+            let idx = bin.reducts.len() as u32;
+            let flat: rustc_hash::FxHashSet<(egg::Id, egg::Id)> = reduct.2.iter().flatten().copied().collect();
+            for pair in flat {
+                bin.index.entry(pair).or_default().push(idx);
+            }
+            bin.reducts.push(reduct);
         }
     };
 
@@ -251,7 +335,11 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         forced: initial_forced,
     });
     heap.push(Reverse((initial_prio, 0)));
-    vsp_register(&initial_state, &mut vsp_seen);
+    if args.opt_var_subset
+        && let Some(reduct) = make_reduct(&initial_state, VSP_CAP)
+    {
+        vsp_register(reduct, &mut vsp_seen);
+    }
     if let Some(s) = seen.as_mut() {
         s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.frozen_mask());
     }
@@ -369,17 +457,54 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // representative reads the match set back by id). A prune placed *after*
             // it would break that contract — a later child would take the id — so
             // any successor prune has to happen first.
-            if args.opt_var_subset {
-                let arity = child_state.pattern.vars.len();
+            // The child's footprint is materialized once here and reused both for
+            // this check (over every dropped variable) and for registration below.
+            let child_reduct = if args.opt_var_subset { make_reduct(&child_state, VSP_CAP) } else { None };
+            if let Some((ref fp, ref vf, ref cols)) = child_reduct {
+                let arity = vf.len();
                 if arity >= 1
-                    && arity - 1 <= 6
-                    && let Some(cands) = vsp_seen.get(&(arity - 1))
+                    && let Some(bin) = vsp_seen.get(&(arity - 1))
                 {
-                    let perms = permutations(arity - 1);
-                    let frozen = &child_state.pattern.var_frozen;
-                    let dominated = (0..arity).any(|v| {
-                        let proj_frozen: Vec<bool> = (0..arity).filter(|&k| k != v).map(|k| frozen[k]).collect();
-                        footprint_set(&child_state, Some(v), VSP_CAP).is_some_and(|proj| cands.iter().any(|(seen, sf)| contained_under_renaming(&proj, &proj_frozen, seen, sf, &perms)))
+                    // Per surviving column, its rarest present pair (shortest posting
+                    // list) and whether it holds a *dead* pair — one absent from the
+                    // index, so no seen reduct contains it. A projection keeping a
+                    // column with a dead pair can be dominated by nobody.
+                    let mut dead = vec![false; arity];
+                    let mut col_rarest: Vec<Option<(&(egg::Id, egg::Id), usize)>> = vec![None; arity];
+                    for i in 0..arity {
+                        for pair in &cols[i] {
+                            match bin.index.get(pair) {
+                                None => {
+                                    dead[i] = true;
+                                    break;
+                                }
+                                Some(list) => {
+                                    if col_rarest[i].is_none_or(|(_, l)| list.len() < l) {
+                                        col_rarest[i] = Some((pair, list.len()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Gather the candidate reducts: for each dropped variable `v`, a
+                    // dominator must contain *every* surviving column's rarest pair (each
+                    // column must embed into some seen column), so it lies in the
+                    // intersection of those pairs' posting lists. Lists are sorted (indices
+                    // pushed in increasing order), so membership is a binary search.
+                    let mut cand: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
+                    for v in 0..arity {
+                        if (0..arity).any(|i| i != v && dead[i]) {
+                            continue; // a kept column has a dead pair: undominatable
+                        }
+                        let lists: Vec<&[u32]> = (0..arity).filter(|&i| i != v).filter_map(|i| col_rarest[i].map(|(p, _)| bin.index[p].as_slice())).collect();
+                        match lists.iter().min_by_key(|l| l.len()) {
+                            None => cand.extend(0..bin.reducts.len() as u32), // no pairs kept (0-var projection)
+                            Some(shortest) => cand.extend(shortest.iter().copied().filter(|idx| lists.iter().all(|l| l.binary_search(idx).is_ok()))),
+                        }
+                    }
+                    let dominated = cand.iter().any(|&idx| {
+                        let (sfp, sf, sc) = &bin.reducts[idx as usize];
+                        dominated_any_drop(fp, cols, vf, sfp, sc, sf)
                     });
                     if dominated {
                         vsp_hits += 1;
@@ -480,7 +605,9 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // "fix" this by guarding the overwrite on `child_cost < best.cost`.
             let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
 
-            vsp_register(&child_state, &mut vsp_seen);
+            if let Some(reduct) = child_reduct {
+                vsp_register(reduct, &mut vsp_seen);
+            }
             nodes.push(Node {
                 state: child_state,
                 depth: child_depth,
