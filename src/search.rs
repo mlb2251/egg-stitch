@@ -21,13 +21,13 @@ pub enum VarOrder {
     /// most-exploding expansion's mean e-nodes per subst — least-exploding
     /// first, so the freeze rule commits the cheap vars before the expensive
     /// ones. The default (best-first's long-standing ordering).
-    #[default]
     MeanNodesPerClass,
     /// Keep left-to-right creation order (identity rank). Effectively a depth-first ordering
     /// where newer vars are frozen before older ones.
     LeftToRight,
     /// Rank vars by how shallowly they occur in the pattern, effectively a breadth
     /// first ordering where older vars are frozen before younger ones.
+    #[default]
     Shallowest,
 }
 
