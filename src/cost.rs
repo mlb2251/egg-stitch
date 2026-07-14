@@ -314,6 +314,36 @@ impl<'a, L: StitchLanguage, A: StitchAnalysis<L>> StitchAnalysisRunner<'a, L, A>
         let weights = &self.egraph.analysis.weights;
         self.egraph[eclass].nodes.iter().map(|enode| enode.discriminant().intrinsic_size(weights) as i64 + self.sum(enode.children())).min().unwrap()
     }
+    /// Size a captured arg contributes after `wrap_subst_args` lifts it to the
+    /// call site (`init_depth` = binders entered so far in the lift, 0 at the top).
+    ///
+    /// A subtree closed under the lift (all `fv < init_depth`) is shift-invariant,
+    /// so its rewritten size `get(..)` carries over. One with a free index is
+    /// re-indexed onto a fresh e-class where the abstraction's rewrite can't fire,
+    /// so it's sized structurally, recursing with the per-binder depth bump. Plain
+    /// `get(eclass)` would count a rewrite the shifted arg never gets, undercounting
+    /// and breaking the `fast >= slow` contract. Mirrors `shift_free_egraph`'s walk;
+    /// an upper bound, exact unless a re-indexed operand collides with a cheaper
+    /// e-class. Only called for shifting slots (`var_depth > 0` or HO arity `> 0`).
+    pub fn shifted_arg_size(&self, eclass: Id, init_depth: u32) -> i64 {
+        let canonical = self.egraph.find(eclass);
+        if self.egraph[canonical].data.fv.iter().all(|&i| i < init_depth as i32) {
+            return self.get(canonical);
+        }
+        let weights = &self.egraph.analysis.weights;
+        let rep = self.egraph[canonical]
+            .nodes
+            .iter()
+            .min_by_key(|n| n.discriminant().intrinsic_size(weights) as u64 + n.children().iter().map(|&c| self.egraph[c].data.size as u64).sum::<u64>())
+            .expect("non-empty eclass");
+        let disc = rep.discriminant();
+        let mut size = disc.intrinsic_size(weights) as i64;
+        for (j, &c) in rep.children().iter().enumerate() {
+            let child_depth = init_depth + if disc.binds_child(j) { 1 } else { 0 };
+            size += self.shifted_arg_size(c, child_depth);
+        }
+        size
+    }
     pub fn weights(&self) -> &Weights {
         &self.egraph.analysis.weights
     }
@@ -400,6 +430,10 @@ pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub arg_to_match_roots: &'a FxHashMap<Id, Vec<Id>>,
     pub ho_arity: &'a [u32],
     pub kept: KeptArgs<'a>,
+    /// Precomputed `∃ slot: var_depth > 0 || ho_arity > 0` — whether any captured
+    /// arg is re-indexed at the call site. When false, the per-arg shift handling
+    /// is skipped entirely (the common case; see `best`).
+    pub any_shift: bool,
 }
 
 impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for RewriteAnalysis<'a, F, O> {
@@ -411,13 +445,20 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             let weights = sizes.weights();
             let ho_arity = sizes.analysis.ho_arity;
             let stub_size = F::stub_application_size(ho_arity.len(), weights) as i64;
-            // Per-slot arg cost: the captured eclass size plus, for HO slots,
-            // the cost of the `h` wrap-λs. Additively separable across slots,
-            // which is exactly what lets the min factor over independent groups.
+            let var_depth = &sizes.analysis.search_state.pattern.var_depth;
+            // Precomputed once per candidate; false for op-children / binder-free
+            // patterns, where every slot takes the plain un-shifted `get(v)` below.
+            let any_shift = sizes.analysis.any_shift;
+            // Per-slot arg cost: captured eclass size plus the `h` wrap-λs for HO
+            // slots. Shifting slots (`h > 0` or `var_depth > 0`) score the
+            // depth-shifted arg via `shifted_arg_size`; others use `get(v)`.
+            // Additively separable across slots, which lets the min factor over
+            // independent groups.
             let arg_cost = |k: usize, v: Id| -> i64 {
                 let h = ho_arity[k];
                 let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
-                wrap + sizes.get(v)
+                let arg = if !any_shift || (h == 0 && var_depth[k] == 0) { sizes.get(v) } else { sizes.shifted_arg_size(v, 0) };
+                wrap + arg
             };
             // Separable min over a factor list: stub + Σfactors (min over rows of Σslots).
             let min_over = |factors: &[Factor]| -> i64 { stub_size + factored_min(factors, arg_cost) };
@@ -567,6 +608,9 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
     let var_depth = &search_state.pattern.var_depth;
     let lambda_free = var_depth.iter().all(|&d| d == 0);
     let filtered: Option<Vec<Option<Vec<Factor>>>> = (!lambda_free).then(|| search_state.matches.iter().map(|m| filter_factors_by_candidate(egraph, m, &candidate.variable_indices, var_depth)).collect());
+    // Any slot that re-indexes its captured arg forces the depth-shift walk in
+    // `best`; lambda-free candidates never do (all `var_depth`/`ho_arity` zero).
+    let any_shift = ho_arity.iter().any(|&h| h > 0) || var_depth.iter().any(|&d| d > 0);
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
@@ -576,6 +620,7 @@ fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: 
             Some(f) => KeptArgs::Filtered(f),
             None => KeptArgs::AllFactored,
         },
+        any_shift,
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
     for (i, m) in search_state.matches.iter().enumerate() {

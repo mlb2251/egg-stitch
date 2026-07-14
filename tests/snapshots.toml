@@ -202,6 +202,35 @@ fixture = "physics/physics.dsr"
 rules = "data/domains/physics/physics.rewrites"
 oracle = { rules = "data/domains/physics/physics.rewrites" }
 
+# ─── fast-cost upper-bound regression (best-first --check-slow, cross-depth) ──
+# The analytic ("fast") cost undercounted a captured arg re-indexed by
+# wrap_subst_args, letting it dip below the exact ("slow") rewritten size and
+# violating the fast >= slow contract. --check-slow (on by default here) aborts
+# mid-search if that recurs; these single-file lambda-calc runs deterministically
+# reach the triggering pattern (lam (?#0 $0)) under uniform and non-uniform
+# (--sym-var-cost 100) weights, so the snapshot freezes the corrected abstraction
+# + cost. steps=100000 runs to convergence so a future search-order change still
+# exercises the path. The stitch recipe defaults to op-children, so lambda-calc
+# is forced via args.
+
+[[case]]
+name = "fast_cost_upper_bound/towers"
+kind = "stitch"
+input = "data/domains/towers/tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench002_it3.json"
+fixture = "fast_cost_upper_bound/towers"
+steps = "100000"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "fast_cost_upper_bound/logo"
+kind = "stitch"
+input = "data/domains/logo/logo_batch_50_1h_ellisk_2019-03-23T14.05.43__bench000_it0.json"
+fixture = "fast_cost_upper_bound/logo"
+steps = "100000"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
 # ─── EPFL circuits (fixed 4-abstraction SMC rollout, seed 1) ──────────────────
 # Per circuit, three configs: no-rules `baseline`, De Morgan + factoring `live`,
 # and the same rules `at-start`. Verified by exhaustive boolean truth-table
