@@ -863,7 +863,7 @@ def check_file(path, args):
     # it's absent, the file aggregates several runs keyed by a tag: either the
     # two backends (`best-first`/`smc`, written by `check_fixture`) or one entry
     # per input file (the list/physics per-file regression in
-    # `dreamcoder_bfs_test.rs`). Check each sub-result independently.
+    # the dreamcoder cases in `tests/snapshots.toml`). Check each sub-result independently.
     if "original_programs" not in data and isinstance(data, dict):
         ok = True
         for tag, sub in data.items():

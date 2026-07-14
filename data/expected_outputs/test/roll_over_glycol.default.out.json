@@ -1,0 +1,42 @@
+{
+  "compression_ratio": 1.967741935483871,
+  "cost_after_rewrites": 61,
+  "cost_at_end_of_each_iter": [
+    33,
+    31
+  ],
+  "final_cost": 31,
+  "heap_sizes_at_end": [
+    0,
+    0
+  ],
+  "initial_cost": 61,
+  "library": [
+    {
+      "approx_cost": -30,
+      "arity": 1,
+      "lambda": "(lam (s4 C (s1 H) (s1 H) $0))",
+      "num_matches": 14,
+      "pattern": "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
+      "pattern_size": 7,
+      "usage_matches": 14
+    },
+    {
+      "approx_cost": 18,
+      "arity": 1,
+      "lambda": "(lam (fn_0 (fn_0 (s1 $0))))",
+      "num_matches": 2,
+      "pattern": "fn_1: (fn_0 (fn_0 (s1 ?#0)))",
+      "pattern_size": 4,
+      "usage_matches": 3
+    }
+  ],
+  "original_programs": [
+    "(m1 H (s4 C (s1 Cl) (s1 H) (s4 C (s1 H) (s2 O (s4 C (s4 C (s1 H) (s1 H) (s1 H)) (s1 H) (s1 H))) (s1 H))))",
+    "(m1 H (s4 C (s3 C (d1 O) (s2 O (s1 H))) (s2 O (s4 C (s1 H) (s4 C (s1 H) (s1 H) (s1 H)) (s1 H))) (s1 H)))"
+  ],
+  "rewritten_programs": [
+    "(m2 O (fn_1 H) (fn_1 Cl))",
+    "(m3 C (fn_0 (s2 O (fn_1 H))) (d1 O) (s2 O (s1 H)))"
+  ]
+}

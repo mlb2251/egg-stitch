@@ -49,19 +49,13 @@ async function load() {
     };
 
     // Top-level (ungrouped / legacy) runs.
-    const topPromises = topFiles
-      .filter(f => !f.endsWith('_debug.json'))
-      .map(f => loadRun('', f).then(r => add('', r)));
+    const topPromises = topFiles.map(f => loadRun('', f).then(r => add('', r)));
 
     // One pass per subfolder, in parallel.
     const subPromises = dirs.map(async d => {
       const sub = await fetch(`results/${d}/`).then(r => r.text());
       const { files } = extractLinks(sub);
-      await Promise.all(
-        files
-          .filter(f => !f.endsWith('_debug.json'))
-          .map(f => loadRun(d, f).then(r => add(d, r)))
-      );
+      await Promise.all(files.map(f => loadRun(d, f).then(r => add(d, r))));
     });
 
     await Promise.all([...topPromises, ...subPromises]);
