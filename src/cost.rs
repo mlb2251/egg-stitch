@@ -446,18 +446,14 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             let ho_arity = sizes.analysis.ho_arity;
             let stub_size = F::stub_application_size(ho_arity.len(), weights) as i64;
             let var_depth = &sizes.analysis.search_state.pattern.var_depth;
-            // Whether *any* slot re-indexes its captured arg (precomputed once per
-            // candidate). When none does — every slot is depth-0 and non-HO, i.e.
-            // all op-children patterns and any binder-free lambda pattern — the
-            // per-slot shift branch collapses to the plain un-shifted size.
+            // Precomputed once per candidate; false for op-children / binder-free
+            // patterns, where every slot takes the plain un-shifted `get(v)` below.
             let any_shift = sizes.analysis.any_shift;
-            // Per-slot arg cost: the captured eclass size plus, for HO slots, the
-            // cost of the `h` wrap-λs. A slot that actually shifts (`h > 0` or
-            // `var_depth > 0`) re-indexes its arg onto a different e-class, so the
-            // un-shifted `get(v)` would undercount the post-shift size; score the
-            // depth-shifted form (what `wrap_subst_args` builds) instead.
-            // Additively separable across slots, which is exactly what lets the
-            // min factor over independent groups.
+            // Per-slot arg cost: captured eclass size plus the `h` wrap-λs for HO
+            // slots. Shifting slots (`h > 0` or `var_depth > 0`) score the
+            // depth-shifted arg via `shifted_arg_size`; others use `get(v)`.
+            // Additively separable across slots, which lets the min factor over
+            // independent groups.
             let arg_cost = |k: usize, v: Id| -> i64 {
                 let h = ho_arity[k];
                 let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
