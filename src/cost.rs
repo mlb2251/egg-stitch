@@ -151,6 +151,12 @@ pub struct CostCache {
     /// Child → parent eclass edges, built from all enodes.
     /// We maintain our own map because `egraph.parents()` can return stale non-canonical ids.
     parents_of: FxHashMap<Id, Vec<Id>>,
+    /// One past the largest eclass id — size for dense `usize::from(Id)`-indexed buffers.
+    cap: usize,
+    /// Position of each eclass in `visit_order` (`u32::MAX` if unreached from root).
+    /// Lets the budget sweep sort a small relevant set into reverse postorder
+    /// without rescanning all of `visit_order`.
+    postorder_pos: Vec<u32>,
 }
 
 impl CostCache {
@@ -191,7 +197,12 @@ impl CostCache {
             }
         }
 
-        Self { visit_order, parents_of }
+        let cap = max_id + 1;
+        let mut postorder_pos = vec![u32::MAX; cap];
+        for (i, &id) in visit_order.iter().enumerate() {
+            postorder_pos[usize::from(id)] = i as u32;
+        }
+        Self { visit_order, parents_of, cap, postorder_pos }
     }
 }
 
@@ -200,6 +211,7 @@ impl CostCache {
 pub struct CostScratch {
     pub runner: RunnerScratch,
     pub rewrite: RewriteScratch,
+    pub budget: BudgetScratch,
 }
 
 impl CostScratch {
@@ -209,7 +221,39 @@ impl CostScratch {
         Self {
             runner: RunnerScratch::new(egraph),
             rewrite: RewriteScratch::default(),
+            budget: BudgetScratch::default(),
         }
+    }
+}
+
+/// Reusable buffers for [`compute_budget_prunable`]'s top-down sweep, so each
+/// call avoids two whole-egraph allocations. `budget`/`relevant` are dense,
+/// `usize::from(Id)`-indexed, and sized to `CostCache::cap` on first use.
+/// Invariant between calls: every entry is at its default (`i64::MIN` / `false`);
+/// `reset` restores it by clearing only the ids in `touched` — O(closure), not O(E).
+#[derive(Default)]
+pub struct BudgetScratch {
+    budget: Vec<i64>,
+    relevant: Vec<bool>,
+    /// Eclasses whose `budget`/`relevant` entries were dirtied this run.
+    touched: Vec<Id>,
+    /// The relevant closure in reverse postorder (root before children) for the sweep.
+    order: Vec<Id>,
+}
+
+impl BudgetScratch {
+    /// Sizes buffers to `cap` (once) and clears the previous run's dirtied entries.
+    fn reset(&mut self, cap: usize) {
+        if self.budget.len() < cap {
+            self.budget.resize(cap, i64::MIN);
+            self.relevant.resize(cap, false);
+        }
+        for &e in &self.touched {
+            self.budget[usize::from(e)] = i64::MIN;
+            self.relevant[usize::from(e)] = false;
+        }
+        self.touched.clear();
+        self.order.clear();
     }
 }
 
@@ -717,7 +761,10 @@ pub struct BudgetPrune {
 /// ↓ under specialization).
 pub fn compute_budget_prunable<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>) -> BudgetPrune {
     // --- bottom-up: optimistic per-eclass lower bound (mirrors compute_lower_bound) ---
-    scratch.rewrite.fill(search_state);
+    // Split-borrow the scratch fields so the runner and the budget buffers are
+    // held mutably at the same time.
+    let CostScratch { runner, rewrite, budget: bscratch } = scratch;
+    rewrite.fill(search_state);
     let var_frozen = &search_state.pattern.var_frozen;
     let mut arg_to_match_roots: FxHashMap<Id, Vec<Id>> = FxHashMap::default();
     for m in &search_state.matches {
@@ -734,10 +781,10 @@ pub fn compute_budget_prunable<F: LanguageFamily, O: StitchOp>(egraph: &StitchEg
     }
     let analysis = LowerBoundAnalysis {
         search_state,
-        eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
+        eclass_to_match_idx: &rewrite.eclass_to_match_idx,
         arg_to_match_roots,
     };
-    let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
+    let mut sizes = StitchAnalysisRunner::new(egraph, cache, runner, analysis);
     for m in &search_state.matches {
         sizes.mark_dirty(m.root_eclass);
     }
@@ -747,7 +794,6 @@ pub fn compute_budget_prunable<F: LanguageFamily, O: StitchOp>(egraph: &StitchEg
 
     // --- shared quantities ---
     let weights = &egraph.analysis.weights;
-    let cap = cache.visit_order.iter().map(|&e| usize::from(e)).max().map_or(0, |m| m + 1);
     let orig = |e: Id| egraph[egraph.find(e)].data.size as i64;
     let lb = |e: Id| sizes.get(egraph.find(e));
     let stub_size = F::stub_application_size(search_state.frozen_count(), weights) as i64;
@@ -780,42 +826,53 @@ pub fn compute_budget_prunable<F: LanguageFamily, O: StitchOp>(egraph: &StitchEg
     // --- top-down: budget B(e) over the reverse postorder (root before children) ---
     // i64::MIN marks an eclass not yet reached by any parent route; `max` over
     // routes keeps the most generous (largest) budget, since a match is kept if
-    // any route keeps it.
-    let mut budget = vec![i64::MIN; cap];
+    // any route keeps it. Buffers are reused across calls (sized to `cache.cap`)
+    // and reset only over the ids touched last run, so a single child pays for
+    // its own ancestor-closure — never the whole egraph.
+    bscratch.reset(cache.cap);
+    let BudgetScratch { budget, relevant, touched, order } = bscratch;
     let root = egraph.find(root);
-    budget[usize::from(root)] = egraph[root].data.size as i64;
     // Restrict the sweep to the ancestor-closure of the *locally-alive* match
     // roots: only those budgets are ever read, and no non-ancestor is ever a
     // parent of an ancestor, so match-root budgets match a full sweep. Locally
     // dead roots are excluded — already pruned, no budget needed.
-    let mut relevant = vec![false; cap];
+    let mark = |e: Id, relevant: &mut Vec<bool>, touched: &mut Vec<Id>| {
+        let i = usize::from(e);
+        if !relevant[i] {
+            relevant[i] = true;
+            touched.push(e);
+            true
+        } else {
+            false
+        }
+    };
     let mut stack: Vec<Id> = Vec::new();
     for (m, mc) in search_state.matches.iter().zip(&match_costs) {
         if mc.locally_dead {
             continue;
         }
         let r = egraph.find(m.root_eclass);
-        let i = usize::from(r);
-        if i < cap && !relevant[i] {
-            relevant[i] = true;
+        if mark(r, &mut *relevant, &mut *touched) {
             stack.push(r);
         }
     }
     while let Some(e) = stack.pop() {
         if let Some(parents) = cache.parents_of.get(&e) {
             for &p in parents {
-                let pi = usize::from(p);
-                if pi < cap && !relevant[pi] {
-                    relevant[pi] = true;
+                if mark(p, &mut *relevant, &mut *touched) {
                     stack.push(p);
                 }
             }
         }
     }
-    for &e in cache.visit_order.iter().rev() {
-        if !relevant[usize::from(e)] {
-            continue;
-        }
+    // The root always sits above every match, so it is in the closure; seed its
+    // budget and guarantee it is tracked (for reset) even when no match survived.
+    mark(root, &mut *relevant, &mut *touched);
+    budget[usize::from(root)] = egraph[root].data.size as i64;
+    // Sweep the relevant closure alone, in reverse postorder (parents first).
+    order.extend_from_slice(touched);
+    order.sort_unstable_by_key(|&e| std::cmp::Reverse(cache.postorder_pos[usize::from(e)]));
+    for &e in order.iter() {
         let be = budget[usize::from(e)];
         if be == i64::MIN {
             continue;
@@ -842,11 +899,11 @@ pub fn compute_budget_prunable<F: LanguageFamily, O: StitchOp>(egraph: &StitchEg
             // by needing to beat the cheapest original competitor.
             let cap_n = be.min(competitor);
             let intrinsic = nd.discriminant().intrinsic_size(weights) as i64;
-            let children: Vec<Id> = nd.children().iter().map(|&c| egraph.find(c)).collect();
-            let total_child_lb: i64 = children.iter().map(|&c| lb(c)).sum();
-            for &c in &children {
+            let total_child_lb: i64 = nd.children().iter().map(|&c| lb(c)).sum();
+            for &c in nd.children() {
                 // Only relevant children's budgets are ever used; non-ancestors
                 // are skipped (their siblings still count via `total_child_lb`).
+                let c = egraph.find(c);
                 let slot = usize::from(c);
                 if !relevant[slot] {
                     continue;
