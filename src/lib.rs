@@ -296,14 +296,14 @@ pub struct Args {
     #[arg(long = "lower-bound", value_enum, default_value_t = LowerBound::Default)]
     pub lower_bound: LowerBound,
 
-    /// Enable Version-B budget pruning (off by default). At each child a
+    /// Disable Version-B budget pruning (on by default). At each child a
     /// top-down budget per e-class identifies substitutions that can never be on
     /// a plausible min term; those substs are dropped from the match set in
     /// place (factoring preserved) before the cost call and stored that way, so
     /// descendants inherit the smaller set. Reuses one optimistic fixpoint for
     /// both the per-subst filter and the whole-node lower-bound prune, so it
     /// supersedes `--lower-bound off`'s pruner while enabled.
-    #[arg(long = "opt-budget-prune", default_value_t = false)]
+    #[arg(long = "no-opt-budget-prune", action = clap::ArgAction::SetFalse)]
     pub opt_budget_prune: bool,
 
     /// Prune patterns which force "expansions" (e.g., 4 -> (+ 4 0)) at *every*
