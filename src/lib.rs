@@ -433,6 +433,7 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 /// the rewritten programs as strings.
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>, iter_limit: usize, node_limit: usize, roll_over: bool) -> (shared::SharedData<F, O>, Vec<String>) {
     let shared::SharedData { egraph, root } = data;
     let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
@@ -441,8 +442,7 @@ pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedDat
         shared::SharedData::new(egraph, root)
     } else {
         let weights = egraph.analysis.weights;
-        let fresh = io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit);
-        fresh
+        io::egraph_from_programs::<F, O>(&programs, rule_file, weights, iter_limit, node_limit)
     };
     (next_data, programs)
 }
