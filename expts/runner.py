@@ -81,6 +81,13 @@ class FamilyDomain:
         """Absolute path of the corpus file for one ``member``."""
         return EGG_STITCH_DIR / self.file_template.format(member=member)
 
+# ``drawings:<cogsci-domain>`` is a pseudo-domain (same input corpus as the
+# plain cogsci domain) that runs with our algebraic drawing DSRs
+# (``data/domains/cogsci/drawings.rewrites``) instead of babble's per-domain
+# rewrites. Used by the drawings-algebraic experiment; mirrors the
+# ``molecules:<family>`` convention.
+DRAWINGS_PREFIX = "drawings:"
+
 
 # Molecule scramble families live under data/domains/molecules/scramble/ (real
 # PubChem substructure corpora; op-children grammar, symmetry DSRs; see
@@ -107,12 +114,19 @@ def family_for(domain: str) -> FamilyDomain | None:
     return next((f for f in FAMILY_DOMAINS if f.member(domain) is not None), None)
 
 
+def drawings_domain(domain: str) -> str | None:
+    """Return the cogsci domain for a ``drawings:<domain>`` pseudo-domain, else None."""
+    return domain[len(DRAWINGS_PREFIX):] if domain.startswith(DRAWINGS_PREFIX) else None
+
+
 def domain_type(domain: str) -> str:
-    """Return ``"cogsci"``, ``"dreamcoder"``, ``"molecules"``, or
+    """Return ``"cogsci"``, ``"drawings"``, ``"dreamcoder"``, ``"molecules"``, or
     ``"epfl-circuits"`` for a known domain."""
     fam = family_for(domain)
     if fam is not None:
         return fam.name
+    if drawings_domain(domain) is not None:
+        return "drawings"
     if domain in DREAMCODER_DOMAINS:
         return "dreamcoder"
     if domain in COGSCI_DOMAINS:
@@ -135,6 +149,9 @@ def input_files(domain: str) -> list[Path]:
     fam = family_for(domain)
     if fam is not None:
         return [fam.input_file(fam.member(domain))]
+    dd = drawings_domain(domain)
+    if dd is not None:
+        return [EGG_STITCH_DIR / "data" / "domains" / "cogsci" / f"{dd}.json"]
     if domain_type(domain) == "cogsci":
         return [EGG_STITCH_DIR / "data" / "domains" / "cogsci" / f"{domain}.json"]
     d = EGG_STITCH_DIR / "data" / "domains" / domain
@@ -152,6 +169,12 @@ def rewrites_path(domain: str) -> str | None:
     fam = family_for(domain)
     if fam is not None:
         return fam.rewrites
+    if domain_type(domain) == "drawings":
+        # Our algebraic drawing DSRs (the drawings-algebraic experiment's
+        # default). Only our own runners use these — the experiment has no babble
+        # column: babble can't parse the constant_folding/matmul directives, and
+        # giving it its own rewrites would confound the rule set with the search.
+        return "data/domains/cogsci/drawings.rewrites"
     if domain_type(domain) == "dreamcoder":
         path = BABBLE_DIR / "harness" / "data" / "benchmark-dsrs" / f"{domain}.rewrites"
         return f"../babble/harness/data/benchmark-dsrs/{domain}.rewrites" if path.exists() else None
