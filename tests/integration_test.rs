@@ -455,11 +455,15 @@ fn check_slow_list_11_43_28_bench001() {
 // while still scoring many distinct patterns.
 
 /// Best-first `--check-slow` over an op-children cogsci corpus + its DSRs.
+///
+/// Budget is 200 expansions: `wheels` doesn't reach its first positive-utility
+/// abstraction until expansion 110 (the other domains find one before 100), so a
+/// smaller budget leaves `result.best` empty and trips the sanity assert below.
 fn check_slow_bf_cogsci(input: &str, rules: &str) {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "100", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "200", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
     let result = run_best_first(&args);
     assert!(result.best.is_some());
 }
