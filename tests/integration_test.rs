@@ -459,7 +459,9 @@ fn check_slow_bf_cogsci(input: &str, rules: &str) {
     if !std::path::Path::new(input).exists() || !std::path::Path::new(rules).exists() {
         return;
     }
-    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "100", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
+    // 200 steps: wheels' first abstraction isn't found until expansion ~110, so
+    // the previous 100-step budget left `best` unset for that domain.
+    let args = Args::parse_from(["egg-stitch", "--search", "best-first", "--input", input, "--rules", rules, "--num-steps", "200", "--max-arity", "2", "--num-abstractions", "1", "--check-slow"]);
     let result = run_best_first(&args);
     assert!(result.best.is_some());
 }
