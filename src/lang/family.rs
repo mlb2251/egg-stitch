@@ -55,16 +55,16 @@ pub trait LanguageFamily: Clone + 'static {
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
 
-    /// Validate the fast-path cost against the slow-path (rebuilt-egraph)
-    /// cost for this family. `OpChildren` requires strict equality;
-    /// `LambdaCalc` allows `fast >= slow` because the fast path's wrap
-    /// accounting is an upper bound — it can miss cases where a wrapped
-    /// operand collides with another existing eclass that already has a
-    /// cheaper rewrite.
-    fn check_fast_vs_slow(fast: i64, slow: i64);
-
     /// Wrap an eclass in `n` lambda binders, returning the new eclass id.
     fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
+
+    /// Non-mutating variant of `wrap_lams`: peel off as many lambda wraps as
+    /// already exist in `egraph`, returning the deepest existing eclass and the
+    /// number of wraps that would still need to be allocated. Used by the fast
+    /// cost analysis so it can resolve a wrapped arg to a pre-existing eclass
+    /// (whose own rewrite size will be picked up transitively) instead of
+    /// treating it as opaque.
+    fn try_lookup_wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &StitchEgraph<Self::Apply<O>>) -> (Id, u32);
 
     /// Total node-count cost of `n` stacked lambda binders under `weights`.
     fn lams_cost(n: u32, weights: &Weights) -> u32;
@@ -144,16 +144,18 @@ impl LanguageFamily for OpChildren {
         weights.sym_var_cost
     }
 
-    fn check_fast_vs_slow(fast: i64, slow: i64) {
-        assert_eq!(fast, slow, "Fast rewrite size {} != slow rewrite size {} (OpChildren)", fast, slow);
-    }
-
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
         Self::make(OpWithVar::Var(v), vec![])
     }
 
     fn wrap_lams<O: StitchOp>(_child: Id, _n: u32, _egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
         panic!("OpChildren has no lambda binders; higher-order capture is unreachable here");
+    }
+
+    fn try_lookup_wrap_lams<O: StitchOp>(child: Id, _n: u32, _egraph: &StitchEgraph<OpChildrenLanguage<O>>) -> (Id, u32) {
+        // OpChildren never wraps with lambdas (ho_arity always 0); callers only invoke this with n=0.
+        assert_eq!(_n, 0, "OpChildren has no lambda binders; higher-order capture is unreachable here");
+        (child, 0)
     }
 
     fn lams_cost(_n: u32, _weights: &Weights) -> u32 {
@@ -246,10 +248,6 @@ impl LanguageFamily for LambdaCalc {
         weights.sym_var_cost
     }
 
-    fn check_fast_vs_slow(fast: i64, slow: i64) {
-        assert!(fast >= slow, "Fast rewrite size {} < slow rewrite size {} (LambdaCalc) — fast path must be an upper bound", fast, slow);
-    }
-
     fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
         Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v)), vec![])
     }
@@ -260,6 +258,21 @@ impl LanguageFamily for LambdaCalc {
             current = egraph.add(LambdaCalcLanguage::Lam([current]));
         }
         current
+    }
+
+    fn try_lookup_wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &StitchEgraph<LambdaCalcLanguage<O>>) -> (Id, u32) {
+        let mut current = child;
+        let mut remaining = n;
+        while remaining > 0 {
+            match egraph.lookup(LambdaCalcLanguage::Lam([current])) {
+                Some(id) => {
+                    current = id;
+                    remaining -= 1;
+                }
+                None => break,
+            }
+        }
+        (current, remaining)
     }
 
     fn lams_cost(n: u32, weights: &Weights) -> u32 {

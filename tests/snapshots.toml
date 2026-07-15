@@ -202,6 +202,54 @@ fixture = "physics/physics.dsr"
 rules = "data/domains/physics/physics.rewrites"
 oracle = { rules = "data/domains/physics/physics.rewrites" }
 
+# ─── fast-cost upper-bound regression (best-first --check-slow, cross-depth) ──
+# The analytic ("fast") cost undercounted a captured arg re-indexed by
+# wrap_subst_args, letting it dip below the exact ("slow") rewritten size and
+# violating the fast >= slow contract. --check-slow (on by default here) aborts
+# mid-search if that recurs; these single-file lambda-calc runs deterministically
+# reach the triggering pattern (lam (?#0 $0)) under uniform and non-uniform
+# (--sym-var-cost 100) weights, so the snapshot freezes the corrected abstraction
+# + cost. steps=100000 runs to convergence so a future search-order change still
+# exercises the path. The stitch recipe defaults to op-children, so lambda-calc
+# is forced via args.
+
+[[case]]
+name = "fast_cost_upper_bound/towers"
+kind = "stitch"
+input = "data/domains/towers/tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench002_it3.json"
+fixture = "fast_cost_upper_bound/towers"
+steps = "100000"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "fast_cost_upper_bound/logo"
+kind = "stitch"
+input = "data/domains/logo/logo_batch_50_1h_ellisk_2019-03-23T14.05.43__bench000_it0.json"
+fixture = "fast_cost_upper_bound/logo"
+steps = "100000"
+args = ["--language", "lambda-calc", "--sym-var-cost", "100"]
+oracle = "beta"
+
+# Exactness of the shifted-arg cost, beyond the upper bound above. When a
+# captured arg re-indexes onto a match root, its lifted form collides with a
+# cheaper (stubbed) e-class: sizing it structurally is a valid upper bound but
+# over-counts, so the analytic cost lands strictly above the exact rewritten
+# size. Here program 0 nests a `(lam (cons $0 ?#0))` site whose captured tail
+# `(lam (cons $0 (foo $2)))` lifts (d_k=1) to `(lam (cons $0 (foo $1)))` —
+# exactly program 1's match root. The fold-aware walk reads that stub's size, so
+# `--check-slow` holds as an equality (cost 33 / 1.45x); a purely structural
+# walk would report 36 / 1.33x.
+
+[[case]]
+name = "fast_cost_upper_bound/depth_shift_overlap"
+kind = "stitch"
+input = "data/domains/stitch/depth_shift_overlap.json"
+fixture = "fast_cost_upper_bound/depth_shift_overlap"
+steps = "100000"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
 # ─── EPFL circuits (fixed 4-abstraction SMC rollout, seed 1) ──────────────────
 # Per circuit, three configs: no-rules `baseline`, De Morgan + factoring `live`,
 # and the same rules `at-start`. Verified by exhaustive boolean truth-table
