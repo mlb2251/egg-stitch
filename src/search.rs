@@ -458,6 +458,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         (0..self.pattern.vars.len()).any(|k| self.is_useless_var(k, shared))
     }
 
+    /// The (ascending) slot indices of every useless metavar (see
+    /// [`useless_var_eclass`]). Used by the footprint tracker to canonicalise a
+    /// pattern by projecting out its constant-bound variables, so a pattern and
+    /// its useless-variable extension share an observational-equivalence signature.
+    pub fn useless_var_slots(&self, shared: &SharedSearchData<F, O>) -> Vec<usize> {
+        (0..self.pattern.vars.len()).filter(|&k| self.is_useless_var(k, shared)).collect()
+    }
+
     /// Total number of frozen vars. The frozen set is no longer a prefix (a
     /// non-dominant reuse can freeze a non-leading slot), so test individual
     /// slots via `pattern.var_frozen[k]`; this count is the

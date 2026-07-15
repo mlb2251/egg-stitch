@@ -20,6 +20,23 @@ use super::signature::{Footprint, footprint_of};
 /// Salt for the cheap proxy hash.
 const SALT_PROXY: u64 = 0x9001_9001;
 
+/// One recorded bucket member: `(signature, frozen marginals, min size, node id,
+/// useless slots)`. The node id resolves the entry's (full) match set on demand
+/// for the `check_slow` validation; `useless` re-projects it to the canonical
+/// footprint the signature was computed over.
+type Entry = (u128, Vec<u64>, usize, usize, Vec<usize>);
+
+/// A candidate's match set with its useless (constant) variable slots projected
+/// out — the canonical footprint the tracker keys on. Borrows unchanged when there
+/// is nothing to drop (the common case), so no allocation on the fast path.
+fn canonicalize<'a>(matches: &'a [MatchAtEClass], useless: &[usize]) -> std::borrow::Cow<'a, [MatchAtEClass]> {
+    if useless.is_empty() {
+        std::borrow::Cow::Borrowed(matches)
+    } else {
+        std::borrow::Cow::Owned(matches.iter().map(|m| m.project_out(useless)).collect())
+    }
+}
+
 /// A cheap, permutation-invariant *proxy* for a candidate's footprint: a hash of
 /// `(arity, num_matches, sum over matches of (root, num_substs))`
 fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
@@ -44,18 +61,29 @@ fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
 /// that deferred representative — computing its signature lazily, only now that a
 /// peer actually needs comparing against it — and then dedup the newcomer.
 ///
-/// Each bucket entry is `(sig, frozen marginals, min size)`; the frozen marginals are
-/// the most-flexible set seen for that sig (a *marginal multiset*, compared up to
-/// the variable permutation the sig quotients out), and a repeat is a hit when a
-/// recorded entry's frozen marginals are a sub-multiset of the new ones — it was at
-/// least as flexible, so this visit's successors are already reachable.
+/// Each bucket [`Entry`] carries frozen marginals — the most-flexible set seen for
+/// that sig (a *marginal multiset*, compared up to the variable permutation the sig
+/// quotients out) — and a repeat is a hit when a recorded entry's frozen marginals
+/// are a sub-multiset of the new ones: it was at least as flexible, so this visit's
+/// successors are already reachable.
+///
+/// **Useless-variable canonicalisation.** A variable bound to a single e-class in
+/// every match (see [`SearchState::useless_var_slots`]) is a constant that adds no
+/// abstraction — an abstraction with one is never an optimal result. Before keying,
+/// such variables are projected out of the match set, so a pattern and its
+/// useless-variable extension share a signature. A pattern that *has* useless
+/// variables is *check-only*: it is pruned when a genuine (already-recorded) pattern
+/// covers its canonical footprint, but it is never itself recorded — a wrapper's
+/// projected footprint must not stand in for a real search state, or a later genuine
+/// peer could be deferred to it and its distinct successors lost.
 ///
 /// Cost: signatures are still computed only on genuine proxy collisions (the
 /// common unique-proxy candidate pays only the proxy hash), so the fast path is
 /// preserved; the lazy materialisation adds exactly one extra `compute` per
 /// colliding bucket (the representative's), and no match set is ever cloned —
-/// only its node index is stored. Unlike the older scheme, the representative's
-/// own duplicates are now caught, so dedup is exact up to footprint-equality.
+/// only its node index (and its useless-slot list) is stored. Unlike the older
+/// scheme, the representative's own duplicates are now caught, so dedup is exact up
+/// to footprint-equality.
 #[derive(Default)]
 pub struct FootprintTracker {
     /// Per proxy: the bucket's deferred representative plus its materialised entries.
@@ -74,19 +102,23 @@ pub struct FootprintTracker {
 #[derive(Default)]
 struct Bucket {
     rep: Option<RepHandle>,
-    /// Each entry: `(signature, frozen marginals, min size, node id)`. The node id
-    /// resolves the entry's match set on demand for the `check_slow` validation.
-    entries: Vec<(u128, Vec<u64>, usize, usize)>,
+    /// Each entry: `(signature, frozen marginals, min size, node id, useless slots)`.
+    /// The node id resolves the entry's match set on demand for the `check_slow`
+    /// validation; `useless` re-projects that (full) match set to the canonical
+    /// footprint the entry's signature was computed over.
+    entries: Vec<Entry>,
 }
 
 /// A deferred representative: enough to materialise its bucket entry on demand
 /// without retaining its match set. The match set is re-read from the search's
-/// (append-only) node array via `id`; `frozen` (whose length is the arity) and
-/// `size` are the small per-candidate facts the signature alone doesn't carry.
+/// (append-only) node array via `id`; `frozen` (whose length is the *canonical*
+/// arity, after `useless` slots are projected out), `size`, and the `useless` slot
+/// list are the small per-candidate facts the signature alone doesn't carry.
 struct RepHandle {
     id: usize,
     frozen: Vec<bool>,
     size: usize,
+    useless: Vec<usize>,
 }
 
 impl FootprintTracker {
@@ -110,7 +142,24 @@ impl FootprintTracker {
         let t = Instant::now();
         let frozen = state.pattern.frozen_mask();
         let size = compute_pattern_size(&state.pattern, &shared.egraph.analysis.weights);
-        let skip = self.check_core(&state.matches, state.pattern.vars.len(), &frozen, size, id, shared.check_slow, resolve);
+        let arity = state.pattern.vars.len();
+        // Canonicalise away useless (constant-bound) variables so a pattern and its
+        // useless-variable extension dedup: they share a footprint once the useless
+        // columns are projected out. The `useless` slots are stored so the deferred
+        // representative and `check_slow` can re-project the match set (re-read by
+        // node id) to the same canonical footprint.
+        let useless = state.useless_var_slots(shared);
+        let skip = if useless.is_empty() {
+            self.check_core(&state.matches, arity, &frozen, size, id, &useless, true, shared.check_slow, resolve)
+        } else {
+            // Check-only against the canonical (useless-projected) footprint: prune
+            // this wrapper if a genuine seen pattern already covers it, but never
+            // record the reduced footprint (that would let a wrapper displace a
+            // genuine peer — see `check_core`'s `register`).
+            let reduced: Vec<MatchAtEClass> = state.matches.iter().map(|m| m.project_out(&useless)).collect();
+            let reduced_frozen: Vec<bool> = (0..arity).filter(|k| !useless.contains(k)).map(|k| frozen[k]).collect();
+            self.check_core(&reduced, arity - useless.len(), &reduced_frozen, size, id, &useless, false, shared.check_slow, resolve)
+        };
         self.time += t.elapsed();
         skip
     }
@@ -122,45 +171,65 @@ impl FootprintTracker {
     /// trusted — catching a hash collision or over-merge rather than silently
     /// pruning a genuinely distinct candidate.
     #[allow(clippy::too_many_arguments)]
-    fn check_core<'n>(&mut self, matches: &[MatchAtEClass], arity: usize, frozen: &[bool], size: usize, id: usize, check_slow: bool, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
+    fn check_core<'n>(&mut self, matches: &[MatchAtEClass], arity: usize, frozen: &[bool], size: usize, id: usize, useless: &[usize], register: bool, check_slow: bool, resolve: &impl Fn(usize) -> &'n [MatchAtEClass]) -> bool {
         let proxy = cheap_proxy_of(matches, arity);
         let rep = {
             let bucket = self.proxy_buckets.entry(proxy).or_default();
             // Fresh proxy: defer the signature, keeping only a handle to the
-            // candidate so its duplicates can still be caught later.
+            // candidate so its duplicates can still be caught later. A check-only
+            // (`!register`) candidate — one whose canonical footprint came from
+            // projecting useless variables out — is *never* recorded, so it can
+            // only be pruned against a genuine seen pattern, never displace one.
             if bucket.rep.is_none() && bucket.entries.is_empty() {
-                bucket.rep = Some(RepHandle { id, frozen: frozen.to_vec(), size });
-                self.proxy_skips += 1;
+                if register {
+                    bucket.rep = Some(RepHandle {
+                        id,
+                        frozen: frozen.to_vec(),
+                        size,
+                        useless: useless.to_vec(),
+                    });
+                    self.proxy_skips += 1;
+                }
                 return false;
             }
             bucket.rep.take()
         };
         // First collision in this bucket: materialise the deferred representative
-        // from its retained match set before comparing the newcomer against it.
+        // from its retained match set (re-projecting its useless columns) before
+        // comparing the newcomer against it.
         if let Some(rep) = rep {
-            let (rsig, rmarginals, rcapped) = compute(resolve(rep.id), rep.frozen.len());
+            let rep_canon = canonicalize(resolve(rep.id), &rep.useless);
+            let (rsig, rmarginals, rcapped) = compute(&rep_canon, rep.frozen.len());
             if rcapped {
                 self.capped += 1;
             }
             let rfc = frozen_marginals(&rep.frozen, &rmarginals);
-            self.proxy_buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size, rep.id));
+            self.proxy_buckets.get_mut(&proxy).expect("present").entries.push((rsig, rfc, rep.size, rep.id, rep.useless));
         }
         let (sig, marginals, capped) = compute(matches, arity);
         if capped {
             self.capped += 1;
         }
         // Slow guard: a signature equality must reflect a genuine footprint
-        // equivalence. Re-read each same-sig entry's match set and confirm an
-        // exact column-permutation witness before any dedup decision rests on it.
+        // equivalence. Re-read each same-sig entry's match set (canonicalised the
+        // same way) and confirm an exact column-permutation witness before any
+        // dedup decision rests on it.
         if check_slow {
             for e in &self.proxy_buckets.get(&proxy).expect("present").entries {
                 if e.0 == sig {
-                    assert!(footprint_equivalent(resolve(e.3), matches, arity), "footprint signature collision: distinct match sets share signature {sig:#034x}");
+                    let e_canon = canonicalize(resolve(e.3), &e.4);
+                    assert!(footprint_equivalent(&e_canon, matches, arity), "footprint signature collision: distinct match sets share signature {sig:#034x}");
                 }
             }
         }
         let fc = frozen_marginals(frozen, &marginals);
-        let skip = dedup_in_bucket(&mut self.proxy_buckets.get_mut(&proxy).expect("present").entries, sig, fc, size, id);
+        let entries = &mut self.proxy_buckets.get_mut(&proxy).expect("present").entries;
+        let skip = if register {
+            dedup_in_bucket(entries, sig, fc, size, id, useless)
+        } else {
+            // Check-only: prune if a genuine entry dominates, but don't record.
+            entries.iter().any(|e| e.0 == sig && submultiset(&e.1, &fc) && e.2 <= size)
+        };
         if skip {
             self.hits += 1;
         }
@@ -175,7 +244,7 @@ impl FootprintTracker {
             self.capped += 1;
         }
         let fc = frozen_marginals(frozen, &fp.marginals);
-        let skip = dedup_in_bucket(&mut self.proxy_buckets.entry(0).or_default().entries, fp.sig, fc, size, 0);
+        let skip = dedup_in_bucket(&mut self.proxy_buckets.entry(0).or_default().entries, fp.sig, fc, size, 0, &[]);
         if skip {
             self.hits += 1;
         }
@@ -202,7 +271,7 @@ fn frozen_marginals(frozen: &[bool], marginals: &[u64]) -> Vec<u64> {
 /// future subsumption). Footprint-equal patterns differ only in definition size,
 /// so keeping the smaller size ensures a strictly smaller equivalent is never
 /// pruned away.
-fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>, usize, usize)>, sig: u128, fc: Vec<u64>, size: usize, id: usize) -> bool {
+fn dedup_in_bucket(bucket: &mut Vec<Entry>, sig: u128, fc: Vec<u64>, size: usize, id: usize, useless: &[usize]) -> bool {
     match bucket.iter_mut().find(|(s, ..)| *s == sig) {
         Some(entry) if submultiset(&entry.1, &fc) && entry.2 <= size => true,
         Some(entry) => {
@@ -211,7 +280,7 @@ fn dedup_in_bucket(bucket: &mut Vec<(u128, Vec<u64>, usize, usize)>, sig: u128, 
             false
         }
         None => {
-            bucket.push((sig, fc, size, id));
+            bucket.push((sig, fc, size, id, useless.to_vec()));
             false
         }
     }
@@ -260,8 +329,8 @@ mod tests {
         let store = [vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![10, 11]])]];
         let resolve = |i: usize| &store[i][..];
         // Representative kept (deferred), then its identical-footprint peer pruned.
-        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, true, &resolve));
-        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, true, &resolve));
+        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, &[], true, true, &resolve));
+        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, &[], true, true, &resolve));
         assert_eq!(t.proxy_skips, 1);
         assert_eq!(t.hits, 1);
     }
@@ -273,8 +342,8 @@ mod tests {
         let mut t = FootprintTracker::new();
         let store = [vec![match_at(100, 2, vec![vec![10, 11]])], vec![match_at(100, 2, vec![vec![11, 10]])]];
         let resolve = |i: usize| &store[i][..];
-        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, true, &resolve));
-        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, true, &resolve));
+        assert!(!t.check_core(&store[0], 2, &[false, false], 5, 0, &[], true, true, &resolve));
+        assert!(t.check_core(&store[1], 2, &[false, false], 5, 1, &[], true, true, &resolve));
     }
 
     /// Cost guard: a footprint-equal pattern that is *strictly smaller* is never
@@ -289,5 +358,32 @@ mod tests {
         assert!(!t.check_and_insert(&big, &[false], 3));
         // A footprint-equal bigger (size 7) one is now dominated → pruned.
         assert!(t.check_and_insert(&big, &[false], 7));
+    }
+
+    /// A useless-variable wrapper is *check-only*: it is pruned when a genuine
+    /// recorded pattern covers its canonical footprint, but is itself never
+    /// recorded — so it cannot displace a genuine peer that arrives later.
+    #[test]
+    fn check_only_wrapper_pruned_but_not_recorded() {
+        let f = |root| vec![match_at(root, 1, vec![vec![10]])];
+        let store = [f(100), f(100), f(100)];
+        let resolve = |i: usize| &store[i][..];
+
+        // A check-only candidate on a fresh proxy claims nothing.
+        let mut t = FootprintTracker::new();
+        assert!(!t.check_core(&store[0], 1, &[false], 6, 0, &[], false, true, &resolve));
+        assert_eq!(t.proxy_skips, 0, "check-only must not claim the proxy");
+        // A genuine pattern then becomes the representative (unblocked), and its
+        // genuine peer is pruned against it — the wrapper left no trace.
+        assert!(!t.check_core(&store[1], 1, &[false], 5, 1, &[], true, true, &resolve));
+        assert_eq!(t.proxy_skips, 1);
+        assert!(t.check_core(&store[2], 1, &[false], 5, 2, &[], true, true, &resolve));
+        assert_eq!(t.hits, 1);
+
+        // With the genuine pattern recorded first, the check-only wrapper is pruned.
+        let mut t = FootprintTracker::new();
+        assert!(!t.check_core(&store[0], 1, &[false], 5, 0, &[], true, true, &resolve));
+        assert!(t.check_core(&store[1], 1, &[false], 5, 1, &[], true, true, &resolve));
+        assert!(t.check_core(&store[2], 1, &[false], 6, 2, &[], false, true, &resolve));
     }
 }
