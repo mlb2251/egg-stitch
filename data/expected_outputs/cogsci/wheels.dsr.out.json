@@ -15,13 +15,13 @@
   "initial_cost": 35427,
   "library": [
     {
-      "approx_cost": 20023,
+      "approx_cost": 20030,
       "arity": 2,
       "lambda": "(lam (lam (T $1 (M $0 0 0 0))))",
-      "num_matches": 21,
+      "num_matches": 20,
       "pattern": "fn_0: (T ?#0 (M ?#1 0 0 0))",
       "pattern_size": 7,
-      "usage_matches": 1463
+      "usage_matches": 1462
     },
     {
       "approx_cost": 12709,
