@@ -359,6 +359,19 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         }
         depth
     }
+
+    /// `depth[k]` = the fewest edges from the pattern root to any occurrence of `?#k`.
+    pub fn syntactic_var_depths(&self) -> Vec<u32> {
+        let nodes = &self.pattern.nodes;
+        let mut depth = vec![0u32; nodes.len()];
+        for i in 0..nodes.len() {
+            let d = depth[i];
+            for &c in nodes[i].children() {
+                depth[usize::from(c)] = d + 1;
+            }
+        }
+        self.vars.iter().map(|ids| ids.iter().map(|&id| depth[usize::from(id)]).min().unwrap_or(0)).collect()
+    }
 }
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {

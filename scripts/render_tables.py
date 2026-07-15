@@ -972,7 +972,9 @@ def _plot_family(cr_map: dict, t_map: dict, title: str, out_path: Path,
 def plot_family_domain(saved: dict, spec: "FamilySpec", domain: str, out_path: Path) -> None:
     """CR-vs-time plot for one family member."""
     runs = saved["domains"][domain].get("runs", {})
-    title = f"{spec.title}\n{spec.domain_labels.get(domain, domain)}"
+    # domain_labels are LaTeX (for the .tex table); de-escape `\&` for the PNG title.
+    label = spec.domain_labels.get(domain, domain).replace("\\&", "&")
+    title = f"{spec.title}\n{label}"
     _plot_family(aggregate_methods_cr(runs), aggregate_methods_time(runs), title,
                  out_path, spec, _reported_sweep_points(saved, spec))
 

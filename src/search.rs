@@ -23,8 +23,12 @@ pub enum VarOrder {
     /// ones. The default (best-first's long-standing ordering).
     #[default]
     MeanNodesPerClass,
-    /// Keep left-to-right creation order (identity rank).
+    /// Keep left-to-right creation order (identity rank). Effectively a depth-first ordering
+    /// where newer vars are frozen before older ones.
     LeftToRight,
+    /// Rank vars by how shallowly they occur in the pattern, effectively a breadth
+    /// first ordering where older vars are frozen before younger ones.
+    Shallowest,
 }
 
 /// A candidate expansion shape: an enode's discriminant paired with its arity.
@@ -818,6 +822,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 order
             }
             VarOrder::LeftToRight => (0..n).collect(),
+            VarOrder::Shallowest => {
+                // Sort vars by syntactic depth from the root (shallowest first,
+                // ties by index).
+                let sd = self.pattern.syntactic_var_depths();
+                let mut order: Vec<usize> = (0..n).collect();
+                order.sort_by(|&a, &b| sd[a].cmp(&sd[b]).then(a.cmp(&b)));
+                order
+            }
         };
         let mut rank = vec![0usize; n];
         for (r, &k) in order.iter().enumerate() {
@@ -1026,5 +1038,60 @@ pub fn setup_search<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedD
 impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SearchState {{ pattern: {}, matches: {} }}", self.pattern, self.matches.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lang::{LambdaCalc, LambdaCalcDisc, LambdaCalcLanguage, Op, OpDB};
+    use egg::Id;
+
+    type Pat = Pattern<LambdaCalc, OpDB<Op>>;
+
+    /// App enode shape (2 children); the placeholder Ids are overwritten by `expand`.
+    fn app() -> LambdaCalcLanguage<OpDB<Op>> {
+        <LambdaCalc as LanguageFamily>::make::<OpDB<Op>>(LambdaCalcDisc::App, vec![Id::from(0); 2])
+    }
+
+    /// A single-shape var whose explosion estimate is `expand_enodes / 1`, so
+    /// `MeanNodesPerClass`'s per-var f-value is exactly `enodes`.
+    fn shape(enodes: usize) -> VarShapes<LambdaCalc, OpDB<Op>> {
+        vec![VarShape {
+            shape: (LambdaCalcDisc::App, 2),
+            support: 0,
+            expand_enodes: enodes,
+            substs: 1,
+        }]
+    }
+
+    /// Each [`VarOrder`] ranks a 3-var pattern by its own criterion, and the
+    /// three criteria are chosen to disagree so the arms can't be conflated.
+    #[test]
+    fn compute_rank_orders_by_variant() {
+        // (@ (@ ?#0 ?#1) ?#2): ?#0/?#1 sit at syntactic depth 2, ?#2 at depth 1.
+        let mut p: Pat = Pattern::single_var();
+        p.expand(0, &app()); // (@ ?#0 ?#1)
+        p.expand(0, &app()); // (@ (@ ?#0 ?#1) ?#2)
+        assert_eq!(p.vars.len(), 3);
+        assert_eq!(p.syntactic_var_depths(), vec![2, 2, 1]);
+        let shapes = vec![shape(2), shape(1), shape(3)]; // f-values 2, 1, 3
+        let state = SearchState {
+            pattern: p,
+            matches: Vec::new(),
+            num_substs: 0,
+            freeze_rule: true,
+        };
+
+        // order[rank] -> var; rank is its inverse.
+        let (rank, order) = state.compute_rank(VarOrder::LeftToRight, &shapes);
+        assert_eq!(order, vec![0, 1, 2], "left-to-right keeps creation order");
+        assert_eq!(rank, vec![0, 1, 2]);
+
+        let (_, order) = state.compute_rank(VarOrder::Shallowest, &shapes);
+        assert_eq!(order, vec![2, 0, 1], "shallowest first by syntactic depth [2,2,1]");
+
+        let (_, order) = state.compute_rank(VarOrder::MeanNodesPerClass, &shapes);
+        assert_eq!(order, vec![1, 0, 2], "least-exploding first by f-values [2,1,3]");
     }
 }

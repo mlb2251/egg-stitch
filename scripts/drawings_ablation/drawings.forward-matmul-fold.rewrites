@@ -1,0 +1,35 @@
+// FORWARD ablation of drawings.rewrites: matmul of two CONSTANT matrices is
+// reduced *symbolically* (mm_norot/mm_full emit the coordinate arithmetic) and
+// then collapsed by the general `constant_folding` operator list — which now
+// folds `sin`/`cos`/`pi` as well as `+ - * /` — instead of a bespoke Rust matmul
+// fold. Folding `pi` to a literal lets `sin`/`cos` evaluate any rotation angle, so
+// no exact-trig table or angle-normalisation rules are needed; `!round` snaps the
+// resulting float noise (e.g. cos(pi/2)'s 6e-17) to clean literals. This shows the
+// general folding framework subsumes the special-purpose matmul fold.
+
+constant_folding: !integersarefloats (params (ops (+ - * / sin cos pi)))
+constant_folding: !round (params (places 6))
+
+// ── identity transform + arithmetic identities ──
+t_id: (T ?p (M 1 0 0 0)) => ?p
+add_id_r: (+ ?x 0) => ?x
+add_id_l: (+ 0 ?x) => ?x
+sub_id:   (- ?x 0) => ?x
+mul_id_r: (* ?x 1) => ?x
+mul_id_l: (* 1 ?x) => ?x
+mul_zero_r: (* ?x 0) => 0
+mul_zero_l: (* 0 ?x) => 0
+div_id:   (/ ?x 1) => ?x
+rep_1: (repeat ?x 1 ?m) => ?x
+
+// ── introduce matmul for nested transforms; eliminate identity matmul ──
+mm_compose: (T (T ?x ?m1) ?m2) => (T ?x (matmul ?m1 ?m2))
+mm_id_l: (matmul (M 1 0 0 0) ?m) => ?m
+mm_id_r: (matmul ?m (M 1 0 0 0)) => ?m
+
+// ── reduce matmul symbolically; the coordinate arithmetic (incl. cos/sin of the
+//    folded angle) is then collapsed by constant_folding above ──
+// outer rotation zero: scale multiplies, inner translation carried through scale.
+mm_norot: (matmul (M ?s1 ?r1 ?x1 ?y1) (M ?s2 0 ?x2 ?y2)) => (M (* ?s1 ?s2) ?r1 (+ ?x2 (* ?s2 ?x1)) (+ ?y2 (* ?s2 ?y1)))
+// general: rotation adds, inner translation carried through outer scale+rotation.
+mm_full: (matmul (M ?s1 ?r1 ?x1 ?y1) (M ?s2 ?r2 ?x2 ?y2)) => (M (* ?s1 ?s2) (+ ?r1 ?r2) (+ ?x2 (* ?s2 (- (* (cos ?r2) ?x1) (* (sin ?r2) ?y1)))) (+ ?y2 (* ?s2 (+ (* (sin ?r2) ?x1) (* (cos ?r2) ?y1)))))
