@@ -238,7 +238,10 @@ def _bench_cost(b: BenchResult, weighting: Weighting) -> tuple[int, int]:
 
 
 # Signals whose kill we treat as "ran out of resources" → DNF (see run_method).
-_RESOURCE_KILL_SIGNALS = {signal.SIGTERM, signal.SIGKILL, signal.SIGABRT}
+# SIGKILL doesn't exist on Windows.
+_RESOURCE_KILL_SIGNALS = {signal.SIGTERM, signal.SIGABRT}
+if hasattr(signal, "SIGKILL"):
+    _RESOURCE_KILL_SIGNALS.add(signal.SIGKILL)
 
 
 # ─── runner ────────────────────────────────────────────────────────────────

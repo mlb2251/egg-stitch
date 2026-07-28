@@ -13,9 +13,13 @@ doesn't require rerunning verbosely.
 from __future__ import annotations
 
 import os
-import resource
 import subprocess
 import sys
+
+try:
+    import resource
+except ImportError:  # Windows has no `resource` module
+    resource = None
 
 
 def _verbose() -> bool:
@@ -39,6 +43,8 @@ def _limit_address_space(mem_limit: int):
     (RLIMIT_AS) at ``mem_limit`` bytes, so an over-allocating tool is killed
     deterministically instead of consuming the whole machine."""
     def _apply() -> None:
+        if resource is None:
+            raise RuntimeError("memory capping (mem_limit) requires the `resource` module, unavailable on this platform")
         resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
     return _apply
 
@@ -60,7 +66,7 @@ def run(cmd: list[str], *, cwd=None, env=None, timeout: float | None = None,
         subprocess.run(cmd, check=True, cwd=cwd, env=env, timeout=timeout, preexec_fn=preexec)
         return
     res = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True,
-                         timeout=timeout, preexec_fn=preexec)
+                         encoding="utf-8", timeout=timeout, preexec_fn=preexec)
     if res.returncode != 0:
         sys.stdout.write(res.stdout)
         sys.stderr.write(res.stderr)
