@@ -29,7 +29,7 @@ def cargo_build(project_dir: Path, bin_name: str) -> Path:
         return project_dir / "target" / "release" / bin_name
     res = subprocess.run(
         ["cargo", "build", "--release", "--bin", bin_name],
-        cwd=project_dir, capture_output=True, text=True,
+        cwd=project_dir, capture_output=True, text=True, encoding="utf-8",
     )
     if res.returncode != 0:
         sys.stdout.write(res.stdout)
