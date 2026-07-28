@@ -24,6 +24,10 @@ details > summary { cursor: pointer; color: var(--accent); font-size: .85rem; ma
 .pill { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .75rem; background: #ecfdf5; color: var(--good); border: 1px solid #a7f3d0; }
 .pill.no { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
 .err { color: #dc2626; }
+.page-nav { display: flex; gap: .5rem; margin: -0.75rem 0 1.5rem; }
+.page-nav a { font-size: .85rem; padding: .3rem .7rem; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--accent); text-decoration: none; }
+.page-nav a:hover { border-color: var(--accent); }
+.page-nav a.active { background: #eef2ff; border-color: #c7d2fe; color: var(--fg); }
 .del { cursor: pointer; background: transparent; border: 1px solid transparent; color: #9ca3af; font-size: 1rem; line-height: 1; padding: .1rem .4rem; border-radius: 4px; }
 .del:hover { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
 .del-folder { margin-left: .75rem; font-size: .95rem; }

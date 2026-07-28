@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>figures &amp; tables — egg-stitch</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  /* Figure-grid layout is specific to this page; the rest reuses style.css. */
+  .section-body { padding: .25rem .1rem 1rem; }
+  .fig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-top: .5rem; }
+  .fig-card { margin: 0; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: .5rem; }
+  .fig-card img { width: 100%; height: auto; display: block; background: #fff; border-radius: 4px; }
+  .fig-card figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; margin-top: .4rem; font-size: .75rem; }
+  .fname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .ftime { color: var(--muted); white-space: nowrap; }
+  .when { color: var(--muted); font-size: .8rem; margin-left: .75rem; }
+  .tex-card { padding: .6rem .8rem; margin: .5rem 0; }
+  .tex-head { display: flex; align-items: baseline; gap: .75rem; }
+  .raw-link { font-size: .75rem; }
+  .data-row { display: flex; align-items: baseline; gap: .6rem; margin: .35rem 0; font-size: .85rem; }
+  .data-label { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+  /* Per-section rerun / delete-cache command rows with copy buttons. */
+  .cmds { margin: .25rem 0 .85rem; padding: .5rem .6rem; background: #f3f4f6; border: 1px solid var(--border); border-radius: 8px; }
+  .cmd-row { display: flex; align-items: baseline; gap: .6rem; margin: .3rem 0; }
+  .cmd-label { flex: none; min-width: 9rem; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .cmd-text { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; color: var(--fg); background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: .25rem .5rem; overflow-x: auto; white-space: pre; }
+  button.copy { flex: none; cursor: pointer; font-size: .72rem; padding: .2rem .55rem; border: 1px solid var(--border); border-radius: 4px; background: var(--card); color: var(--accent); }
+  button.copy:hover { border-color: var(--accent); }
+  button.copy.ok { color: var(--good); border-color: #a7f3d0; background: #ecfdf5; }
+</style>
+</head>
+<body>
+<h1>figures &amp; tables</h1>
+<div class="sub" id="meta">loading…</div>
+<nav class="page-nav">
+  <a href="index.html">raw runs</a>
+  <a href="table1.html">table 1</a>
+  <a href="table2.html">table 2</a>
+  <a href="figures.html" class="active">figures &amp; tables</a>
+</nav>
+<div id="sections"></div>
+<script src="figures.js"></script>
+</body>
+</html>
