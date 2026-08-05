@@ -13,26 +13,18 @@ pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 
     /// default treats the node as a leaf and scales by `sym_cost`; structural
     /// discriminants (e.g. `LambdaCalcDisc::App`/`Lam`) override to read the
     /// matching field.
-    fn intrinsic_size(&self, weights: &Weights) -> u32 {
-        weights.sym_var_cost
-    }
+    fn intrinsic_size(&self, weights: &Weights) -> u32;
     /// If this op represents a pattern variable, returns it. Default: not a var.
     /// Var-aware op types (`OpWithVar` and wrappers around it) override.
-    fn as_var(&self) -> Option<egg::Var> {
-        None
-    }
+    fn as_var(&self) -> Option<egg::Var>;
     /// If this op is a De Bruijn variable leaf, returns its index. Whether the
     /// occurrence is *free* in some enclosing context is decided elsewhere — this
     /// just reports the shape of the leaf.
-    fn de_bruijn_index(&self) -> Option<i32> {
-        None
-    }
+    fn de_bruijn_index(&self) -> Option<i32>;
     /// True iff this op binds a fresh De Bruijn slot for its `j`th child — i.e.,
     /// indices in `child[j]`'s fv set should be decremented (and `0` dropped)
     /// before bubbling up.
-    fn binds_child(&self, _j: usize) -> u32 {
-        0
-    }
+    fn binds_child(&self, _j: usize) -> u32;
 }
 
 /// A leaf-op slot: a `StitchDisc` that can additionally be parsed from a name.
@@ -68,7 +60,23 @@ impl Op {
     }
 }
 
-impl StitchDisc for Op {}
+impl StitchDisc for Op {
+    fn intrinsic_size(&self, weights: &Weights) -> u32 {
+        weights.sym_var_cost
+    }
+
+    fn as_var(&self) -> Option<egg::Var> {
+        None
+    }
+
+    fn de_bruijn_index(&self) -> Option<i32> {
+        None
+    }
+
+    fn binds_child(&self, _j: usize) -> u32 {
+        0
+    }
+}
 
 impl StitchOp for Op {
     fn from_name(s: &str) -> Self {

@@ -43,6 +43,13 @@ impl<O: StitchDisc> StitchDisc for OpWithVar<O> {
             Self::Var(_) => None,
         }
     }
+
+    fn binds_child(&self, j: usize) -> u32 {
+        match self {
+            Self::Var(_n) => 0,
+            Self::Node(o) => o.binds_child(j),
+        }
+    }
 }
 
 impl<O: StitchOp> StitchOp for OpWithVar<O> {

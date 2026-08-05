@@ -47,6 +47,13 @@ impl<O: StitchDisc> StitchDisc for OpDB<O> {
             Self::Node(o) => o.de_bruijn_index(),
         }
     }
+
+    fn binds_child(&self, j: usize) -> u32 {
+        match self {
+            Self::Var(_n) => 0,
+            Self::Node(o) => o.binds_child(j),
+        }
+    }
 }
 
 impl<O: StitchOp> StitchOp for OpDB<O> {
