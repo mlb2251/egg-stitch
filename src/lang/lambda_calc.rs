@@ -68,7 +68,7 @@ impl<O: StitchDisc> StitchDisc for LambdaCalcDisc<O> {
 
     /// `Lam` binds its single body child; nothing else introduces a binder.
     fn binds_child(&self, j: usize) -> u32 {
-        if (matches!(self, Self::Lam) && j == 0) {1} else {0}
+        if (matches!(self, Self::Lam) && j == 0) { 1 } else { 0 }
     }
 }
 

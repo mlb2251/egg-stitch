@@ -50,7 +50,7 @@ fn de_bruijn_index_reports_index_for_var_only() {
 fn plain_op_has_no_de_bruijn_index() {
     assert_eq!(Op::from_name("foo").de_bruijn_index(), None);
     // Default `binds_child` is false for any j.
-    assert!(!Op::from_name("foo").binds_child(0));
+    assert!(Op::from_name("foo").binds_child(0) == 0);
 }
 
 #[test]
