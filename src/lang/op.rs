@@ -30,8 +30,8 @@ pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 
     /// True iff this op binds a fresh De Bruijn slot for its `j`th child — i.e.,
     /// indices in `child[j]`'s fv set should be decremented (and `0` dropped)
     /// before bubbling up.
-    fn binds_child(&self, _j: usize) -> bool {
-        false
+    fn binds_child(&self, _j: usize) -> u32 {
+        0
     }
 }
 

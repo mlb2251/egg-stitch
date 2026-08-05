@@ -114,7 +114,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         // of the expanded var, since we never share nodes across occurrences.
         for j in 0..num_children {
             self.vars.insert(var_idx + j, Vec::with_capacity(var_positions.len()));
-            let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
+            let child_depth = parent_depth + target_disc.binds_child(j);
             self.var_depth.insert(var_idx + j, child_depth);
             // The new enode replaces every occurrence of the parent var, so the
             // syntactic walk visits each new child exactly `parent_occ` times.
@@ -354,7 +354,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             let d = depth[i];
             let disc = nodes[i].discriminant();
             for (j, &c) in nodes[i].children().iter().enumerate() {
-                depth[usize::from(c)] = d + if disc.binds_child(j) { 1 } else { 0 };
+                depth[usize::from(c)] = d + disc.binds_child(j);
             }
         }
         depth

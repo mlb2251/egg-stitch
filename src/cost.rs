@@ -133,7 +133,7 @@ pub(crate) fn shift_free_egraph<F: LanguageFamily, O: StitchOp>(egraph: &mut Sti
         .iter()
         .enumerate()
         .map(|(j, &c)| {
-            let child_depth = initial_depth + if disc.binds_child(j) { 1 } else { 0 };
+            let child_depth = initial_depth + disc.binds_child(j);
             shift_free_egraph::<F, O>(egraph, c, d_k, rank_map, h, child_depth, memo)
         })
         .collect();
