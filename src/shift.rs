@@ -48,7 +48,7 @@ fn shift_extraction_rec<F: LanguageFamily, O: StitchOp>(extraction: &[F::Apply<O
         .iter()
         .enumerate()
         .map(|(j, &c)| {
-            let child_cutoff = cutoff + if disc.binds_child(j) { 1 } else { 0 };
+            let child_cutoff = cutoff + disc.binds_child(j);
             shift_extraction_rec::<F, O>(extraction, c, child_cutoff, delta, out, memo)
         })
         .collect();

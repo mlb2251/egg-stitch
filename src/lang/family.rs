@@ -313,7 +313,7 @@ impl LanguageFamily for LambdaCalc {
             let d = depth[i];
             let disc = nodes[i].discriminant();
             for (j, &c) in nodes[i].children().iter().enumerate() {
-                depth[usize::from(c)] = d + if disc.binds_child(j) { 1 } else { 0 };
+                depth[usize::from(c)] = d + disc.binds_child(j);
             }
         }
         let db = |n: i32| O::make_db_var(n).expect("LambdaCalc requires a DB-var-bearing leaf op");

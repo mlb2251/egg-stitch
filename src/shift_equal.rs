@@ -163,7 +163,7 @@ impl<'a, L: StitchLanguage> ShiftEqCtx<'a, L> {
             return false;
         }
         na.children().iter().zip(nb.children().iter()).enumerate().all(|(k, (&ca, &cb))| {
-            let new_depth = init_depth + if da.binds_child(k) { 1 } else { 0 };
+            let new_depth = init_depth + da.binds_child(k);
             self.shift_eq_struct(ca, cb, new_depth, used_cycle)
         })
     }

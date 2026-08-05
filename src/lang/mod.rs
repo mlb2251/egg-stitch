@@ -158,11 +158,8 @@ pub fn enode_fv<'a, L: StitchLanguage>(node: &L, child_fv: impl Fn(Id) -> &'a Fx
     }
     for (j, &c) in node.children().iter().enumerate() {
         let cf = child_fv(c);
-        if disc.binds_child(j) {
-            fv.extend(cf.iter().filter_map(|&i| if i >= 1 { Some(i - 1) } else { None }));
-        } else {
-            fv.extend(cf.iter().copied());
-        }
+        let children_bound = disc.binds_child(j) as i32;
+        fv.extend(cf.iter().filter_map(|&i| if i >= children_bound { Some(i - children_bound) } else { None }));
     }
     fv
 }
