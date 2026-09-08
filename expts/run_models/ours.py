@@ -61,6 +61,7 @@ def egg_stitch(input, output="out.json", rewrites=None, **kwargs) -> Path:
 def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
          weighting: Weighting, search: str, max_arity: int,
          search_flags: dict[str, object],
+         language: str | None = None,
          only_use_dsrs_at_start: bool = False,
          iter_limit: int | None = None,
          timeout: float | None = None,
@@ -70,17 +71,20 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
 
     ``search_flags`` carries only the runner-specific dials (num_steps,
     particles, temperature, …); the rest is identical between the two
-    search modes. ``only_use_dsrs_at_start`` switches DSRs from live-during-
-    search to a one-shot canonicalisation pass; ``iter_limit`` caps e-saturation
-    iterations (None = the binary default, 100); ``timeout`` caps wall-clock;
-    ``mem_limit`` caps address space. ``extra_args`` are appended verbatim to
-    the CLI (the ablation harness passes e.g. ``--no-opt-lower-bound``,
-    ``--var-order``/``--compression-limit`` pairs).
+    search modes. ``language`` overrides the ``weighting``-derived default
+    (table7 asks for ``op-children-db``). ``only_use_dsrs_at_start`` switches
+    DSRs from live-during-search to a one-shot canonicalisation pass;
+    ``iter_limit`` caps e-saturation iterations (None = the binary default,
+    100); ``timeout`` caps wall-clock; ``mem_limit`` caps address space.
+    ``extra_args`` are appended verbatim to the CLI (the ablation harness
+    passes e.g. ``--no-opt-lower-bound``, ``--var-order``/``--compression-limit``
+    pairs).
     """
     output_path = unique_path(
         current_folder_path() / f"{input_path.stem}_{search.replace('-', '_')}.json"
     )
-    language = "op-children" if weighting == "no-apps" else "lambda-calc"
+    if language is None:
+        language = "op-children" if weighting == "no-apps" else "lambda-calc"
     cmd: list[str] = [
         str(egg_stitch_bin()),
         "-i", str(input_path),
@@ -165,6 +169,8 @@ class OursBf:
     # the method label unchanged.
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
     no_dsrs: bool = field(default=False, repr=False)
+    # None derives the language from the weighting; table7 pins op-children-db.
+    language: str | None = field(default=None, repr=False)
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
@@ -184,6 +190,7 @@ class OursBf:
             weighting=weighting, search="best-first",
             max_arity=self.max_arity,
             search_flags=search_flags,
+            language=self.language,
             only_use_dsrs_at_start=self.only_use_dsrs_at_start,
             iter_limit=self.iter_limit,
             timeout=self.timeout, mem_limit=self.mem_limit,
@@ -199,6 +206,8 @@ class OursSmc:
     num_particles: int = 1000
     temperature: float = 100.0
     max_arity: int = MAX_ARITY
+    # None derives the language from the weighting; table7 pins op-children-db.
+    language: str | None = field(default=None, repr=False)
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
@@ -216,6 +225,7 @@ class OursSmc:
                 "num_particles": self.num_particles,
                 "temperature": self.temperature,
             },
+            language=self.language,
             iter_limit=self.iter_limit,
             timeout=self.timeout, mem_limit=self.mem_limit,
             extra_args=self.extra_args,
