@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Run every ./run.py table experiment (plus the arity sweep and ablation) in
 # order, then render them. Continues past a failing experiment and reports failures at the end.
+# table7_5 (table7's roster over all 20 EPFL circuits) is deliberately not here:
+# it is 4x table7 and supplementary. Run it on its own with ./run.py table7_5.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."

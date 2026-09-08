@@ -239,23 +239,20 @@ fn check_regen(circuit: &str) {
     assert_eq!(regen, committed, "{corpus} no longer regenerates byte-identically from {circuit}.aig (regenerate with: python3 scripts/epfl-circuits/aig_to_egg.py {circuit})");
 }
 
-#[test]
-fn hyp_corpus_regenerates() {
-    check_regen("hyp");
-}
-#[test]
-fn log2_corpus_regenerates() {
-    check_regen("log2");
-}
-#[test]
-fn multiplier_corpus_regenerates() {
-    check_regen("multiplier");
-}
-#[test]
-fn square_corpus_regenerates() {
-    check_regen("square");
-}
-#[test]
-fn voter_corpus_regenerates() {
-    check_regen("voter");
+/// One trial per committed corpus, named `corpus_regenerates::<circuit>`. All 20
+/// EPFL circuits are committed (table7 reports five of them, table7_5 all of
+/// them), so all 20 are checked.
+mod corpus_regenerates {
+    use super::check_regen;
+
+    macro_rules! cases {
+        ($($circuit:ident),* $(,)?) => { $(
+            #[test]
+            fn $circuit() {
+                check_regen(stringify!($circuit));
+            }
+        )* };
+    }
+
+    cases!(adder, arbiter, bar, cavlc, ctrl, dec, div, hyp, i2c, int2float, log2, max, mem_ctrl, multiplier, priority, router, sin, sqrt, square, voter,);
 }

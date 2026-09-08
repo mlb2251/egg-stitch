@@ -24,7 +24,7 @@ from ._subproc import available_memory_bytes
 from .bench import MAX_ARITY, MEM_LIMIT_BYTES
 from .folders import SUMMARY_RESULTS_DIR, set_folder, summary_results_path
 from .run_models import Babble, OursBf, OursSmc, Stitch
-from .runner import EPFL_CIRCUITS, MOLECULES
+from .runner import EPFL_ALL_MEMBERS, EPFL_CIRCUITS, MOLECULES
 
 # SMC is stochastic, so it needs more repeats to average out run-to-run noise;
 # every other method here is deterministic and only needs a few for timing noise.
@@ -364,4 +364,27 @@ def table7() -> Path:
         use_dsrs=True,
         folder_prefix="table7",
         output_name="table7.json",
+    )
+
+
+# Table 7.5: table7's configuration over the *whole* EPFL suite rather than the
+# five circuits build_benchmarks.py selects. Selection scores each circuit on
+# structural diversity and on no-DSR compression, so the reported set is by
+# construction the half where repeated structure exists for the DSRs to exploit
+# — this table is what quantifies that. ~4x table7's domains at the same roster,
+# so budget hours; every (method, domain) cell is cached under results/table7_5/
+# and a re-run resumes.
+TABLE7_5_DOMAINS = [f"{EPFL_CIRCUITS.name}:{m}" for m in EPFL_ALL_MEMBERS]
+
+
+def table7_5() -> Path:
+    """Run table7's roster and knobs across all 20 EPFL circuits."""
+    _require_free_memory("table7_5")
+    return _run_table(
+        domains=TABLE7_5_DOMAINS,
+        runners=_table7_runners(),
+        num_abstractions=TABLE7_NUM_ABSTRACTIONS,
+        use_dsrs=True,
+        folder_prefix="table7_5",
+        output_name="table7_5.json",
     )

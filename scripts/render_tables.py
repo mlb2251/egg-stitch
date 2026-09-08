@@ -31,6 +31,7 @@ from expts.tables import (  # noqa: E402
     TABLE5_BFS_SWEEP,
     TABLE5_DOMAINS,
     TABLE5_ENUM_POINT,
+    TABLE7_5_DOMAINS,
     TABLE7_BFS_SWEEP,
     TABLE7_DOMAINS,
     TABLE7_SMC_SWEEP,
@@ -836,6 +837,44 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     ],
 )
 
+# table7.5: the same roster over all 20 EPFL circuits, so the reader can see what
+# table7's median filter on diversity/redundancy does to the margins. The five
+# table7 circuits keep their labels, so the two tables read against each other.
+TABLE7_5_SPEC = FamilySpec.estitch_roster(
+    title="EPFL Circuit Compression, Full Suite (Factoring DSRs)",
+    fig_subdir="table7_5",
+    domains=TABLE7_5_DOMAINS,
+    domain_labels={
+        "epfl-circuits:adder": "Adder",
+        "epfl-circuits:arbiter": "Arbiter",
+        "epfl-circuits:bar": "Barrel",
+        "epfl-circuits:cavlc": "CAVLC",
+        "epfl-circuits:ctrl": "Ctrl",
+        "epfl-circuits:dec": "Decoder",
+        "epfl-circuits:div": "Divisor",
+        "epfl-circuits:hyp": "Hypotenuse",
+        "epfl-circuits:i2c": "I2C",
+        "epfl-circuits:int2float": "Int2Float",
+        "epfl-circuits:log2": "Log2",
+        "epfl-circuits:max": "Max",
+        "epfl-circuits:mem_ctrl": "MemCtrl",
+        "epfl-circuits:multiplier": "Multiplier",
+        "epfl-circuits:priority": "Priority",
+        "epfl-circuits:router": "Router",
+        "epfl-circuits:sin": "Sin",
+        "epfl-circuits:sqrt": "Sqrt",
+        "epfl-circuits:square": "Square",
+        "epfl-circuits:voter": "Voter",
+    },
+    enum_point=TABLE_BFS_STEPS,
+    enum_sweep=TABLE7_BFS_SWEEP,
+    smc_sweep=TABLE7_SMC_SWEEP,
+    extras=[
+        ("babble", "Babble", "Babble"),
+        ("enum-baseline", "BFS/NR", "BFS (no rules)"),
+    ],
+)
+
 
 # Unit names for the two sweep methods, used only in the kick-down notices.
 SWEEP_UNIT = {"enum": "steps", "smc": "particles"}
@@ -1138,7 +1177,7 @@ def main() -> None:
     # geomean PNGs.
     notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
     family_saved: dict[str, dict] = {}  # table5/table7, for the combined grid
-    for spec in (TABLE5_SPEC, TABLE7_SPEC):
+    for spec in (TABLE5_SPEC, TABLE7_SPEC, TABLE7_5_SPEC):
         path = RESULTS_DIR / f"{spec.fig_subdir}.json"
         if not path.exists():
             print(f"skipping {spec.fig_subdir}: {path} not present", file=sys.stderr)
