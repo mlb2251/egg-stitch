@@ -184,8 +184,14 @@ def parse_rounds(stderr: str) -> list[list[Phase]]:
 
 def report(cell: Cell, stderr: str, elapsed: float, dnf: str | None, dump: Path) -> None:
     """Print the per-round phase breakdown and anti-unification blowup stats."""
-    outcome = f"DNF ({dnf}) after {elapsed:.0f}s" if dnf else (
-        f"finished in {elapsed:.0f}s, compression {json.load(open(dump))['compression']:.3f}")
+    if dnf == "timeout":
+        # `elapsed` covers teardown too, which drags on when the kill has 20 GiB
+        # to reclaim, so a timeout reports the budget it blew instead.
+        outcome = f"DNF (timeout at {cell.timeout:.0f}s)"
+    elif dnf:
+        outcome = f"DNF ({dnf}) after {elapsed:.0f}s"
+    else:
+        outcome = f"finished in {elapsed:.0f}s, compression {json.load(open(dump))['compression']:.3f}"
     print(f"\n{cell.domain} ({cell.table}): {outcome}")
     for i, phases in enumerate(parse_rounds(stderr), 1):
         print(f"  round {i}: " + " | ".join(str(p) for p in phases))
