@@ -56,13 +56,16 @@ def domains_for_table(table: int) -> list[str]:
 def methods_for_table(table: int) -> list[str]:
     """Ordered method columns for the table.
 
-    DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add the
-    dsrs-only-at-start "BFS@start" baseline; no-DSR tables (2 & 4) keep Stitch
-    and have no baseline.
+    DSR tables (1 & 3) add the dsrs-only-at-start "BFS@start" baseline, and
+    carry Stitch only when they can borrow it from a no-DSR counterpart (see
+    :data:`NO_DSR_COUNTERPART`); no-DSR tables (2 & 4) run Stitch themselves and
+    have no baseline.
     """
     if table in TABLES_WITH_EGRAPH_MIN:
-        # babble follows SMC; the BFS/MT and BFS/NR baselines are kept rightmost.
-        return ["enum", "smc", "babble", BASELINE_METHOD, NO_RULES_METHOD]
+        # babble follows SMC; the BFS/MT and BFS/NR baselines are kept rightmost,
+        # with borrowed Stitch beside BFS/NR — the two no-DSR reference columns.
+        borrowed = ["stitch"] if table in NO_DSR_COUNTERPART else []
+        return ["enum", "smc", "babble", BASELINE_METHOD, NO_RULES_METHOD, *borrowed]
     return ["enum", "smc", "babble", "stitch"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
@@ -76,9 +79,9 @@ DOMAIN_LABELS = {
     "towers": "Towers",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
-# DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add a
-# "dsrs-only-at-start" baseline: best-first that canonicalises with the DSRs
-# once instead of keeping them live (the "BFS@start" column, same as table5).
+# DSR tables (1 & 3) add a "dsrs-only-at-start" baseline: best-first that
+# canonicalises with the DSRs once instead of keeping them live (the "BFS@start"
+# column, same as table5).
 BASELINE_METHOD = "enum-dsrs-at-start"
 # No-rules Enum baseline (BFS/NR): best-first with the DSRs turned off entirely,
 # the direct-babble-comparison reference on the DSR tables (1 & 3) and table5/7.
@@ -112,10 +115,12 @@ TABLE_TITLES = {
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
 TABLES_WITH_EGRAPH_MIN = {1, 3}
-# DSR tables (1 & 3) don't run Stitch (it doesn't accept DSRs) and omit the
-# Stitch column entirely (see ``render``), so neither borrows numbers from a
-# no-DSR counterpart. Kept as a map in case a future table wants to.
-NO_DSR_COUNTERPART: dict[int, int] = {}
+# A DSR table can't run Stitch itself, so it shows the same-domain,
+# same-abstraction-count numbers from its no-DSR counterpart, marked with
+# STITCH_STAR. Table 3 borrows from table 4 (table 4's domains are a superset and
+# both stack 20 abstractions). Table 1 could borrow from table 2 the same way; it
+# doesn't today.
+NO_DSR_COUNTERPART: dict[int, int] = {3: 4}
 STITCH_STAR = "$^{\\star}$"
 
 # Plot styling: each method gets a color, each domain a marker. Keeping these
@@ -303,9 +308,8 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
     every method column gets a faint background tint of its plot color.
     """
     domains = saved["domains"]
-    # DSR tables (1 & 3) drop Stitch and add the dsrs-only-at-start baseline;
-    # no-DSR tables (2 & 4) keep Stitch. ``_collect_rows`` returns cells in this
-    # same order, so no per-method filtering is needed below.
+    # ``_collect_rows`` returns cells in ``methods_for_table`` order, so no
+    # per-method filtering is needed below.
     methods = methods_for_table(table)
     n = len(methods)
     has_egraph_min = table in TABLES_WITH_EGRAPH_MIN
