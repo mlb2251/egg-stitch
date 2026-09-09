@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 failed=()
-for expt in table1 table2 table3 table4 table5 table7 arity_experiment; do
+for expt in table1 table2 table3 table4 table5 table7 table7_5 arity_experiment; do
     echo "=== Running ${expt} ==="
     if ! ./run.py "${expt}"; then
         echo "!!! ${expt} failed, continuing"
