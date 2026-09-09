@@ -32,7 +32,8 @@ from .run_models import OursBf, OursSmc
 from .runner import input_files, run_method
 from .tables import (
     BFS_STEP_SWEEP, TABLE5_BFS_SWEEP, TABLE5_ENUM_POINT, TABLE5_TIMEOUT,
-    TABLE7_BFS_SWEEP, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT, TABLE_BFS_STEPS,
+    TABLE7_BFS_SWEEP, TABLE7_ITER_LIMIT, TABLE7_LANGUAGE, TABLE7_MAX_ARITY, TABLE7_TIMEOUT,
+    TABLE_BFS_STEPS,
 )
 
 TARGET_COMPRESSION_FRACTION = 0.99
@@ -69,6 +70,7 @@ class TableSpec:
     table: int
     max_arity: int
     iter_limit: int | None
+    language: str | None
     timeout: float | None
     mem_limit: int | None
     # Configured BFS operating point and its sweep, resolved to the reported cell
@@ -83,12 +85,12 @@ class TableSpec:
 
 
 TABLE_SPECS: dict[int, TableSpec] = {
-    3: TableSpec(table=3, max_arity=MAX_ARITY, iter_limit=None, timeout=None,
+    3: TableSpec(table=3, max_arity=MAX_ARITY, iter_limit=None, language=None, timeout=None,
                  mem_limit=None, enum_point=TABLE_BFS_STEPS, bfs_sweep=BFS_STEP_SWEEP),
-    5: TableSpec(table=5, max_arity=MAX_ARITY, iter_limit=None, timeout=TABLE5_TIMEOUT,
+    5: TableSpec(table=5, max_arity=MAX_ARITY, iter_limit=None, language=None, timeout=TABLE5_TIMEOUT,
                  mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE5_ENUM_POINT, bfs_sweep=TABLE5_BFS_SWEEP),
     7: TableSpec(table=7, max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT,
-                 timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
+                 language=TABLE7_LANGUAGE, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
                  enum_point=TABLE_BFS_STEPS, bfs_sweep=TABLE7_BFS_SWEEP),
 }
 
@@ -196,7 +198,7 @@ def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], limit_cr: float | None)
         limit = ("--compression-limit", f"{math.floor(limit_cr * 1e6) / 1e6:.6f}")
     return OursBf(
         num_steps=num_steps, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
-        timeout=timeout, mem_limit=mem, extra_args=flags + limit,
+        language=spec.language, timeout=timeout, mem_limit=mem, extra_args=flags + limit,
     )
 
 
@@ -206,7 +208,7 @@ def _smc_runner(spec: TableSpec, flags: tuple[str, ...], num_particles: int) -> 
     # num_steps/temperature left at OursSmc's defaults, matching the table runs.
     return OursSmc(
         num_particles=num_particles, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
-        timeout=spec.timeout, mem_limit=spec.mem_limit, extra_args=flags,
+        language=spec.language, timeout=spec.timeout, mem_limit=spec.mem_limit, extra_args=flags,
     )
 
 
