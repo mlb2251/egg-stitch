@@ -2884,6 +2884,74 @@
               ]
             }
           ]
+        ],
+        "stitch": [
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:hexyl",
+              "file": "hexyl.scram",
+              "initial_cost": 4370,
+              "final_cost": 1586,
+              "compression_ratio": 2.755359394703657,
+              "elapsed_secs": 0.05822443962097168,
+              "library": [
+                "fn_0: (s1 H)",
+                "fn_1: (s4 C fn_0 #1 #0)",
+                "fn_2: (s4 C #0 fn_0 fn_0)",
+                "fn_3: (fn_1 fn_0 #0)"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
+            }
+          ],
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:hexyl",
+              "file": "hexyl.scram",
+              "initial_cost": 4370,
+              "final_cost": 1586,
+              "compression_ratio": 2.755359394703657,
+              "elapsed_secs": 0.05590987205505371,
+              "library": [
+                "fn_0: (s1 H)",
+                "fn_1: (s4 C fn_0 #1 #0)",
+                "fn_2: (s4 C #0 fn_0 fn_0)",
+                "fn_3: (fn_1 fn_0 #0)"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
+            }
+          ],
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:hexyl",
+              "file": "hexyl.scram",
+              "initial_cost": 4370,
+              "final_cost": 1586,
+              "compression_ratio": 2.755359394703657,
+              "elapsed_secs": 0.05689811706542969,
+              "library": [
+                "fn_0: (s1 H)",
+                "fn_1: (s4 C fn_0 #1 #0)",
+                "fn_2: (s4 C #0 fn_0 fn_0)",
+                "fn_3: (fn_1 fn_0 #0)"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
+            }
+          ]
         ]
       }
     },
@@ -5813,6 +5881,74 @@
               ]
             }
           ]
+        ],
+        "stitch": [
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:ester",
+              "file": "ester.scram",
+              "initial_cost": 3556,
+              "final_cost": 1529,
+              "compression_ratio": 2.3257030739045126,
+              "elapsed_secs": 0.04068255424499512,
+              "library": [
+                "fn_0: (s4 C (s1 H) (s1 H) #0)",
+                "fn_1: (s1 H)",
+                "fn_2: (s4 C #1 #0 fn_1)",
+                "fn_3: (s3 C #0 (d1 O))"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
+            }
+          ],
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:ester",
+              "file": "ester.scram",
+              "initial_cost": 3556,
+              "final_cost": 1529,
+              "compression_ratio": 2.3257030739045126,
+              "elapsed_secs": 0.0389406681060791,
+              "library": [
+                "fn_0: (s4 C (s1 H) (s1 H) #0)",
+                "fn_1: (s1 H)",
+                "fn_2: (s4 C #1 #0 fn_1)",
+                "fn_3: (s3 C #0 (d1 O))"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
+            }
+          ],
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:ester",
+              "file": "ester.scram",
+              "initial_cost": 3556,
+              "final_cost": 1529,
+              "compression_ratio": 2.3257030739045126,
+              "elapsed_secs": 0.03943157196044922,
+              "library": [
+                "fn_0: (s4 C (s1 H) (s1 H) #0)",
+                "fn_1: (s1 H)",
+                "fn_2: (s4 C #1 #0 fn_1)",
+                "fn_3: (s3 C #0 (d1 O))"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
+            }
+          ]
         ]
       }
     },
@@ -8740,6 +8876,74 @@
                 1443,
                 1264
               ]
+            }
+          ]
+        ],
+        "stitch": [
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:glycol",
+              "file": "glycol.scram",
+              "initial_cost": 2976,
+              "final_cost": 1263,
+              "compression_ratio": 2.356294536817102,
+              "elapsed_secs": 0.04210472106933594,
+              "library": [
+                "fn_0: (s1 H)",
+                "fn_1: (s4 C #1 fn_0 #0)",
+                "fn_2: (s4 C fn_0 #0 fn_0)",
+                "fn_3: (s2 O #0)"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
+            }
+          ],
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:glycol",
+              "file": "glycol.scram",
+              "initial_cost": 2976,
+              "final_cost": 1263,
+              "compression_ratio": 2.356294536817102,
+              "elapsed_secs": 0.03886866569519043,
+              "library": [
+                "fn_0: (s1 H)",
+                "fn_1: (s4 C #1 fn_0 #0)",
+                "fn_2: (s4 C fn_0 #0 fn_0)",
+                "fn_3: (s2 O #0)"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
+            }
+          ],
+          [
+            {
+              "method": "Stitch(max_arity=2)",
+              "domain": "molecules:glycol",
+              "file": "glycol.scram",
+              "initial_cost": 2976,
+              "final_cost": 1263,
+              "compression_ratio": 2.356294536817102,
+              "elapsed_secs": 0.03978562355041504,
+              "library": [
+                "fn_0: (s1 H)",
+                "fn_1: (s4 C #1 fn_0 #0)",
+                "fn_2: (s4 C fn_0 #0 fn_0)",
+                "fn_3: (s2 O #0)"
+              ],
+              "egraph_min_term_size": null,
+              "timed_out": false,
+              "cost_at_end_of_each_iter": null,
+              "num_steps_run": null,
+              "egg_compression_ratio": null
             }
           ]
         ]
