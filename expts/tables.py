@@ -64,6 +64,7 @@ def _sweep_runners(
     mem_limit: int | None = None,
     max_arity: int = MAX_ARITY,
     iter_limit: int | None = None,
+    language: str | None = None,
     extra_args: tuple[str, ...] = (),
 ) -> tuple[tuple[str, object], ...]:
     """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value.
@@ -73,10 +74,13 @@ def _sweep_runners(
     ``smc_particles`` override the sweeps (table5 extends them, table7 truncates).
     ``max_arity`` raises the abstraction arity cap (table7 uses 4). ``iter_limit``
     caps e-saturation iterations (table7 uses 30; None keeps the binary default).
-    ``extra_args`` are appended verbatim to every swept runner's CLI (the
-    standalone drawings-algebraic experiment passes its match-set caps here).
+    ``language`` overrides the weighting-derived language (table7 uses
+    ``op-children-db``). ``extra_args`` are appended verbatim to every swept
+    runner's CLI (the standalone drawings-algebraic experiment passes its
+    match-set caps here).
     """
-    common = dict(max_arity=max_arity, iter_limit=iter_limit, timeout=timeout, mem_limit=mem_limit, extra_args=extra_args)
+    common = dict(max_arity=max_arity, iter_limit=iter_limit, language=language,
+                  timeout=timeout, mem_limit=mem_limit, extra_args=extra_args)
     bfs = tuple((f"enum-{n}", OursBf(num_steps=n, **common)) for n in bfs_steps)
     smc = tuple((f"smc-{p}", OursSmc(num_particles=p, **common)) for p in smc_particles)
     return bfs + smc
@@ -319,6 +323,11 @@ TABLE7_DOMAINS = EPFL_CIRCUITS.domains
 TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE7_NUM_ABSTRACTIONS = 4
 TABLE7_MAX_ARITY = 4
+# Cone A's ``$3`` and cone B's ``$3`` are different nets, so an abstraction must
+# not hardcode one. ``op-children-db`` parses ``$n`` as a free De Bruijn
+# variable, which keeps it out of abstraction bodies; it is also the language
+# ``scripts/epfl-circuits/build_benchmarks.py`` selects the corpus under.
+TABLE7_LANGUAGE = "op-children-db"
 # Cap e-saturation at 30 iterations (vs the binary default 100). The factoring
 # DSRs blow the e-graph up on these cones, and 100 iterations runs ~4-5x slower
 # for no better result -- past the timeout at the high sweep points.
@@ -340,10 +349,12 @@ def _table7_runners() -> tuple[tuple[str, object], ...]:
     baselines, and babble, every runner at max-arity 4 and capped at
     :data:`TABLE7_TIMEOUT` / :data:`MEM_LIMIT_BYTES`.
 
-    ``iter_limit`` is an ours-only knob (egg-stitch's e-saturation cap); babble
-    runs its DSR saturation for a fixed 3 iterations internally, so it only
-    takes the arity / resource caps."""
-    common = dict(max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
+    ``iter_limit`` and ``language`` are ours-only knobs (egg-stitch's
+    e-saturation cap and :data:`TABLE7_LANGUAGE`); babble runs its DSR
+    saturation for a fixed 3 iterations internally, so it only takes the arity
+    / resource caps."""
+    common = dict(max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT,
+                  language=TABLE7_LANGUAGE, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
     return (
         _sweep_runners(bfs_steps=TABLE7_BFS_SWEEP, smc_particles=TABLE7_SMC_SWEEP, **common)
         + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
