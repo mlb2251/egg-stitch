@@ -275,8 +275,11 @@ TABLE5_SMC_POINT = 1_000
 
 def _table5_runners() -> tuple[tuple[str, object], ...]:
     """Table 3's roster (Enum/SMC sweeps + babble) plus the dsrs-only-at-start
-    and no-rules Enum (BFS/NR) baselines, every runner capped at
-    :data:`TABLE5_TIMEOUT` and :data:`MEM_LIMIT_BYTES`."""
+    and no-rules Enum (BFS/NR) baselines and Stitch, every runner capped at
+    :data:`TABLE5_TIMEOUT` and :data:`MEM_LIMIT_BYTES`.
+
+    Stitch can't take the DSRs, so it runs on the raw corpus — the same problem
+    BFS/NR solves, and the check that BFS/NR isn't a handicapped baseline."""
     capped = dict(timeout=TABLE5_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)
     return (
         _sweep_runners(timeout=TABLE5_TIMEOUT, bfs_steps=TABLE5_BFS_SWEEP, mem_limit=MEM_LIMIT_BYTES)
@@ -285,6 +288,7 @@ def _table5_runners() -> tuple[tuple[str, object], ...]:
             num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **capped)),)
         + (("enum-baseline", OursBf(
             num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **capped)),)
+        + (("stitch", Stitch(ignore_dsrs=True, **capped)),)
     )
 
 
@@ -316,9 +320,9 @@ def table5() -> Path:
 
 
 # Table 7: the EPFL circuits with the factoring DSRs. Table 5's full roster
-# (Enum/SMC sweeps + dsrs-only-at-start + babble + no-rules Enum baseline), at
-# max-arity 4. babble runs via its ``circuits`` binary (boolean and/or/not over
-# ``$N`` inputs); Stitch has no circuit frontend, so it stays dropped.
+# (Enum/SMC sweeps + dsrs-only-at-start + babble + no-rules Enum baseline +
+# Stitch), at max-arity 4. babble runs via its ``circuits`` binary (boolean
+# and/or/not over ``$N`` inputs).
 TABLE7_DOMAINS = EPFL_CIRCUITS.domains
 TABLE7_TIMEOUT = 300.0  # seconds, per tool invocation
 TABLE7_NUM_ABSTRACTIONS = 4
@@ -328,6 +332,13 @@ TABLE7_MAX_ARITY = 4
 # variable, which keeps it out of abstraction bodies; it is also the language
 # ``scripts/epfl-circuits/build_benchmarks.py`` selects the corpus under.
 TABLE7_LANGUAGE = "op-children-db"
+# stitch's utility calculation disagrees with its own rewriter on these cones
+# (it overcounts a self-overlapping `and`/`not` abstraction), which aborts the
+# run; `--no-mismatch-check` lets it finish. The compression we report is
+# recomputed from the rewritten corpus by `ast_size`, so the number stays
+# honest -- but stitch selects its abstractions on the bad utility, so it is
+# not the optimal-per-round search it is on every other corpus.
+TABLE7_STITCH_NO_MISMATCH_CHECK = True
 # Cap e-saturation at 30 iterations (vs the binary default 100). The factoring
 # DSRs blow the e-graph up on these cones, and 100 iterations runs ~4-5x slower
 # for no better result -- past the timeout at the high sweep points.
@@ -346,7 +357,7 @@ TABLE7_SMC_SWEEP = tuple(p for p in SMC_PARTICLE_SWEEP if p <= 2000)
 
 def _table7_runners() -> tuple[tuple[str, object], ...]:
     """Enum/SMC sweeps (live DSRs), the dsrs-only-at-start and no-rules Enum
-    baselines, and babble, every runner at max-arity 4 and capped at
+    baselines, babble, and Stitch, every runner at max-arity 4 and capped at
     :data:`TABLE7_TIMEOUT` / :data:`MEM_LIMIT_BYTES`.
 
     ``iter_limit`` and ``language`` are ours-only knobs (egg-stitch's
@@ -360,6 +371,9 @@ def _table7_runners() -> tuple[tuple[str, object], ...]:
         + (("enum-dsrs-at-start", OursBf(num_steps=BASELINE_BFS_STEPS, only_use_dsrs_at_start=True, **common)),)
         + (("babble", Babble(max_arity=TABLE7_MAX_ARITY, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES)),)
         + (("enum-baseline", OursBf(num_steps=BASELINE_BFS_STEPS, no_dsrs=True, **common)),)
+        + (("stitch", Stitch(
+            max_arity=TABLE7_MAX_ARITY, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
+            ignore_dsrs=True, no_mismatch_check=TABLE7_STITCH_NO_MISMATCH_CHECK)),)
     )
 
 

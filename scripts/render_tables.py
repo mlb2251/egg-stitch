@@ -736,7 +736,8 @@ class FamilySpec:
         """Build a spec for the standard E-Stitch roster: the enum (BFS) and smc
         (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), followed by
         the family-specific ``extras`` -- each a ``(method_key, col_label,
-        plot_label)`` triple (babble and/or the no-rules Enum baseline BFS/NR).
+        plot_label)`` triple (babble, the no-rules Enum baseline BFS/NR, and
+        Stitch).
         The shared three methods -- their order, labels, colors, and the smc
         representative point -- live here so the per-family specs can't drift on
         them; only the bits that genuinely differ are args.
@@ -748,7 +749,7 @@ class FamilySpec:
         # Table columns keep the BFS/MT and BFS/NR baselines rightmost (babble,
         # a real method, follows SMC). Plots are unaffected — they have no
         # left-to-right ranking, so their series order stays as built above.
-        baselines = ("enum-dsrs-at-start", "enum-baseline")
+        baselines = ("enum-dsrs-at-start", "enum-baseline", "stitch")
         table_methods = [m for m in methods if m not in baselines] + [
             m for m in methods if m in baselines
         ]
@@ -808,14 +809,15 @@ TABLE5_SPEC = FamilySpec.estitch_roster(
     extras=[
         ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
+        ("stitch", "Stitch", "Stitch"),
     ],
 )
 
 # table7: EPFL circuits with the factoring DSRs. Same roster as table5 (babble +
-# a no-rules Enum baseline "enum-baseline"), so the three-way baseline/live/
-# at-start contrast plus babble all show. babble runs via its ``circuits`` binary
-# (boolean and/or/not over ``$N`` inputs). Enum DNFs here (best-first can't search
-# the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
+# a no-rules Enum baseline "enum-baseline" + Stitch), so the three-way baseline/
+# live/at-start contrast plus babble all show. babble runs via its ``circuits``
+# binary (boolean and/or/not over ``$N`` inputs). Enum DNFs here (best-first
+# can't search the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
 TABLE7_SPEC = FamilySpec.estitch_roster(
     title="EPFL Circuit Compression (Factoring DSRs)",
     fig_subdir="table7",
@@ -833,6 +835,7 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     extras=[
         ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
+        ("stitch", "Stitch", "Stitch"),
     ],
 )
 
@@ -874,7 +877,7 @@ def render_family_tex(saved: dict, spec: "FamilySpec") -> tuple[str, list[str]]:
     one row per family × method, with Compression Ratio and Time (s) groups and
     a geomean row. ``notices`` lists any series-method sweep-point kick-downs.
 
-    No e-graph-min or Stitch columns (these tables have neither). A method that
+    No e-graph-min column. A method that
     timed out / OOM'd on any run of a family has no comparable number, so it's
     rendered ``DNF`` and excluded from that row's bolding and the geomean. A
     series method (Enum/SMC) whose representative sweep point DNFs at the geomean
