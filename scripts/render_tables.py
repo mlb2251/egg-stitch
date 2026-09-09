@@ -853,6 +853,7 @@ TABLE7_5_SPEC = FamilySpec.estitch_roster(
     extras=[
         ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
+        ("stitch", "Stitch", "Stitch"),
     ],
 )
 
