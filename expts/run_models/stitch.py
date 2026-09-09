@@ -1,6 +1,8 @@
 """Wrapper around the external stitch compressor.
 
-stitch doesn't accept DSRs, so the runner asserts ``rewrites_path is None``.
+stitch doesn't accept DSRs, so the runner asserts ``rewrites_path is None``
+unless ``ignore_dsrs`` is set — the DSR tables (5/7) carry stitch as a
+no-DSR reference point alongside our own no-rules baseline.
 The cost-flag selection keeps stitch's internal scoring lined up with the
 runner's uniform :func:`expts.runner.ast_size`: at ``no-apps`` weighting all
 non-app costs are huge so the fixed App=1 is negligible vs. the node-count
@@ -47,9 +49,15 @@ class Stitch:
     max_arity: int = MAX_ARITY
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
+    # Run in a DSR table, discarding its rewrites (stitch has no way to use
+    # them). Opt-in so a table that forgets stitch can't take DSRs still trips
+    # the assert below.
+    ignore_dsrs: bool = field(default=False, repr=False)
+    # See TABLE7_STITCH_NO_MISMATCH_CHECK.
+    no_mismatch_check: bool = field(default=False, repr=False)
 
     def __call__(self, rounds: int, input_path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
-        assert rewrites_path is None, "stitch doesn't accept DSRs"
+        assert rewrites_path is None or self.ignore_dsrs, "stitch doesn't accept DSRs"
         cost = "1" if weighting == "apps-equal" else "10000"
         out_path = unique_path(current_folder_path() / f"{input_path.stem}_stitch.json")
         cmd = [
@@ -71,6 +79,8 @@ class Stitch:
         # them natively, so leave stitch unconstrained there.
         if weighting == "no-apps":
             cmd += ["--no-curried-bodies", "--no-curried-metavars"]
+        if self.no_mismatch_check:
+            cmd.append("--no-mismatch-check")
         start = time.time()
         _subproc_run(cmd, timeout=self.timeout, mem_limit=self.mem_limit)
         elapsed = time.time() - start

@@ -56,13 +56,16 @@ def domains_for_table(table: int) -> list[str]:
 def methods_for_table(table: int) -> list[str]:
     """Ordered method columns for the table.
 
-    DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add the
-    dsrs-only-at-start "BFS@start" baseline; no-DSR tables (2 & 4) keep Stitch
-    and have no baseline.
+    DSR tables (1 & 3) add the dsrs-only-at-start "BFS@start" baseline, and
+    carry Stitch only when they can borrow it from a no-DSR counterpart (see
+    :data:`NO_DSR_COUNTERPART`); no-DSR tables (2 & 4) run Stitch themselves and
+    have no baseline.
     """
     if table in TABLES_WITH_EGRAPH_MIN:
-        # babble follows SMC; the BFS/MT and BFS/NR baselines are kept rightmost.
-        return ["enum", "smc", "babble", BASELINE_METHOD, NO_RULES_METHOD]
+        # babble follows SMC; the BFS/MT and BFS/NR baselines are kept rightmost,
+        # with borrowed Stitch beside BFS/NR — the two no-DSR reference columns.
+        borrowed = ["stitch"] if table in NO_DSR_COUNTERPART else []
+        return ["enum", "smc", "babble", BASELINE_METHOD, NO_RULES_METHOD, *borrowed]
     return ["enum", "smc", "babble", "stitch"]
 DOMAIN_LABELS = {
     "nuts-bolts": "Nuts \\& Bolts",
@@ -76,9 +79,9 @@ DOMAIN_LABELS = {
     "towers": "Towers",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
-# DSR tables (1 & 3) drop Stitch (it can't take DSRs) and add a
-# "dsrs-only-at-start" baseline: best-first that canonicalises with the DSRs
-# once instead of keeping them live (the "BFS@start" column, same as table5).
+# DSR tables (1 & 3) add a "dsrs-only-at-start" baseline: best-first that
+# canonicalises with the DSRs once instead of keeping them live (the "BFS@start"
+# column, same as table5).
 BASELINE_METHOD = "enum-dsrs-at-start"
 # No-rules Enum baseline (BFS/NR): best-first with the DSRs turned off entirely,
 # the direct-babble-comparison reference on the DSR tables (1 & 3) and table5/7.
@@ -112,11 +115,12 @@ TABLE_TITLES = {
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
 TABLES_WITH_EGRAPH_MIN = {1, 3}
-# DSR tables (1 & 3) don't run Stitch (it doesn't accept DSRs) and omit the
-# Stitch column entirely (see ``render``), so neither borrows numbers from a
-# no-DSR counterpart. Kept as a map in case a future table wants to.
-NO_DSR_COUNTERPART: dict[int, int] = {}
-STITCH_STAR = "$^{\\star}$"
+# A DSR table can't run Stitch itself, so it shows the same-domain,
+# same-abstraction-count numbers from its no-DSR counterpart. Table 3 borrows
+# from table 4 (table 4's domains are a superset and both stack 20
+# abstractions). Table 1 could borrow from table 2 the same way; it doesn't
+# today.
+NO_DSR_COUNTERPART: dict[int, int] = {3: 4}
 
 # Plot styling: each method gets a color, each domain a marker. Keeping these
 # as module-level dicts makes it easy to extend with new methods/domains.
@@ -217,7 +221,7 @@ def _stitch_no_dsr_maps(table: int) -> dict[str, tuple[float | None, float | Non
     """``{domain: (cr, time)}`` for Stitch from the matching no-DSR table.
 
     Returns an empty dict if ``table`` has no counterpart or the JSON is
-    missing — callers treat that as "no starred values to inject."
+    missing — callers treat that as "nothing to inject."
     """
     other = NO_DSR_COUNTERPART.get(table)
     if other is None:
@@ -303,9 +307,8 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
     every method column gets a faint background tint of its plot color.
     """
     domains = saved["domains"]
-    # DSR tables (1 & 3) drop Stitch and add the dsrs-only-at-start baseline;
-    # no-DSR tables (2 & 4) keep Stitch. ``_collect_rows`` returns cells in this
-    # same order, so no per-method filtering is needed below.
+    # ``_collect_rows`` returns cells in ``methods_for_table`` order, so no
+    # per-method filtering is needed below.
     methods = methods_for_table(table)
     n = len(methods)
     has_egraph_min = table in TABLES_WITH_EGRAPH_MIN
@@ -365,20 +368,11 @@ def render(saved: dict, table: int, presentation: bool = False) -> str:
              crs: list[float | None], ts: list[float | None]) -> str:
         """Render one data row with the best CR (max) and time (min) bolded.
 
-        ``crs``/``ts`` are already in ``methods`` order (Stitch dropped on DSR
-        tables), so bolding is relative to exactly the displayed columns.
+        ``crs``/``ts`` are already in ``methods`` order, so bolding is relative
+        to exactly the displayed columns.
         """
         cr_strs = bold_best(crs, ".2f", higher_is_better=True)
         t_strs = bold_best(ts, ".3f", higher_is_better=False)
-
-        # Star Stitch if it's still in the method list.
-        if stitch_no_dsr and "stitch" in methods:
-            stitch_idx = methods.index("stitch")
-            if crs[stitch_idx] is not None:
-                cr_strs[stitch_idx] += STITCH_STAR
-            if ts[stitch_idx] is not None:
-                t_strs[stitch_idx] += STITCH_STAR
-
         if presentation:
             cr_strs = _shade_cells(cr_strs, methods)
             t_strs = _shade_cells(t_strs, methods)
@@ -420,8 +414,7 @@ TABLE_SWEEP_POINT: dict[str, int] = {
 }
 
 
-def _draw_cr_vs_time(ax, cr_map: dict, t_map: dict, title: str,
-                     stitch_starred: bool = False, *,
+def _draw_cr_vs_time(ax, cr_map: dict, t_map: dict, title: str, *,
                      methods: list[str] = METHODS,
                      sweep_for_method: dict = SWEEP_FOR_METHOD,
                      sweep_point: dict = TABLE_SWEEP_POINT,
@@ -455,11 +448,8 @@ def _draw_cr_vs_time(ax, cr_map: dict, t_map: dict, title: str,
             if cr is None or t is None:
                 continue
             methods_seen.add(method)
-            # Single-point methods use a square, matching the sweep operating
-            # points; a starred (borrowed-value) Stitch keeps its distinct star.
-            marker = "*" if (method == "stitch" and stitch_starred) else "s"
-            size = 120 if marker == "*" else 14
-            ax.scatter([t], [cr], color=color, marker=marker, s=size, zorder=2)
+            # Single-point methods use a square, matching the sweep operating points.
+            ax.scatter([t], [cr], color=color, marker="s", s=14, zorder=2)
             continue
         # Sweep method: collect (cr, t, param) tuples, sorted by parameter
         # so the connecting line follows the sweep order.
@@ -503,20 +493,15 @@ def _draw_cr_vs_time(ax, cr_map: dict, t_map: dict, title: str,
     def legend_label(m: str) -> str:
         """Method's legend label; sweep methods note the unit their annotated
         numbers use (BFS steps / SMC particles), so the numbers on each line are
-        unambiguous. DSR-table Stitch (from the no-DSR run) gets a star."""
+        unambiguous."""
         base = method_plot_labels[m]
         if m in sweep_for_method and m in SWEEP_UNIT:
             base += f" (numbers are {SWEEP_UNIT[m]})"
-        if m == "stitch" and stitch_starred:
-            base += r"$^{\star}$"
         return base
 
     def legend_marker(m: str) -> str:
         """Sweep methods show a line with a round marker (matching their per-point
-        dots); single-point methods a square (matching their in-plot square); a
-        borrowed-value Stitch a star."""
-        if m == "stitch" and stitch_starred:
-            return "*"
+        dots); single-point methods a square (matching their in-plot square)."""
         return "o" if m in sweep_for_method else "s"
 
     method_handles = [
@@ -608,8 +593,7 @@ def _place_sweep_labels(fig, ax, sweep_series: list) -> None:
                         fontsize=7, color=color, zorder=4)
 
 
-def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path,
-                    stitch_starred: bool = False, *,
+def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path, *,
                     methods: list[str] = METHODS,
                     sweep_for_method: dict = SWEEP_FOR_METHOD,
                     sweep_point: dict = TABLE_SWEEP_POINT,
@@ -619,14 +603,13 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path,
 
     See ``_draw_cr_vs_time`` for the plot semantics; the ``methods``/``sweep_*``/
     ``method_*`` arguments default to the Table 1-4 roster but are overridden for
-    the family tables. ``stitch_starred`` swaps Stitch's marker/label to a star
-    (used on DSR tables where Stitch's number comes from the no-DSR run).
+    the family tables.
     """
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(6, 4.5))
     method_handles, sweep_series = _draw_cr_vs_time(
-        ax, cr_map, t_map, title, stitch_starred,
+        ax, cr_map, t_map, title,
         methods=methods, sweep_for_method=sweep_for_method,
         sweep_point=sweep_point, method_colors=method_colors,
         method_plot_labels=method_plot_labels)
@@ -644,32 +627,29 @@ def plot_domain(saved: dict, table: int, domain: str, out_path: Path) -> None:
     """Plot CR vs time for a single domain.
 
     On DSR tables, splice in the matching no-DSR Stitch point so readers
-    can see where regular Stitch lands; the marker/legend get a star.
+    can see where regular Stitch lands.
     """
     runs = saved["domains"][domain].get("runs", {})
     cr_map = aggregate_methods_cr(runs)
     t_map = aggregate_methods_time(runs)
     stitch_no_dsr = _stitch_no_dsr_maps(table)
-    starred = False
     if domain in stitch_no_dsr:
         cr, t = stitch_no_dsr[domain]
         if cr is not None and t is not None:
             cr_map[TABLE_DATA_KEYS["stitch"]] = cr
             t_map[TABLE_DATA_KEYS["stitch"]] = t
-            starred = True
     title = f"{TABLE_TITLES[table]}\n{DOMAIN_PLOT_LABELS.get(domain, domain)}"
-    plot_cr_vs_time(cr_map, t_map, title, out_path, stitch_starred=starred,
+    plot_cr_vs_time(cr_map, t_map, title, out_path,
                     methods=methods_for_table(table))
 
 
-def _table_geomean_maps(saved: dict, table: int) -> tuple[dict, dict, bool]:
-    """Per-key CR / time geomeans across a table's domains, plus ``stitch_starred``
-    (true when a no-DSR Stitch point was spliced in — see ``_stitch_no_dsr_maps``)."""
+def _table_geomean_maps(saved: dict, table: int) -> tuple[dict, dict]:
+    """Per-key CR / time geomeans across a table's domains, with any no-DSR Stitch
+    point spliced in (see ``_stitch_no_dsr_maps``)."""
     domains = [d for d in domains_for_table(table) if d in saved["domains"]]
     per_cr = [aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains]
     per_t = [aggregate_methods_time(saved["domains"][d].get("runs", {})) for d in domains]
     stitch_no_dsr = _stitch_no_dsr_maps(table)
-    starred = False
     if stitch_no_dsr:
         key = TABLE_DATA_KEYS["stitch"]
         for d, cm, tm in zip(domains, per_cr, per_t):
@@ -678,20 +658,18 @@ def _table_geomean_maps(saved: dict, table: int) -> tuple[dict, dict, bool]:
                 if cr is not None and t is not None:
                     cm[key] = cr
                     tm[key] = t
-                    starred = True
     keys = {k for m in per_cr for k in m} | {k for m in per_t for k in m}
     cr_map = {k: geomean_col([m.get(k) for m in per_cr]) for k in keys}
     t_map = {k: geomean_col([m.get(k) for m in per_t]) for k in keys}
-    return cr_map, t_map, starred
+    return cr_map, t_map
 
 
 def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
     """Plot CR vs time using geomeans (across the table's domains) per key."""
-    cr_map, t_map, starred = _table_geomean_maps(saved, table)
+    cr_map, t_map = _table_geomean_maps(saved, table)
     plot_cr_vs_time(cr_map, t_map,
                     f"{TABLE_TITLES[table]}\nGeo. mean across domains",
-                    out_path, stitch_starred=starred,
-                    methods=methods_for_table(table))
+                    out_path, methods=methods_for_table(table))
 
 
 # ─── family tables (table5/table7): same shape, different rosters ─────────────
@@ -736,7 +714,8 @@ class FamilySpec:
         """Build a spec for the standard E-Stitch roster: the enum (BFS) and smc
         (SMC) sweeps plus the dsrs-only-at-start baseline (BFS/MT), followed by
         the family-specific ``extras`` -- each a ``(method_key, col_label,
-        plot_label)`` triple (babble and/or the no-rules Enum baseline BFS/NR).
+        plot_label)`` triple (babble, the no-rules Enum baseline BFS/NR, and
+        Stitch).
         The shared three methods -- their order, labels, colors, and the smc
         representative point -- live here so the per-family specs can't drift on
         them; only the bits that genuinely differ are args.
@@ -748,7 +727,7 @@ class FamilySpec:
         # Table columns keep the BFS/MT and BFS/NR baselines rightmost (babble,
         # a real method, follows SMC). Plots are unaffected — they have no
         # left-to-right ranking, so their series order stays as built above.
-        baselines = ("enum-dsrs-at-start", "enum-baseline")
+        baselines = ("enum-dsrs-at-start", "enum-baseline", "stitch")
         table_methods = [m for m in methods if m not in baselines] + [
             m for m in methods if m in baselines
         ]
@@ -808,14 +787,15 @@ TABLE5_SPEC = FamilySpec.estitch_roster(
     extras=[
         ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
+        ("stitch", "Stitch", "Stitch"),
     ],
 )
 
 # table7: EPFL circuits with the factoring DSRs. Same roster as table5 (babble +
-# a no-rules Enum baseline "enum-baseline"), so the three-way baseline/live/
-# at-start contrast plus babble all show. babble runs via its ``circuits`` binary
-# (boolean and/or/not over ``$N`` inputs). Enum DNFs here (best-first can't search
-# the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
+# a no-rules Enum baseline "enum-baseline" + Stitch), so the three-way baseline/
+# live/at-start contrast plus babble all show. babble runs via its ``circuits``
+# binary (boolean and/or/not over ``$N`` inputs). Enum DNFs here (best-first
+# can't search the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
 TABLE7_SPEC = FamilySpec.estitch_roster(
     title="EPFL Circuit Compression (Factoring DSRs)",
     fig_subdir="table7",
@@ -833,6 +813,7 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     extras=[
         ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
+        ("stitch", "Stitch", "Stitch"),
     ],
 )
 
@@ -874,7 +855,7 @@ def render_family_tex(saved: dict, spec: "FamilySpec") -> tuple[str, list[str]]:
     one row per family × method, with Compression Ratio and Time (s) groups and
     a geomean row. ``notices`` lists any series-method sweep-point kick-downs.
 
-    No e-graph-min or Stitch columns (these tables have neither). A method that
+    No e-graph-min column. A method that
     timed out / OOM'd on any run of a family has no comparable number, so it's
     rendered ``DNF`` and excluded from that row's bolding and the geomean. A
     series method (Enum/SMC) whose representative sweep point DNFs at the geomean
@@ -1014,11 +995,11 @@ def plot_family_geomean(saved: dict, spec: "FamilySpec", out_path: Path) -> None
 # truthful.
 def _table_geomean_panel(saved: dict, table: int) -> dict:
     """Standalone-panel descriptor for a regular table's (1-4) geomean over domains."""
-    cr_map, t_map, starred = _table_geomean_maps(saved, table)
+    cr_map, t_map = _table_geomean_maps(saved, table)
     return {
         "cr_map": cr_map, "t_map": t_map,
         "title": f"{TABLE_TITLES[table]}\nGeo. mean across domains",
-        "stitch_starred": starred, "methods": methods_for_table(table),
+        "methods": methods_for_table(table),
         "sweep_for_method": SWEEP_FOR_METHOD, "sweep_point": TABLE_SWEEP_POINT,
     }
 
@@ -1029,7 +1010,7 @@ def _family_geomean_panel(saved: dict, spec: "FamilySpec") -> dict:
     return {
         "cr_map": cr_map, "t_map": t_map,
         "title": f"{spec.title}\nGeo. mean across families",
-        "stitch_starred": False, "methods": spec.plot_methods,
+        "methods": spec.plot_methods,
         "sweep_for_method": spec.sweep_for_method,
         "sweep_point": _reported_sweep_points(saved, spec),
     }
@@ -1052,7 +1033,7 @@ def plot_geomean_panel(panel: dict, out_path: Path) -> list:
     fig, ax = plt.subplots(figsize=_PANEL_FIGSIZE)
     handles, sweep_series = _draw_cr_vs_time(
         ax, panel["cr_map"], panel["t_map"], "",
-        panel["stitch_starred"], methods=panel["methods"],
+        methods=panel["methods"],
         sweep_for_method=panel["sweep_for_method"],
         sweep_point=panel["sweep_point"],
         method_colors=METHOD_COLORS, method_plot_labels=METHOD_PLOT_LABELS)
