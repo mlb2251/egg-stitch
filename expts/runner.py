@@ -187,13 +187,23 @@ def rewrites_path(domain: str) -> str | None:
 _PARSER_CONFIG = ParserConfig(prefix_symbols={}, dots_are_cons=False)
 
 
+# babble spells in explicit lambda calculus what an op-children tool leaves
+# implicit: applications as curried `@` chains, an abstraction's parameters as
+# binders (`λ` in the op-children languages, `lambda` in dreamcoder; egg-stitch's
+# own lambda-calc writes `lam`). Priced in `_node_cost` so either spelling of a
+# call or abstraction costs the same.
+_APPLY_HEAD = "@"
+_BINDER_HEADS = frozenset({"lam", "\u03bb", "lambda"})
+
+
 def _node_cost(node, weighting: Weighting) -> int:
     """Recursive cost of a parsed s-expression node.
 
     Atoms count as 1. For a list ``(head c1 ... cn)`` the cost is the sum of
-    child costs plus, under ``apps-equal``, one extra App per child position
-    — except for ``lam`` which is a primitive Lam node (no surrounding Apps)
-    in egg-stitch's lambda-calc grammar.
+    child costs plus, under ``apps-equal``, one extra App per child position.
+    An ``@`` head is an application node and a binder head is a Lam node, priced
+    so babble's explicit spelling of a call or an abstraction costs exactly what
+    the flat spelling of the same one costs under either weighting.
     """
     if isinstance(node, str):
         return 1
@@ -205,7 +215,19 @@ def _node_cost(node, weighting: Weighting) -> int:
         return 1
     head, *rest = children
     body = _node_cost(head, weighting) + sum(_node_cost(c, weighting) for c in rest)
-    if weighting == "apps-equal" and head != "lam":
+    if head == _APPLY_HEAD:
+        # The `@` *is* the application node, so it costs nothing under no-apps
+        # and exactly one App under apps-equal — what the same call costs
+        # written flat. Charging it as an atom on top would price every babble
+        # call above every other tool's.
+        return body - 1 + (weighting == "apps-equal")
+    if head in _BINDER_HEADS:
+        # A binder is a primitive Lam node under apps-equal: an atom, with no
+        # surrounding App. Under no-apps it costs nothing, because an
+        # op-children abstraction writes its parameters as metavars and spells
+        # no binder at all.
+        return body - (weighting == "no-apps")
+    if weighting == "apps-equal":
         body += len(rest)  # one App node per child position (curried application)
     return body
 
