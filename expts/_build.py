@@ -49,12 +49,15 @@ def _git(repo_dir: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def check_clean_main(repo_dir: Path, expected_origin: str) -> None:
+def check_clean_main(repo_dir: Path, expected_origin: str,
+                     expected_commit: str | None = None) -> None:
     """Assert ``repo_dir`` is on main, clean, and synced with ``expected_origin``.
 
     Raises ``RuntimeError`` if origin's URL doesn't match, the working tree
     isn't on ``main``, has uncommitted/untracked changes, or has diverged
-    from ``origin/main`` after a fetch.
+    from ``origin/main`` after a fetch. ``expected_commit`` additionally pins
+    which commit of that repo the numbers are produced against; bumping it is
+    what records that a tool's behaviour changed.
     """
     origin_url = _git(repo_dir, "remote", "get-url", "origin")
     if origin_url != expected_origin:
@@ -75,4 +78,10 @@ def check_clean_main(repo_dir: Path, expected_origin: str) -> None:
     if local != remote:
         raise RuntimeError(
             f"{repo_dir}: local main ({local[:8]}) is not in sync with origin/main ({remote[:8]})"
+        )
+    if expected_commit is not None and local != expected_commit:
+        raise RuntimeError(
+            f"{repo_dir}: pinned to {expected_commit[:8]} but main is at {local[:8]}. "
+            f"If that change is meant to affect the numbers, bump the pin and drop the "
+            f"cached results it invalidates."
         )
