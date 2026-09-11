@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """One-sweep benchmark builder for the epfl-circuits family.
 
-Survey every EPFL Combinational Benchmark Suite circuit, score each on two axes,
-keep the ones above the median on BOTH, and write their corpora to
-data/domains/epfl-circuits/ (removing any others). The two axes:
+Survey every EPFL Combinational Benchmark Suite circuit, write every corpus to
+data/domains/epfl-circuits/, and report which ones score above the median on
+BOTH axes — that subset is what table7 reports. The two axes:
 
   - distinct cone shapes -- structural diversity (variety the DSRs can merge);
   - no-rules compression  -- run egg-stitch with no DSRs; high ratio means real
@@ -105,16 +105,15 @@ def main():
     print(f"\nmedians: distinct_shapes={med_shapes}  no_rules_compression={med_comp:.2f}x")
     print("selected (above both):", ", ".join(sorted(r[0] for r in selected)))
 
-    # Write the selected corpora; drop any other *.json already in the domain.
+    # Every circuit's corpus is written, not just the selected ones: table7_5
+    # runs the whole suite to measure what this selection costs. The scores only
+    # decide which five table7 reports, and that set is EPFL_CIRCUITS.members in
+    # expts/runner.py — update it there if the selection above disagrees.
     os.makedirs(DOMAIN, exist_ok=True)
-    keep = {r[0] for r in selected}
-    for existing in os.listdir(DOMAIN):
-        if existing.endswith(".json") and existing[:-5] not in keep:
-            os.remove(os.path.join(DOMAIN, existing))
-    for name, _, _, corpus in selected:
+    for name, _, _, corpus in rows:
         with open(corpus) as src, open(os.path.join(DOMAIN, f"{name}.json"), "w") as dst:
             dst.write(src.read())
-    print(f"wrote {len(selected)} corpora to {DOMAIN}")
+    print(f"wrote {len(rows)} corpora to {DOMAIN}")
 
 
 if __name__ == "__main__":
