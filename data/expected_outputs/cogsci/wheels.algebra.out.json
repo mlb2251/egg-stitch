@@ -8,20 +8,20 @@
   ],
   "final_cost": 19463,
   "heap_sizes_at_end": [
-    20783,
-    6536,
+    21049,
+    6526,
     0
   ],
   "initial_cost": 35427,
   "library": [
     {
-      "approx_cost": 21280,
+      "approx_cost": 21850,
       "arity": 2,
       "lambda": "(lam (lam (C (T c $1) $0)))",
-      "num_matches": 140,
+      "num_matches": 26,
       "pattern": "fn_0: (C (T c ?#0) ?#1)",
       "pattern_size": 5,
-      "usage_matches": 559
+      "usage_matches": 445
     },
     {
       "approx_cost": 22371,
