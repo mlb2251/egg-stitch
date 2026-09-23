@@ -1,0 +1,7 @@
+[
+  "(app + a b c d e f (lam1 (app foo (app bar (app h $0)) (app gg (lam1 (app bar (app h $1)))))))",
+  "(app + a b c d e f (lam1 (app foo (app bar (app $0 q)) (app gg (lam1 (app bar (app $1 q)))))))",
+  "(app + a b c d e f (lam1 (app foo (app bar (app k $0 r)) (app gg (lam1 (app bar (app k $1 r)))))))",
+  "(app + a b c d e f (lam1 (app foo (app bar (app m s $0 t)) (app gg (lam1 (app bar (app m s $1 t)))))))",
+  "(app + a b c d e f (lam1 (app foo (app bar $0) (app gg (lam1 (app bar $1))))))"
+]

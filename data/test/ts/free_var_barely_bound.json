@@ -1,0 +1,5 @@
+[
+  "(lam1 (app foo (app reduce xs z (lam2 (app max (app f $1) $0))) (app reduce xs z (lam2 (app max (app g $1) $0))) (app reduce xs z (lam2 (app max (app h $1) $0)))))",
+  "(lam1 (app baz (app reduce xs z (lam2 (app max (app k $1) $0))) (app reduce xs z (lam2 (app max (app m $1) $0)))))",
+  "(lam1 (app qux (app reduce xs z (lam2 (app max (app n $1) $0))) (app reduce xs z (lam2 (app max (app p $1) $0)))))"
+]

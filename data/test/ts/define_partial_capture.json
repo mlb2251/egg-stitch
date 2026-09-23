@@ -1,0 +1,6 @@
+[
+  "(define (app fetch u) (define (app parse $0) (app render $1 k)))",
+  "(define (app fetch u) (define (app parse $0) (app log (app str_concat $1 $1))))",
+  "(define (app fetch u) (define (app parse $0) (app save db $1)))",
+  "(define (app fetch u) (define (app parse $0) (if (app ok $1) (app send $1) done)))"
+]

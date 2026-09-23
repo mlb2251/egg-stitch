@@ -1,0 +1,5 @@
+[
+  "(lam1 (app foo (app bar $0 (app cfg q r s) a) (app bar $0 (app cfg q r s) b) (app bar $0 (app cfg q r s) c)))",
+  "(lam1 (app baz (app bar $0 (app cfg q r s) d) (app bar $0 (app cfg q r s) e)))",
+  "(lam1 (app qux (app bar $0 (app cfg q r s) f) (app bar $0 (app cfg q r s) g)))"
+]
