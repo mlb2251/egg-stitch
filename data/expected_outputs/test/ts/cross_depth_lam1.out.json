@@ -1,0 +1,37 @@
+{
+  "compression_ratio": 2.1964285714285716,
+  "cost_after_rewrites": 123,
+  "cost_at_end_of_each_iter": [
+    56
+  ],
+  "final_cost": 56,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 123,
+  "library": [
+    {
+      "approx_cost": 27,
+      "arity": 1,
+      "lambda": "(lam1 (app + a b c d e f (lam1 (app foo (app bar (app $1 $0)) (app gg (lam1 (app bar (app $2 $1))))))))",
+      "num_matches": 5,
+      "pattern": "fn_0: (app + a b c d e f (lam1 (app foo (app bar (app ?#0 $0)) (app gg (lam1 (app bar (app ?#0 $1)))))))",
+      "pattern_size": 24,
+      "usage_matches": 5
+    }
+  ],
+  "original_programs": [
+    "(app + a b c d e f (lam1 (app foo (app bar (app h $0)) (app gg (lam1 (app bar (app h $1)))))))",
+    "(app + a b c d e f (lam1 (app foo (app bar (app $0 q)) (app gg (lam1 (app bar (app $1 q)))))))",
+    "(app + a b c d e f (lam1 (app foo (app bar (app k $0 r)) (app gg (lam1 (app bar (app k $1 r)))))))",
+    "(app + a b c d e f (lam1 (app foo (app bar (app m s $0 t)) (app gg (lam1 (app bar (app m s $1 t)))))))",
+    "(app + a b c d e f (lam1 (app foo (app bar $0) (app gg (lam1 (app bar $1))))))"
+  ],
+  "rewritten_programs": [
+    "(app fn_0 (lam1 (app h $0)))",
+    "(app fn_0 (lam1 (app $0 q)))",
+    "(app fn_0 (lam1 (app k $0 r)))",
+    "(app fn_0 (lam1 (app m s $0 t)))",
+    "(app fn_0 (lam1 $0))"
+  ]
+}

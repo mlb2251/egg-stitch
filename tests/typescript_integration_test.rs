@@ -3,7 +3,7 @@
 //!
 //! `typescript_family_test.rs` unit-tests the family hooks one at a time. These
 //! tests run the whole binary (`load_egraph` → search → rewrite → display) on
-//! small hand-written corpora and check the output three independent ways:
+//! small hand-written corpora and check the output two ways:
 //!
 //! 1. **Scope invariants**, computed by the tiny s-expression walker at the
 //!    bottom of this file. It encodes the binder rules (`lam{n}` binds n slots
@@ -12,12 +12,7 @@
 //!    Every library `lambda` must be closed, every rewritten program must have
 //!    the same free variables as its original, and every call site must be one
 //!    flat `(app fn_k …)` carrying exactly `arity_k` arguments.
-//! 2. **The β oracle** (`scripts/check_equiv.py --flat`): inline the library
-//!    into each rewritten program, β-normalise, and compare with the original.
-//!    This is what catches a wrong de Bruijn index. The oracle's flat desugaring
-//!    is deliberately non-injective (`(lam2 X)` = `(lam1 (lam1 X))`,
-//!    `(f a)` = `(app f a)`), which is why (1) also checks the flat shapes.
-//! 3. **Pinned shapes** on corpora small enough to reason about by hand. Each
+//! 2. **Pinned shapes** on corpora small enough to reason about by hand. Each
 //!    pinned string was checked against the oracle, and so was its most likely
 //!    off-by-one mutant (the oracle rejects every one of those mutants).
 //!
@@ -29,7 +24,6 @@
 //! the *last* parameter.
 
 use std::collections::BTreeSet;
-use std::process::Command;
 
 use serde_json::Value;
 
@@ -76,7 +70,7 @@ fn arity(run: &Value, i: usize) -> usize {
 }
 
 /// Runs one corpus under both backends and checks every invariant on each.
-/// Returns `(best_first, smc)` so callers can pin shapes on top.
+/// Returns `(best_first, smc)`.
 fn run_both_checked(corpus: &str) -> (Value, Value) {
     let bf = run_ts("best-first", corpus, &[]);
     let smc = run_ts("smc", corpus, &[]);
@@ -87,14 +81,13 @@ fn run_both_checked(corpus: &str) -> (Value, Value) {
 
 // ─── invariants ─────────────────────────────────────────────────────────────
 
-/// Everything that must hold for *any* abstraction the search picks.
+/// Everything that must hold for any abstraction the search picks.
 fn assert_all_invariants(run: &Value, label: &str) {
     assert!(!library(run).is_empty(), "{label}: no abstraction found; every corpus here is built to compress, and an empty library would make the oracle pass vacuously");
     assert_library_closed(run, label);
     assert_scope_preserved(run, label);
     assert_call_sites_flat(run, label);
     assert_binder_groups(run, label);
-    assert_oracle_accepts(run, label);
 }
 
 /// Every library `lambda` is a closed term: all `?#k` became bound DB indices
@@ -154,24 +147,6 @@ fn assert_binder_groups(run: &Value, label: &str) {
             assert!(l.starts_with(&format!("(lam{a} ")), "{label}: fn_{i} (arity {a}) should open with one lam{a}: {l}");
         }
     }
-}
-
-/// Runs the flat β oracle on `run`. Skipped (with a note) when `python3` is
-/// missing locally; a hard failure under CI, where losing it loses coverage.
-fn assert_oracle_accepts(run: &Value, label: &str) {
-    let path = std::env::temp_dir().join(format!("egg-stitch-ts-oracle-{}-{}.json", std::process::id(), label.replace(['/', '[', ']'], "_")));
-    std::fs::write(&path, serde_json::to_string(run).unwrap()).unwrap();
-    let out = Command::new("python3").args(["scripts/check_equiv.py", "--flat"]).arg(&path).output();
-    let _ = std::fs::remove_file(&path);
-    let out = match out {
-        Ok(o) => o,
-        Err(e) => {
-            assert!(std::env::var_os("CI").is_none(), "{label}: python3 unavailable under CI: {e}");
-            eprintln!("{label}: skipping β oracle ({e})");
-            return;
-        }
-    };
-    assert!(out.status.success(), "{label}: β oracle rejected the run:\n{}", String::from_utf8_lossy(&out.stdout));
 }
 
 // ─── A. de Bruijn indices across multi-slot binders ─────────────────────────
@@ -280,19 +255,30 @@ fn free_context_var_never_leaks_into_a_body() {
     }
 }
 
-// ─── B. higher-order capture ────────────────────────────────────────────────
-
-/// The existing one-index fixture (`stitch/ts_arity2_capture`) re-checked
-/// against the scope invariants, which its snapshot doesn't assert.
+/// The flat transliteration of lambda-calc `ho_arity2_capture`, and its
+/// contrast case: the hole is *first-order*. It sits in the callee slot of
+/// `(app ?#0 $1)` under the `lam2`, so `$2` is the `lam1` parameter and the
+/// `$1` is literal pattern structure (not an η-wrap), and it is filled by the
+/// closed symbols `g` and `k`, passed bare rather than `lam1`-wrapped.
+/// Best-first only, matching its snapshot.
 #[test]
-fn one_index_capture_existing_fixture() {
-    let run = common::run("best-first", "data/domains/ho-bugs/ts_arity2_capture.json", &["--language", "typescript"]);
-    assert_all_invariants(&run, "ts_arity2_capture");
+fn flat_arity_mismatch_stays_first_order() {
+    let run = run_ts("best-first", "flat_arity_mismatch", &[]);
+    assert_all_invariants(&run, "flat_arity_mismatch");
+    assert_eq!(arity(&run, 0), 1);
+    assert_eq!(lambda(&run, 0), "(lam1 (app F e (lam2 (app P $0 (app $2 $1)))))");
+    let orig = programs(&run, "original_programs");
+    let rewr = programs(&run, "rewritten_programs");
+    assert_eq!(rewr[0], "(app fn_0 g)", "closed filler is passed bare, not lam1-wrapped");
+    assert_eq!(rewr[1], orig[1], "the 3-child call can't match the 2-child pattern");
+    assert_eq!(rewr[2], "(app fn_0 k)");
 }
 
-/// The two-index path the snapshot manifest calls out as uncovered: the hole
-/// `(app g $1 $0)` references *both* slots of the enclosing `lam2`, so `?#0`
-/// captures two indices and renders as `(app $2 $1 $0)`.
+// ─── B. higher-order capture ────────────────────────────────────────────────
+
+/// The two-index path: the hole `(app g $1 $0)` references *both* slots of
+/// the enclosing `lam2`, so `?#0` captures two indices and renders as
+/// `(app $2 $1 $0)`.
 ///
 /// Program 1 is the asymmetric one. Its captured term `(app h $0 $1)` has the
 /// arguments flipped, so it can't η-reduce to `h`; the call-site argument has

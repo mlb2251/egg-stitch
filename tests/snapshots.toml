@@ -350,25 +350,6 @@ backends = "both"
 args = ["--language", "lambda-calc"]
 oracle = "beta"
 
-# First TypeScript-shaped case in the suite. The flat transliteration of
-# stitch/ho_arity2_capture: the corpus's own `lam2` is preserved as-is, and the
-# learned abstraction wraps it in a single `lam1` binder (flat's one-node
-# binder group) rather than the sibling's two stacked `lam`s. The captured
-# pattern is `(app F e (lam2 (app P $0 (app ?#0 $1))))` — a ONE-index flat
-# higher-order capture (`?#0` applied to a single `$1`), matching 2/3 programs.
-# Program 2, `(app h $1 $1)`, is deliberately left unmatched: flat currying
-# makes that a single 3-child call node that can't unify with the pattern's
-# 2-child `(app ?#0 $1)`, whereas the lambda-calc sibling's curried spine lets
-# `(?#0 $1 $1)` generalize over it too (matching 3/3 there). That two-capture
-# path is NOT covered by this fixture. Needs the `beta-flat` oracle — plain
-# `beta` would read `lam2`/`app` as ordinary symbols.
-[[case]]
-name = "stitch/ts_arity2_capture"
-kind = "stitch"
-input = "data/domains/ho-bugs/ts_arity2_capture.json"
-args = ["--language", "typescript"]
-oracle = "beta-flat"
-
 [[case]]
 name = "stitch/fn_name_collision"
 kind = "stitch"
@@ -919,3 +900,186 @@ steps = "2000"
 rules = "data/domains/molecules/molecules.rewrites"
 args = ["--roll-over"]
 oracle = { rules = "data/domains/molecules/molecules.rewrites" }
+
+# ─── TypeScript flat-dialect corpora (data/test/ts/) ──────────────────────────
+# One snapshot per corpus exercised by tests/typescript_integration_test.rs,
+# which owns the scope invariants and pinned shapes; these fixtures freeze the
+# full output. Flat dialect, so every case needs the `beta-flat` oracle.
+
+[[case]]
+name = "ts/cps_define_capture"
+kind = "stitch"
+input = "data/test/ts/cps_define_capture.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/cross_depth_lam1"
+kind = "stitch"
+input = "data/test/ts/cross_depth_lam1.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/cross_depth_lam2"
+kind = "stitch"
+input = "data/test/ts/cross_depth_lam2.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/define_body_slot"
+kind = "stitch"
+input = "data/test/ts/define_body_slot.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/define_partial_capture"
+kind = "stitch"
+input = "data/test/ts/define_partial_capture.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/define_value_capture"
+kind = "stitch"
+input = "data/test/ts/define_value_capture.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/define_value_slot"
+kind = "stitch"
+input = "data/test/ts/define_value_slot.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+# Flat transliteration of stitch/ho_arity2_capture, and the lambda-calc
+# sibling's contrast case. The hole is FIRST-ORDER: it sits in the callee slot
+# of `(app ?#0 $1)` and is filled by the closed symbols `g` and `k`, so nothing
+# is captured (the `$1` is literal pattern structure, not an eta-wrap; the args
+# are bare, not `lam1`-wrapped). Program 2, `(app h $1 $1)`, is deliberately
+# left unmatched: flat application makes it a single 3-child call node that
+# can't unify with the pattern's 2-child `(app ?#0 $1)`, and there is no
+# `(app h $1)` subterm to put in the hole. The curried sibling does have one,
+# `(h $1)`, which is why it needs a one-index higher-order capture and matches
+# 3/3 there. Best-first only (the pre-move fixture was never blessed for SMC).
+[[case]]
+name = "ts/flat_arity_mismatch"
+kind = "stitch"
+input = "data/test/ts/flat_arity_mismatch.json"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/free_var_as_symbol"
+kind = "stitch"
+input = "data/test/ts/free_var_as_symbol.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/free_var_barely_bound"
+kind = "stitch"
+input = "data/test/ts/free_var_barely_bound.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/free_var_barely_free"
+kind = "stitch"
+input = "data/test/ts/free_var_barely_free.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/free_var_context"
+kind = "stitch"
+input = "data/test/ts/free_var_context.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/ho_partial_capture"
+kind = "stitch"
+input = "data/test/ts/ho_partial_capture.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/ho_two_index_capture"
+kind = "stitch"
+input = "data/test/ts/ho_two_index_capture.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/lam0_thunk"
+kind = "stitch"
+input = "data/test/ts/lam0_thunk.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/lam100_ho_capture"
+kind = "stitch"
+input = "data/test/ts/lam100_ho_capture.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/lam100_metavar_depth"
+kind = "stitch"
+input = "data/test/ts/lam100_metavar_depth.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/lam10_metavar_depth"
+kind = "stitch"
+input = "data/test/ts/lam10_metavar_depth.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/lam2_metavar_depth"
+kind = "stitch"
+input = "data/test/ts/lam2_metavar_depth.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/lam3_metavar_depth"
+kind = "stitch"
+input = "data/test/ts/lam3_metavar_depth.json"
+backends = "both"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
+
+[[case]]
+name = "ts/mixed"
+kind = "stitch"
+input = "data/test/ts/mixed.json"
+backends = "both"
+num_abstractions = "3"
+args = ["--language", "typescript"]
+oracle = "beta-flat"
