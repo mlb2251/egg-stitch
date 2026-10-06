@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Delete the cached E-Stitch results that appear as cells in the main tables
-(1-5, 7, 7.5), so that re-running those tables recomputes only them.
+(1-5, 7), so that re-running those tables recomputes only them.
 
 Babble/Stitch caches and the rest of the BFS/SMC sweeps are kept. The files are
 checked into git, so ``git restore results/`` undoes this.
@@ -32,7 +32,6 @@ TABLES = {
     "table4": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
     "table5": (TABLE5_ENUM_POINT, TABLE5_BFS_SWEEP, SMC_PARTICLE_SWEEP),
     "table7": (TABLE_BFS_STEPS, TABLE7_BFS_SWEEP, TABLE7_SMC_SWEEP),
-    "table7_5": (TABLE_BFS_STEPS, TABLE7_BFS_SWEEP, TABLE7_SMC_SWEEP),
 }
 
 
