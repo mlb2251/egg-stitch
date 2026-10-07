@@ -46,18 +46,19 @@ cache used for the paper is included. Render scripts write to `figures/`.
 
 | Paper | Experiment | Render script | Output in `figures/` |
 | --- | --- | --- | --- |
-| Table 1 | `table3` | `render_tables.py` | `table3.tex` |
-| Table 2 | `table5` | `render_tables.py` | `table5.tex` |
-| Table 3 | `table7` | `render_tables.py` | `table7.tex` |
-| Table 4 | `table4` | `render_tables.py` | `table4.tex` |
+| Table 1 | `babble_comparison_rewrites` | `render_tables.py` | `babble_comparison_rewrites.tex` |
+| Table 2 | `molecules` | `render_tables.py` | `molecules.tex` |
+| Table 3 | `circuits` | `render_tables.py` | `circuits.tex` |
+| Table 4 | `babble_comparison_no_rewrites` | `render_tables.py` | `babble_comparison_no_rewrites.tex` |
 | Table 5 | `ablation` | `render_ablation.py` | `ablation.tex` |
-| Table 6 | `table7_5` | `render_tables.py` | `table7_5.tex` |
+| Table 6 | `circuits_all` | `render_tables.py` | `circuits_all.tex` |
 | Table 7 | `ablation` | `render_ablation.py` | `ablation-appendix.tex` |
-| Figure 6 | `table5` | `render_molecules.py` | `molecules/search-progress.png` |
-| Figure 10 | `table3`, `table4`, `table5`, `table7` | `render_tables.py` | `curve-grid/` |
+| Figure 6 | `molecules` | `render_molecules.py` | `molecules/search-progress.png` |
+| Figure 10 | the four main tables | `render_tables.py` | `curve-grid/` |
 | Figure 11 | `arity_experiment` | `render_arity.py` | `arity/` |
 
-Render scripts are in `scripts/`. `table1` and `table2` are not in the paper.
+Render scripts are in `scripts/`. `babble_comparison_rewrites_single` and `babble_comparison_no_rewrites_single` are
+not in the paper.
 
 ### 1. Render from cached results (minutes)
 
@@ -74,7 +75,10 @@ All other results are read from the cache.
 
 ```bash
 python scripts/clear_table_estitch_results.py
-for t in table1 table2 table3 table4 table5 table7; do ./run.py $t; done
+for t in babble_comparison_rewrites_single babble_comparison_no_rewrites_single \
+         babble_comparison_rewrites babble_comparison_no_rewrites molecules circuits; do
+    ./run.py $t
+done
 python scripts/render_tables.py
 ```
 
@@ -97,7 +101,7 @@ Interrupted runs resume from the cache.
   aggregated over 10 runs and vary slightly.
 - Tables 2, 3 and 6 cap each run at 300s and 20 GiB, reporting DNF otherwise.
   Runs near the cap may change status on different hardware.
-- `table5`, `table7` and `table7_5` require 20 GiB of free memory.
+- `molecules`, `circuits` and `circuits_all` require 20 GiB of free memory.
 
 The paper's results were produced on TODO.
 
