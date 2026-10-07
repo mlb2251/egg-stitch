@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
-from .._build import cargo_build, check_clean_main
+from .._build import cargo_build, check_pinned
 from .._subproc import run as _subproc_run
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
@@ -41,12 +41,12 @@ BABBLE_COMMIT = "dd6a1f5abeb8271071bd80b79371289d2aecdad6"
 
 @cache
 def _babble_ready() -> None:
-    """Verify ``../babble`` is on a clean, synced main exactly once per process.
+    """Verify ``../babble`` is a clean checkout of ``BABBLE_COMMIT`` exactly once per process.
 
     Both binaries below build from the same source tree, so we share one
     check between them.
     """
-    check_clean_main(BABBLE_DIR, "git@github.com:kavigupta/babble.git", BABBLE_COMMIT)
+    check_pinned(BABBLE_DIR, BABBLE_COMMIT)
 
 
 @cache

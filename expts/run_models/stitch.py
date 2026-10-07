@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
-from .._build import cargo_build, check_clean_main
+from .._build import cargo_build, check_pinned
 from .._subproc import run as _subproc_run
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
@@ -24,16 +24,17 @@ from ..folders import current_folder_path, unique_path
 # Stitch lives as a sibling clone of this repo.
 STITCH_DIR: Path = (Path(__file__).resolve().parent.parent.parent.parent / "stitch").resolve()
 
+STITCH_COMMIT = "350804b7b35807c78bd21c313785ae5152ae2985"
+
 
 @cache
 def stitch_bin() -> Path:
-    """Verify ``../stitch`` is clean+synced, build, and return the binary path.
+    """Verify ``../stitch`` is a clean checkout of ``STITCH_COMMIT``, build, and return the binary path.
 
-    Lazy + cached so importing this module is cheap and doesn't fetch from
-    origin / shell out to cargo until someone actually wants to invoke
-    stitch.
+    Lazy + cached so importing this module is cheap and doesn't shell out to
+    git / cargo until someone actually wants to invoke stitch.
     """
-    check_clean_main(STITCH_DIR, "git@github.com:mlb2251/stitch.git")
+    check_pinned(STITCH_DIR, STITCH_COMMIT)
     return cargo_build(STITCH_DIR, "compress")
 
 
