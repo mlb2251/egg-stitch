@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render the molecule scramble results as one figure per family.
 
-Reads ``results/table5.json`` (the molecule-subset table; see
-``expts/tables.py``). table5 records two best-first conditions whose
+Reads ``results/molecules.json`` (the molecule-subset table; see
+``expts/tables.py``). The molecules table records two best-first conditions whose
 per-iteration cost trajectory this renderer draws:
 
   ``enum-dsrs-at-start`` -- DSRs canonicalise the egraph once, then search
@@ -30,16 +30,16 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-from expts.tables import TABLE5_DOMAINS, TABLE5_SMC_POINT  # noqa: E402
+from expts.tables import MOLECULES_DOMAINS, MOLECULES_SMC_POINT  # noqa: E402
 
-RESULTS_PATH = PROJECT_ROOT / "results" / "table5.json"
+RESULTS_PATH = PROJECT_ROOT / "results" / "molecules.json"
 DEFAULT_OUT_DIR = PROJECT_ROOT / "figures" / "molecules"
 DEFAULT_MAX_STEP = 4
 
-# Logical method name -> the table5 method key holding its run data.
+# Logical method name -> the molecules method key holding its run data.
 METHOD_DATA_KEY = {
     "DSR-canon": "enum-dsrs-at-start",
-    "search-DSR": f"smc-{TABLE5_SMC_POINT}",
+    "search-DSR": f"smc-{MOLECULES_SMC_POINT}",
 }
 METHODS = ("DSR-canon", "search-DSR")
 METHOD_COLORS = {
@@ -296,7 +296,7 @@ def annotate_diagram(ax, x: float, y: float, entry: ExprNode, offset_y: int) -> 
 
 def perfile_record(saved: dict, domain: str, method: str) -> dict | None:
     """Extract the single per-file result dict for a (family, method) from
-    table5's nested ``domains -> runs -> [reps][files]`` shape.
+    the molecules table's nested ``domains -> runs -> [reps][files]`` shape.
 
     Uses the first repeat (a representative run). Returns None if the method is
     absent or its first repeat has no files (e.g. a tool that didn't run here).
@@ -449,7 +449,7 @@ def render_combined(saved: dict, out_path: Path, max_step: int) -> None:
     """
     import matplotlib.pyplot as plt
 
-    domains = [d for d in TABLE5_DOMAINS if d in saved["domains"]]
+    domains = [d for d in MOLECULES_DOMAINS if d in saved["domains"]]
 
     fig, axes = plt.subplots(
         2, 2, figsize=(8.0, 4.8), constrained_layout=True
@@ -493,7 +493,7 @@ def main() -> None:
     """Parse CLI arguments and render one graph per domain."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--input", type=Path, default=RESULTS_PATH, help="Path to table5.json"
+        "--input", type=Path, default=RESULTS_PATH, help="Path to molecules.json"
     )
     parser.add_argument(
         "--output",

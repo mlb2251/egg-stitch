@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Render Table 1-4 JSON result files as LaTeX tabulars and PNG plots.
+"""Render the table experiments' JSON result files as LaTeX tabulars and PNG plots.
 
-Reads ``results/tableN.json`` (per-file records, list per (method, repeat))
-and writes ``figures/tableN.tex`` (LaTeX tabular) plus ``figures/tableN.png``
+Reads ``results/<table>.json`` (per-file records, list per (method, repeat))
+and writes ``figures/<table>.tex`` (LaTeX tabular) plus ``figures/<table>.png``
 (log-log scatter of compression ratio against time; time on the x axis,
 compression ratio on the y axis; color = method, marker =
 domain). Sizes shown for DC (dreamcoder) domains are per-file averages;
@@ -28,13 +28,13 @@ from expts.render_common import (  # noqa: E402
 from expts.tables import (  # noqa: E402
     BFS_STEP_SWEEP,
     SMC_PARTICLE_SWEEP,
-    TABLE5_BFS_SWEEP,
-    TABLE5_DOMAINS,
-    TABLE5_ENUM_POINT,
-    TABLE7_5_DOMAINS,
-    TABLE7_BFS_SWEEP,
-    TABLE7_DOMAINS,
-    TABLE7_SMC_SWEEP,
+    MOLECULES_BFS_SWEEP,
+    MOLECULES_DOMAINS,
+    MOLECULES_ENUM_POINT,
+    CIRCUITS_ALL_DOMAINS,
+    CIRCUITS_BFS_SWEEP,
+    CIRCUITS_DOMAINS,
+    CIRCUITS_SMC_SWEEP,
     TABLE_BFS_STEPS,
     TABLE_SMC_PARTICLES,
 )
@@ -44,22 +44,22 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results"
 FIGURES_DIR = PROJECT_ROOT / "figures"
 
-# Tables 1/3 (DSR runs) only include domains that have a babble equational
-# theory; tables 2/4 (no-DSR runs) include text/logo/towers as well.
+# DSR tables only include domains that have a babble equational theory; no-DSR
+# tables include text/logo/towers as well.
 TABLE_DOMAINS_DSR = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics"]
 TABLE_DOMAINS_NO_DSR = TABLE_DOMAINS_DSR + ["text", "logo", "towers"]
 
 
-def domains_for_table(table: int) -> list[str]:
+def domains_for_table(table: str) -> list[str]:
     return TABLE_DOMAINS_DSR if table in TABLES_WITH_EGRAPH_MIN else TABLE_DOMAINS_NO_DSR
 
 
-def methods_for_table(table: int) -> list[str]:
+def methods_for_table(table: str) -> list[str]:
     """Ordered method columns for the table.
 
-    DSR tables (1 & 3) add the dsrs-only-at-start "BFS@start" baseline, and
+    DSR tables add the dsrs-only-at-start "BFS@start" baseline, and
     carry Stitch only when they can borrow it from a no-DSR counterpart (see
-    :data:`NO_DSR_COUNTERPART`); no-DSR tables (2 & 4) run Stitch themselves and
+    :data:`NO_DSR_COUNTERPART`); no-DSR tables run Stitch themselves and
     have no baseline.
     """
     if table in TABLES_WITH_EGRAPH_MIN:
@@ -80,12 +80,12 @@ DOMAIN_LABELS = {
     "towers": "Towers",
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
-# DSR tables (1 & 3) add a "dsrs-only-at-start" baseline: best-first that
+# DSR tables add a "dsrs-only-at-start" baseline: best-first that
 # canonicalises with the DSRs once instead of keeping them live (the "BFS@start"
-# column, same as table5).
+# column, same as molecules).
 BASELINE_METHOD = "enum-dsrs-at-start"
 # No-rules Enum baseline (BFS/NR): best-first with the DSRs turned off entirely,
-# the direct-babble-comparison reference on the DSR tables (1 & 3) and table5/7.
+# the direct-babble-comparison reference on the DSR tables and molecules/circuits.
 NO_RULES_METHOD = "enum-baseline"
 # Table cells use the bare search-strategy name; plot legends spell out the
 # E-Stitch prefix so each series is unambiguous standalone.
@@ -109,19 +109,18 @@ TABLE_DATA_KEYS = {
     NO_RULES_METHOD: NO_RULES_METHOD,
 }
 TABLE_TITLES = {
-    1: "Compression Using Rewrites",
-    2: "Compression Without Rewrites",
-    3: "Compression Using Rewrites, Stacked Abstractions",
-    4: "Compression Without Rewrites, Stacked Abstractions",
+    "babble_comparison_rewrites_single": "Compression Using Rewrites",
+    "babble_comparison_no_rewrites_single": "Compression Without Rewrites",
+    "babble_comparison_rewrites": "Compression Using Rewrites, Stacked Abstractions",
+    "babble_comparison_no_rewrites": "Compression Without Rewrites, Stacked Abstractions",
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
-TABLES_WITH_EGRAPH_MIN = {1, 3}
+TABLES_WITH_EGRAPH_MIN = {"babble_comparison_rewrites_single", "babble_comparison_rewrites"}
 # A DSR table can't run Stitch itself, so it shows the same-domain,
-# same-abstraction-count numbers from its no-DSR counterpart. Table 3 borrows
-# from table 4 (table 4's domains are a superset and both stack 20
-# abstractions). Table 1 could borrow from table 2 the same way; it doesn't
+# same-abstraction-count numbers from its no-DSR counterpart (whose domains are
+# a superset). The single-abstraction tables could pair the same way; they don't
 # today.
-NO_DSR_COUNTERPART: dict[int, int] = {3: 4}
+NO_DSR_COUNTERPART: dict[str, str] = {"babble_comparison_rewrites": "babble_comparison_no_rewrites"}
 
 # Plot styling: each method gets a color, each domain a marker. Keeping these
 # as module-level dicts makes it easy to extend with new methods/domains.
@@ -173,9 +172,9 @@ DOMAIN_PLOT_LABELS = {
 }
 
 
-def results_json(table: int) -> Path:
-    """Return the path to ``results/tableN.json`` (the canonical checked-in copy)."""
-    path = RESULTS_DIR / f"table{table}.json"
+def results_json(table: str) -> Path:
+    """Return the path to ``results/<table>.json`` (the canonical checked-in copy)."""
+    path = RESULTS_DIR / f"{table}.json"
     if not path.exists():
         sys.exit(f"missing {path}")
     return path
@@ -218,7 +217,7 @@ def bold_best(xs: list[float | None], spec: str,
     return out
 
 
-def _stitch_no_dsr_maps(table: int) -> dict[str, tuple[float | None, float | None]]:
+def _stitch_no_dsr_maps(table: str) -> dict[str, tuple[float | None, float | None]]:
     """``{domain: (cr, time)}`` for Stitch from the matching no-DSR table.
 
     Returns an empty dict if ``table`` has no counterpart or the JSON is
@@ -227,7 +226,7 @@ def _stitch_no_dsr_maps(table: int) -> dict[str, tuple[float | None, float | Non
     other = NO_DSR_COUNTERPART.get(table)
     if other is None:
         return {}
-    path = RESULTS_DIR / f"table{other}.json"
+    path = RESULTS_DIR / f"{other}.json"
     if not path.exists():
         return {}
     with open(path) as fh:
@@ -242,7 +241,7 @@ def _stitch_no_dsr_maps(table: int) -> dict[str, tuple[float | None, float | Non
 
 
 def _collect_rows(
-    saved: dict, table: int
+    saved: dict, table: str
 ) -> list[tuple[str, float | None, float | None, list[float | None], list[float | None]]]:
     """Per-domain ``(domain, original_size, egraph_min, crs, ts)`` for the table.
 
@@ -301,7 +300,7 @@ def _shade_cells(cells: list[str], methods: list[str]) -> list[str]:
     ]
 
 
-def render(saved: dict, table: int, presentation: bool = False) -> str:
+def render(saved: dict, table: str, presentation: bool = False) -> str:
     """Return a LaTeX ``tabular`` string for the given loaded results dict.
 
     With ``presentation=True`` the Size/E-graph-min columns are dropped and
@@ -603,7 +602,7 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path, *,
     """Save a single-panel log-log CR-vs-time plot with a legend to its right.
 
     See ``_draw_cr_vs_time`` for the plot semantics; the ``methods``/``sweep_*``/
-    ``method_*`` arguments default to the Table 1-4 roster but are overridden for
+    ``method_*`` arguments default to the babble-comparison roster but are overridden for
     the family tables.
     """
     import matplotlib.pyplot as plt
@@ -624,7 +623,7 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path, *,
     plt.close(fig)
 
 
-def plot_domain(saved: dict, table: int, domain: str, out_path: Path) -> None:
+def plot_domain(saved: dict, table: str, domain: str, out_path: Path) -> None:
     """Plot CR vs time for a single domain.
 
     On DSR tables, splice in the matching no-DSR Stitch point so readers
@@ -644,7 +643,7 @@ def plot_domain(saved: dict, table: int, domain: str, out_path: Path) -> None:
                     methods=methods_for_table(table))
 
 
-def _table_geomean_maps(saved: dict, table: int) -> tuple[dict, dict]:
+def _table_geomean_maps(saved: dict, table: str) -> tuple[dict, dict]:
     """Per-key CR / time geomeans across a table's domains, with any no-DSR Stitch
     point spliced in (see ``_stitch_no_dsr_maps``)."""
     domains = [d for d in domains_for_table(table) if d in saved["domains"]]
@@ -665,7 +664,7 @@ def _table_geomean_maps(saved: dict, table: int) -> tuple[dict, dict]:
     return cr_map, t_map
 
 
-def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
+def plot_geomean(saved: dict, table: str, out_path: Path) -> None:
     """Plot CR vs time using geomeans (across the table's domains) per key."""
     cr_map, t_map = _table_geomean_maps(saved, table)
     plot_cr_vs_time(cr_map, t_map,
@@ -673,8 +672,8 @@ def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
                     out_path, methods=methods_for_table(table))
 
 
-# ─── family tables (table5/table7): same shape, different rosters ─────────────
-# Both share table5's layout — the two ours sweeps + single-point baselines, no
+# ─── family tables (molecules/circuits): same shape, different rosters ─────────────
+# Both share the molecules table's layout — the two ours sweeps + single-point baselines, no
 # Stitch (can't take DSRs) and no e-graph-min table column — but differ in their
 # domains and which non-sweep methods they carry, so each is described by a
 # FamilySpec consumed by render_family_tex / render_family below.
@@ -723,7 +722,7 @@ class FamilySpec:
         """
         methods = ["enum", "smc", "enum-dsrs-at-start", *(e[0] for e in extras)]
         # Base methods take color slots 0/1/3; extras fill 2 then 4, 5, ... so a
-        # single-extra roster (table7) keeps its original slot-2 color.
+        # single-extra roster (circuits) keeps its original slot-2 color.
         extra_slots = [2, 4, 5][: len(extras)]
         # Table columns keep the BFS/MT and BFS/NR baselines rightmost (babble,
         # a real method, follows SMC). Plots are unaffected — they have no
@@ -770,20 +769,20 @@ class FamilySpec:
         )
 
 
-# table5: molecule scramble subset. The two ours sweeps (enum extended to 100k),
+# molecules: molecule scramble subset. The two ours sweeps (enum extended to 100k),
 # the dsrs-only-at-start baseline (a single best-first point), babble, and the
 # no-rules Enum baseline (BFS/NR).
-TABLE5_SPEC = FamilySpec.estitch_roster(
+MOLECULES_SPEC = FamilySpec.estitch_roster(
     title="Molecule Scramble Compression (DSRs)",
-    fig_subdir="table5",
-    domains=TABLE5_DOMAINS,
+    fig_subdir="molecules",
+    domains=MOLECULES_DOMAINS,
     domain_labels={
         "molecules:hexyl": "Hexyl",
         "molecules:ester": "Ester",
         "molecules:glycol": "Glycol",
     },
-    enum_point=TABLE5_ENUM_POINT,
-    enum_sweep=TABLE5_BFS_SWEEP,
+    enum_point=MOLECULES_ENUM_POINT,
+    enum_sweep=MOLECULES_BFS_SWEEP,
     smc_sweep=SMC_PARTICLE_SWEEP,
     extras=[
         ("babble", "Babble", "Babble"),
@@ -792,15 +791,15 @@ TABLE5_SPEC = FamilySpec.estitch_roster(
     ],
 )
 
-# table7: EPFL circuits with the factoring DSRs. Same roster as table5 (babble +
+# circuits: EPFL circuits with the factoring DSRs. Same roster as molecules (babble +
 # a no-rules Enum baseline "enum-baseline" + Stitch), so the three-way baseline/
 # live/at-start contrast plus babble all show. babble runs via its ``circuits``
 # binary (boolean and/or/not over ``$N`` inputs). Enum DNFs here (best-first
-# can't search the rule-saturated e-graph; see TABLE7_BFS_SWEEP).
-TABLE7_SPEC = FamilySpec.estitch_roster(
+# can't search the rule-saturated e-graph; see CIRCUITS_BFS_SWEEP).
+CIRCUITS_SPEC = FamilySpec.estitch_roster(
     title="EPFL Circuit Compression (Factoring DSRs)",
-    fig_subdir="table7",
-    domains=TABLE7_DOMAINS,
+    fig_subdir="circuits",
+    domains=CIRCUITS_DOMAINS,
     domain_labels={
         "epfl-circuits:multiplier": "Multiplier",
         "epfl-circuits:square": "Square",
@@ -809,8 +808,8 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
         "epfl-circuits:voter": "Voter",
     },
     enum_point=TABLE_BFS_STEPS,
-    enum_sweep=TABLE7_BFS_SWEEP,
-    smc_sweep=TABLE7_SMC_SWEEP,
+    enum_sweep=CIRCUITS_BFS_SWEEP,
+    smc_sweep=CIRCUITS_SMC_SWEEP,
     extras=[
         ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
@@ -818,13 +817,13 @@ TABLE7_SPEC = FamilySpec.estitch_roster(
     ],
 )
 
-# table7.5: the same roster over all 20 EPFL circuits, so the reader can see what
-# table7's median filter on diversity/redundancy does to the margins. The five
-# table7 circuits keep their labels, so the two tables read against each other.
-TABLE7_5_SPEC = FamilySpec.estitch_roster(
+# circuits_all: the same roster over all 20 EPFL circuits, so the reader can see what
+# the circuits table's median filter on diversity/redundancy does to the margins. The five
+# circuits-table circuits keep their labels, so the two tables read against each other.
+CIRCUITS_ALL_SPEC = FamilySpec.estitch_roster(
     title="EPFL Circuit Compression, Full Suite (Factoring DSRs)",
-    fig_subdir="table7_5",
-    domains=TABLE7_5_DOMAINS,
+    fig_subdir="circuits_all",
+    domains=CIRCUITS_ALL_DOMAINS,
     domain_labels={
         "epfl-circuits:adder": "Adder",
         "epfl-circuits:arbiter": "Arbiter",
@@ -848,8 +847,8 @@ TABLE7_5_SPEC = FamilySpec.estitch_roster(
         "epfl-circuits:voter": "Voter",
     },
     enum_point=TABLE_BFS_STEPS,
-    enum_sweep=TABLE7_BFS_SWEEP,
-    smc_sweep=TABLE7_SMC_SWEEP,
+    enum_sweep=CIRCUITS_BFS_SWEEP,
+    smc_sweep=CIRCUITS_SMC_SWEEP,
     extras=[
         ("babble", "Babble", "Babble"),
         ("enum-baseline", "BFS/NR", "BFS (no rules)"),
@@ -891,7 +890,7 @@ def _kicked_data_keys(saved: dict, spec: "FamilySpec") -> tuple[dict[str, str], 
 
 
 def render_family_tex(saved: dict, spec: "FamilySpec") -> tuple[str, list[str]]:
-    """Return ``(latex_tabular, notices)`` for a family table (table5/table7):
+    """Return ``(latex_tabular, notices)`` for a family table (molecules/circuits):
     one row per family × method, with Compression Ratio and Time (s) groups and
     a geomean row. ``notices`` lists any series-method sweep-point kick-downs.
 
@@ -1003,7 +1002,7 @@ def plot_family_domain(saved: dict, spec: "FamilySpec", domain: str, out_path: P
 def _family_geomean_maps(saved: dict, spec: "FamilySpec") -> tuple[dict, dict]:
     """Compute the per-key CR / time geomeans across a family's members.
 
-    A method that DNFs on any family (e.g. babble on table5's hexyl) is dropped
+    A method that DNFs on any family (e.g. babble on the molecules table's hexyl) is dropped
     from the geomean plot entirely — a geomean over a subset of families isn't
     comparable to one over all of them. This matches the LaTeX table, which
     blanks the geomean cell for any method with a DNF."""
@@ -1033,8 +1032,8 @@ def plot_family_geomean(saved: dict, spec: "FamilySpec", out_path: Path) -> None
 # (keyed on the shared method names) so the same method reads the same color and
 # label across regular-table and family panels, and the one shared legend is
 # truthful.
-def _table_geomean_panel(saved: dict, table: int) -> dict:
-    """Standalone-panel descriptor for a regular table's (1-4) geomean over domains."""
+def _table_geomean_panel(saved: dict, table: str) -> dict:
+    """Standalone-panel descriptor for a babble-comparison table's geomean over domains."""
     cr_map, t_map = _table_geomean_maps(saved, table)
     return {
         "cr_map": cr_map, "t_map": t_map,
@@ -1045,7 +1044,7 @@ def _table_geomean_panel(saved: dict, table: int) -> dict:
 
 
 def _family_geomean_panel(saved: dict, spec: "FamilySpec") -> dict:
-    """Standalone-panel descriptor for a family table's (5/7) geomean over families."""
+    """Standalone-panel descriptor for a family table's geomean over families."""
     cr_map, t_map = _family_geomean_maps(saved, spec)
     return {
         "cr_map": cr_map, "t_map": t_map,
@@ -1116,32 +1115,33 @@ def main() -> None:
     argparse.ArgumentParser(description=__doc__).parse_args()
 
     FIGURES_DIR.mkdir(exist_ok=True)
-    table_saved: dict[int, dict] = {}  # tables 3/4, for the combined geomean grid
-    for table in (1, 2, 3, 4):
-        path = RESULTS_DIR / f"table{table}.json"
+    stacked = ("babble_comparison_rewrites", "babble_comparison_no_rewrites")
+    table_saved: dict[str, dict] = {}  # stacked tables, for the combined geomean grid
+    for table in ("babble_comparison_rewrites_single", "babble_comparison_no_rewrites_single", *stacked):
+        path = RESULTS_DIR / f"{table}.json"
         if not path.exists():
-            print(f"skipping table{table}: {path} not present", file=sys.stderr)
+            print(f"skipping {table}: {path} not present", file=sys.stderr)
             continue
         with open(path) as f:
             saved = json.load(f)
-        if table in (3, 4):
+        if table in stacked:
             table_saved[table] = saved
-        tex_path = FIGURES_DIR / f"table{table}.tex"
+        tex_path = FIGURES_DIR / f"{table}.tex"
         tex_path.write_text(f"% source: {path}\n" + render(saved, table) + "\n")
         print(f"wrote {tex_path}", file=sys.stderr)
         # Presentation variants of the stacked-abstraction tables: no size
         # columns, method columns tinted to match the plots.
-        if table in (3, 4):
-            pres_path = FIGURES_DIR / f"table{table}_presentation.tex"
+        if table in stacked:
+            pres_path = FIGURES_DIR / f"{table}_presentation.tex"
             pres_path.write_text(
                 f"% source: {path}\n"
                 + render(saved, table, presentation=True) + "\n")
             print(f"wrote {pres_path}", file=sys.stderr)
         # Drop the previous single-PNG-per-table output; the per-domain
         # files below replace it. Silent if it was already gone.
-        stale = FIGURES_DIR / f"table{table}.png"
+        stale = FIGURES_DIR / f"{table}.png"
         stale.unlink(missing_ok=True)
-        domain_dir = FIGURES_DIR / f"table{table}"
+        domain_dir = FIGURES_DIR / table
         domain_dir.mkdir(exist_ok=True)
         for domain in domains_for_table(table):
             if domain not in saved["domains"]:
@@ -1149,17 +1149,17 @@ def main() -> None:
             plot_path = domain_dir / f"{domain}.png"
             plot_domain(saved, table, domain, plot_path)
             print(f"wrote {plot_path}", file=sys.stderr)
-        geomean_path = FIGURES_DIR / f"table{table}_geomean.png"
+        geomean_path = FIGURES_DIR / f"{table}_geomean.png"
         plot_geomean(saved, table, geomean_path)
         print(f"wrote {geomean_path}", file=sys.stderr)
 
-    # Tables 5 & 7 (molecule scramble / EPFL circuit subsets) share a roster
-    # shape distinct from tables 1-4 (family rows, DSR baselines, no Stitch), so
+    # The molecule and EPFL circuit tables share a roster shape distinct from
+    # the babble-comparison tables (family rows, DSR baselines, no Stitch), so
     # they go through the FamilySpec renderers: a LaTeX table plus per-family and
     # geomean PNGs.
     notices: list[str] = []  # series-method sweep kick-downs, surfaced at the end
-    family_saved: dict[str, dict] = {}  # table5/table7, for the combined grid
-    for spec in (TABLE5_SPEC, TABLE7_SPEC, TABLE7_5_SPEC):
+    family_saved: dict[str, dict] = {}  # molecules/circuits, for the combined grid
+    for spec in (MOLECULES_SPEC, CIRCUITS_SPEC, CIRCUITS_ALL_SPEC):
         path = RESULTS_DIR / f"{spec.fig_subdir}.json"
         if not path.exists():
             print(f"skipping {spec.fig_subdir}: {path} not present", file=sys.stderr)
@@ -1173,19 +1173,19 @@ def main() -> None:
         print(f"wrote {tex_path}", file=sys.stderr)
         render_family(saved, spec)
         family_saved[spec.fig_subdir] = saved
-        # table5 also gets per-family molecule scramble trajectory figures.
-        if spec is TABLE5_SPEC:
+        # molecules also gets per-family molecule scramble trajectory figures.
+        if spec is MOLECULES_SPEC:
             render_molecules(saved, FIGURES_DIR / "molecules")
 
-    # Geomean panels for tables 3, 5, 7, 4 as separate figures plus one shared
+    # Geomean panels for the four main tables as separate figures plus one shared
     # legend figure, so a compound LaTeX figure can arrange them (each cell is
     # emitted only if its source JSON was present). Every panel uses the canonical
     # colors/labels, so the one legend figure applies to all of them.
     named_panels: list[tuple[str, dict]] = []
-    for name, kind, key in (("table3", "table", 3),
-                            ("table5", "family", TABLE5_SPEC),
-                            ("table7", "family", TABLE7_SPEC),
-                            ("table4", "table", 4)):
+    for name, kind, key in (("babble_comparison_rewrites", "table", "babble_comparison_rewrites"),
+                            ("molecules", "family", MOLECULES_SPEC),
+                            ("circuits", "family", CIRCUITS_SPEC),
+                            ("babble_comparison_no_rewrites", "table", "babble_comparison_no_rewrites")):
         if kind == "table" and key in table_saved:
             named_panels.append((name, _table_geomean_panel(table_saved[key], key)))
         elif kind == "family" and key.fig_subdir in family_saved:

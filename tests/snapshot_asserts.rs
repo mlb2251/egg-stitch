@@ -240,7 +240,7 @@ fn check_regen(circuit: &str) {
 }
 
 /// One trial per committed corpus, named `corpus_regenerates::<circuit>`. All 20
-/// EPFL circuits are committed (table7 reports five of them, table7_5 all of
+/// EPFL circuits are committed (the circuits table reports five of them, circuits_all all of
 /// them), so all 20 are checked.
 mod corpus_regenerates {
     use super::check_regen;

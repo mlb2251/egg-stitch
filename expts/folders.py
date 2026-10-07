@@ -20,7 +20,7 @@ SUMMARY_RESULTS_DIR = Path(__file__).parent.parent / "results"
 
 def summary_results_path(name: str) -> Path:
     """Return the absolute path for a checked-in summary JSON (e.g.
-    ``results/table1.json``), creating the parent folder as needed."""
+    ``results/babble_comparison_rewrites_single.json``), creating the parent folder as needed."""
     SUMMARY_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     return SUMMARY_RESULTS_DIR / name
 

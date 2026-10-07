@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Attribute every babble DNF in tables 3/5/7 to one of babble's pipeline phases.
+"""Attribute every babble DNF in the babble_comparison_rewrites,
+molecules and circuits tables to one of babble's pipeline phases.
 
 Re-runs each DNF cell under ``RUST_LOG=info``, which brackets each phase of a
 round -- DSR saturation, co-occurrence, anti-unification, dedup, beam search,
@@ -32,7 +33,7 @@ from expts.run_models.babble import (  # noqa: E402
 from expts.runner import _RESOURCE_KILL_SIGNALS, domain_type, input_files, rewrites_path  # noqa: E402
 
 # The tables that run babble with DSRs live, i.e. the ones whose cells can DNF.
-TABLES = ("table3.json", "table5.json", "table7.json")
+TABLES = ("babble_comparison_rewrites.json", "molecules.json", "circuits.json")
 
 # Only these domain types have an op-children babble binary the script can drive.
 BINARIES = {"molecules": babble_molecules_bin, "epfl-circuits": babble_circuits_bin}

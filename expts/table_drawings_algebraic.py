@@ -8,7 +8,7 @@ assoc/comm, scale/translate interchange) — they expose multiple equivalent nor
 forms whose best choice depends on the library being built. Live keeps all forms
 so each abstraction can align to the matching one; at-start commits to a single
 greedy min-term up front, so live wins (and the gap widens with expressiveness).
-Same roster shape as table5/7 (Enum/SMC sweeps + dsrs-only-at-start baseline, no
+Same roster shape as molecules/circuits (Enum/SMC sweeps + dsrs-only-at-start baseline, no
 babble — it can't parse the constant_folding/matmul directives).
 
 Kept out of the main ``tables`` / ``render_tables`` pipeline because it isn't used
@@ -70,7 +70,7 @@ def _runners() -> tuple[tuple[str, object], ...]:
 
 def table_drawings_algebraic() -> Path:
     """Run the cogsci drawing domains with the non-confluent algebraic DSRs: the
-    table5/7 roster (Enum/SMC sweeps + dsrs-only-at-start baseline, no babble) at
+    molecules/circuits roster (Enum/SMC sweeps + dsrs-only-at-start baseline, no babble) at
     arity 4 with the per-factor match-set cap. Demonstrates live > at-start on a
     non-confluent rule set. Writes ``results/table_drawings_algebraic.json``."""
     _require_free_memory("table_drawings_algebraic")

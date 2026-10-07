@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Delete the cached E-Stitch results that appear as cells in the main tables
-(1-5, 7), so that re-running those tables recomputes only them.
+"""Delete the cached E-Stitch results that appear as cells in the tables in
+``TABLES``, so that re-running those tables recomputes only them.
 
 Babble/Stitch caches and the rest of the BFS/SMC sweeps are kept. The files are
 checked into git, so ``git restore results/`` undoes this.
@@ -15,23 +15,23 @@ from expts.folders import SUMMARY_RESULTS_DIR  # noqa: E402
 from expts.render_common import reported_sweep_point  # noqa: E402
 from expts.tables import (  # noqa: E402
     SMC_PARTICLE_SWEEP,
-    TABLE5_BFS_SWEEP,
-    TABLE5_ENUM_POINT,
-    TABLE7_BFS_SWEEP,
-    TABLE7_SMC_SWEEP,
+    MOLECULES_BFS_SWEEP,
+    MOLECULES_ENUM_POINT,
+    CIRCUITS_BFS_SWEEP,
+    CIRCUITS_SMC_SWEEP,
     TABLE_BFS_STEPS,
     TABLE_SMC_PARTICLES,
 )
 
-# table -> (enum point, enum sweep, smc sweep). Tables 1-4 never kick down from
+# table -> (enum point, enum sweep, smc sweep). The babble comparisons never kick down from
 # their configured point, so their sweeps are just that point.
 TABLES = {
-    "table1": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
-    "table2": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
-    "table3": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
-    "table4": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
-    "table5": (TABLE5_ENUM_POINT, TABLE5_BFS_SWEEP, SMC_PARTICLE_SWEEP),
-    "table7": (TABLE_BFS_STEPS, TABLE7_BFS_SWEEP, TABLE7_SMC_SWEEP),
+    "babble_comparison_rewrites_single": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
+    "babble_comparison_no_rewrites_single": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
+    "babble_comparison_rewrites": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
+    "babble_comparison_no_rewrites": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
+    "molecules": (MOLECULES_ENUM_POINT, MOLECULES_BFS_SWEEP, SMC_PARTICLE_SWEEP),
+    "circuits": (TABLE_BFS_STEPS, CIRCUITS_BFS_SWEEP, CIRCUITS_SMC_SWEEP),
 }
 
 
