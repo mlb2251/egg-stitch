@@ -36,8 +36,15 @@ cp "$root/../stitch/Cargo.lock" "$build/stitch/"
 cd "$build"
 cargo vendor --locked --manifest-path egg-stitch/Cargo.toml \
     -s babble/Cargo.toml -s stitch/Cargo.toml vendor > cargo-config.toml
-# The image's Python is 3.12 on x86-64 Linux, so these wheels must come from the same.
-python3 -m pip wheel -q --no-deps -r egg-stitch/requirements-lock.txt -w wheels
+# Wheels for the image's Python (CPython 3.12, x86-64 Linux), whatever Python runs this.
+grep -v -e '^#' -e '^s-exp-parser==' egg-stitch/requirements-lock.txt > binary-reqs.txt
+python3 -m pip download -q --no-deps --only-binary=:all: --implementation cp \
+    --python-version 3.12 --abi cp312 --platform manylinux_2_28_x86_64 \
+    --platform manylinux_2_17_x86_64 --platform manylinux2014_x86_64 \
+    -r binary-reqs.txt -d wheels
+rm binary-reqs.txt
+# s-exp-parser only publishes an sdist; it's pure Python, so a locally built wheel works.
+python3 -m pip wheel -q --no-deps "$(grep '^s-exp-parser==' egg-stitch/requirements-lock.txt)" -w wheels
 cp "$here/Dockerfile" .
 sed -e "s/@ESTITCH_COMMIT@/$estitch_commit/" -e "s/@BABBLE_COMMIT@/$babble_commit/" \
     -e "s/@STITCH_COMMIT@/$stitch_commit/" "$here/README.md" > README.md
