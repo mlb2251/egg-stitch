@@ -1,7 +1,7 @@
 """Wrapper around the external stitch compressor.
 
 stitch doesn't accept DSRs, so the runner asserts ``rewrites_path is None``
-unless ``ignore_dsrs`` is set — the DSR tables (5/7) carry stitch as a
+unless ``ignore_dsrs`` is set — the molecules and circuits tables carry stitch as a
 no-DSR reference point alongside our own no-rules baseline.
 The cost-flag selection keeps stitch's internal scoring lined up with the
 runner's uniform :func:`expts.runner.ast_size`: at ``no-apps`` weighting all

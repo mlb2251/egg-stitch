@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Delete the cached E-Stitch results that appear as cells in the main tables
-(1-5, 7), so that re-running those tables recomputes only them.
+"""Delete the cached E-Stitch results that appear as cells in the tables in
+``TABLES``, so that re-running those tables recomputes only them.
 
 Babble/Stitch caches and the rest of the BFS/SMC sweeps are kept. The files are
 checked into git, so ``git restore results/`` undoes this.

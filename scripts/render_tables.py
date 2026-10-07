@@ -817,9 +817,9 @@ CIRCUITS_SPEC = FamilySpec.estitch_roster(
     ],
 )
 
-# circuits.5: the same roster over all 20 EPFL circuits, so the reader can see what
+# circuits_all: the same roster over all 20 EPFL circuits, so the reader can see what
 # the circuits table's median filter on diversity/redundancy does to the margins. The five
-# circuits circuits keep their labels, so the two tables read against each other.
+# circuits-table circuits keep their labels, so the two tables read against each other.
 CIRCUITS_ALL_SPEC = FamilySpec.estitch_roster(
     title="EPFL Circuit Compression, Full Suite (Factoring DSRs)",
     fig_subdir="circuits_all",
