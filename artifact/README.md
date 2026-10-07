@@ -57,8 +57,8 @@ cache used for the paper is included. Render scripts write to `figures/`.
 | Figure 10 | the four main tables | `render_tables.py` | `curve-grid/` |
 | Figure 11 | `arity_experiment` | `render_arity.py` | `arity/` |
 
-Render scripts are in `scripts/`. `babble_comparison_rewrites_single` and `babble_comparison_no_rewrites_single` are
-not in the paper.
+Render scripts are in `scripts/`. `babble_comparison_rewrites_single` and
+`babble_comparison_no_rewrites_single` are not in the paper.
 
 ### 1. Render from cached results (minutes)
 
