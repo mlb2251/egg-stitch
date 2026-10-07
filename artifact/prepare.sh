@@ -26,8 +26,10 @@ fi
 
 rm -rf "$build"
 mkdir -p "$build"
-clone egg-stitch https://github.com/mlb2251/egg-stitch.git "$(git -C "$root" rev-parse HEAD)"
-clone babble https://github.com/kavigupta/babble.git "$(pin BABBLE_COMMIT babble)"
+estitch_commit=$(git -C "$root" rev-parse HEAD)
+babble_commit=$(pin BABBLE_COMMIT babble)
+clone egg-stitch https://github.com/mlb2251/egg-stitch.git "$estitch_commit"
+clone babble https://github.com/kavigupta/babble.git "$babble_commit"
 clone stitch https://github.com/mlb2251/stitch.git "$stitch_commit"
 cp "$root/../stitch/Cargo.lock" "$build/stitch/"
 
@@ -36,5 +38,7 @@ cargo vendor --locked --manifest-path egg-stitch/Cargo.toml \
     -s babble/Cargo.toml -s stitch/Cargo.toml vendor > cargo-config.toml
 # The image's Python is 3.12 on x86-64 Linux, so these wheels must come from the same.
 python3 -m pip wheel -q --no-deps -r egg-stitch/requirements-lock.txt -w wheels
-cp "$here/Dockerfile" "$here/README.md" .
+cp "$here/Dockerfile" .
+sed -e "s/@ESTITCH_COMMIT@/$estitch_commit/" -e "s/@BABBLE_COMMIT@/$babble_commit/" \
+    -e "s/@STITCH_COMMIT@/$stitch_commit/" "$here/README.md" > README.md
 echo "build context ready: $build"

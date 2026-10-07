@@ -6,9 +6,9 @@ table and figure in the paper's evaluation.
 
 | Repository | Pinned commit | Source |
 | --- | --- | --- |
-| egg-stitch (E-Stitch) | see `git -C /artifact/egg-stitch log -1` | https://github.com/mlb2251/egg-stitch |
-| babble | `dd6a1f5` | https://github.com/kavigupta/babble |
-| Stitch | `350804b` | https://github.com/mlb2251/stitch |
+| egg-stitch (E-Stitch) | `@ESTITCH_COMMIT@` | https://github.com/mlb2251/egg-stitch |
+| babble | `@BABBLE_COMMIT@` | https://github.com/kavigupta/babble |
+| Stitch | `@STITCH_COMMIT@` | https://github.com/mlb2251/stitch |
 
 The GitHub repositories are where development continues. This archive is
 frozen at the commits the paper's numbers were produced with.
