@@ -56,13 +56,7 @@ and figures to `figures/`. Results are cached per (method, domain) under
 | Figure 10 | the four main tables | `curve-grid/` |
 | Figure 11 | `arity_experiment` | `arity/` |
 
-### 1. Render from cached results (minutes)
-
-```bash
-bash scripts/run_all_tables.sh
-```
-
-### 2. Recompute E-Stitch cells in the main paper tables (TODO hours)
+### 1. Recompute E-Stitch cells in the main paper tables (TODO hours)
 
 All other results are read from the cache.
 
@@ -73,7 +67,7 @@ bash scripts/run_all_tables.sh
 
 `git restore results/` restores the original cache.
 
-### 3. Rerun everything (TODO days)
+### 2. Rerun everything (TODO days)
 
 ```bash
 rm -rf results/
