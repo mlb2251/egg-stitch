@@ -8,7 +8,7 @@
         "initial_cost": 4370,
         "final_cost": 1008,
         "compression_ratio": 4.3353174603174605,
-        "elapsed_secs": 0.9690730571746826,
+        "elapsed_secs": 0.8357973098754883,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m4 C (s1 H) (s1 H) (fn_0 ?#0) (fn_0 (fn_0 ?#1)))",
@@ -22,7 +22,9 @@
           1382,
           1143,
           1009
-        ]
+        ],
+        "num_steps_run": 33,
+        "egg_compression_ratio": 4.3320118929633304
       }
     ],
     [
@@ -33,7 +35,7 @@
         "initial_cost": 4370,
         "final_cost": 1008,
         "compression_ratio": 4.3353174603174605,
-        "elapsed_secs": 0.9059877395629883,
+        "elapsed_secs": 0.8110885620117188,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m4 C (s1 H) (s1 H) (fn_0 ?#0) (fn_0 (fn_0 ?#1)))",
@@ -47,7 +49,9 @@
           1382,
           1143,
           1009
-        ]
+        ],
+        "num_steps_run": 33,
+        "egg_compression_ratio": 4.3320118929633304
       }
     ],
     [
@@ -58,7 +62,7 @@
         "initial_cost": 4370,
         "final_cost": 1008,
         "compression_ratio": 4.3353174603174605,
-        "elapsed_secs": 0.9018657207489014,
+        "elapsed_secs": 0.8041317462921143,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (m4 C (s1 H) (s1 H) (fn_0 ?#0) (fn_0 (fn_0 ?#1)))",
@@ -72,7 +76,9 @@
           1382,
           1143,
           1009
-        ]
+        ],
+        "num_steps_run": 33,
+        "egg_compression_ratio": 4.3320118929633304
       }
     ]
   ],
@@ -85,7 +91,7 @@
         "initial_cost": 3556,
         "final_cost": 1190,
         "compression_ratio": 2.988235294117647,
-        "elapsed_secs": 0.7057955265045166,
+        "elapsed_secs": 0.6314520835876465,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (s1 H)",
@@ -99,7 +105,9 @@
           1549,
           1353,
           1191
-        ]
+        ],
+        "num_steps_run": 21,
+        "egg_compression_ratio": 2.9865659109991602
       }
     ],
     [
@@ -110,7 +118,7 @@
         "initial_cost": 3556,
         "final_cost": 1190,
         "compression_ratio": 2.988235294117647,
-        "elapsed_secs": 0.6979467868804932,
+        "elapsed_secs": 0.635509729385376,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (s1 H)",
@@ -124,7 +132,9 @@
           1549,
           1353,
           1191
-        ]
+        ],
+        "num_steps_run": 21,
+        "egg_compression_ratio": 2.9865659109991602
       }
     ],
     [
@@ -135,7 +145,7 @@
         "initial_cost": 3556,
         "final_cost": 1190,
         "compression_ratio": 2.988235294117647,
-        "elapsed_secs": 0.6887874603271484,
+        "elapsed_secs": 0.639350175857544,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (s1 H)",
@@ -149,7 +159,9 @@
           1549,
           1353,
           1191
-        ]
+        ],
+        "num_steps_run": 21,
+        "egg_compression_ratio": 2.9865659109991602
       }
     ]
   ],
@@ -162,7 +174,7 @@
         "initial_cost": 2976,
         "final_cost": 827,
         "compression_ratio": 3.5985489721886337,
-        "elapsed_secs": 0.43641066551208496,
+        "elapsed_secs": 0.4272804260253906,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (s2 O (fn_0 (fn_0 (s2 O ?#0))))",
@@ -176,7 +188,9 @@
           1181,
           954,
           828
-        ]
+        ],
+        "num_steps_run": 40,
+        "egg_compression_ratio": 3.595410628019324
       }
     ],
     [
@@ -187,7 +201,7 @@
         "initial_cost": 2976,
         "final_cost": 827,
         "compression_ratio": 3.5985489721886337,
-        "elapsed_secs": 0.4307994842529297,
+        "elapsed_secs": 0.4240422248840332,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (s2 O (fn_0 (fn_0 (s2 O ?#0))))",
@@ -201,7 +215,9 @@
           1181,
           954,
           828
-        ]
+        ],
+        "num_steps_run": 40,
+        "egg_compression_ratio": 3.595410628019324
       }
     ],
     [
@@ -212,7 +228,7 @@
         "initial_cost": 2976,
         "final_cost": 827,
         "compression_ratio": 3.5985489721886337,
-        "elapsed_secs": 0.43178725242614746,
+        "elapsed_secs": 0.40851759910583496,
         "library": [
           "fn_0: (s4 C (s1 H) (s1 H) ?#0)",
           "fn_1: (s2 O (fn_0 (fn_0 (s2 O ?#0))))",
@@ -226,7 +242,9 @@
           1181,
           954,
           828
-        ]
+        ],
+        "num_steps_run": 40,
+        "egg_compression_ratio": 3.595410628019324
       }
     ]
   ]

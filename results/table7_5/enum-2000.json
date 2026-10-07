@@ -8,7 +8,7 @@
         "initial_cost": 23033,
         "final_cost": 6006,
         "compression_ratio": 3.834998334998335,
-        "elapsed_secs": 0.8171095848083496,
+        "elapsed_secs": 0.8715629577636719,
         "library": [
           "fn_0: (not (or (and ?#0 ?#1) (not (or ?#0 ?#1))))",
           "fn_1: (or (and (or ?#0 ?#1) ?#2) (and ?#0 ?#1))",
@@ -35,7 +35,7 @@
         "initial_cost": 23033,
         "final_cost": 6006,
         "compression_ratio": 3.834998334998335,
-        "elapsed_secs": 0.8151233196258545,
+        "elapsed_secs": 0.8507480621337891,
         "library": [
           "fn_0: (not (or (and ?#0 ?#1) (not (or ?#0 ?#1))))",
           "fn_1: (or (and (or ?#0 ?#1) ?#2) (and ?#0 ?#1))",
@@ -62,7 +62,7 @@
         "initial_cost": 23033,
         "final_cost": 6006,
         "compression_ratio": 3.834998334998335,
-        "elapsed_secs": 0.8103458881378174,
+        "elapsed_secs": 0.8484082221984863,
         "library": [
           "fn_0: (not (or (and ?#0 ?#1) (not (or ?#0 ?#1))))",
           "fn_1: (or (and (or ?#0 ?#1) ?#2) (and ?#0 ?#1))",
@@ -91,7 +91,7 @@
         "initial_cost": 12561,
         "final_cost": 6365,
         "compression_ratio": 1.9734485467399843,
-        "elapsed_secs": 0.1465768814086914,
+        "elapsed_secs": 0.14899301528930664,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) ?#2)",
           "fn_1: (and (not (fn_0 ?#0 ?#1 ?#2)) ?#3)",
@@ -118,7 +118,7 @@
         "initial_cost": 12561,
         "final_cost": 6365,
         "compression_ratio": 1.9734485467399843,
-        "elapsed_secs": 0.15342307090759277,
+        "elapsed_secs": 0.15139079093933105,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) ?#2)",
           "fn_1: (and (not (fn_0 ?#0 ?#1 ?#2)) ?#3)",
@@ -145,7 +145,7 @@
         "initial_cost": 12561,
         "final_cost": 6365,
         "compression_ratio": 1.9734485467399843,
-        "elapsed_secs": 0.1526937484741211,
+        "elapsed_secs": 0.15001153945922852,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) ?#2)",
           "fn_1: (and (not (fn_0 ?#0 ?#1 ?#2)) ?#3)",
@@ -174,7 +174,7 @@
         "initial_cost": 13609,
         "final_cost": 7596,
         "compression_ratio": 1.7916008425487098,
-        "elapsed_secs": 3.5452659130096436,
+        "elapsed_secs": 3.532167434692383,
         "library": [
           "fn_0: (not (or (not ?#0) (and (not ?#1) ?#2)))",
           "fn_1: (fn_0 (not ?#0) ?#1 ?#2)",
@@ -201,7 +201,7 @@
         "initial_cost": 13609,
         "final_cost": 7596,
         "compression_ratio": 1.7916008425487098,
-        "elapsed_secs": 3.4161083698272705,
+        "elapsed_secs": 3.5307793617248535,
         "library": [
           "fn_0: (not (or (not ?#0) (and (not ?#1) ?#2)))",
           "fn_1: (fn_0 (not ?#0) ?#1 ?#2)",
@@ -228,7 +228,7 @@
         "initial_cost": 13609,
         "final_cost": 7596,
         "compression_ratio": 1.7916008425487098,
-        "elapsed_secs": 3.426470994949341,
+        "elapsed_secs": 3.5388147830963135,
         "library": [
           "fn_0: (not (or (not ?#0) (and (not ?#1) ?#2)))",
           "fn_1: (fn_0 (not ?#0) ?#1 ?#2)",
@@ -257,7 +257,7 @@
         "initial_cost": 10055,
         "final_cost": 5836,
         "compression_ratio": 1.722926662097327,
-        "elapsed_secs": 16.274625301361084,
+        "elapsed_secs": 16.812535285949707,
         "library": [
           "fn_0: (not (or (not (or (not ?#0) ?#1)) ?#2))",
           "fn_1: (and (not ?#0) ?#1)",
@@ -284,7 +284,7 @@
         "initial_cost": 10055,
         "final_cost": 5836,
         "compression_ratio": 1.722926662097327,
-        "elapsed_secs": 16.909149885177612,
+        "elapsed_secs": 16.92917251586914,
         "library": [
           "fn_0: (not (or (not (or (not ?#0) ?#1)) ?#2))",
           "fn_1: (and (not ?#0) ?#1)",
@@ -311,7 +311,7 @@
         "initial_cost": 10055,
         "final_cost": 5836,
         "compression_ratio": 1.722926662097327,
-        "elapsed_secs": 16.72650933265686,
+        "elapsed_secs": 17.367131233215332,
         "library": [
           "fn_0: (not (or (not (or (not ?#0) ?#1)) ?#2))",
           "fn_1: (and (not ?#0) ?#1)",
@@ -340,7 +340,7 @@
         "initial_cost": 3349,
         "final_cost": 1741,
         "compression_ratio": 1.9236071223434807,
-        "elapsed_secs": 1.1080825328826904,
+        "elapsed_secs": 1.1591424942016602,
         "library": [
           "fn_0: (not (or (not (or (and (not ?#0) ?#1) ?#2)) (not ?#3)))",
           "fn_1: (fn_0 ?#0 ?#1 ?#2 (not ?#3))",
@@ -367,7 +367,7 @@
         "initial_cost": 3349,
         "final_cost": 1741,
         "compression_ratio": 1.9236071223434807,
-        "elapsed_secs": 1.098320484161377,
+        "elapsed_secs": 1.177473545074463,
         "library": [
           "fn_0: (not (or (not (or (and (not ?#0) ?#1) ?#2)) (not ?#3)))",
           "fn_1: (fn_0 ?#0 ?#1 ?#2 (not ?#3))",
@@ -394,7 +394,7 @@
         "initial_cost": 3349,
         "final_cost": 1741,
         "compression_ratio": 1.9236071223434807,
-        "elapsed_secs": 1.0939817428588867,
+        "elapsed_secs": 1.175445318222046,
         "library": [
           "fn_0: (not (or (not (or (and (not ?#0) ?#1) ?#2)) (not ?#3)))",
           "fn_1: (fn_0 ?#0 ?#1 ?#2 (not ?#3))",
@@ -423,7 +423,7 @@
         "initial_cost": 3522,
         "final_cost": 2402,
         "compression_ratio": 1.466278101582015,
-        "elapsed_secs": 1.3585073947906494,
+        "elapsed_secs": 1.4421539306640625,
         "library": [
           "fn_0: (and (and (not ?#0) (and ?#1 ?#2)) ?#3)",
           "fn_1: (and (and ?#0 ?#1) ?#2)",
@@ -450,7 +450,7 @@
         "initial_cost": 3522,
         "final_cost": 2402,
         "compression_ratio": 1.466278101582015,
-        "elapsed_secs": 1.35799241065979,
+        "elapsed_secs": 1.448211431503296,
         "library": [
           "fn_0: (and (and (not ?#0) (and ?#1 ?#2)) ?#3)",
           "fn_1: (and (and ?#0 ?#1) ?#2)",
@@ -477,7 +477,7 @@
         "initial_cost": 3522,
         "final_cost": 2402,
         "compression_ratio": 1.466278101582015,
-        "elapsed_secs": 1.3593733310699463,
+        "elapsed_secs": 1.4420814514160156,
         "library": [
           "fn_0: (and (and (not ?#0) (and ?#1 ?#2)) ?#3)",
           "fn_1: (and (and ?#0 ?#1) ?#2)",
@@ -506,7 +506,7 @@
         "initial_cost": 21583,
         "final_cost": 8423,
         "compression_ratio": 2.562388697613677,
-        "elapsed_secs": 7.688758850097656,
+        "elapsed_secs": 8.220728397369385,
         "library": [
           "fn_0: (not (or (and (not (or ?#0 ?#1)) ?#2) (and (or ?#0 ?#1) (not ?#2))))",
           "fn_1: (and (or (not (or ?#0 ?#1)) ?#2) ?#3)",
@@ -533,7 +533,7 @@
         "initial_cost": 21583,
         "final_cost": 8423,
         "compression_ratio": 2.562388697613677,
-        "elapsed_secs": 7.710357189178467,
+        "elapsed_secs": 8.247565031051636,
         "library": [
           "fn_0: (not (or (and (not (or ?#0 ?#1)) ?#2) (and (or ?#0 ?#1) (not ?#2))))",
           "fn_1: (and (or (not (or ?#0 ?#1)) ?#2) ?#3)",
@@ -560,7 +560,7 @@
         "initial_cost": 21583,
         "final_cost": 8423,
         "compression_ratio": 2.562388697613677,
-        "elapsed_secs": 7.707535028457642,
+        "elapsed_secs": 8.272865533828735,
         "library": [
           "fn_0: (not (or (and (not (or ?#0 ?#1)) ?#2) (and (or ?#0 ?#1) (not ?#2))))",
           "fn_1: (and (or (not (or ?#0 ?#1)) ?#2) ?#3)",
@@ -589,7 +589,7 @@
         "initial_cost": 22455,
         "final_cost": 8693,
         "compression_ratio": 2.5831128494190727,
-        "elapsed_secs": 19.651198387145996,
+        "elapsed_secs": 21.076509952545166,
         "library": [
           "fn_0: (not (or (and ?#0 ?#1) (not (or ?#0 ?#1))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -616,7 +616,7 @@
         "initial_cost": 22455,
         "final_cost": 8693,
         "compression_ratio": 2.5831128494190727,
-        "elapsed_secs": 19.82462978363037,
+        "elapsed_secs": 20.916495323181152,
         "library": [
           "fn_0: (not (or (and ?#0 ?#1) (not (or ?#0 ?#1))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -643,7 +643,7 @@
         "initial_cost": 22455,
         "final_cost": 8693,
         "compression_ratio": 2.5831128494190727,
-        "elapsed_secs": 19.696099758148193,
+        "elapsed_secs": 20.160853147506714,
         "library": [
           "fn_0: (not (or (and ?#0 ?#1) (not (or ?#0 ?#1))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -672,7 +672,7 @@
         "initial_cost": 12124,
         "final_cost": 7554,
         "compression_ratio": 1.604977495366693,
-        "elapsed_secs": 36.95023989677429,
+        "elapsed_secs": 39.48621201515198,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (and (not (or ?#0 ?#1)) ?#2)",
@@ -699,7 +699,7 @@
         "initial_cost": 12124,
         "final_cost": 7554,
         "compression_ratio": 1.604977495366693,
-        "elapsed_secs": 36.95616841316223,
+        "elapsed_secs": 39.44294738769531,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (and (not (or ?#0 ?#1)) ?#2)",
@@ -726,7 +726,7 @@
         "initial_cost": 12124,
         "final_cost": 7554,
         "compression_ratio": 1.604977495366693,
-        "elapsed_secs": 38.02717614173889,
+        "elapsed_secs": 38.46047377586365,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (and (not (or ?#0 ?#1)) ?#2)",
@@ -755,7 +755,7 @@
         "initial_cost": 2978,
         "final_cost": 1801,
         "compression_ratio": 1.6535258189894504,
-        "elapsed_secs": 7.377452373504639,
+        "elapsed_secs": 7.452963829040527,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#2))",
           "fn_1: (and (not ?#0) ?#1)",
@@ -782,7 +782,7 @@
         "initial_cost": 2978,
         "final_cost": 1801,
         "compression_ratio": 1.6535258189894504,
-        "elapsed_secs": 7.421955108642578,
+        "elapsed_secs": 7.711305856704712,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#2))",
           "fn_1: (and (not ?#0) ?#1)",
@@ -809,7 +809,7 @@
         "initial_cost": 2978,
         "final_cost": 1801,
         "compression_ratio": 1.6535258189894504,
-        "elapsed_secs": 7.412431001663208,
+        "elapsed_secs": 7.790879726409912,
         "library": [
           "fn_0: (and (or (not ?#0) ?#1) (or (not ?#1) ?#2))",
           "fn_1: (and (not ?#0) ?#1)",
@@ -838,7 +838,7 @@
         "initial_cost": 29748,
         "final_cost": 9505,
         "compression_ratio": 3.1297211993687535,
-        "elapsed_secs": 81.18233323097229,
+        "elapsed_secs": 85.35867857933044,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -865,7 +865,7 @@
         "initial_cost": 29748,
         "final_cost": 9505,
         "compression_ratio": 3.1297211993687535,
-        "elapsed_secs": 80.91510272026062,
+        "elapsed_secs": 86.05700159072876,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -892,7 +892,7 @@
         "initial_cost": 29748,
         "final_cost": 9505,
         "compression_ratio": 3.1297211993687535,
-        "elapsed_secs": 79.52710723876953,
+        "elapsed_secs": 87.35842108726501,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -921,7 +921,7 @@
         "initial_cost": 17265,
         "final_cost": 8535,
         "compression_ratio": 2.022847100175747,
-        "elapsed_secs": 1.9100899696350098,
+        "elapsed_secs": 1.9777576923370361,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (fn_0 ?#0 ?#1 (not ?#2))",
@@ -948,7 +948,7 @@
         "initial_cost": 17265,
         "final_cost": 8535,
         "compression_ratio": 2.022847100175747,
-        "elapsed_secs": 1.8794665336608887,
+        "elapsed_secs": 1.9804096221923828,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (fn_0 ?#0 ?#1 (not ?#2))",
@@ -975,7 +975,7 @@
         "initial_cost": 17265,
         "final_cost": 8535,
         "compression_ratio": 2.022847100175747,
-        "elapsed_secs": 1.8873693943023682,
+        "elapsed_secs": 1.9694335460662842,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (fn_0 ?#0 ?#1 (not ?#2))",
@@ -1004,7 +1004,7 @@
         "initial_cost": 16708,
         "final_cost": 9351,
         "compression_ratio": 1.7867607742487435,
-        "elapsed_secs": 13.989211559295654,
+        "elapsed_secs": 14.883148193359375,
         "library": [
           "fn_0: (not (or (not (or ?#0 (not ?#1))) ?#2))",
           "fn_1: (fn_0 ?#0 ?#1 (not ?#2))",
@@ -1031,7 +1031,7 @@
         "initial_cost": 16708,
         "final_cost": 9351,
         "compression_ratio": 1.7867607742487435,
-        "elapsed_secs": 14.295114278793335,
+        "elapsed_secs": 14.850328207015991,
         "library": [
           "fn_0: (not (or (not (or ?#0 (not ?#1))) ?#2))",
           "fn_1: (fn_0 ?#0 ?#1 (not ?#2))",
@@ -1058,7 +1058,7 @@
         "initial_cost": 16708,
         "final_cost": 9351,
         "compression_ratio": 1.7867607742487435,
-        "elapsed_secs": 14.039793729782104,
+        "elapsed_secs": 14.595292091369629,
         "library": [
           "fn_0: (not (or (not (or ?#0 (not ?#1))) ?#2))",
           "fn_1: (fn_0 ?#0 ?#1 (not ?#2))",
@@ -1087,7 +1087,7 @@
         "initial_cost": 36301,
         "final_cost": 9292,
         "compression_ratio": 3.9066939302625916,
-        "elapsed_secs": 113.82014727592468,
+        "elapsed_secs": 115.17001819610596,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and ?#0 ?#1) ?#2))",
@@ -1114,7 +1114,7 @@
         "initial_cost": 36301,
         "final_cost": 9292,
         "compression_ratio": 3.9066939302625916,
-        "elapsed_secs": 114.0806839466095,
+        "elapsed_secs": 114.39392495155334,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and ?#0 ?#1) ?#2))",
@@ -1141,7 +1141,7 @@
         "initial_cost": 36301,
         "final_cost": 9292,
         "compression_ratio": 3.9066939302625916,
-        "elapsed_secs": 110.60442233085632,
+        "elapsed_secs": 114.23279881477356,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and (not ?#1) ?#0)))",
           "fn_1: (not (or (and ?#0 ?#1) ?#2))",
@@ -1170,7 +1170,7 @@
         "initial_cost": 21422,
         "final_cost": 8043,
         "compression_ratio": 2.6634340420241203,
-        "elapsed_secs": 9.31325387954712,
+        "elapsed_secs": 9.721975088119507,
         "library": [
           "fn_0: (not (or (not (or ?#0 ?#1)) (and ?#0 (not ?#2))))",
           "fn_1: (not (fn_0 ?#0 ?#1 (fn_0 ?#2 (not ?#3) ?#1)))",
@@ -1197,7 +1197,7 @@
         "initial_cost": 21422,
         "final_cost": 8043,
         "compression_ratio": 2.6634340420241203,
-        "elapsed_secs": 9.367221355438232,
+        "elapsed_secs": 9.83893871307373,
         "library": [
           "fn_0: (not (or (not (or ?#0 ?#1)) (and ?#0 (not ?#2))))",
           "fn_1: (not (fn_0 ?#0 ?#1 (fn_0 ?#2 (not ?#3) ?#1)))",
@@ -1224,7 +1224,7 @@
         "initial_cost": 21422,
         "final_cost": 8043,
         "compression_ratio": 2.6634340420241203,
-        "elapsed_secs": 9.727149486541748,
+        "elapsed_secs": 9.62770414352417,
         "library": [
           "fn_0: (not (or (not (or ?#0 ?#1)) (and ?#0 (not ?#2))))",
           "fn_1: (not (fn_0 ?#0 ?#1 (fn_0 ?#2 (not ?#3) ?#1)))",
@@ -1253,7 +1253,7 @@
         "initial_cost": 4153,
         "final_cost": 2525,
         "compression_ratio": 1.6447524752475247,
-        "elapsed_secs": 33.002275466918945,
+        "elapsed_secs": 33.16478991508484,
         "library": [
           "fn_0: (not (or ?#0 (not (and ?#1 ?#2))))",
           "fn_1: (and (not (and ?#0 ?#1)) (or ?#0 ?#1))",
@@ -1280,7 +1280,7 @@
         "initial_cost": 4153,
         "final_cost": 2525,
         "compression_ratio": 1.6447524752475247,
-        "elapsed_secs": 32.179455041885376,
+        "elapsed_secs": 35.81913876533508,
         "library": [
           "fn_0: (not (or ?#0 (not (and ?#1 ?#2))))",
           "fn_1: (and (not (and ?#0 ?#1)) (or ?#0 ?#1))",
@@ -1307,7 +1307,7 @@
         "initial_cost": 4153,
         "final_cost": 2525,
         "compression_ratio": 1.6447524752475247,
-        "elapsed_secs": 31.950359582901,
+        "elapsed_secs": 33.06231737136841,
         "library": [
           "fn_0: (not (or ?#0 (not (and ?#1 ?#2))))",
           "fn_1: (and (not (and ?#0 ?#1)) (or ?#0 ?#1))",
@@ -1336,7 +1336,7 @@
         "initial_cost": 26766,
         "final_cost": 9779,
         "compression_ratio": 2.7370896819715718,
-        "elapsed_secs": 139.61925148963928,
+        "elapsed_secs": 143.2112216949463,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 (not ?#1))))",
           "fn_1: (not (or (or (not ?#0) ?#1) ?#2))",
@@ -1363,7 +1363,7 @@
         "initial_cost": 26766,
         "final_cost": 9779,
         "compression_ratio": 2.7370896819715718,
-        "elapsed_secs": 139.4692759513855,
+        "elapsed_secs": 144.0248827934265,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 (not ?#1))))",
           "fn_1: (not (or (or (not ?#0) ?#1) ?#2))",
@@ -1390,7 +1390,7 @@
         "initial_cost": 26766,
         "final_cost": 9779,
         "compression_ratio": 2.7370896819715718,
-        "elapsed_secs": 139.01343202590942,
+        "elapsed_secs": 141.69827699661255,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 (not ?#1))))",
           "fn_1: (not (or (or (not ?#0) ?#1) ?#2))",
@@ -1419,7 +1419,7 @@
         "initial_cost": 19732,
         "final_cost": 8465,
         "compression_ratio": 2.3310100413467216,
-        "elapsed_secs": 47.65721416473389,
+        "elapsed_secs": 48.28156781196594,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (fn_0 (or ?#0 ?#1) ?#2 (fn_0 ?#0 (not ?#1) ?#2))",
@@ -1446,7 +1446,7 @@
         "initial_cost": 19732,
         "final_cost": 8465,
         "compression_ratio": 2.3310100413467216,
-        "elapsed_secs": 48.86713004112244,
+        "elapsed_secs": 48.3315212726593,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (fn_0 (or ?#0 ?#1) ?#2 (fn_0 ?#0 (not ?#1) ?#2))",
@@ -1473,7 +1473,7 @@
         "initial_cost": 19732,
         "final_cost": 8465,
         "compression_ratio": 2.3310100413467216,
-        "elapsed_secs": 49.30020022392273,
+        "elapsed_secs": 48.87328028678894,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) ?#2))",
           "fn_1: (fn_0 (or ?#0 ?#1) ?#2 (fn_0 ?#0 (not ?#1) ?#2))",
@@ -1502,7 +1502,7 @@
         "initial_cost": 30981,
         "final_cost": 9257,
         "compression_ratio": 3.346764610564978,
-        "elapsed_secs": 253.63599634170532,
+        "elapsed_secs": 256.4320385456085,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -1529,7 +1529,7 @@
         "initial_cost": 30981,
         "final_cost": 9257,
         "compression_ratio": 3.346764610564978,
-        "elapsed_secs": 254.56864166259766,
+        "elapsed_secs": 259.0214829444885,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -1556,7 +1556,7 @@
         "initial_cost": 30981,
         "final_cost": 9257,
         "compression_ratio": 3.346764610564978,
-        "elapsed_secs": 252.81326603889465,
+        "elapsed_secs": 261.93503403663635,
         "library": [
           "fn_0: (not (or (and ?#0 (not ?#1)) (and (not ?#0) ?#1)))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -1585,7 +1585,7 @@
         "initial_cost": 25998,
         "final_cost": 8565,
         "compression_ratio": 3.0353765323992996,
-        "elapsed_secs": 12.676214456558228,
+        "elapsed_secs": 13.204217672348022,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 (not ?#1))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -1612,7 +1612,7 @@
         "initial_cost": 25998,
         "final_cost": 8565,
         "compression_ratio": 3.0353765323992996,
-        "elapsed_secs": 12.79227614402771,
+        "elapsed_secs": 13.133517026901245,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 (not ?#1))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",
@@ -1639,7 +1639,7 @@
         "initial_cost": 25998,
         "final_cost": 8565,
         "compression_ratio": 3.0353765323992996,
-        "elapsed_secs": 12.784335374832153,
+        "elapsed_secs": 13.149281024932861,
         "library": [
           "fn_0: (not (or (and (not ?#0) ?#1) (and ?#0 (not ?#1))))",
           "fn_1: (not (or (and (not ?#0) ?#1) ?#2))",

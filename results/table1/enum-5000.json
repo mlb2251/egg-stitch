@@ -8,7 +8,7 @@
         "initial_cost": 19008,
         "final_cost": 10717,
         "compression_ratio": 1.7736306802276756,
-        "elapsed_secs": 0.1605663299560547,
+        "elapsed_secs": 0.16595888137817383,
         "library": [
           "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))"
         ],
@@ -16,7 +16,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10718
-        ]
+        ],
+        "num_steps_run": 582,
+        "egg_compression_ratio": 1.773558499720097
       }
     ],
     [
@@ -27,7 +29,7 @@
         "initial_cost": 19008,
         "final_cost": 10717,
         "compression_ratio": 1.7736306802276756,
-        "elapsed_secs": 0.15920209884643555,
+        "elapsed_secs": 0.16570067405700684,
         "library": [
           "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))"
         ],
@@ -35,7 +37,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10718
-        ]
+        ],
+        "num_steps_run": 582,
+        "egg_compression_ratio": 1.773558499720097
       }
     ],
     [
@@ -46,7 +50,7 @@
         "initial_cost": 19008,
         "final_cost": 10717,
         "compression_ratio": 1.7736306802276756,
-        "elapsed_secs": 0.1589207649230957,
+        "elapsed_secs": 0.17007184028625488,
         "library": [
           "fn_0: (T (repeat (T l (M 1 0 -0.5 (/ 0.5 (tan (/ pi ?#0))))) ?#0 (M 1 (/ (* 2 pi) ?#0) 0 0)) (M ?#1 0 0 0))"
         ],
@@ -54,7 +58,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           10718
-        ]
+        ],
+        "num_steps_run": 582,
+        "egg_compression_ratio": 1.773558499720097
       }
     ]
   ],
@@ -67,7 +73,7 @@
         "initial_cost": 35712,
         "final_cost": 17117,
         "compression_ratio": 2.086346906584098,
-        "elapsed_secs": 0.20465874671936035,
+        "elapsed_secs": 0.2194507122039795,
         "library": [
           "fn_0: (C ?#0 (T (T (T l (M 1 0 -0.5 0)) (M ?#1 (/ pi 4) 0 0)) (M 1 0 (* ?#1 (* 0.5 (cos (/ pi 4)))) (* ?#1 (* 0.5 (sin (/ pi 4)))))))"
         ],
@@ -75,7 +81,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           17118
-        ]
+        ],
+        "num_steps_run": 3166,
+        "egg_compression_ratio": 1.2024185068349107
       }
     ],
     [
@@ -86,7 +94,7 @@
         "initial_cost": 35712,
         "final_cost": 17117,
         "compression_ratio": 2.086346906584098,
-        "elapsed_secs": 0.20304298400878906,
+        "elapsed_secs": 0.224137544631958,
         "library": [
           "fn_0: (C ?#0 (T (T (T l (M 1 0 -0.5 0)) (M ?#1 (/ pi 4) 0 0)) (M 1 0 (* ?#1 (* 0.5 (cos (/ pi 4)))) (* ?#1 (* 0.5 (sin (/ pi 4)))))))"
         ],
@@ -94,7 +102,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           17118
-        ]
+        ],
+        "num_steps_run": 3166,
+        "egg_compression_ratio": 1.2024185068349107
       }
     ],
     [
@@ -105,7 +115,7 @@
         "initial_cost": 35712,
         "final_cost": 17117,
         "compression_ratio": 2.086346906584098,
-        "elapsed_secs": 0.20426654815673828,
+        "elapsed_secs": 0.22100830078125,
         "library": [
           "fn_0: (C ?#0 (T (T (T l (M 1 0 -0.5 0)) (M ?#1 (/ pi 4) 0 0)) (M 1 0 (* ?#1 (* 0.5 (cos (/ pi 4)))) (* ?#1 (* 0.5 (sin (/ pi 4)))))))"
         ],
@@ -113,7 +123,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           17118
-        ]
+        ],
+        "num_steps_run": 3166,
+        "egg_compression_ratio": 1.2024185068349107
       }
     ]
   ],
@@ -126,7 +138,7 @@
         "initial_cost": 35426,
         "final_cost": 24415,
         "compression_ratio": 1.4509932418595126,
-        "elapsed_secs": 0.09447026252746582,
+        "elapsed_secs": 0.09781169891357422,
         "library": [
           "fn_0: (T ?#0 (M ?#1 0 0 0))"
         ],
@@ -134,7 +146,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           24416
-        ]
+        ],
+        "num_steps_run": 677,
+        "egg_compression_ratio": 1.239228374836173
       }
     ],
     [
@@ -145,7 +159,7 @@
         "initial_cost": 35426,
         "final_cost": 24415,
         "compression_ratio": 1.4509932418595126,
-        "elapsed_secs": 0.09553146362304688,
+        "elapsed_secs": 0.10062551498413086,
         "library": [
           "fn_0: (T ?#0 (M ?#1 0 0 0))"
         ],
@@ -153,7 +167,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           24416
-        ]
+        ],
+        "num_steps_run": 677,
+        "egg_compression_ratio": 1.239228374836173
       }
     ],
     [
@@ -164,7 +180,7 @@
         "initial_cost": 35426,
         "final_cost": 24415,
         "compression_ratio": 1.4509932418595126,
-        "elapsed_secs": 0.09515762329101562,
+        "elapsed_secs": 0.09702444076538086,
         "library": [
           "fn_0: (T ?#0 (M ?#1 0 0 0))"
         ],
@@ -172,7 +188,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           24416
-        ]
+        ],
+        "num_steps_run": 677,
+        "egg_compression_ratio": 1.239228374836173
       }
     ]
   ],
@@ -185,7 +203,7 @@
         "initial_cost": 42935,
         "final_cost": 25186,
         "compression_ratio": 1.70471690621774,
-        "elapsed_secs": 0.1759932041168213,
+        "elapsed_secs": 0.1847848892211914,
         "library": [
           "fn_0: (T ?#0 (M 1 0 0 ?#1))"
         ],
@@ -193,7 +211,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           25187
-        ]
+        ],
+        "num_steps_run": 1830,
+        "egg_compression_ratio": 1.4701234763965538
       }
     ],
     [
@@ -204,7 +224,7 @@
         "initial_cost": 42935,
         "final_cost": 25186,
         "compression_ratio": 1.70471690621774,
-        "elapsed_secs": 0.17863154411315918,
+        "elapsed_secs": 0.17805981636047363,
         "library": [
           "fn_0: (T ?#0 (M 1 0 0 ?#1))"
         ],
@@ -212,7 +232,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           25187
-        ]
+        ],
+        "num_steps_run": 1830,
+        "egg_compression_ratio": 1.4701234763965538
       }
     ],
     [
@@ -223,7 +245,7 @@
         "initial_cost": 42935,
         "final_cost": 25186,
         "compression_ratio": 1.70471690621774,
-        "elapsed_secs": 0.17800259590148926,
+        "elapsed_secs": 0.18476057052612305,
         "library": [
           "fn_0: (T ?#0 (M 1 0 0 ?#1))"
         ],
@@ -231,7 +253,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           25187
-        ]
+        ],
+        "num_steps_run": 1830,
+        "egg_compression_ratio": 1.4701234763965538
       }
     ]
   ],
@@ -244,7 +268,7 @@
         "initial_cost": 166,
         "final_cost": 151,
         "compression_ratio": 1.099337748344371,
-        "elapsed_secs": 0.005463123321533203,
+        "elapsed_secs": 0.006107330322265625,
         "library": [
           "fn_0: (lam (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))) $0))"
         ],
@@ -252,7 +276,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           152
-        ]
+        ],
+        "num_steps_run": 205,
+        "egg_compression_ratio": 1.0986842105263157
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -261,7 +287,7 @@
         "initial_cost": 216,
         "final_cost": 212,
         "compression_ratio": 1.0188679245283019,
-        "elapsed_secs": 0.006474018096923828,
+        "elapsed_secs": 0.006377458572387695,
         "library": [
           "fn_1: (lam (?#0 $0))"
         ],
@@ -269,7 +295,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           213
-        ]
+        ],
+        "num_steps_run": 286,
+        "egg_compression_ratio": 1.0187793427230047
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -278,7 +306,7 @@
         "initial_cost": 326,
         "final_cost": 307,
         "compression_ratio": 1.0618892508143323,
-        "elapsed_secs": 0.006537199020385742,
+        "elapsed_secs": 0.0067348480224609375,
         "library": [
           "fn_2: (+ 1 1)"
         ],
@@ -286,7 +314,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           308
-        ]
+        ],
+        "num_steps_run": 234,
+        "egg_compression_ratio": 1.0616883116883118
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -295,7 +325,7 @@
         "initial_cost": 429,
         "final_cost": 418,
         "compression_ratio": 1.0263157894736843,
-        "elapsed_secs": 0.008774995803833008,
+        "elapsed_secs": 0.009471893310546875,
         "library": [
           "fn_5: (lam (?#0 $0))"
         ],
@@ -303,7 +333,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           419
-        ]
+        ],
+        "num_steps_run": 315,
+        "egg_compression_ratio": 1.026252983293556
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -312,7 +344,7 @@
         "initial_cost": 498,
         "final_cost": 482,
         "compression_ratio": 1.033195020746888,
-        "elapsed_secs": 0.00915980339050293,
+        "elapsed_secs": 0.00973653793334961,
         "library": [
           "fn_7: (lam (?#0 $0))"
         ],
@@ -320,7 +352,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           483
-        ]
+        ],
+        "num_steps_run": 251,
+        "egg_compression_ratio": 1.0331262939958592
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -329,7 +363,7 @@
         "initial_cost": 770,
         "final_cost": 743,
         "compression_ratio": 1.0363391655450875,
-        "elapsed_secs": 0.01316690444946289,
+        "elapsed_secs": 0.013952493667602539,
         "library": [
           "fn_8: (lam (map ?#0 $0))"
         ],
@@ -337,7 +371,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           744
-        ]
+        ],
+        "num_steps_run": 337,
+        "egg_compression_ratio": 1.0362903225806452
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -346,7 +382,7 @@
         "initial_cost": 896,
         "final_cost": 867,
         "compression_ratio": 1.0334486735870818,
-        "elapsed_secs": 0.01528167724609375,
+        "elapsed_secs": 0.016451120376586914,
         "library": [
           "fn_9: (lam (?#0 $0))"
         ],
@@ -354,7 +390,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           868
-        ]
+        ],
+        "num_steps_run": 376,
+        "egg_compression_ratio": 1.0334101382488479
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -363,7 +401,7 @@
         "initial_cost": 1101,
         "final_cost": 1061,
         "compression_ratio": 1.0377002827521207,
-        "elapsed_secs": 0.016995906829833984,
+        "elapsed_secs": 0.01785111427307129,
         "library": [
           "fn_11: (lam (?#0 $0))"
         ],
@@ -371,7 +409,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1062
-        ]
+        ],
+        "num_steps_run": 327,
+        "egg_compression_ratio": 1.0376647834274952
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -380,7 +420,7 @@
         "initial_cost": 1002,
         "final_cost": 959,
         "compression_ratio": 1.0448383733055266,
-        "elapsed_secs": 0.012681007385253906,
+        "elapsed_secs": 0.013551950454711914,
         "library": [
           "fn_13: (lam (?#0 $0))"
         ],
@@ -388,7 +428,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           960
-        ]
+        ],
+        "num_steps_run": 200,
+        "egg_compression_ratio": 1.0447916666666666
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -397,7 +439,7 @@
         "initial_cost": 1052,
         "final_cost": 1008,
         "compression_ratio": 1.0436507936507937,
-        "elapsed_secs": 0.014371395111083984,
+        "elapsed_secs": 0.015390872955322266,
         "library": [
           "fn_14: (lam (?#0 $0))"
         ],
@@ -405,7 +447,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1009
-        ]
+        ],
+        "num_steps_run": 246,
+        "egg_compression_ratio": 1.043607532210109
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -414,7 +458,7 @@
         "initial_cost": 1065,
         "final_cost": 1015,
         "compression_ratio": 1.0492610837438423,
-        "elapsed_secs": 0.012719392776489258,
+        "elapsed_secs": 0.013305187225341797,
         "library": [
           "fn_17: (lam (?#0 $0))"
         ],
@@ -422,7 +466,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1016
-        ]
+        ],
+        "num_steps_run": 180,
+        "egg_compression_ratio": 1.0492125984251968
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -431,7 +477,7 @@
         "initial_cost": 171,
         "final_cost": 148,
         "compression_ratio": 1.1554054054054055,
-        "elapsed_secs": 0.0042111873626708984,
+        "elapsed_secs": 0.06238722801208496,
         "library": [
           "fn_0: (+ 1 1)"
         ],
@@ -439,7 +485,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           149
-        ]
+        ],
+        "num_steps_run": 111,
+        "egg_compression_ratio": 1.1543624161073827
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -448,7 +496,7 @@
         "initial_cost": 215,
         "final_cost": 202,
         "compression_ratio": 1.0643564356435644,
-        "elapsed_secs": 0.004788637161254883,
+        "elapsed_secs": 0.005263090133666992,
         "library": [
           "fn_20: (map (lam (?#0 $0 ?#1)))"
         ],
@@ -456,7 +504,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           203
-        ]
+        ],
+        "num_steps_run": 115,
+        "egg_compression_ratio": 1.064039408866995
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -465,7 +515,7 @@
         "initial_cost": 286,
         "final_cost": 262,
         "compression_ratio": 1.0916030534351144,
-        "elapsed_secs": 0.00508880615234375,
+        "elapsed_secs": 0.005236625671386719,
         "library": [
           "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))"
         ],
@@ -473,7 +523,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           263
-        ]
+        ],
+        "num_steps_run": 126,
+        "egg_compression_ratio": 1.091254752851711
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -482,7 +534,7 @@
         "initial_cost": 322,
         "final_cost": 313,
         "compression_ratio": 1.0287539936102237,
-        "elapsed_secs": 0.006633758544921875,
+        "elapsed_secs": 0.006885051727294922,
         "library": [
           "fn_26: (lam (?#0 $0))"
         ],
@@ -490,7 +542,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           314
-        ]
+        ],
+        "num_steps_run": 258,
+        "egg_compression_ratio": 1.0286624203821657
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -499,7 +553,7 @@
         "initial_cost": 424,
         "final_cost": 398,
         "compression_ratio": 1.065326633165829,
-        "elapsed_secs": 0.00788116455078125,
+        "elapsed_secs": 0.008341789245605469,
         "library": [
           "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))"
         ],
@@ -507,7 +561,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           399
-        ]
+        ],
+        "num_steps_run": 225,
+        "egg_compression_ratio": 1.0651629072681705
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -516,7 +572,7 @@
         "initial_cost": 481,
         "final_cost": 460,
         "compression_ratio": 1.0456521739130435,
-        "elapsed_secs": 0.00703740119934082,
+        "elapsed_secs": 0.007367849349975586,
         "library": [
           "fn_27: (lam (?#0 $0))"
         ],
@@ -524,7 +580,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           461
-        ]
+        ],
+        "num_steps_run": 157,
+        "egg_compression_ratio": 1.0455531453362257
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -533,7 +591,7 @@
         "initial_cost": 549,
         "final_cost": 520,
         "compression_ratio": 1.0557692307692308,
-        "elapsed_secs": 0.007502555847167969,
+        "elapsed_secs": 0.007704257965087891,
         "library": [
           "fn_28: (lam (?#0 $0))"
         ],
@@ -541,7 +599,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           521
-        ]
+        ],
+        "num_steps_run": 143,
+        "egg_compression_ratio": 1.055662188099808
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -550,7 +610,7 @@
         "initial_cost": 651,
         "final_cost": 617,
         "compression_ratio": 1.0551053484602917,
-        "elapsed_secs": 0.00839996337890625,
+        "elapsed_secs": 0.009956836700439453,
         "library": [
           "fn_29: (lam (?#0 $0))"
         ],
@@ -558,7 +618,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           618
-        ]
+        ],
+        "num_steps_run": 154,
+        "egg_compression_ratio": 1.0550161812297734
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -567,7 +629,7 @@
         "initial_cost": 751,
         "final_cost": 714,
         "compression_ratio": 1.0518207282913166,
-        "elapsed_secs": 0.00936746597290039,
+        "elapsed_secs": 0.009968996047973633,
         "library": [
           "fn_30: (lam (?#0 $0))"
         ],
@@ -575,7 +637,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           715
-        ]
+        ],
+        "num_steps_run": 161,
+        "egg_compression_ratio": 1.0517482517482517
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -584,7 +648,7 @@
         "initial_cost": 900,
         "final_cost": 858,
         "compression_ratio": 1.048951048951049,
-        "elapsed_secs": 0.010447978973388672,
+        "elapsed_secs": 0.010853052139282227,
         "library": [
           "fn_30: (lam (?#0 $0))"
         ],
@@ -592,7 +656,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           859
-        ]
+        ],
+        "num_steps_run": 175,
+        "egg_compression_ratio": 1.048894062863795
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -601,7 +667,7 @@
         "initial_cost": 837,
         "final_cost": 793,
         "compression_ratio": 1.055485498108449,
-        "elapsed_secs": 0.009310007095336914,
+        "elapsed_secs": 0.0098876953125,
         "library": [
           "fn_33: (lam (?#0 $0))"
         ],
@@ -609,7 +675,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           794
-        ]
+        ],
+        "num_steps_run": 132,
+        "egg_compression_ratio": 1.0554156171284634
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -618,7 +686,7 @@
         "initial_cost": 903,
         "final_cost": 856,
         "compression_ratio": 1.0549065420560748,
-        "elapsed_secs": 0.009902715682983398,
+        "elapsed_secs": 0.010506629943847656,
         "library": [
           "fn_34: (lam (?#0 $0))"
         ],
@@ -626,7 +694,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           857
-        ]
+        ],
+        "num_steps_run": 144,
+        "egg_compression_ratio": 1.0548424737456243
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -635,7 +705,7 @@
         "initial_cost": 146,
         "final_cost": 133,
         "compression_ratio": 1.0977443609022557,
-        "elapsed_secs": 0.0048406124114990234,
+        "elapsed_secs": 0.0052487850189208984,
         "library": [
           "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))"
         ],
@@ -643,7 +713,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           134
-        ]
+        ],
+        "num_steps_run": 217,
+        "egg_compression_ratio": 1.0671641791044777
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -652,7 +724,7 @@
         "initial_cost": 212,
         "final_cost": 201,
         "compression_ratio": 1.054726368159204,
-        "elapsed_secs": 0.005403757095336914,
+        "elapsed_secs": 0.0055005550384521484,
         "library": [
           "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))"
         ],
@@ -660,7 +732,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           202
-        ]
+        ],
+        "num_steps_run": 232,
+        "egg_compression_ratio": 1.0346534653465347
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -669,7 +743,7 @@
         "initial_cost": 288,
         "final_cost": 262,
         "compression_ratio": 1.099236641221374,
-        "elapsed_secs": 0.005626201629638672,
+        "elapsed_secs": 0.005914211273193359,
         "library": [
           "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
         ],
@@ -677,7 +751,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           263
-        ]
+        ],
+        "num_steps_run": 141,
+        "egg_compression_ratio": 1.0836501901140685
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -686,7 +762,7 @@
         "initial_cost": 400,
         "final_cost": 360,
         "compression_ratio": 1.1111111111111112,
-        "elapsed_secs": 0.010178089141845703,
+        "elapsed_secs": 0.010741472244262695,
         "library": [
           "fn_40: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
         ],
@@ -694,7 +770,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           361
-        ]
+        ],
+        "num_steps_run": 261,
+        "egg_compression_ratio": 1.0886426592797784
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -703,7 +781,7 @@
         "initial_cost": 490,
         "final_cost": 443,
         "compression_ratio": 1.1060948081264108,
-        "elapsed_secs": 0.011024951934814453,
+        "elapsed_secs": 0.01148366928100586,
         "library": [
           "fn_41: (lam (map ?#0 $0))"
         ],
@@ -711,7 +789,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           444
-        ]
+        ],
+        "num_steps_run": 217,
+        "egg_compression_ratio": 1.087837837837838
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -720,7 +800,7 @@
         "initial_cost": 632,
         "final_cost": 588,
         "compression_ratio": 1.0748299319727892,
-        "elapsed_secs": 0.015856504440307617,
+        "elapsed_secs": 0.016428232192993164,
         "library": [
           "fn_42: (lam (map ?#0 $0))"
         ],
@@ -728,7 +808,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           589
-        ]
+        ],
+        "num_steps_run": 344,
+        "egg_compression_ratio": 1.061120543293718
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -737,7 +819,7 @@
         "initial_cost": 679,
         "final_cost": 630,
         "compression_ratio": 1.0777777777777777,
-        "elapsed_secs": 0.009214162826538086,
+        "elapsed_secs": 0.00962376594543457,
         "library": [
           "fn_45: (lam (map ?#0 $0))"
         ],
@@ -745,7 +827,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           631
-        ]
+        ],
+        "num_steps_run": 165,
+        "egg_compression_ratio": 1.0713153724247226
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -754,7 +838,7 @@
         "initial_cost": 739,
         "final_cost": 698,
         "compression_ratio": 1.0587392550143266,
-        "elapsed_secs": 0.010450601577758789,
+        "elapsed_secs": 0.010956525802612305,
         "library": [
           "fn_46: (lam (?#0 $0))"
         ],
@@ -762,7 +846,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           699
-        ]
+        ],
+        "num_steps_run": 204,
+        "egg_compression_ratio": 1.0472103004291846
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -771,7 +857,7 @@
         "initial_cost": 744,
         "final_cost": 710,
         "compression_ratio": 1.047887323943662,
-        "elapsed_secs": 0.00957798957824707,
+        "elapsed_secs": 0.009786128997802734,
         "library": [
           "fn_50: (lam (?#0 $0))"
         ],
@@ -779,7 +865,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           711
-        ]
+        ],
+        "num_steps_run": 176,
+        "egg_compression_ratio": 1.0478199718706047
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -788,7 +876,7 @@
         "initial_cost": 883,
         "final_cost": 842,
         "compression_ratio": 1.0486935866983373,
-        "elapsed_secs": 0.010248422622680664,
+        "elapsed_secs": 0.010795354843139648,
         "library": [
           "fn_52: (lam (?#0 $0))"
         ],
@@ -796,7 +884,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           843
-        ]
+        ],
+        "num_steps_run": 160,
+        "egg_compression_ratio": 1.0486358244365361
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -805,7 +895,7 @@
         "initial_cost": 917,
         "final_cost": 869,
         "compression_ratio": 1.0552359033371692,
-        "elapsed_secs": 0.01022958755493164,
+        "elapsed_secs": 0.010563135147094727,
         "library": [
           "fn_53: (lam (?#0 $0))"
         ],
@@ -813,7 +903,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           869
-        ]
+        ],
+        "num_steps_run": 143,
+        "egg_compression_ratio": 1.0563866513233602
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -822,7 +914,7 @@
         "initial_cost": 919,
         "final_cost": 866,
         "compression_ratio": 1.0612009237875288,
-        "elapsed_secs": 0.009804248809814453,
+        "elapsed_secs": 0.010604381561279297,
         "library": [
           "fn_54: (lam (?#0 $0))"
         ],
@@ -830,7 +922,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           866
-        ]
+        ],
+        "num_steps_run": 130,
+        "egg_compression_ratio": 1.0623556581986142
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -839,7 +933,7 @@
         "initial_cost": 176,
         "final_cost": 165,
         "compression_ratio": 1.0666666666666667,
-        "elapsed_secs": 0.005254507064819336,
+        "elapsed_secs": 0.005738258361816406,
         "library": [
           "fn_0: (+ 1)"
         ],
@@ -847,7 +941,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           166
-        ]
+        ],
+        "num_steps_run": 210,
+        "egg_compression_ratio": 1.0662650602409638
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -856,7 +952,7 @@
         "initial_cost": 245,
         "final_cost": 236,
         "compression_ratio": 1.0381355932203389,
-        "elapsed_secs": 0.0058307647705078125,
+        "elapsed_secs": 0.00614166259765625,
         "library": [
           "fn_55: (map (lam (index $0 ?#0)) (range ?#1))"
         ],
@@ -864,7 +960,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           237
-        ]
+        ],
+        "num_steps_run": 239,
+        "egg_compression_ratio": 1.0379746835443038
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -873,7 +971,7 @@
         "initial_cost": 473,
         "final_cost": 449,
         "compression_ratio": 1.0534521158129175,
-        "elapsed_secs": 0.007962465286254883,
+        "elapsed_secs": 0.00861501693725586,
         "library": [
           "fn_57: (lam (map ?#0 $0))"
         ],
@@ -881,7 +979,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           450
-        ]
+        ],
+        "num_steps_run": 215,
+        "egg_compression_ratio": 1.0533333333333332
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -890,7 +990,7 @@
         "initial_cost": 480,
         "final_cost": 459,
         "compression_ratio": 1.0457516339869282,
-        "elapsed_secs": 0.007890462875366211,
+        "elapsed_secs": 0.00805211067199707,
         "library": [
           "fn_59: (lam (map ?#0 $0))"
         ],
@@ -898,7 +998,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           460
-        ]
+        ],
+        "num_steps_run": 196,
+        "egg_compression_ratio": 1.0456521739130435
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -907,7 +1009,7 @@
         "initial_cost": 559,
         "final_cost": 526,
         "compression_ratio": 1.0627376425855513,
-        "elapsed_secs": 0.008050680160522461,
+        "elapsed_secs": 0.008249282836914062,
         "library": [
           "fn_60: (lam (map ?#0 $0))"
         ],
@@ -915,7 +1017,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           527
-        ]
+        ],
+        "num_steps_run": 151,
+        "egg_compression_ratio": 1.0626185958254268
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -924,7 +1028,7 @@
         "initial_cost": 570,
         "final_cost": 537,
         "compression_ratio": 1.0614525139664805,
-        "elapsed_secs": 0.00892329216003418,
+        "elapsed_secs": 0.007729768753051758,
         "library": [
           "fn_62: (lam (map ?#0 $0))"
         ],
@@ -932,7 +1036,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           538
-        ]
+        ],
+        "num_steps_run": 114,
+        "egg_compression_ratio": 1.0613382899628252
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -941,7 +1047,7 @@
         "initial_cost": 614,
         "final_cost": 581,
         "compression_ratio": 1.0567986230636832,
-        "elapsed_secs": 0.007491588592529297,
+        "elapsed_secs": 0.007692098617553711,
         "library": [
           "fn_62: (lam (map ?#0 $0))"
         ],
@@ -949,7 +1055,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           582
-        ]
+        ],
+        "num_steps_run": 106,
+        "egg_compression_ratio": 1.056701030927835
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -958,7 +1066,7 @@
         "initial_cost": 703,
         "final_cost": 670,
         "compression_ratio": 1.0492537313432835,
-        "elapsed_secs": 0.008102893829345703,
+        "elapsed_secs": 0.00889730453491211,
         "library": [
           "fn_63: (lam (map ?#0 $0))"
         ],
@@ -966,7 +1074,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           671
-        ]
+        ],
+        "num_steps_run": 134,
+        "egg_compression_ratio": 1.0491803278688525
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -975,7 +1085,7 @@
         "initial_cost": 776,
         "final_cost": 740,
         "compression_ratio": 1.0486486486486486,
-        "elapsed_secs": 0.009119033813476562,
+        "elapsed_secs": 0.009752273559570312,
         "library": [
           "fn_64: (lam (map ?#0 $0))"
         ],
@@ -983,7 +1093,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           741
-        ]
+        ],
+        "num_steps_run": 172,
+        "egg_compression_ratio": 1.048582995951417
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -992,7 +1104,7 @@
         "initial_cost": 825,
         "final_cost": 786,
         "compression_ratio": 1.049618320610687,
-        "elapsed_secs": 0.008563995361328125,
+        "elapsed_secs": 0.009237051010131836,
         "library": [
           "fn_65: (lam (map ?#0 $0))"
         ],
@@ -1000,7 +1112,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           787
-        ]
+        ],
+        "num_steps_run": 119,
+        "egg_compression_ratio": 1.0495552731893265
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1009,7 +1123,7 @@
         "initial_cost": 782,
         "final_cost": 746,
         "compression_ratio": 1.0482573726541555,
-        "elapsed_secs": 0.008230447769165039,
+        "elapsed_secs": 0.008787870407104492,
         "library": [
           "fn_67: (lam (map ?#0 $0))"
         ],
@@ -1017,7 +1131,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           747
-        ]
+        ],
+        "num_steps_run": 108,
+        "egg_compression_ratio": 1.0481927710843373
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1026,7 +1142,7 @@
         "initial_cost": 808,
         "final_cost": 771,
         "compression_ratio": 1.0479896238651103,
-        "elapsed_secs": 0.008565664291381836,
+        "elapsed_secs": 0.009107589721679688,
         "library": [
           "fn_68: (lam (?#0 $0))"
         ],
@@ -1034,7 +1150,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           772
-        ]
+        ],
+        "num_steps_run": 119,
+        "egg_compression_ratio": 1.0479274611398963
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1043,7 +1161,7 @@
         "initial_cost": 135,
         "final_cost": 120,
         "compression_ratio": 1.125,
-        "elapsed_secs": 0.0038909912109375,
+        "elapsed_secs": 0.0043125152587890625,
         "library": [
           "fn_0: (+ 1 (+ 1 1))"
         ],
@@ -1051,7 +1169,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           121
-        ]
+        ],
+        "num_steps_run": 113,
+        "egg_compression_ratio": 1.1239669421487604
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1060,7 +1180,7 @@
         "initial_cost": 251,
         "final_cost": 241,
         "compression_ratio": 1.04149377593361,
-        "elapsed_secs": 0.00574040412902832,
+        "elapsed_secs": 0.005873203277587891,
         "library": [
           "fn_19: (map (lam (?#0 $0 ?#1)))"
         ],
@@ -1068,7 +1188,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           242
-        ]
+        ],
+        "num_steps_run": 213,
+        "egg_compression_ratio": 1.0413223140495869
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1077,7 +1199,7 @@
         "initial_cost": 303,
         "final_cost": 284,
         "compression_ratio": 1.0669014084507042,
-        "elapsed_secs": 0.006076812744140625,
+        "elapsed_secs": 0.005852460861206055,
         "library": [
           "fn_57: (lam (map (lam (?#0 $0 ?#1)) $0))"
         ],
@@ -1085,7 +1207,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           285
-        ]
+        ],
+        "num_steps_run": 147,
+        "egg_compression_ratio": 1.0666666666666667
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1094,7 +1218,7 @@
         "initial_cost": 427,
         "final_cost": 412,
         "compression_ratio": 1.0364077669902914,
-        "elapsed_secs": 0.007857561111450195,
+        "elapsed_secs": 0.008325576782226562,
         "library": [
           "fn_57: (cdr (cdr ?#0))"
         ],
@@ -1102,7 +1226,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           413
-        ]
+        ],
+        "num_steps_run": 308,
+        "egg_compression_ratio": 1.026634382566586
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1111,7 +1237,7 @@
         "initial_cost": 478,
         "final_cost": 463,
         "compression_ratio": 1.0323974082073435,
-        "elapsed_secs": 0.008729219436645508,
+        "elapsed_secs": 0.00902247428894043,
         "library": [
           "fn_57: (lam (?#0 $0))"
         ],
@@ -1119,7 +1245,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           464
-        ]
+        ],
+        "num_steps_run": 304,
+        "egg_compression_ratio": 1.0237068965517242
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1128,7 +1256,7 @@
         "initial_cost": 588,
         "final_cost": 565,
         "compression_ratio": 1.0407079646017698,
-        "elapsed_secs": 0.012681722640991211,
+        "elapsed_secs": 0.013269901275634766,
         "library": [
           "fn_69: (lam (?#0 $0))"
         ],
@@ -1136,7 +1264,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           566
-        ]
+        ],
+        "num_steps_run": 402,
+        "egg_compression_ratio": 1.0265017667844523
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1145,7 +1275,7 @@
         "initial_cost": 671,
         "final_cost": 643,
         "compression_ratio": 1.0435458786936236,
-        "elapsed_secs": 0.00901651382446289,
+        "elapsed_secs": 0.00946807861328125,
         "library": [
           "fn_71: (lam (map ?#0 $0))"
         ],
@@ -1153,7 +1283,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           644
-        ]
+        ],
+        "num_steps_run": 198,
+        "egg_compression_ratio": 1.0372670807453417
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1162,7 +1294,7 @@
         "initial_cost": 761,
         "final_cost": 730,
         "compression_ratio": 1.0424657534246575,
-        "elapsed_secs": 0.009943008422851562,
+        "elapsed_secs": 0.010507583618164062,
         "library": [
           "fn_72: (lam (?#0 $0))"
         ],
@@ -1170,7 +1302,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           731
-        ]
+        ],
+        "num_steps_run": 216,
+        "egg_compression_ratio": 1.036935704514364
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1179,7 +1313,7 @@
         "initial_cost": 831,
         "final_cost": 796,
         "compression_ratio": 1.0439698492462313,
-        "elapsed_secs": 0.010824203491210938,
+        "elapsed_secs": 0.011330842971801758,
         "library": [
           "fn_73: (lam (?#0 $0))"
         ],
@@ -1187,7 +1321,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           797
-        ]
+        ],
+        "num_steps_run": 213,
+        "egg_compression_ratio": 1.0388958594730238
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1196,7 +1332,7 @@
         "initial_cost": 1070,
         "final_cost": 1020,
         "compression_ratio": 1.0490196078431373,
-        "elapsed_secs": 0.013254880905151367,
+        "elapsed_secs": 0.013469457626342773,
         "library": [
           "fn_74: (lam (?#0 $0))"
         ],
@@ -1204,7 +1340,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1021
-        ]
+        ],
+        "num_steps_run": 189,
+        "egg_compression_ratio": 1.0450538687561215
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1213,7 +1351,7 @@
         "initial_cost": 1027,
         "final_cost": 979,
         "compression_ratio": 1.04902962206333,
-        "elapsed_secs": 0.01161336898803711,
+        "elapsed_secs": 0.012618780136108398,
         "library": [
           "fn_75: (lam (?#0 $0))"
         ],
@@ -1221,7 +1359,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           980
-        ]
+        ],
+        "num_steps_run": 164,
+        "egg_compression_ratio": 1.0448979591836736
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1230,7 +1370,7 @@
         "initial_cost": 1008,
         "final_cost": 957,
         "compression_ratio": 1.0532915360501567,
-        "elapsed_secs": 0.010866880416870117,
+        "elapsed_secs": 0.011606454849243164,
         "library": [
           "fn_76: (lam (?#0 $0))"
         ],
@@ -1238,7 +1378,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           958
-        ]
+        ],
+        "num_steps_run": 151,
+        "egg_compression_ratio": 1.0490605427974948
       }
     ],
     [
@@ -1249,7 +1391,7 @@
         "initial_cost": 166,
         "final_cost": 151,
         "compression_ratio": 1.099337748344371,
-        "elapsed_secs": 0.00495600700378418,
+        "elapsed_secs": 0.005802631378173828,
         "library": [
           "fn_0: (lam (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))) $0))"
         ],
@@ -1257,7 +1399,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           152
-        ]
+        ],
+        "num_steps_run": 205,
+        "egg_compression_ratio": 1.0986842105263157
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1266,7 +1410,7 @@
         "initial_cost": 216,
         "final_cost": 212,
         "compression_ratio": 1.0188679245283019,
-        "elapsed_secs": 0.005824565887451172,
+        "elapsed_secs": 0.006044626235961914,
         "library": [
           "fn_1: (lam (?#0 $0))"
         ],
@@ -1274,7 +1418,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           213
-        ]
+        ],
+        "num_steps_run": 286,
+        "egg_compression_ratio": 1.0187793427230047
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1283,7 +1429,7 @@
         "initial_cost": 326,
         "final_cost": 307,
         "compression_ratio": 1.0618892508143323,
-        "elapsed_secs": 0.006484270095825195,
+        "elapsed_secs": 0.006589412689208984,
         "library": [
           "fn_2: (+ 1 1)"
         ],
@@ -1291,7 +1437,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           308
-        ]
+        ],
+        "num_steps_run": 234,
+        "egg_compression_ratio": 1.0616883116883118
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1300,7 +1448,7 @@
         "initial_cost": 429,
         "final_cost": 418,
         "compression_ratio": 1.0263157894736843,
-        "elapsed_secs": 0.008651018142700195,
+        "elapsed_secs": 0.009221553802490234,
         "library": [
           "fn_5: (lam (?#0 $0))"
         ],
@@ -1308,7 +1456,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           419
-        ]
+        ],
+        "num_steps_run": 315,
+        "egg_compression_ratio": 1.026252983293556
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1317,7 +1467,7 @@
         "initial_cost": 498,
         "final_cost": 482,
         "compression_ratio": 1.033195020746888,
-        "elapsed_secs": 0.008871316909790039,
+        "elapsed_secs": 0.009621143341064453,
         "library": [
           "fn_7: (lam (?#0 $0))"
         ],
@@ -1325,7 +1475,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           483
-        ]
+        ],
+        "num_steps_run": 251,
+        "egg_compression_ratio": 1.0331262939958592
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1334,7 +1486,7 @@
         "initial_cost": 770,
         "final_cost": 743,
         "compression_ratio": 1.0363391655450875,
-        "elapsed_secs": 0.012983322143554688,
+        "elapsed_secs": 0.013593673706054688,
         "library": [
           "fn_8: (lam (map ?#0 $0))"
         ],
@@ -1342,7 +1494,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           744
-        ]
+        ],
+        "num_steps_run": 337,
+        "egg_compression_ratio": 1.0362903225806452
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1351,7 +1505,7 @@
         "initial_cost": 896,
         "final_cost": 867,
         "compression_ratio": 1.0334486735870818,
-        "elapsed_secs": 0.015186309814453125,
+        "elapsed_secs": 0.015831708908081055,
         "library": [
           "fn_9: (lam (?#0 $0))"
         ],
@@ -1359,7 +1513,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           868
-        ]
+        ],
+        "num_steps_run": 376,
+        "egg_compression_ratio": 1.0334101382488479
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1368,7 +1524,7 @@
         "initial_cost": 1101,
         "final_cost": 1061,
         "compression_ratio": 1.0377002827521207,
-        "elapsed_secs": 0.016783952713012695,
+        "elapsed_secs": 0.017851591110229492,
         "library": [
           "fn_11: (lam (?#0 $0))"
         ],
@@ -1376,7 +1532,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1062
-        ]
+        ],
+        "num_steps_run": 327,
+        "egg_compression_ratio": 1.0376647834274952
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1385,7 +1543,7 @@
         "initial_cost": 1002,
         "final_cost": 959,
         "compression_ratio": 1.0448383733055266,
-        "elapsed_secs": 0.013540506362915039,
+        "elapsed_secs": 0.013586997985839844,
         "library": [
           "fn_13: (lam (?#0 $0))"
         ],
@@ -1393,7 +1551,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           960
-        ]
+        ],
+        "num_steps_run": 200,
+        "egg_compression_ratio": 1.0447916666666666
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1402,7 +1562,7 @@
         "initial_cost": 1052,
         "final_cost": 1008,
         "compression_ratio": 1.0436507936507937,
-        "elapsed_secs": 0.014643669128417969,
+        "elapsed_secs": 0.015331029891967773,
         "library": [
           "fn_14: (lam (?#0 $0))"
         ],
@@ -1410,7 +1570,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1009
-        ]
+        ],
+        "num_steps_run": 246,
+        "egg_compression_ratio": 1.043607532210109
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1419,7 +1581,7 @@
         "initial_cost": 1065,
         "final_cost": 1015,
         "compression_ratio": 1.0492610837438423,
-        "elapsed_secs": 0.013054847717285156,
+        "elapsed_secs": 0.013550281524658203,
         "library": [
           "fn_17: (lam (?#0 $0))"
         ],
@@ -1427,7 +1589,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1016
-        ]
+        ],
+        "num_steps_run": 180,
+        "egg_compression_ratio": 1.0492125984251968
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1436,7 +1600,7 @@
         "initial_cost": 171,
         "final_cost": 148,
         "compression_ratio": 1.1554054054054055,
-        "elapsed_secs": 0.0043087005615234375,
+        "elapsed_secs": 0.0047075748443603516,
         "library": [
           "fn_0: (+ 1 1)"
         ],
@@ -1444,7 +1608,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           149
-        ]
+        ],
+        "num_steps_run": 111,
+        "egg_compression_ratio": 1.1543624161073827
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1453,7 +1619,7 @@
         "initial_cost": 215,
         "final_cost": 202,
         "compression_ratio": 1.0643564356435644,
-        "elapsed_secs": 0.0048618316650390625,
+        "elapsed_secs": 0.00477290153503418,
         "library": [
           "fn_20: (map (lam (?#0 $0 ?#1)))"
         ],
@@ -1461,7 +1627,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           203
-        ]
+        ],
+        "num_steps_run": 115,
+        "egg_compression_ratio": 1.064039408866995
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1470,7 +1638,7 @@
         "initial_cost": 286,
         "final_cost": 262,
         "compression_ratio": 1.0916030534351144,
-        "elapsed_secs": 0.005305051803588867,
+        "elapsed_secs": 0.005338191986083984,
         "library": [
           "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))"
         ],
@@ -1478,7 +1646,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           263
-        ]
+        ],
+        "num_steps_run": 126,
+        "egg_compression_ratio": 1.091254752851711
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1487,7 +1657,7 @@
         "initial_cost": 322,
         "final_cost": 313,
         "compression_ratio": 1.0287539936102237,
-        "elapsed_secs": 0.0067479610443115234,
+        "elapsed_secs": 0.006861448287963867,
         "library": [
           "fn_26: (lam (?#0 $0))"
         ],
@@ -1495,7 +1665,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           314
-        ]
+        ],
+        "num_steps_run": 258,
+        "egg_compression_ratio": 1.0286624203821657
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1504,7 +1676,7 @@
         "initial_cost": 424,
         "final_cost": 398,
         "compression_ratio": 1.065326633165829,
-        "elapsed_secs": 0.00805044174194336,
+        "elapsed_secs": 0.009024620056152344,
         "library": [
           "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))"
         ],
@@ -1512,7 +1684,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           399
-        ]
+        ],
+        "num_steps_run": 225,
+        "egg_compression_ratio": 1.0651629072681705
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1521,7 +1695,7 @@
         "initial_cost": 481,
         "final_cost": 460,
         "compression_ratio": 1.0456521739130435,
-        "elapsed_secs": 0.007085084915161133,
+        "elapsed_secs": 0.00743865966796875,
         "library": [
           "fn_27: (lam (?#0 $0))"
         ],
@@ -1529,7 +1703,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           461
-        ]
+        ],
+        "num_steps_run": 157,
+        "egg_compression_ratio": 1.0455531453362257
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1538,7 +1714,7 @@
         "initial_cost": 549,
         "final_cost": 520,
         "compression_ratio": 1.0557692307692308,
-        "elapsed_secs": 0.007953166961669922,
+        "elapsed_secs": 0.008326292037963867,
         "library": [
           "fn_28: (lam (?#0 $0))"
         ],
@@ -1546,7 +1722,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           521
-        ]
+        ],
+        "num_steps_run": 143,
+        "egg_compression_ratio": 1.055662188099808
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1555,7 +1733,7 @@
         "initial_cost": 651,
         "final_cost": 617,
         "compression_ratio": 1.0551053484602917,
-        "elapsed_secs": 0.009403228759765625,
+        "elapsed_secs": 0.009443998336791992,
         "library": [
           "fn_29: (lam (?#0 $0))"
         ],
@@ -1563,7 +1741,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           618
-        ]
+        ],
+        "num_steps_run": 154,
+        "egg_compression_ratio": 1.0550161812297734
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1572,7 +1752,7 @@
         "initial_cost": 751,
         "final_cost": 714,
         "compression_ratio": 1.0518207282913166,
-        "elapsed_secs": 0.009608983993530273,
+        "elapsed_secs": 0.010582923889160156,
         "library": [
           "fn_30: (lam (?#0 $0))"
         ],
@@ -1580,7 +1760,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           715
-        ]
+        ],
+        "num_steps_run": 161,
+        "egg_compression_ratio": 1.0517482517482517
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1589,7 +1771,7 @@
         "initial_cost": 900,
         "final_cost": 858,
         "compression_ratio": 1.048951048951049,
-        "elapsed_secs": 0.010740995407104492,
+        "elapsed_secs": 0.011543989181518555,
         "library": [
           "fn_30: (lam (?#0 $0))"
         ],
@@ -1597,7 +1779,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           859
-        ]
+        ],
+        "num_steps_run": 175,
+        "egg_compression_ratio": 1.048894062863795
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1606,7 +1790,7 @@
         "initial_cost": 837,
         "final_cost": 793,
         "compression_ratio": 1.055485498108449,
-        "elapsed_secs": 0.009398221969604492,
+        "elapsed_secs": 0.009923219680786133,
         "library": [
           "fn_33: (lam (?#0 $0))"
         ],
@@ -1614,7 +1798,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           794
-        ]
+        ],
+        "num_steps_run": 132,
+        "egg_compression_ratio": 1.0554156171284634
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1623,7 +1809,7 @@
         "initial_cost": 903,
         "final_cost": 856,
         "compression_ratio": 1.0549065420560748,
-        "elapsed_secs": 0.010236740112304688,
+        "elapsed_secs": 0.010790109634399414,
         "library": [
           "fn_34: (lam (?#0 $0))"
         ],
@@ -1631,7 +1817,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           857
-        ]
+        ],
+        "num_steps_run": 144,
+        "egg_compression_ratio": 1.0548424737456243
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1640,7 +1828,7 @@
         "initial_cost": 146,
         "final_cost": 133,
         "compression_ratio": 1.0977443609022557,
-        "elapsed_secs": 0.005015373229980469,
+        "elapsed_secs": 0.005290031433105469,
         "library": [
           "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))"
         ],
@@ -1648,7 +1836,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           134
-        ]
+        ],
+        "num_steps_run": 217,
+        "egg_compression_ratio": 1.0671641791044777
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1657,7 +1847,7 @@
         "initial_cost": 212,
         "final_cost": 201,
         "compression_ratio": 1.054726368159204,
-        "elapsed_secs": 0.0069081783294677734,
+        "elapsed_secs": 0.00545501708984375,
         "library": [
           "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))"
         ],
@@ -1665,7 +1855,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           202
-        ]
+        ],
+        "num_steps_run": 232,
+        "egg_compression_ratio": 1.0346534653465347
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1674,7 +1866,7 @@
         "initial_cost": 288,
         "final_cost": 262,
         "compression_ratio": 1.099236641221374,
-        "elapsed_secs": 0.00564122200012207,
+        "elapsed_secs": 0.0056917667388916016,
         "library": [
           "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
         ],
@@ -1682,7 +1874,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           263
-        ]
+        ],
+        "num_steps_run": 141,
+        "egg_compression_ratio": 1.0836501901140685
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1691,7 +1885,7 @@
         "initial_cost": 400,
         "final_cost": 360,
         "compression_ratio": 1.1111111111111112,
-        "elapsed_secs": 0.010426521301269531,
+        "elapsed_secs": 0.010727405548095703,
         "library": [
           "fn_40: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
         ],
@@ -1699,7 +1893,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           361
-        ]
+        ],
+        "num_steps_run": 261,
+        "egg_compression_ratio": 1.0886426592797784
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1708,7 +1904,7 @@
         "initial_cost": 490,
         "final_cost": 443,
         "compression_ratio": 1.1060948081264108,
-        "elapsed_secs": 0.011583089828491211,
+        "elapsed_secs": 0.01140904426574707,
         "library": [
           "fn_41: (lam (map ?#0 $0))"
         ],
@@ -1716,7 +1912,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           444
-        ]
+        ],
+        "num_steps_run": 217,
+        "egg_compression_ratio": 1.087837837837838
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1725,7 +1923,7 @@
         "initial_cost": 632,
         "final_cost": 588,
         "compression_ratio": 1.0748299319727892,
-        "elapsed_secs": 0.015764713287353516,
+        "elapsed_secs": 0.016477584838867188,
         "library": [
           "fn_42: (lam (map ?#0 $0))"
         ],
@@ -1733,7 +1931,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           589
-        ]
+        ],
+        "num_steps_run": 344,
+        "egg_compression_ratio": 1.061120543293718
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1742,7 +1942,7 @@
         "initial_cost": 679,
         "final_cost": 630,
         "compression_ratio": 1.0777777777777777,
-        "elapsed_secs": 0.009506702423095703,
+        "elapsed_secs": 0.009348392486572266,
         "library": [
           "fn_45: (lam (map ?#0 $0))"
         ],
@@ -1750,7 +1950,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           631
-        ]
+        ],
+        "num_steps_run": 165,
+        "egg_compression_ratio": 1.0713153724247226
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1759,7 +1961,7 @@
         "initial_cost": 739,
         "final_cost": 698,
         "compression_ratio": 1.0587392550143266,
-        "elapsed_secs": 0.010396957397460938,
+        "elapsed_secs": 0.011083841323852539,
         "library": [
           "fn_46: (lam (?#0 $0))"
         ],
@@ -1767,7 +1969,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           699
-        ]
+        ],
+        "num_steps_run": 204,
+        "egg_compression_ratio": 1.0472103004291846
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1776,7 +1980,7 @@
         "initial_cost": 744,
         "final_cost": 710,
         "compression_ratio": 1.047887323943662,
-        "elapsed_secs": 0.009330511093139648,
+        "elapsed_secs": 0.009692907333374023,
         "library": [
           "fn_50: (lam (?#0 $0))"
         ],
@@ -1784,7 +1988,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           711
-        ]
+        ],
+        "num_steps_run": 176,
+        "egg_compression_ratio": 1.0478199718706047
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1793,7 +1999,7 @@
         "initial_cost": 883,
         "final_cost": 842,
         "compression_ratio": 1.0486935866983373,
-        "elapsed_secs": 0.010241031646728516,
+        "elapsed_secs": 0.010642766952514648,
         "library": [
           "fn_52: (lam (?#0 $0))"
         ],
@@ -1801,7 +2007,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           843
-        ]
+        ],
+        "num_steps_run": 160,
+        "egg_compression_ratio": 1.0486358244365361
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1810,7 +2018,7 @@
         "initial_cost": 917,
         "final_cost": 869,
         "compression_ratio": 1.0552359033371692,
-        "elapsed_secs": 0.01035928726196289,
+        "elapsed_secs": 0.011303901672363281,
         "library": [
           "fn_53: (lam (?#0 $0))"
         ],
@@ -1818,7 +2026,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           869
-        ]
+        ],
+        "num_steps_run": 143,
+        "egg_compression_ratio": 1.0563866513233602
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1827,7 +2037,7 @@
         "initial_cost": 919,
         "final_cost": 866,
         "compression_ratio": 1.0612009237875288,
-        "elapsed_secs": 0.009947776794433594,
+        "elapsed_secs": 0.010300636291503906,
         "library": [
           "fn_54: (lam (?#0 $0))"
         ],
@@ -1835,7 +2045,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           866
-        ]
+        ],
+        "num_steps_run": 130,
+        "egg_compression_ratio": 1.0623556581986142
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1844,7 +2056,7 @@
         "initial_cost": 176,
         "final_cost": 165,
         "compression_ratio": 1.0666666666666667,
-        "elapsed_secs": 0.005354166030883789,
+        "elapsed_secs": 0.005478382110595703,
         "library": [
           "fn_0: (+ 1)"
         ],
@@ -1852,7 +2064,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           166
-        ]
+        ],
+        "num_steps_run": 210,
+        "egg_compression_ratio": 1.0662650602409638
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1861,7 +2075,7 @@
         "initial_cost": 245,
         "final_cost": 236,
         "compression_ratio": 1.0381355932203389,
-        "elapsed_secs": 0.006572246551513672,
+        "elapsed_secs": 0.006221771240234375,
         "library": [
           "fn_55: (map (lam (index $0 ?#0)) (range ?#1))"
         ],
@@ -1869,7 +2083,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           237
-        ]
+        ],
+        "num_steps_run": 239,
+        "egg_compression_ratio": 1.0379746835443038
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1878,7 +2094,7 @@
         "initial_cost": 473,
         "final_cost": 449,
         "compression_ratio": 1.0534521158129175,
-        "elapsed_secs": 0.007954120635986328,
+        "elapsed_secs": 0.008460044860839844,
         "library": [
           "fn_57: (lam (map ?#0 $0))"
         ],
@@ -1886,7 +2102,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           450
-        ]
+        ],
+        "num_steps_run": 215,
+        "egg_compression_ratio": 1.0533333333333332
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1895,7 +2113,7 @@
         "initial_cost": 480,
         "final_cost": 459,
         "compression_ratio": 1.0457516339869282,
-        "elapsed_secs": 0.007949590682983398,
+        "elapsed_secs": 0.00789189338684082,
         "library": [
           "fn_59: (lam (map ?#0 $0))"
         ],
@@ -1903,7 +2121,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           460
-        ]
+        ],
+        "num_steps_run": 196,
+        "egg_compression_ratio": 1.0456521739130435
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1912,7 +2132,7 @@
         "initial_cost": 559,
         "final_cost": 526,
         "compression_ratio": 1.0627376425855513,
-        "elapsed_secs": 0.008156776428222656,
+        "elapsed_secs": 0.008569002151489258,
         "library": [
           "fn_60: (lam (map ?#0 $0))"
         ],
@@ -1920,7 +2140,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           527
-        ]
+        ],
+        "num_steps_run": 151,
+        "egg_compression_ratio": 1.0626185958254268
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1929,7 +2151,7 @@
         "initial_cost": 570,
         "final_cost": 537,
         "compression_ratio": 1.0614525139664805,
-        "elapsed_secs": 0.007416963577270508,
+        "elapsed_secs": 0.008106231689453125,
         "library": [
           "fn_62: (lam (map ?#0 $0))"
         ],
@@ -1937,7 +2159,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           538
-        ]
+        ],
+        "num_steps_run": 114,
+        "egg_compression_ratio": 1.0613382899628252
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1946,7 +2170,7 @@
         "initial_cost": 614,
         "final_cost": 581,
         "compression_ratio": 1.0567986230636832,
-        "elapsed_secs": 0.0074460506439208984,
+        "elapsed_secs": 0.007726430892944336,
         "library": [
           "fn_62: (lam (map ?#0 $0))"
         ],
@@ -1954,7 +2178,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           582
-        ]
+        ],
+        "num_steps_run": 106,
+        "egg_compression_ratio": 1.056701030927835
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1963,7 +2189,7 @@
         "initial_cost": 703,
         "final_cost": 670,
         "compression_ratio": 1.0492537313432835,
-        "elapsed_secs": 0.008282661437988281,
+        "elapsed_secs": 0.00857853889465332,
         "library": [
           "fn_63: (lam (map ?#0 $0))"
         ],
@@ -1971,7 +2197,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           671
-        ]
+        ],
+        "num_steps_run": 134,
+        "egg_compression_ratio": 1.0491803278688525
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1980,7 +2208,7 @@
         "initial_cost": 776,
         "final_cost": 740,
         "compression_ratio": 1.0486486486486486,
-        "elapsed_secs": 0.00923299789428711,
+        "elapsed_secs": 0.009572744369506836,
         "library": [
           "fn_64: (lam (map ?#0 $0))"
         ],
@@ -1988,7 +2216,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           741
-        ]
+        ],
+        "num_steps_run": 172,
+        "egg_compression_ratio": 1.048582995951417
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -1997,7 +2227,7 @@
         "initial_cost": 825,
         "final_cost": 786,
         "compression_ratio": 1.049618320610687,
-        "elapsed_secs": 0.008816242218017578,
+        "elapsed_secs": 0.008995532989501953,
         "library": [
           "fn_65: (lam (map ?#0 $0))"
         ],
@@ -2005,7 +2235,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           787
-        ]
+        ],
+        "num_steps_run": 119,
+        "egg_compression_ratio": 1.0495552731893265
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2014,7 +2246,7 @@
         "initial_cost": 782,
         "final_cost": 746,
         "compression_ratio": 1.0482573726541555,
-        "elapsed_secs": 0.008382320404052734,
+        "elapsed_secs": 0.008597373962402344,
         "library": [
           "fn_67: (lam (map ?#0 $0))"
         ],
@@ -2022,7 +2254,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           747
-        ]
+        ],
+        "num_steps_run": 108,
+        "egg_compression_ratio": 1.0481927710843373
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2031,7 +2265,7 @@
         "initial_cost": 808,
         "final_cost": 771,
         "compression_ratio": 1.0479896238651103,
-        "elapsed_secs": 0.008720874786376953,
+        "elapsed_secs": 0.008730411529541016,
         "library": [
           "fn_68: (lam (?#0 $0))"
         ],
@@ -2039,7 +2273,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           772
-        ]
+        ],
+        "num_steps_run": 119,
+        "egg_compression_ratio": 1.0479274611398963
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2048,7 +2284,7 @@
         "initial_cost": 135,
         "final_cost": 120,
         "compression_ratio": 1.125,
-        "elapsed_secs": 0.004080295562744141,
+        "elapsed_secs": 0.004195213317871094,
         "library": [
           "fn_0: (+ 1 (+ 1 1))"
         ],
@@ -2056,7 +2292,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           121
-        ]
+        ],
+        "num_steps_run": 113,
+        "egg_compression_ratio": 1.1239669421487604
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2065,7 +2303,7 @@
         "initial_cost": 251,
         "final_cost": 241,
         "compression_ratio": 1.04149377593361,
-        "elapsed_secs": 0.00550079345703125,
+        "elapsed_secs": 0.007071256637573242,
         "library": [
           "fn_19: (map (lam (?#0 $0 ?#1)))"
         ],
@@ -2073,7 +2311,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           242
-        ]
+        ],
+        "num_steps_run": 213,
+        "egg_compression_ratio": 1.0413223140495869
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2082,7 +2322,7 @@
         "initial_cost": 303,
         "final_cost": 284,
         "compression_ratio": 1.0669014084507042,
-        "elapsed_secs": 0.005631208419799805,
+        "elapsed_secs": 0.0057277679443359375,
         "library": [
           "fn_57: (lam (map (lam (?#0 $0 ?#1)) $0))"
         ],
@@ -2090,7 +2330,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           285
-        ]
+        ],
+        "num_steps_run": 147,
+        "egg_compression_ratio": 1.0666666666666667
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2099,7 +2341,7 @@
         "initial_cost": 427,
         "final_cost": 412,
         "compression_ratio": 1.0364077669902914,
-        "elapsed_secs": 0.007966041564941406,
+        "elapsed_secs": 0.008391618728637695,
         "library": [
           "fn_57: (cdr (cdr ?#0))"
         ],
@@ -2107,7 +2349,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           413
-        ]
+        ],
+        "num_steps_run": 308,
+        "egg_compression_ratio": 1.026634382566586
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2116,7 +2360,7 @@
         "initial_cost": 478,
         "final_cost": 463,
         "compression_ratio": 1.0323974082073435,
-        "elapsed_secs": 0.008643150329589844,
+        "elapsed_secs": 0.009836912155151367,
         "library": [
           "fn_57: (lam (?#0 $0))"
         ],
@@ -2124,7 +2368,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           464
-        ]
+        ],
+        "num_steps_run": 304,
+        "egg_compression_ratio": 1.0237068965517242
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2133,7 +2379,7 @@
         "initial_cost": 588,
         "final_cost": 565,
         "compression_ratio": 1.0407079646017698,
-        "elapsed_secs": 0.012457609176635742,
+        "elapsed_secs": 0.013496160507202148,
         "library": [
           "fn_69: (lam (?#0 $0))"
         ],
@@ -2141,7 +2387,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           566
-        ]
+        ],
+        "num_steps_run": 402,
+        "egg_compression_ratio": 1.0265017667844523
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2150,7 +2398,7 @@
         "initial_cost": 671,
         "final_cost": 643,
         "compression_ratio": 1.0435458786936236,
-        "elapsed_secs": 0.009139776229858398,
+        "elapsed_secs": 0.009558916091918945,
         "library": [
           "fn_71: (lam (map ?#0 $0))"
         ],
@@ -2158,7 +2406,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           644
-        ]
+        ],
+        "num_steps_run": 198,
+        "egg_compression_ratio": 1.0372670807453417
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2167,7 +2417,7 @@
         "initial_cost": 761,
         "final_cost": 730,
         "compression_ratio": 1.0424657534246575,
-        "elapsed_secs": 0.014356851577758789,
+        "elapsed_secs": 0.010403156280517578,
         "library": [
           "fn_72: (lam (?#0 $0))"
         ],
@@ -2175,7 +2425,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           731
-        ]
+        ],
+        "num_steps_run": 216,
+        "egg_compression_ratio": 1.036935704514364
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2184,7 +2436,7 @@
         "initial_cost": 831,
         "final_cost": 796,
         "compression_ratio": 1.0439698492462313,
-        "elapsed_secs": 0.011852025985717773,
+        "elapsed_secs": 0.011470794677734375,
         "library": [
           "fn_73: (lam (?#0 $0))"
         ],
@@ -2192,7 +2444,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           797
-        ]
+        ],
+        "num_steps_run": 213,
+        "egg_compression_ratio": 1.0388958594730238
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2201,7 +2455,7 @@
         "initial_cost": 1070,
         "final_cost": 1020,
         "compression_ratio": 1.0490196078431373,
-        "elapsed_secs": 0.0130157470703125,
+        "elapsed_secs": 0.01334691047668457,
         "library": [
           "fn_74: (lam (?#0 $0))"
         ],
@@ -2209,7 +2463,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1021
-        ]
+        ],
+        "num_steps_run": 189,
+        "egg_compression_ratio": 1.0450538687561215
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2218,7 +2474,7 @@
         "initial_cost": 1027,
         "final_cost": 979,
         "compression_ratio": 1.04902962206333,
-        "elapsed_secs": 0.01182699203491211,
+        "elapsed_secs": 0.01233816146850586,
         "library": [
           "fn_75: (lam (?#0 $0))"
         ],
@@ -2226,7 +2482,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           980
-        ]
+        ],
+        "num_steps_run": 164,
+        "egg_compression_ratio": 1.0448979591836736
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2235,7 +2493,7 @@
         "initial_cost": 1008,
         "final_cost": 957,
         "compression_ratio": 1.0532915360501567,
-        "elapsed_secs": 0.010775089263916016,
+        "elapsed_secs": 0.011525392532348633,
         "library": [
           "fn_76: (lam (?#0 $0))"
         ],
@@ -2243,7 +2501,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           958
-        ]
+        ],
+        "num_steps_run": 151,
+        "egg_compression_ratio": 1.0490605427974948
       }
     ],
     [
@@ -2254,7 +2514,7 @@
         "initial_cost": 166,
         "final_cost": 151,
         "compression_ratio": 1.099337748344371,
-        "elapsed_secs": 0.005210399627685547,
+        "elapsed_secs": 0.005976438522338867,
         "library": [
           "fn_0: (lam (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))) $0))"
         ],
@@ -2262,7 +2522,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           152
-        ]
+        ],
+        "num_steps_run": 205,
+        "egg_compression_ratio": 1.0986842105263157
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2271,7 +2533,7 @@
         "initial_cost": 216,
         "final_cost": 212,
         "compression_ratio": 1.0188679245283019,
-        "elapsed_secs": 0.0056226253509521484,
+        "elapsed_secs": 0.006367921829223633,
         "library": [
           "fn_1: (lam (?#0 $0))"
         ],
@@ -2279,7 +2541,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           213
-        ]
+        ],
+        "num_steps_run": 286,
+        "egg_compression_ratio": 1.0187793427230047
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2288,7 +2552,7 @@
         "initial_cost": 326,
         "final_cost": 307,
         "compression_ratio": 1.0618892508143323,
-        "elapsed_secs": 0.006849765777587891,
+        "elapsed_secs": 0.006920576095581055,
         "library": [
           "fn_2: (+ 1 1)"
         ],
@@ -2296,7 +2560,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           308
-        ]
+        ],
+        "num_steps_run": 234,
+        "egg_compression_ratio": 1.0616883116883118
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2305,7 +2571,7 @@
         "initial_cost": 429,
         "final_cost": 418,
         "compression_ratio": 1.0263157894736843,
-        "elapsed_secs": 0.008898258209228516,
+        "elapsed_secs": 0.009258508682250977,
         "library": [
           "fn_5: (lam (?#0 $0))"
         ],
@@ -2313,7 +2579,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           419
-        ]
+        ],
+        "num_steps_run": 315,
+        "egg_compression_ratio": 1.026252983293556
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2322,7 +2590,7 @@
         "initial_cost": 498,
         "final_cost": 482,
         "compression_ratio": 1.033195020746888,
-        "elapsed_secs": 0.009050846099853516,
+        "elapsed_secs": 0.010130882263183594,
         "library": [
           "fn_7: (lam (?#0 $0))"
         ],
@@ -2330,7 +2598,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           483
-        ]
+        ],
+        "num_steps_run": 251,
+        "egg_compression_ratio": 1.0331262939958592
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2339,7 +2609,7 @@
         "initial_cost": 770,
         "final_cost": 743,
         "compression_ratio": 1.0363391655450875,
-        "elapsed_secs": 0.013077497482299805,
+        "elapsed_secs": 0.01376485824584961,
         "library": [
           "fn_8: (lam (map ?#0 $0))"
         ],
@@ -2347,7 +2617,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           744
-        ]
+        ],
+        "num_steps_run": 337,
+        "egg_compression_ratio": 1.0362903225806452
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2356,7 +2628,7 @@
         "initial_cost": 896,
         "final_cost": 867,
         "compression_ratio": 1.0334486735870818,
-        "elapsed_secs": 0.015107393264770508,
+        "elapsed_secs": 0.01620936393737793,
         "library": [
           "fn_9: (lam (?#0 $0))"
         ],
@@ -2364,7 +2636,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           868
-        ]
+        ],
+        "num_steps_run": 376,
+        "egg_compression_ratio": 1.0334101382488479
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2373,7 +2647,7 @@
         "initial_cost": 1101,
         "final_cost": 1061,
         "compression_ratio": 1.0377002827521207,
-        "elapsed_secs": 0.0169980525970459,
+        "elapsed_secs": 0.017793893814086914,
         "library": [
           "fn_11: (lam (?#0 $0))"
         ],
@@ -2381,7 +2655,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1062
-        ]
+        ],
+        "num_steps_run": 327,
+        "egg_compression_ratio": 1.0376647834274952
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2390,7 +2666,7 @@
         "initial_cost": 1002,
         "final_cost": 959,
         "compression_ratio": 1.0448383733055266,
-        "elapsed_secs": 0.013433218002319336,
+        "elapsed_secs": 0.013754606246948242,
         "library": [
           "fn_13: (lam (?#0 $0))"
         ],
@@ -2398,7 +2674,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           960
-        ]
+        ],
+        "num_steps_run": 200,
+        "egg_compression_ratio": 1.0447916666666666
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2407,7 +2685,7 @@
         "initial_cost": 1052,
         "final_cost": 1008,
         "compression_ratio": 1.0436507936507937,
-        "elapsed_secs": 0.014795780181884766,
+        "elapsed_secs": 0.015276670455932617,
         "library": [
           "fn_14: (lam (?#0 $0))"
         ],
@@ -2415,7 +2693,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1009
-        ]
+        ],
+        "num_steps_run": 246,
+        "egg_compression_ratio": 1.043607532210109
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2424,7 +2704,7 @@
         "initial_cost": 1065,
         "final_cost": 1015,
         "compression_ratio": 1.0492610837438423,
-        "elapsed_secs": 0.012973308563232422,
+        "elapsed_secs": 0.013977527618408203,
         "library": [
           "fn_17: (lam (?#0 $0))"
         ],
@@ -2432,7 +2712,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1016
-        ]
+        ],
+        "num_steps_run": 180,
+        "egg_compression_ratio": 1.0492125984251968
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2441,7 +2723,7 @@
         "initial_cost": 171,
         "final_cost": 148,
         "compression_ratio": 1.1554054054054055,
-        "elapsed_secs": 0.0043218135833740234,
+        "elapsed_secs": 0.0045833587646484375,
         "library": [
           "fn_0: (+ 1 1)"
         ],
@@ -2449,7 +2731,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           149
-        ]
+        ],
+        "num_steps_run": 111,
+        "egg_compression_ratio": 1.1543624161073827
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2458,7 +2742,7 @@
         "initial_cost": 215,
         "final_cost": 202,
         "compression_ratio": 1.0643564356435644,
-        "elapsed_secs": 0.004757881164550781,
+        "elapsed_secs": 0.004837512969970703,
         "library": [
           "fn_20: (map (lam (?#0 $0 ?#1)))"
         ],
@@ -2466,7 +2750,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           203
-        ]
+        ],
+        "num_steps_run": 115,
+        "egg_compression_ratio": 1.064039408866995
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2475,7 +2761,7 @@
         "initial_cost": 286,
         "final_cost": 262,
         "compression_ratio": 1.0916030534351144,
-        "elapsed_secs": 0.005413055419921875,
+        "elapsed_secs": 0.0052568912506103516,
         "library": [
           "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))"
         ],
@@ -2483,7 +2769,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           263
-        ]
+        ],
+        "num_steps_run": 126,
+        "egg_compression_ratio": 1.091254752851711
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2492,7 +2780,7 @@
         "initial_cost": 322,
         "final_cost": 313,
         "compression_ratio": 1.0287539936102237,
-        "elapsed_secs": 0.00665736198425293,
+        "elapsed_secs": 0.007165670394897461,
         "library": [
           "fn_26: (lam (?#0 $0))"
         ],
@@ -2500,7 +2788,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           314
-        ]
+        ],
+        "num_steps_run": 258,
+        "egg_compression_ratio": 1.0286624203821657
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2509,7 +2799,7 @@
         "initial_cost": 424,
         "final_cost": 398,
         "compression_ratio": 1.065326633165829,
-        "elapsed_secs": 0.00802755355834961,
+        "elapsed_secs": 0.008352994918823242,
         "library": [
           "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))"
         ],
@@ -2517,7 +2807,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           399
-        ]
+        ],
+        "num_steps_run": 225,
+        "egg_compression_ratio": 1.0651629072681705
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2526,7 +2818,7 @@
         "initial_cost": 481,
         "final_cost": 460,
         "compression_ratio": 1.0456521739130435,
-        "elapsed_secs": 0.007205009460449219,
+        "elapsed_secs": 0.007467031478881836,
         "library": [
           "fn_27: (lam (?#0 $0))"
         ],
@@ -2534,7 +2826,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           461
-        ]
+        ],
+        "num_steps_run": 157,
+        "egg_compression_ratio": 1.0455531453362257
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2543,7 +2837,7 @@
         "initial_cost": 549,
         "final_cost": 520,
         "compression_ratio": 1.0557692307692308,
-        "elapsed_secs": 0.007567405700683594,
+        "elapsed_secs": 0.008003711700439453,
         "library": [
           "fn_28: (lam (?#0 $0))"
         ],
@@ -2551,7 +2845,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           521
-        ]
+        ],
+        "num_steps_run": 143,
+        "egg_compression_ratio": 1.055662188099808
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2560,7 +2856,7 @@
         "initial_cost": 651,
         "final_cost": 617,
         "compression_ratio": 1.0551053484602917,
-        "elapsed_secs": 0.008643865585327148,
+        "elapsed_secs": 0.008854389190673828,
         "library": [
           "fn_29: (lam (?#0 $0))"
         ],
@@ -2568,7 +2864,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           618
-        ]
+        ],
+        "num_steps_run": 154,
+        "egg_compression_ratio": 1.0550161812297734
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2577,7 +2875,7 @@
         "initial_cost": 751,
         "final_cost": 714,
         "compression_ratio": 1.0518207282913166,
-        "elapsed_secs": 0.009537220001220703,
+        "elapsed_secs": 0.009853601455688477,
         "library": [
           "fn_30: (lam (?#0 $0))"
         ],
@@ -2585,7 +2883,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           715
-        ]
+        ],
+        "num_steps_run": 161,
+        "egg_compression_ratio": 1.0517482517482517
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2594,7 +2894,7 @@
         "initial_cost": 900,
         "final_cost": 858,
         "compression_ratio": 1.048951048951049,
-        "elapsed_secs": 0.01076054573059082,
+        "elapsed_secs": 0.010899543762207031,
         "library": [
           "fn_30: (lam (?#0 $0))"
         ],
@@ -2602,7 +2902,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           859
-        ]
+        ],
+        "num_steps_run": 175,
+        "egg_compression_ratio": 1.048894062863795
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2611,7 +2913,7 @@
         "initial_cost": 837,
         "final_cost": 793,
         "compression_ratio": 1.055485498108449,
-        "elapsed_secs": 0.009840250015258789,
+        "elapsed_secs": 0.009620189666748047,
         "library": [
           "fn_33: (lam (?#0 $0))"
         ],
@@ -2619,7 +2921,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           794
-        ]
+        ],
+        "num_steps_run": 132,
+        "egg_compression_ratio": 1.0554156171284634
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2628,7 +2932,7 @@
         "initial_cost": 903,
         "final_cost": 856,
         "compression_ratio": 1.0549065420560748,
-        "elapsed_secs": 0.010138750076293945,
+        "elapsed_secs": 0.010243415832519531,
         "library": [
           "fn_34: (lam (?#0 $0))"
         ],
@@ -2636,7 +2940,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           857
-        ]
+        ],
+        "num_steps_run": 144,
+        "egg_compression_ratio": 1.0548424737456243
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2645,7 +2951,7 @@
         "initial_cost": 146,
         "final_cost": 133,
         "compression_ratio": 1.0977443609022557,
-        "elapsed_secs": 0.005105257034301758,
+        "elapsed_secs": 0.005262136459350586,
         "library": [
           "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))"
         ],
@@ -2653,7 +2959,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           134
-        ]
+        ],
+        "num_steps_run": 217,
+        "egg_compression_ratio": 1.0671641791044777
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2662,7 +2970,7 @@
         "initial_cost": 212,
         "final_cost": 201,
         "compression_ratio": 1.054726368159204,
-        "elapsed_secs": 0.005288362503051758,
+        "elapsed_secs": 0.0055141448974609375,
         "library": [
           "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))"
         ],
@@ -2670,7 +2978,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           202
-        ]
+        ],
+        "num_steps_run": 232,
+        "egg_compression_ratio": 1.0346534653465347
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2679,7 +2989,7 @@
         "initial_cost": 288,
         "final_cost": 262,
         "compression_ratio": 1.099236641221374,
-        "elapsed_secs": 0.005404472351074219,
+        "elapsed_secs": 0.0059201717376708984,
         "library": [
           "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
         ],
@@ -2687,7 +2997,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           263
-        ]
+        ],
+        "num_steps_run": 141,
+        "egg_compression_ratio": 1.0836501901140685
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2696,7 +3008,7 @@
         "initial_cost": 400,
         "final_cost": 360,
         "compression_ratio": 1.1111111111111112,
-        "elapsed_secs": 0.010366678237915039,
+        "elapsed_secs": 0.010765314102172852,
         "library": [
           "fn_40: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
         ],
@@ -2704,7 +3016,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           361
-        ]
+        ],
+        "num_steps_run": 261,
+        "egg_compression_ratio": 1.0886426592797784
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2713,7 +3027,7 @@
         "initial_cost": 490,
         "final_cost": 443,
         "compression_ratio": 1.1060948081264108,
-        "elapsed_secs": 0.01138448715209961,
+        "elapsed_secs": 0.01144719123840332,
         "library": [
           "fn_41: (lam (map ?#0 $0))"
         ],
@@ -2721,7 +3035,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           444
-        ]
+        ],
+        "num_steps_run": 217,
+        "egg_compression_ratio": 1.087837837837838
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2730,7 +3046,7 @@
         "initial_cost": 632,
         "final_cost": 588,
         "compression_ratio": 1.0748299319727892,
-        "elapsed_secs": 0.015650510787963867,
+        "elapsed_secs": 0.016629457473754883,
         "library": [
           "fn_42: (lam (map ?#0 $0))"
         ],
@@ -2738,7 +3054,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           589
-        ]
+        ],
+        "num_steps_run": 344,
+        "egg_compression_ratio": 1.061120543293718
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2747,7 +3065,7 @@
         "initial_cost": 679,
         "final_cost": 630,
         "compression_ratio": 1.0777777777777777,
-        "elapsed_secs": 0.009341001510620117,
+        "elapsed_secs": 0.009777069091796875,
         "library": [
           "fn_45: (lam (map ?#0 $0))"
         ],
@@ -2755,7 +3073,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           631
-        ]
+        ],
+        "num_steps_run": 165,
+        "egg_compression_ratio": 1.0713153724247226
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2764,7 +3084,7 @@
         "initial_cost": 739,
         "final_cost": 698,
         "compression_ratio": 1.0587392550143266,
-        "elapsed_secs": 0.010516166687011719,
+        "elapsed_secs": 0.01087498664855957,
         "library": [
           "fn_46: (lam (?#0 $0))"
         ],
@@ -2772,7 +3092,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           699
-        ]
+        ],
+        "num_steps_run": 204,
+        "egg_compression_ratio": 1.0472103004291846
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2781,7 +3103,7 @@
         "initial_cost": 744,
         "final_cost": 710,
         "compression_ratio": 1.047887323943662,
-        "elapsed_secs": 0.009632110595703125,
+        "elapsed_secs": 0.010044336318969727,
         "library": [
           "fn_50: (lam (?#0 $0))"
         ],
@@ -2789,7 +3111,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           711
-        ]
+        ],
+        "num_steps_run": 176,
+        "egg_compression_ratio": 1.0478199718706047
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2798,7 +3122,7 @@
         "initial_cost": 883,
         "final_cost": 842,
         "compression_ratio": 1.0486935866983373,
-        "elapsed_secs": 0.010249853134155273,
+        "elapsed_secs": 0.010888099670410156,
         "library": [
           "fn_52: (lam (?#0 $0))"
         ],
@@ -2806,7 +3130,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           843
-        ]
+        ],
+        "num_steps_run": 160,
+        "egg_compression_ratio": 1.0486358244365361
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2815,7 +3141,7 @@
         "initial_cost": 917,
         "final_cost": 869,
         "compression_ratio": 1.0552359033371692,
-        "elapsed_secs": 0.010444164276123047,
+        "elapsed_secs": 0.010762929916381836,
         "library": [
           "fn_53: (lam (?#0 $0))"
         ],
@@ -2823,7 +3149,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           869
-        ]
+        ],
+        "num_steps_run": 143,
+        "egg_compression_ratio": 1.0563866513233602
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2832,7 +3160,7 @@
         "initial_cost": 919,
         "final_cost": 866,
         "compression_ratio": 1.0612009237875288,
-        "elapsed_secs": 0.010108709335327148,
+        "elapsed_secs": 0.010701894760131836,
         "library": [
           "fn_54: (lam (?#0 $0))"
         ],
@@ -2840,7 +3168,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           866
-        ]
+        ],
+        "num_steps_run": 130,
+        "egg_compression_ratio": 1.0623556581986142
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2849,7 +3179,7 @@
         "initial_cost": 176,
         "final_cost": 165,
         "compression_ratio": 1.0666666666666667,
-        "elapsed_secs": 0.0053637027740478516,
+        "elapsed_secs": 0.005770206451416016,
         "library": [
           "fn_0: (+ 1)"
         ],
@@ -2857,7 +3187,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           166
-        ]
+        ],
+        "num_steps_run": 210,
+        "egg_compression_ratio": 1.0662650602409638
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2866,7 +3198,7 @@
         "initial_cost": 245,
         "final_cost": 236,
         "compression_ratio": 1.0381355932203389,
-        "elapsed_secs": 0.006310462951660156,
+        "elapsed_secs": 0.006602764129638672,
         "library": [
           "fn_55: (map (lam (index $0 ?#0)) (range ?#1))"
         ],
@@ -2874,7 +3206,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           237
-        ]
+        ],
+        "num_steps_run": 239,
+        "egg_compression_ratio": 1.0379746835443038
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2883,7 +3217,7 @@
         "initial_cost": 473,
         "final_cost": 449,
         "compression_ratio": 1.0534521158129175,
-        "elapsed_secs": 0.00832676887512207,
+        "elapsed_secs": 0.008763551712036133,
         "library": [
           "fn_57: (lam (map ?#0 $0))"
         ],
@@ -2891,7 +3225,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           450
-        ]
+        ],
+        "num_steps_run": 215,
+        "egg_compression_ratio": 1.0533333333333332
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2900,7 +3236,7 @@
         "initial_cost": 480,
         "final_cost": 459,
         "compression_ratio": 1.0457516339869282,
-        "elapsed_secs": 0.00798797607421875,
+        "elapsed_secs": 0.008731365203857422,
         "library": [
           "fn_59: (lam (map ?#0 $0))"
         ],
@@ -2908,7 +3244,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           460
-        ]
+        ],
+        "num_steps_run": 196,
+        "egg_compression_ratio": 1.0456521739130435
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2917,7 +3255,7 @@
         "initial_cost": 559,
         "final_cost": 526,
         "compression_ratio": 1.0627376425855513,
-        "elapsed_secs": 0.008117437362670898,
+        "elapsed_secs": 0.008621454238891602,
         "library": [
           "fn_60: (lam (map ?#0 $0))"
         ],
@@ -2925,7 +3263,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           527
-        ]
+        ],
+        "num_steps_run": 151,
+        "egg_compression_ratio": 1.0626185958254268
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2934,7 +3274,7 @@
         "initial_cost": 570,
         "final_cost": 537,
         "compression_ratio": 1.0614525139664805,
-        "elapsed_secs": 0.00724339485168457,
+        "elapsed_secs": 0.007842302322387695,
         "library": [
           "fn_62: (lam (map ?#0 $0))"
         ],
@@ -2942,7 +3282,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           538
-        ]
+        ],
+        "num_steps_run": 114,
+        "egg_compression_ratio": 1.0613382899628252
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2951,7 +3293,7 @@
         "initial_cost": 614,
         "final_cost": 581,
         "compression_ratio": 1.0567986230636832,
-        "elapsed_secs": 0.007450580596923828,
+        "elapsed_secs": 0.007729053497314453,
         "library": [
           "fn_62: (lam (map ?#0 $0))"
         ],
@@ -2959,7 +3301,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           582
-        ]
+        ],
+        "num_steps_run": 106,
+        "egg_compression_ratio": 1.056701030927835
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2968,7 +3312,7 @@
         "initial_cost": 703,
         "final_cost": 670,
         "compression_ratio": 1.0492537313432835,
-        "elapsed_secs": 0.008682489395141602,
+        "elapsed_secs": 0.008805036544799805,
         "library": [
           "fn_63: (lam (map ?#0 $0))"
         ],
@@ -2976,7 +3320,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           671
-        ]
+        ],
+        "num_steps_run": 134,
+        "egg_compression_ratio": 1.0491803278688525
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -2985,7 +3331,7 @@
         "initial_cost": 776,
         "final_cost": 740,
         "compression_ratio": 1.0486486486486486,
-        "elapsed_secs": 0.009252309799194336,
+        "elapsed_secs": 0.009557247161865234,
         "library": [
           "fn_64: (lam (map ?#0 $0))"
         ],
@@ -2993,7 +3339,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           741
-        ]
+        ],
+        "num_steps_run": 172,
+        "egg_compression_ratio": 1.048582995951417
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3002,7 +3350,7 @@
         "initial_cost": 825,
         "final_cost": 786,
         "compression_ratio": 1.049618320610687,
-        "elapsed_secs": 0.009508132934570312,
+        "elapsed_secs": 0.008973121643066406,
         "library": [
           "fn_65: (lam (map ?#0 $0))"
         ],
@@ -3010,7 +3358,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           787
-        ]
+        ],
+        "num_steps_run": 119,
+        "egg_compression_ratio": 1.0495552731893265
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3019,7 +3369,7 @@
         "initial_cost": 782,
         "final_cost": 746,
         "compression_ratio": 1.0482573726541555,
-        "elapsed_secs": 0.00821828842163086,
+        "elapsed_secs": 0.008658170700073242,
         "library": [
           "fn_67: (lam (map ?#0 $0))"
         ],
@@ -3027,7 +3377,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           747
-        ]
+        ],
+        "num_steps_run": 108,
+        "egg_compression_ratio": 1.0481927710843373
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3036,7 +3388,7 @@
         "initial_cost": 808,
         "final_cost": 771,
         "compression_ratio": 1.0479896238651103,
-        "elapsed_secs": 0.009350776672363281,
+        "elapsed_secs": 0.009290695190429688,
         "library": [
           "fn_68: (lam (?#0 $0))"
         ],
@@ -3044,7 +3396,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           772
-        ]
+        ],
+        "num_steps_run": 119,
+        "egg_compression_ratio": 1.0479274611398963
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3053,7 +3407,7 @@
         "initial_cost": 135,
         "final_cost": 120,
         "compression_ratio": 1.125,
-        "elapsed_secs": 0.004132747650146484,
+        "elapsed_secs": 0.004311561584472656,
         "library": [
           "fn_0: (+ 1 (+ 1 1))"
         ],
@@ -3061,7 +3415,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           121
-        ]
+        ],
+        "num_steps_run": 113,
+        "egg_compression_ratio": 1.1239669421487604
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3070,7 +3426,7 @@
         "initial_cost": 251,
         "final_cost": 241,
         "compression_ratio": 1.04149377593361,
-        "elapsed_secs": 0.005734920501708984,
+        "elapsed_secs": 0.005789995193481445,
         "library": [
           "fn_19: (map (lam (?#0 $0 ?#1)))"
         ],
@@ -3078,7 +3434,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           242
-        ]
+        ],
+        "num_steps_run": 213,
+        "egg_compression_ratio": 1.0413223140495869
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3087,7 +3445,7 @@
         "initial_cost": 303,
         "final_cost": 284,
         "compression_ratio": 1.0669014084507042,
-        "elapsed_secs": 0.005690097808837891,
+        "elapsed_secs": 0.00593876838684082,
         "library": [
           "fn_57: (lam (map (lam (?#0 $0 ?#1)) $0))"
         ],
@@ -3095,7 +3453,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           285
-        ]
+        ],
+        "num_steps_run": 147,
+        "egg_compression_ratio": 1.0666666666666667
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3104,7 +3464,7 @@
         "initial_cost": 427,
         "final_cost": 412,
         "compression_ratio": 1.0364077669902914,
-        "elapsed_secs": 0.008068323135375977,
+        "elapsed_secs": 0.00860595703125,
         "library": [
           "fn_57: (cdr (cdr ?#0))"
         ],
@@ -3112,7 +3472,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           413
-        ]
+        ],
+        "num_steps_run": 308,
+        "egg_compression_ratio": 1.026634382566586
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3121,7 +3483,7 @@
         "initial_cost": 478,
         "final_cost": 463,
         "compression_ratio": 1.0323974082073435,
-        "elapsed_secs": 0.008815288543701172,
+        "elapsed_secs": 0.00896453857421875,
         "library": [
           "fn_57: (lam (?#0 $0))"
         ],
@@ -3129,7 +3491,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           464
-        ]
+        ],
+        "num_steps_run": 304,
+        "egg_compression_ratio": 1.0237068965517242
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3138,7 +3502,7 @@
         "initial_cost": 588,
         "final_cost": 565,
         "compression_ratio": 1.0407079646017698,
-        "elapsed_secs": 0.012819766998291016,
+        "elapsed_secs": 0.013688802719116211,
         "library": [
           "fn_69: (lam (?#0 $0))"
         ],
@@ -3146,7 +3510,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           566
-        ]
+        ],
+        "num_steps_run": 402,
+        "egg_compression_ratio": 1.0265017667844523
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3155,7 +3521,7 @@
         "initial_cost": 671,
         "final_cost": 643,
         "compression_ratio": 1.0435458786936236,
-        "elapsed_secs": 0.00918436050415039,
+        "elapsed_secs": 0.009342193603515625,
         "library": [
           "fn_71: (lam (map ?#0 $0))"
         ],
@@ -3163,7 +3529,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           644
-        ]
+        ],
+        "num_steps_run": 198,
+        "egg_compression_ratio": 1.0372670807453417
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3172,7 +3540,7 @@
         "initial_cost": 761,
         "final_cost": 730,
         "compression_ratio": 1.0424657534246575,
-        "elapsed_secs": 0.010036945343017578,
+        "elapsed_secs": 0.010463237762451172,
         "library": [
           "fn_72: (lam (?#0 $0))"
         ],
@@ -3180,7 +3548,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           731
-        ]
+        ],
+        "num_steps_run": 216,
+        "egg_compression_ratio": 1.036935704514364
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3189,7 +3559,7 @@
         "initial_cost": 831,
         "final_cost": 796,
         "compression_ratio": 1.0439698492462313,
-        "elapsed_secs": 0.010921001434326172,
+        "elapsed_secs": 0.011276960372924805,
         "library": [
           "fn_73: (lam (?#0 $0))"
         ],
@@ -3197,7 +3567,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           797
-        ]
+        ],
+        "num_steps_run": 213,
+        "egg_compression_ratio": 1.0388958594730238
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3206,7 +3578,7 @@
         "initial_cost": 1070,
         "final_cost": 1020,
         "compression_ratio": 1.0490196078431373,
-        "elapsed_secs": 0.012815475463867188,
+        "elapsed_secs": 0.013365507125854492,
         "library": [
           "fn_74: (lam (?#0 $0))"
         ],
@@ -3214,7 +3586,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           1021
-        ]
+        ],
+        "num_steps_run": 189,
+        "egg_compression_ratio": 1.0450538687561215
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3223,7 +3597,7 @@
         "initial_cost": 1027,
         "final_cost": 979,
         "compression_ratio": 1.04902962206333,
-        "elapsed_secs": 0.011681318283081055,
+        "elapsed_secs": 0.012157201766967773,
         "library": [
           "fn_75: (lam (?#0 $0))"
         ],
@@ -3231,7 +3605,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           980
-        ]
+        ],
+        "num_steps_run": 164,
+        "egg_compression_ratio": 1.0448979591836736
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3240,7 +3616,7 @@
         "initial_cost": 1008,
         "final_cost": 957,
         "compression_ratio": 1.0532915360501567,
-        "elapsed_secs": 0.010788917541503906,
+        "elapsed_secs": 0.0115814208984375,
         "library": [
           "fn_76: (lam (?#0 $0))"
         ],
@@ -3248,7 +3624,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           958
-        ]
+        ],
+        "num_steps_run": 151,
+        "egg_compression_ratio": 1.0490605427974948
       }
     ]
   ],
@@ -3261,7 +3639,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.010574102401733398,
+        "elapsed_secs": 0.011364221572875977,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3269,7 +3647,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 261,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3278,7 +3658,7 @@
         "initial_cost": 474,
         "final_cost": 433,
         "compression_ratio": 1.094688221709007,
-        "elapsed_secs": 0.008125066757202148,
+        "elapsed_secs": 0.009029388427734375,
         "library": [
           "fn_143: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3286,7 +3666,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           434
-        ]
+        ],
+        "num_steps_run": 163,
+        "egg_compression_ratio": 1.0944700460829493
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3295,7 +3677,7 @@
         "initial_cost": 438,
         "final_cost": 389,
         "compression_ratio": 1.1259640102827764,
-        "elapsed_secs": 0.006020307540893555,
+        "elapsed_secs": 0.0063283443450927734,
         "library": [
           "fn_145: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3303,7 +3685,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           390
-        ]
+        ],
+        "num_steps_run": 92,
+        "egg_compression_ratio": 1.1256410256410256
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3312,7 +3696,7 @@
         "initial_cost": 527,
         "final_cost": 478,
         "compression_ratio": 1.102510460251046,
-        "elapsed_secs": 0.007586956024169922,
+        "elapsed_secs": 0.008044719696044922,
         "library": [
           "fn_146: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3320,7 +3704,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           479
-        ]
+        ],
+        "num_steps_run": 112,
+        "egg_compression_ratio": 1.1022964509394573
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3329,7 +3715,7 @@
         "initial_cost": 521,
         "final_cost": 464,
         "compression_ratio": 1.1228448275862069,
-        "elapsed_secs": 0.007386922836303711,
+        "elapsed_secs": 0.007169246673583984,
         "library": [
           "fn_148: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3337,7 +3723,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           465
-        ]
+        ],
+        "num_steps_run": 105,
+        "egg_compression_ratio": 1.1225806451612903
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3346,7 +3734,7 @@
         "initial_cost": 600,
         "final_cost": 551,
         "compression_ratio": 1.0889292196007259,
-        "elapsed_secs": 0.009278059005737305,
+        "elapsed_secs": 0.009483098983764648,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3354,7 +3742,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           552
-        ]
+        ],
+        "num_steps_run": 200,
+        "egg_compression_ratio": 1.088768115942029
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3363,7 +3753,7 @@
         "initial_cost": 490,
         "final_cost": 453,
         "compression_ratio": 1.0816777041942605,
-        "elapsed_secs": 0.009174108505249023,
+        "elapsed_secs": 0.009396553039550781,
         "library": [
           "fn_155: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3371,7 +3761,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           454
-        ]
+        ],
+        "num_steps_run": 198,
+        "egg_compression_ratio": 1.0814977973568283
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3380,7 +3772,7 @@
         "initial_cost": 449,
         "final_cost": 404,
         "compression_ratio": 1.1113861386138615,
-        "elapsed_secs": 0.0062329769134521484,
+        "elapsed_secs": 0.006555080413818359,
         "library": [
           "fn_157: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3388,7 +3780,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           405
-        ]
+        ],
+        "num_steps_run": 112,
+        "egg_compression_ratio": 1.1111111111111112
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3397,7 +3791,7 @@
         "initial_cost": 433,
         "final_cost": 388,
         "compression_ratio": 1.115979381443299,
-        "elapsed_secs": 0.0059087276458740234,
+        "elapsed_secs": 0.006226301193237305,
         "library": [
           "fn_157: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3405,7 +3799,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           389
-        ]
+        ],
+        "num_steps_run": 99,
+        "egg_compression_ratio": 1.1156812339331619
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3414,7 +3810,7 @@
         "initial_cost": 507,
         "final_cost": 462,
         "compression_ratio": 1.0974025974025974,
-        "elapsed_secs": 0.006482124328613281,
+        "elapsed_secs": 0.006631374359130859,
         "library": [
           "fn_158: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3422,7 +3818,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           463
-        ]
+        ],
+        "num_steps_run": 113,
+        "egg_compression_ratio": 1.0971922246220303
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3431,7 +3829,7 @@
         "initial_cost": 518,
         "final_cost": 461,
         "compression_ratio": 1.123644251626898,
-        "elapsed_secs": 0.00719761848449707,
+        "elapsed_secs": 0.007216930389404297,
         "library": [
           "fn_160: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3439,7 +3837,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           462
-        ]
+        ],
+        "num_steps_run": 99,
+        "egg_compression_ratio": 1.1233766233766234
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3448,7 +3848,7 @@
         "initial_cost": 527,
         "final_cost": 474,
         "compression_ratio": 1.1118143459915613,
-        "elapsed_secs": 0.007143497467041016,
+        "elapsed_secs": 0.007843494415283203,
         "library": [
           "fn_161: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3456,7 +3856,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           475
-        ]
+        ],
+        "num_steps_run": 109,
+        "egg_compression_ratio": 1.111578947368421
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3465,7 +3867,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.010062217712402344,
+        "elapsed_secs": 0.010471820831298828,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3473,7 +3875,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 260,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3482,7 +3886,7 @@
         "initial_cost": 505,
         "final_cost": 468,
         "compression_ratio": 1.079059829059829,
-        "elapsed_secs": 0.012009859085083008,
+        "elapsed_secs": 0.012599706649780273,
         "library": [
           "fn_162: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3490,7 +3894,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           469
-        ]
+        ],
+        "num_steps_run": 220,
+        "egg_compression_ratio": 1.0788912579957357
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3499,7 +3905,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.011817693710327148,
+        "elapsed_secs": 0.011994123458862305,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3507,7 +3913,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 258,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3516,7 +3924,7 @@
         "initial_cost": 576,
         "final_cost": 539,
         "compression_ratio": 1.0686456400742115,
-        "elapsed_secs": 0.009625673294067383,
+        "elapsed_secs": 0.010187625885009766,
         "library": [
           "fn_165: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3524,7 +3932,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           540
-        ]
+        ],
+        "num_steps_run": 229,
+        "egg_compression_ratio": 1.0685185185185184
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3533,7 +3943,7 @@
         "initial_cost": 658,
         "final_cost": 605,
         "compression_ratio": 1.087603305785124,
-        "elapsed_secs": 0.011435985565185547,
+        "elapsed_secs": 0.011902093887329102,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3541,7 +3951,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           606
-        ]
+        ],
+        "num_steps_run": 232,
+        "egg_compression_ratio": 1.0874587458745875
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3550,7 +3962,7 @@
         "initial_cost": 463,
         "final_cost": 426,
         "compression_ratio": 1.0868544600938967,
-        "elapsed_secs": 0.007666587829589844,
+        "elapsed_secs": 0.008119821548461914,
         "library": [
           "fn_170: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3558,7 +3970,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           427
-        ]
+        ],
+        "num_steps_run": 155,
+        "egg_compression_ratio": 1.0866510538641687
       }
     ],
     [
@@ -3569,7 +3983,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.01052236557006836,
+        "elapsed_secs": 0.011136293411254883,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3577,7 +3991,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 261,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3586,7 +4002,7 @@
         "initial_cost": 474,
         "final_cost": 433,
         "compression_ratio": 1.094688221709007,
-        "elapsed_secs": 0.009145021438598633,
+        "elapsed_secs": 0.008872032165527344,
         "library": [
           "fn_143: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3594,7 +4010,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           434
-        ]
+        ],
+        "num_steps_run": 163,
+        "egg_compression_ratio": 1.0944700460829493
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3603,7 +4021,7 @@
         "initial_cost": 438,
         "final_cost": 389,
         "compression_ratio": 1.1259640102827764,
-        "elapsed_secs": 0.0058782100677490234,
+        "elapsed_secs": 0.00632929801940918,
         "library": [
           "fn_145: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3611,7 +4029,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           390
-        ]
+        ],
+        "num_steps_run": 92,
+        "egg_compression_ratio": 1.1256410256410256
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3620,7 +4040,7 @@
         "initial_cost": 527,
         "final_cost": 478,
         "compression_ratio": 1.102510460251046,
-        "elapsed_secs": 0.00777745246887207,
+        "elapsed_secs": 0.007875204086303711,
         "library": [
           "fn_146: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3628,7 +4048,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           479
-        ]
+        ],
+        "num_steps_run": 112,
+        "egg_compression_ratio": 1.1022964509394573
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3637,7 +4059,7 @@
         "initial_cost": 521,
         "final_cost": 464,
         "compression_ratio": 1.1228448275862069,
-        "elapsed_secs": 0.0069005489349365234,
+        "elapsed_secs": 0.0071718692779541016,
         "library": [
           "fn_148: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3645,7 +4067,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           465
-        ]
+        ],
+        "num_steps_run": 105,
+        "egg_compression_ratio": 1.1225806451612903
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3654,7 +4078,7 @@
         "initial_cost": 600,
         "final_cost": 551,
         "compression_ratio": 1.0889292196007259,
-        "elapsed_secs": 0.009291887283325195,
+        "elapsed_secs": 0.009607791900634766,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3662,7 +4086,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           552
-        ]
+        ],
+        "num_steps_run": 200,
+        "egg_compression_ratio": 1.088768115942029
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3671,7 +4097,7 @@
         "initial_cost": 490,
         "final_cost": 453,
         "compression_ratio": 1.0816777041942605,
-        "elapsed_secs": 0.009103536605834961,
+        "elapsed_secs": 0.009508371353149414,
         "library": [
           "fn_155: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3679,7 +4105,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           454
-        ]
+        ],
+        "num_steps_run": 198,
+        "egg_compression_ratio": 1.0814977973568283
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3688,7 +4116,7 @@
         "initial_cost": 449,
         "final_cost": 404,
         "compression_ratio": 1.1113861386138615,
-        "elapsed_secs": 0.006146669387817383,
+        "elapsed_secs": 0.006409883499145508,
         "library": [
           "fn_157: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3696,7 +4124,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           405
-        ]
+        ],
+        "num_steps_run": 112,
+        "egg_compression_ratio": 1.1111111111111112
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3705,7 +4135,7 @@
         "initial_cost": 433,
         "final_cost": 388,
         "compression_ratio": 1.115979381443299,
-        "elapsed_secs": 0.005991935729980469,
+        "elapsed_secs": 0.006569862365722656,
         "library": [
           "fn_157: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3713,7 +4143,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           389
-        ]
+        ],
+        "num_steps_run": 99,
+        "egg_compression_ratio": 1.1156812339331619
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3722,7 +4154,7 @@
         "initial_cost": 507,
         "final_cost": 462,
         "compression_ratio": 1.0974025974025974,
-        "elapsed_secs": 0.006453990936279297,
+        "elapsed_secs": 0.006349325180053711,
         "library": [
           "fn_158: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3730,7 +4162,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           463
-        ]
+        ],
+        "num_steps_run": 113,
+        "egg_compression_ratio": 1.0971922246220303
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3739,7 +4173,7 @@
         "initial_cost": 518,
         "final_cost": 461,
         "compression_ratio": 1.123644251626898,
-        "elapsed_secs": 0.0068628787994384766,
+        "elapsed_secs": 0.007629871368408203,
         "library": [
           "fn_160: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3747,7 +4181,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           462
-        ]
+        ],
+        "num_steps_run": 99,
+        "egg_compression_ratio": 1.1233766233766234
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3756,7 +4192,7 @@
         "initial_cost": 527,
         "final_cost": 474,
         "compression_ratio": 1.1118143459915613,
-        "elapsed_secs": 0.0074231624603271484,
+        "elapsed_secs": 0.007596254348754883,
         "library": [
           "fn_161: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3764,7 +4200,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           475
-        ]
+        ],
+        "num_steps_run": 109,
+        "egg_compression_ratio": 1.111578947368421
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3773,7 +4211,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.009935617446899414,
+        "elapsed_secs": 0.010249137878417969,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3781,7 +4219,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 260,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3790,7 +4230,7 @@
         "initial_cost": 505,
         "final_cost": 468,
         "compression_ratio": 1.079059829059829,
-        "elapsed_secs": 0.012328147888183594,
+        "elapsed_secs": 0.012541532516479492,
         "library": [
           "fn_162: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3798,7 +4238,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           469
-        ]
+        ],
+        "num_steps_run": 220,
+        "egg_compression_ratio": 1.0788912579957357
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3807,7 +4249,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.011431455612182617,
+        "elapsed_secs": 0.012037515640258789,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3815,7 +4257,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 258,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3824,7 +4268,7 @@
         "initial_cost": 576,
         "final_cost": 539,
         "compression_ratio": 1.0686456400742115,
-        "elapsed_secs": 0.009721994400024414,
+        "elapsed_secs": 0.010736227035522461,
         "library": [
           "fn_165: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3832,7 +4276,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           540
-        ]
+        ],
+        "num_steps_run": 229,
+        "egg_compression_ratio": 1.0685185185185184
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3841,7 +4287,7 @@
         "initial_cost": 658,
         "final_cost": 605,
         "compression_ratio": 1.087603305785124,
-        "elapsed_secs": 0.011219263076782227,
+        "elapsed_secs": 0.011992692947387695,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3849,7 +4295,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           606
-        ]
+        ],
+        "num_steps_run": 232,
+        "egg_compression_ratio": 1.0874587458745875
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3858,7 +4306,7 @@
         "initial_cost": 463,
         "final_cost": 426,
         "compression_ratio": 1.0868544600938967,
-        "elapsed_secs": 0.0076291561126708984,
+        "elapsed_secs": 0.007964611053466797,
         "library": [
           "fn_170: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3866,7 +4314,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           427
-        ]
+        ],
+        "num_steps_run": 155,
+        "egg_compression_ratio": 1.0866510538641687
       }
     ],
     [
@@ -3877,7 +4327,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.010511398315429688,
+        "elapsed_secs": 0.011507034301757812,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3885,7 +4335,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 261,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3894,7 +4346,7 @@
         "initial_cost": 474,
         "final_cost": 433,
         "compression_ratio": 1.094688221709007,
-        "elapsed_secs": 0.008516550064086914,
+        "elapsed_secs": 0.009090900421142578,
         "library": [
           "fn_143: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3902,7 +4354,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           434
-        ]
+        ],
+        "num_steps_run": 163,
+        "egg_compression_ratio": 1.0944700460829493
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3911,7 +4365,7 @@
         "initial_cost": 438,
         "final_cost": 389,
         "compression_ratio": 1.1259640102827764,
-        "elapsed_secs": 0.006005525588989258,
+        "elapsed_secs": 0.006364345550537109,
         "library": [
           "fn_145: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3919,7 +4373,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           390
-        ]
+        ],
+        "num_steps_run": 92,
+        "egg_compression_ratio": 1.1256410256410256
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3928,7 +4384,7 @@
         "initial_cost": 527,
         "final_cost": 478,
         "compression_ratio": 1.102510460251046,
-        "elapsed_secs": 0.007657289505004883,
+        "elapsed_secs": 0.007883071899414062,
         "library": [
           "fn_146: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3936,7 +4392,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           479
-        ]
+        ],
+        "num_steps_run": 112,
+        "egg_compression_ratio": 1.1022964509394573
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3945,7 +4403,7 @@
         "initial_cost": 521,
         "final_cost": 464,
         "compression_ratio": 1.1228448275862069,
-        "elapsed_secs": 0.00688481330871582,
+        "elapsed_secs": 0.007222414016723633,
         "library": [
           "fn_148: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3953,7 +4411,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           465
-        ]
+        ],
+        "num_steps_run": 105,
+        "egg_compression_ratio": 1.1225806451612903
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3962,7 +4422,7 @@
         "initial_cost": 600,
         "final_cost": 551,
         "compression_ratio": 1.0889292196007259,
-        "elapsed_secs": 0.009305238723754883,
+        "elapsed_secs": 0.009572029113769531,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3970,7 +4430,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           552
-        ]
+        ],
+        "num_steps_run": 200,
+        "egg_compression_ratio": 1.088768115942029
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3979,7 +4441,7 @@
         "initial_cost": 490,
         "final_cost": 453,
         "compression_ratio": 1.0816777041942605,
-        "elapsed_secs": 0.009353399276733398,
+        "elapsed_secs": 0.009511232376098633,
         "library": [
           "fn_155: (lam (lam (?#0 $1 $0)))"
         ],
@@ -3987,7 +4449,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           454
-        ]
+        ],
+        "num_steps_run": 198,
+        "egg_compression_ratio": 1.0814977973568283
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -3996,7 +4460,7 @@
         "initial_cost": 449,
         "final_cost": 404,
         "compression_ratio": 1.1113861386138615,
-        "elapsed_secs": 0.006218910217285156,
+        "elapsed_secs": 0.006579399108886719,
         "library": [
           "fn_157: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4004,7 +4468,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           405
-        ]
+        ],
+        "num_steps_run": 112,
+        "egg_compression_ratio": 1.1111111111111112
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4013,7 +4479,7 @@
         "initial_cost": 433,
         "final_cost": 388,
         "compression_ratio": 1.115979381443299,
-        "elapsed_secs": 0.0060536861419677734,
+        "elapsed_secs": 0.0062177181243896484,
         "library": [
           "fn_157: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4021,7 +4487,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           389
-        ]
+        ],
+        "num_steps_run": 99,
+        "egg_compression_ratio": 1.1156812339331619
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4030,7 +4498,7 @@
         "initial_cost": 507,
         "final_cost": 462,
         "compression_ratio": 1.0974025974025974,
-        "elapsed_secs": 0.006374359130859375,
+        "elapsed_secs": 0.007543087005615234,
         "library": [
           "fn_158: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4038,7 +4506,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           463
-        ]
+        ],
+        "num_steps_run": 113,
+        "egg_compression_ratio": 1.0971922246220303
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4047,7 +4517,7 @@
         "initial_cost": 518,
         "final_cost": 461,
         "compression_ratio": 1.123644251626898,
-        "elapsed_secs": 0.006871223449707031,
+        "elapsed_secs": 0.0072209835052490234,
         "library": [
           "fn_160: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4055,7 +4525,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           462
-        ]
+        ],
+        "num_steps_run": 99,
+        "egg_compression_ratio": 1.1233766233766234
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4064,7 +4536,7 @@
         "initial_cost": 527,
         "final_cost": 474,
         "compression_ratio": 1.1118143459915613,
-        "elapsed_secs": 0.007309675216674805,
+        "elapsed_secs": 0.007445573806762695,
         "library": [
           "fn_161: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4072,7 +4544,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           475
-        ]
+        ],
+        "num_steps_run": 109,
+        "egg_compression_ratio": 1.111578947368421
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4081,7 +4555,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.010070085525512695,
+        "elapsed_secs": 0.010582923889160156,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4089,7 +4563,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 260,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4098,7 +4574,7 @@
         "initial_cost": 505,
         "final_cost": 468,
         "compression_ratio": 1.079059829059829,
-        "elapsed_secs": 0.012122631072998047,
+        "elapsed_secs": 0.012277603149414062,
         "library": [
           "fn_162: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4106,7 +4582,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           469
-        ]
+        ],
+        "num_steps_run": 220,
+        "egg_compression_ratio": 1.0788912579957357
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4115,7 +4593,7 @@
         "initial_cost": 567,
         "final_cost": 522,
         "compression_ratio": 1.0862068965517242,
-        "elapsed_secs": 0.011562824249267578,
+        "elapsed_secs": 0.012128829956054688,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4123,7 +4601,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           523
-        ]
+        ],
+        "num_steps_run": 258,
+        "egg_compression_ratio": 1.0860420650095601
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4132,7 +4612,7 @@
         "initial_cost": 576,
         "final_cost": 539,
         "compression_ratio": 1.0686456400742115,
-        "elapsed_secs": 0.009770393371582031,
+        "elapsed_secs": 0.010025262832641602,
         "library": [
           "fn_165: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4140,7 +4620,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           540
-        ]
+        ],
+        "num_steps_run": 229,
+        "egg_compression_ratio": 1.0685185185185184
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4149,7 +4631,7 @@
         "initial_cost": 658,
         "final_cost": 605,
         "compression_ratio": 1.087603305785124,
-        "elapsed_secs": 0.0113525390625,
+        "elapsed_secs": 0.011905670166015625,
         "library": [
           "fn_0: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4157,7 +4639,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           606
-        ]
+        ],
+        "num_steps_run": 232,
+        "egg_compression_ratio": 1.0874587458745875
       },
       {
         "method": "OursBf(num_steps=5000, max_forced_expansion=None, max_arity=2)",
@@ -4166,7 +4650,7 @@
         "initial_cost": 463,
         "final_cost": 426,
         "compression_ratio": 1.0868544600938967,
-        "elapsed_secs": 0.007712602615356445,
+        "elapsed_secs": 0.007910728454589844,
         "library": [
           "fn_170: (lam (lam (?#0 $1 $0)))"
         ],
@@ -4174,7 +4658,9 @@
         "timed_out": false,
         "cost_at_end_of_each_iter": [
           427
-        ]
+        ],
+        "num_steps_run": 155,
+        "egg_compression_ratio": 1.0866510538641687
       }
     ]
   ]
