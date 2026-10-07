@@ -39,33 +39,27 @@ between runs; `--seed` fixes them. `--help` lists all options.
 
 ## Reproducing the paper
 
-Experiments are defined in `expts/tables.py` and run with `./run.py
-<experiment>`. Results are cached per (method, domain) under `results/`; the
-cache used for the paper is included. Render scripts write to `figures/`.
+`bash scripts/run_all_tables.sh` runs every experiment and renders all tables
+and figures to `figures/`. Results are cached per (method, domain) under
+`results/` and reused; the cache used for the paper is included.
 
-| Paper | Experiment | Render script | Output in `figures/` |
-| --- | --- | --- | --- |
-| Table 1 | `babble_comparison_rewrites` | `render_tables.py` | `babble_comparison_rewrites.tex` |
-| Table 2 | `molecules` | `render_tables.py` | `molecules.tex` |
-| Table 3 | `circuits` | `render_tables.py` | `circuits.tex` |
-| Table 4 | `babble_comparison_no_rewrites` | `render_tables.py` | `babble_comparison_no_rewrites.tex` |
-| Table 5 | `ablation` | `render_ablation.py` | `ablation.tex` |
-| Table 6 | `circuits_all` | `render_tables.py` | `circuits_all.tex` |
-| Table 7 | `ablation` | `render_ablation.py` | `ablation-appendix.tex` |
-| Figure 6 | `molecules` | `render_molecules.py` | `molecules/search-progress.png` |
-| Figure 10 | the four main tables | `render_tables.py` | `curve-grid/` |
-| Figure 11 | `arity_experiment` | `render_arity.py` | `arity/` |
-
-Render scripts are in `scripts/`. `babble_comparison_rewrites_single` and
-`babble_comparison_no_rewrites_single` are not in the paper.
+| Paper | Experiment | Output in `figures/` |
+| --- | --- | --- |
+| Table 1 | `babble_comparison_rewrites` | `babble_comparison_rewrites.tex` |
+| Table 2 | `molecules` | `molecules.tex` |
+| Table 3 | `circuits` | `circuits.tex` |
+| Table 4 | `babble_comparison_no_rewrites` | `babble_comparison_no_rewrites.tex` |
+| Table 5 | `ablation` | `ablation.tex` |
+| Table 6 | `circuits_all` | `circuits_all.tex` |
+| Table 7 | `ablation` | `ablation-appendix.tex` |
+| Figure 6 | `molecules` | `molecules/search-progress.png` |
+| Figure 10 | the four main tables | `curve-grid/` |
+| Figure 11 | `arity_experiment` | `arity/` |
 
 ### 1. Render from cached results (minutes)
 
 ```bash
-python scripts/render_tables.py
-python scripts/render_molecules.py
-python scripts/render_ablation.py
-python scripts/render_arity.py
+bash scripts/run_all_tables.sh
 ```
 
 ### 2. Recompute E-Stitch cells in the main paper tables (TODO hours)
@@ -74,11 +68,7 @@ All other results are read from the cache.
 
 ```bash
 python scripts/clear_table_estitch_results.py
-for t in babble_comparison_rewrites_single babble_comparison_no_rewrites_single \
-         babble_comparison_rewrites babble_comparison_no_rewrites molecules circuits; do
-    ./run.py $t
-done
-python scripts/render_tables.py
+bash scripts/run_all_tables.sh
 ```
 
 `git restore results/` restores the original cache.
@@ -87,8 +77,7 @@ python scripts/render_tables.py
 
 ```bash
 rm -rf results/
-scripts/run_all_tables.sh
-python scripts/render_molecules.py
+bash scripts/run_all_tables.sh
 ```
 
 Interrupted runs resume from the cache.
