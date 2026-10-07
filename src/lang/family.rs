@@ -434,14 +434,11 @@ impl LanguageFamily for TypeScript {
 
     /// One `Lam(n)` enode, not `n` stacked single-binders.
     fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
-        if n == 0 {
-            return child;
-        }
         egraph.add(Self::make(O::from_name(&format!("lam{n}")), vec![child]))
     }
 
-    fn lams_cost(n: u32, weights: &Weights) -> u32 {
-        if n == 0 { 0 } else { weights.lam_cost }
+    fn lams_cost(_n: u32, weights: &Weights) -> u32 {
+        weights.lam_cost
     }
 
     /// One flat `App` whatever the arity, plus one DB-var leaf per captured

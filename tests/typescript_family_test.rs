@@ -47,16 +47,8 @@ fn wrap_lams_adds_one_node_that_binds_n() {
 }
 
 #[test]
-fn wrap_lams_of_zero_is_the_identity() {
-    let mut g = egraph(Weights::default());
-    let body = leaf(&mut g, "x");
-    assert_eq!(TypeScript::wrap_lams::<TsOp>(body, 0, &mut g), body);
-}
-
-#[test]
 fn lams_cost_is_flat_in_n() {
     let w = Weights { sym_var_cost: 1, app_cost: 1, lam_cost: 7 };
-    assert_eq!(TypeScript::lams_cost(0, &w), 0);
     for n in 1..=5u32 {
         assert_eq!(TypeScript::lams_cost(n, &w), 7, "lams_cost must not scale with n");
     }
