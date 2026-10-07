@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 failed=()
-for expt in table1 table2 table3 table4 table5 table7 table7_5 arity_experiment; do
+for expt in babble_comparison_rewrites_single babble_comparison_no_rewrites_single babble_comparison_rewrites babble_comparison_no_rewrites molecules circuits circuits_all arity_experiment; do
     echo "=== Running ${expt} ==="
     if ! ./run.py "${expt}"; then
         echo "!!! ${expt} failed, continuing"
@@ -19,7 +19,7 @@ python scripts/render_tables.py
 echo "=== Rendering arity ==="
 python scripts/render_arity.py
 
-# Ablation study: reuses results/table{3,5,7}.json (the hardest experiment of
+# Ablation study: reuses results/{babble_comparison_rewrites,molecules,circuits}.json (the hardest experiment of
 # each), so it runs after those tables. Every measurement is cached, so this is
 # cheap to re-run.
 echo "=== Running ablation ==="

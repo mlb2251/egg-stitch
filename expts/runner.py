@@ -107,7 +107,7 @@ EPFL_CIRCUITS = FamilyDomain(
     rewrites="data/domains/epfl-circuits/and_or_demorgan_factor.rewrites",
 )
 # The whole suite. ``EPFL_CIRCUITS.members`` above is the diverse-and-redundant
-# subset build_benchmarks.py picks and table7 reports; table7_5 runs all 20, so
+# subset build_benchmarks.py picks and the circuits table reports; circuits_all runs all 20, so
 # how much that selection moves the numbers is itself measurable.
 EPFL_ALL_MEMBERS: tuple[str, ...] = (
     "adder", "arbiter", "bar", "cavlc", "ctrl", "dec", "div", "hyp", "i2c",

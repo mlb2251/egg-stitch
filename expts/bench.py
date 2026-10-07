@@ -17,8 +17,8 @@ Weighting = Literal["no-apps", "apps-equal"]
 
 - ``"no-apps"`` — flat cogsci-style s-expressions (operators take all children
   directly, no curried application nodes). Maps to egg-stitch
-  ``--language op-children`` and to babble's ``drawings`` binary. Table7
-  overrides the language to ``op-children-db`` (see ``TABLE7_LANGUAGE``).
+  ``--language op-children`` and to babble's ``drawings`` binary. The circuits
+  table overrides the language to ``op-children-db`` (see ``CIRCUITS_LANGUAGE``).
 - ``"apps-equal"`` — curried dreamcoder-style s-expressions where every
   application is a binary ``App`` node. Maps to egg-stitch
   ``--language lambda-calc`` and to babble's ``benchmark`` binary.

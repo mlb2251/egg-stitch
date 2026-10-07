@@ -1,8 +1,8 @@
 """
 Ablation experiment: how each search optimisation pays off on the single
-hardest experiment of tables 3, 5, and 7.
+hardest experiment of the babble_comparison_rewrites, molecules and circuits tables.
 
-Runs *after* ``results/table{3,5,7}.json`` exist. For each of those tables it:
+Runs *after* those tables' ``results/<table>.json`` exist. For each of them it:
 
 1. Picks the hardest single-file domain from the latex tables, hard=BFS took longest.
 2. Establishes a target compression to reach based on the BFS's configuration but run
@@ -31,8 +31,8 @@ from .render_common import aggregate_time, has_dnf, repeat_cr, reported_sweep_po
 from .run_models import OursBf, OursSmc
 from .runner import input_files, run_method
 from .tables import (
-    BFS_STEP_SWEEP, TABLE5_BFS_SWEEP, TABLE5_ENUM_POINT, TABLE5_TIMEOUT,
-    TABLE7_BFS_SWEEP, TABLE7_ITER_LIMIT, TABLE7_LANGUAGE, TABLE7_MAX_ARITY, TABLE7_TIMEOUT,
+    BFS_STEP_SWEEP, MOLECULES_BFS_SWEEP, MOLECULES_ENUM_POINT, MOLECULES_TIMEOUT,
+    CIRCUITS_BFS_SWEEP, CIRCUITS_ITER_LIMIT, CIRCUITS_LANGUAGE, CIRCUITS_MAX_ARITY, CIRCUITS_TIMEOUT,
     TABLE_BFS_STEPS,
 )
 
@@ -67,7 +67,7 @@ SMC_ABLATIONS: dict[str, tuple[str, ...]] = {
 
 @dataclass(frozen=True)
 class TableSpec:
-    table: int
+    table: str
     max_arity: int
     iter_limit: int | None
     language: str | None
@@ -80,26 +80,26 @@ class TableSpec:
 
     @property
     def enum_key(self) -> str:
-        """The ``runs`` key of this table's canonical BFS cell in tableN.json."""
+        """The ``runs`` key of this table's canonical BFS cell in ``results/<table>.json``."""
         return f"enum-{self.enum_point}"
 
 
-TABLE_SPECS: dict[int, TableSpec] = {
-    3: TableSpec(table=3, max_arity=MAX_ARITY, iter_limit=None, language=None, timeout=None,
+TABLE_SPECS: dict[str, TableSpec] = {
+    "babble_comparison_rewrites": TableSpec(table="babble_comparison_rewrites", max_arity=MAX_ARITY, iter_limit=None, language=None, timeout=None,
                  mem_limit=None, enum_point=TABLE_BFS_STEPS, bfs_sweep=BFS_STEP_SWEEP),
-    5: TableSpec(table=5, max_arity=MAX_ARITY, iter_limit=None, language=None, timeout=TABLE5_TIMEOUT,
-                 mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE5_ENUM_POINT, bfs_sweep=TABLE5_BFS_SWEEP),
-    7: TableSpec(table=7, max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT,
-                 language=TABLE7_LANGUAGE, timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
-                 enum_point=TABLE_BFS_STEPS, bfs_sweep=TABLE7_BFS_SWEEP),
+    "molecules": TableSpec(table="molecules", max_arity=MAX_ARITY, iter_limit=None, language=None, timeout=MOLECULES_TIMEOUT,
+                 mem_limit=MEM_LIMIT_BYTES, enum_point=MOLECULES_ENUM_POINT, bfs_sweep=MOLECULES_BFS_SWEEP),
+    "circuits": TableSpec(table="circuits", max_arity=CIRCUITS_MAX_ARITY, iter_limit=CIRCUITS_ITER_LIMIT,
+                 language=CIRCUITS_LANGUAGE, timeout=CIRCUITS_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
+                 enum_point=TABLE_BFS_STEPS, bfs_sweep=CIRCUITS_BFS_SWEEP),
 }
 
 
 def _load_table(spec: TableSpec) -> dict:
-    """Load ``results/table{N}.json`` (the ablation runs after that table)."""
-    path = SUMMARY_RESULTS_DIR / f"table{spec.table}.json"
+    """Load ``results/<table>.json`` (the ablation runs after that table)."""
+    path = SUMMARY_RESULTS_DIR / f"{spec.table}.json"
     if not path.exists():
-        raise SystemExit(f"ablation: missing {path}; run table{spec.table} first")
+        raise SystemExit(f"ablation: missing {path}; run {spec.table} first")
     with open(path) as fh:
         return json.load(fh)
 
@@ -124,7 +124,7 @@ def hardest_domain(spec: TableSpec, saved: dict) -> str:
 
 def _cache_path(spec: TableSpec, key: str) -> Path:
     """Per-measurement cache file (delete to force a recompute)."""
-    return SUMMARY_RESULTS_DIR / "ablation" / f"table{spec.table}" / f"{key}.json"
+    return SUMMARY_RESULTS_DIR / "ablation" / spec.table / f"{key}.json"
 
 
 def _geomean(vals: list[float]) -> float | None:
@@ -269,7 +269,7 @@ def _run_bfs_ablations(spec: TableSpec, domain: str, limit_cr: float) -> dict[st
     for name, flags in BFS_ABLATIONS.items():
         m = _measure(_bfs_runner(spec, flags, limit_cr), domain, spec, f"bfs_{name}")
         out[name] = {"time": m["time"], "steps": m["steps"], "cr": m["cr"], "dnf": m["dnf"]}
-        print(f"  [table{spec.table}] BFS {name}: time={m['time']}, steps={m['steps']}, cr={m['cr']}", flush=True)
+        print(f"  [{spec.table}] BFS {name}: time={m['time']}, steps={m['steps']}, cr={m['cr']}", flush=True)
     return out
 
 
@@ -287,12 +287,12 @@ def _run_smc_ablations(spec: TableSpec, domain: str, target_cr: float) -> dict[s
             out[name] = {"particles": None, "time": None, "steps": None, "cr": None, "reached": False}
         else:
             out[name] = {"particles": particles, "time": m["time"], "steps": m["steps"], "cr": m["cr"], "reached": True}
-        print(f"  [table{spec.table}] SMC {name}: particles={out[name]['particles']}, time={out[name]['time']}", flush=True)
+        print(f"  [{spec.table}] SMC {name}: particles={out[name]['particles']}, time={out[name]['time']}", flush=True)
     return out
 
 
 def ablation() -> Path:
-    """Run the full ablation over tables 3, 5, and 7 and write
+    """Run the full ablation over :data:`TABLE_SPECS` and write
     ``results/ablation.json``. Cheap to re-run: every measurement is cached."""
     set_folder(f"ablation/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {"tables": {}}
@@ -308,9 +308,9 @@ def ablation() -> Path:
         # minimal-body form by a node.
         target_cr = max_cr * TARGET_COMPRESSION_FRACTION
         egg_cr = max_egg_cr * TARGET_COMPRESSION_FRACTION
-        print(f"=== table{table}: hardest={domain}, max CR={max_cr:.4f}, "
+        print(f"=== {table}: hardest={domain}, max CR={max_cr:.4f}, "
               f"target={target_cr:.4f} (egg {egg_cr:.4f}) ===", flush=True)
-        results["tables"][str(table)] = {
+        results["tables"][table] = {
             "domain": domain,
             "max_cr": max_cr,
             "target_cr": target_cr,
