@@ -24,18 +24,17 @@ access is needed.
 
 ## Example
 
-Learn one abstraction on the ester molecule corpus (Table 2) with the molecule
-rewrite rules (~1s):
+Learn one abstraction on the glycol molecule corpus (Table 2) with the molecule
+rewrite rules (~5s):
 
 ```bash
 cargo run --release -- --search smc \
-    -i data/domains/molecules/scramble/ester.scram.json \
+    -i data/domains/molecules/scramble/glycol.scram.json \
     -r data/domains/molecules/molecules.rewrites \
-    --num-particles 1000 --num-steps 100 --temperature 100 --max-arity 2 \
-    -o ester.json
+    --num-particles 10000 --num-steps 100 --temperature 100 --max-arity 2
 ```
 
-Expected compression ratio: ~2.2×. Without `-r`: ~1.4×. Results vary slightly
+Expected compression ratio: ~2.6×. Without `-r`: ~1.4×. Results may vary slightly
 between runs; `--seed` fixes them. `--help` lists all options.
 
 ## Reproducing the paper
