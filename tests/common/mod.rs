@@ -143,6 +143,13 @@ pub fn run(search: &str, input: &str, extra: &[&str]) -> Value {
     run_stitch_backend(search, input, true, "1", "50000", extra)
 }
 
+/// [`run`] with `--num-abstractions n` instead of 1, for tests that check a
+/// stacked library. (Passing a second `--num-abstractions` via `extra` would
+/// make clap reject the repeated flag.)
+pub fn run_with_abstractions(search: &str, input: &str, n: &str, extra: &[&str]) -> Value {
+    run_stitch_backend(search, input, true, n, "50000", extra)
+}
+
 /// One stitch-convention backend run: `[--check-slow] --num-abstractions <n>`,
 /// with best-first at `bf_steps` and SMC at 1000 particles × 1000 steps.
 fn run_stitch_backend(search: &str, input: &str, check_slow: bool, num_abstractions: &str, bf_steps: &str, extra: &[&str]) -> Value {

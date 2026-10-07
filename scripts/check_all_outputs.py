@@ -5,6 +5,9 @@ Each fixture's oracle is declared in `tests/snapshots.toml` (the same manifest
 that drives the Rust snapshot suite), via each case's `oracle` field:
 
   * "beta"            — β-only equivalence (the default)
+  * "beta-flat"       — β-only, but parsing the flat TypeScript dialect
+                        (`lam{n}` binder groups, variadic `app`, `define` as a
+                        let). Required for `--language typescript` runs.
   * { rules = "..." } — β + the given DSR file (β alone can't bridge e.g.
                         `(* 0 ?x) ≡ 0`)
   * "circuit"         — exhaustive boolean truth-table equivalence
@@ -43,6 +46,13 @@ def fixture_rel(case):
     return rel.removesuffix(".json") + ".out.json"
 
 
+def _is_typescript_case(case):
+    """True iff the case runs `--language typescript` (the only dialect the
+    flat oracle understands)."""
+    args = case.get("args", [])
+    return any(a == "--language" and args[i + 1] == "typescript" for i, a in enumerate(args[:-1]))
+
+
 def load_oracles():
     """Map each fixture rel-path to its oracle spec from the manifest."""
     manifest = tomllib.loads(MANIFEST.read_text())
@@ -51,7 +61,17 @@ def load_oracles():
         # dreamcoder cases use `glob` (no single input) but always set `fixture`.
         if "fixture" not in case and "input" not in case:
             raise SystemExit(f"manifest case {case['name']!r} has neither fixture nor input")
-        oracles[fixture_rel(case)] = case.get("oracle", "beta")
+        oracle = case.get("oracle", "beta")
+        # A TypeScript case checked with plain `beta` degrades silently (its
+        # `lam{n}`/`app` heads read as opaque symbols); a `beta-flat` case that
+        # isn't TypeScript is equally suspect. Enforce the CLAUDE.md "must" in
+        # both directions so this can't fail open.
+        is_ts = _is_typescript_case(case)
+        if is_ts and oracle != "beta-flat":
+            raise SystemExit(f"manifest case {case['name']!r} runs --language typescript but oracle is {oracle!r}, not \"beta-flat\"")
+        if oracle == "beta-flat" and not is_ts:
+            raise SystemExit(f"manifest case {case['name']!r} sets oracle = \"beta-flat\" but does not run --language typescript")
+        oracles[fixture_rel(case)] = oracle
     return oracles
 
 
@@ -63,11 +83,11 @@ def main():
         sys.exit(1)
 
     circuits = []
-    # check_equiv batches, keyed by the rules file (None for β-only) so each
-    # batch is a single subprocess call.
+    # check_equiv batches, keyed by (rules file or None, flat?) so each distinct
+    # `check_equiv.py` invocation (rules set × dialect) is one subprocess call.
     batches = {}
     for p in paths:
-        rel = str(p.relative_to(ROOT))
+        rel = p.relative_to(ROOT).as_posix()
         oracle = oracles.get(rel)
         if oracle is None:
             print(f"no manifest case owns fixture {rel} (add a [[case]] to tests/snapshots.toml)", file=sys.stderr)
@@ -77,9 +97,11 @@ def main():
         elif isinstance(oracle, dict) and "skip" in oracle:
             print(f"skip ({oracle['skip']}): {rel}")
         elif isinstance(oracle, dict) and "rules" in oracle:
-            batches.setdefault(oracle["rules"], []).append(p)
+            batches.setdefault((oracle["rules"], False), []).append(p)
+        elif oracle == "beta-flat":
+            batches.setdefault((None, True), []).append(p)
         elif oracle == "beta":
-            batches.setdefault(None, []).append(p)
+            batches.setdefault((None, False), []).append(p)
         else:
             print(f"unknown oracle {oracle!r} for {rel}", file=sys.stderr)
             sys.exit(1)
@@ -90,11 +112,13 @@ def main():
         res = subprocess.run([sys.executable, str(CIRCUIT_CHECKER), *map(str, circuits)], cwd=REPO)
         if res.returncode != 0:
             overall = res.returncode
-    for rules, group in batches.items():
+    for (rules, flat), group in batches.items():
         cmd = [sys.executable, str(CHECKER), *[str(p) for p in group]]
         if rules:
             cmd += ["--rewrites", rules]
-        label = f"(rules={rules})" if rules else "(β-only)"
+        if flat:
+            cmd += ["--flat"]
+        label = f"(rules={rules})" if rules else ("(β-only, flat)" if flat else "(β-only)")
         print(f"$ check_equiv.py {label} <{len(group)} files>")
         res = subprocess.run(cmd, cwd=REPO)
         if res.returncode != 0:

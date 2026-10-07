@@ -69,6 +69,10 @@ pub trait LanguageFamily: Clone + 'static {
     /// Total node-count cost of `n` stacked lambda binders under `weights`.
     fn lams_cost(n: u32, weights: &Weights) -> u32;
 
+    /// Cost of the eta-wrap within the pattern carried by one occurrence of a
+    /// metavariable with `h` indices.
+    fn ho_occurrence_cost(h: u32, weights: &Weights) -> u32;
+
     /// In a pattern-side `RecExpr`, wrap `head` in `n` curried applications to
     /// fresh DB-var leaves `$(n-1), $(n-2), …, $0` (outer-local first). Returns
     /// the id of the outermost App. Used by `Pattern::display_with_ho` to render
@@ -157,6 +161,10 @@ impl LanguageFamily for OpChildren {
     }
 
     fn lams_cost(_n: u32, _weights: &Weights) -> u32 {
+        panic!("OpChildren has no lambda binders; higher-order capture is unreachable here");
+    }
+
+    fn ho_occurrence_cost(_h: u32, _weights: &Weights) -> u32 {
         panic!("OpChildren has no lambda binders; higher-order capture is unreachable here");
     }
 
@@ -266,6 +274,11 @@ impl LanguageFamily for LambdaCalc {
         n * weights.lam_cost
     }
 
+    /// One curried `App` and one DB-var leaf per captured index.
+    fn ho_occurrence_cost(h: u32, weights: &Weights) -> u32 {
+        h * (weights.app_cost + weights.sym_var_cost)
+    }
+
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<LambdaCalcLanguage<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id {
         let mut current = head;
         for &db in db_args {
@@ -357,5 +370,169 @@ impl LanguageFamily for LambdaCalc {
         // (including var-headed apps like `(?#0 a b)`) appify correctly via the
         // same curried-App handling.
         Ok(LambdaCalcLanguage::<OpWithVar<O>>::parse_program(s)?.into())
+    }
+}
+
+/// TypeScript family: flat n-ary nodes like OpChildren, but with binders,
+/// flat lambdas, and flat apps.
+#[derive(Clone, Copy, Debug)]
+pub struct TypeScript;
+
+impl LanguageFamily for TypeScript {
+    type Discriminant<O: StitchOp> = O;
+    type Apply<O: StitchOp> = OpChildrenLanguage<O>;
+
+    fn make<P: StitchOp>(op: P, kids: Vec<Id>) -> OpChildrenLanguage<P> {
+        OpChildrenLanguage { op, children: kids }
+    }
+
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: A, mut f: impl FnMut(A) -> B) -> B {
+        f(op)
+    }
+
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
+        let head = egraph.add(Self::make(O::from_name(name), vec![]));
+        let mut kids = Vec::with_capacity(children.len() + 1);
+        kids.push(head);
+        kids.extend(children);
+        egraph.add(Self::make(O::from_name("app"), kids))
+    }
+
+    /// Cost of the 'app' leaf + cost of the callee leaf (ex. fn_0)
+    /// This does not depend on the arity of the application.
+    fn stub_application_size(_arity: usize, weights: &Weights) -> u32 {
+        weights.app_cost + weights.sym_var_cost
+    }
+
+    fn symbol_cost(weights: &Weights) -> u32 {
+        weights.sym_var_cost
+    }
+
+    fn check_fast_vs_slow(fast: i64, slow: i64) {
+        assert!(fast >= slow, "Fast rewrite size {} < slow rewrite size {} (TypeScript) — fast path must be an upper bound", fast, slow);
+    }
+
+    fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
+        Self::make(OpWithVar::Var(v), vec![])
+    }
+
+    /// One `Lam(n)` enode.
+    fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
+        egraph.add(Self::make(O::from_name(&format!("lam{n}")), vec![child]))
+    }
+
+    fn lams_cost(_n: u32, weights: &Weights) -> u32 {
+        weights.lam_cost
+    }
+
+    /// One flat `App` plus one DB-var leaf per index.
+    fn ho_occurrence_cost(h: u32, weights: &Weights) -> u32 {
+        weights.app_cost + h * weights.sym_var_cost
+    }
+
+    /// Flat counterpart of `LambdaCalc`'s curried version: one `app` whose
+    /// first child is the head and whose remaining children are the DB-var
+    /// leaves in the order `(n-1, n-2, …, 0)`.
+    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<OpChildrenLanguage<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id {
+        if db_args.is_empty() {
+            return head;
+        }
+        let mut kids = Vec::with_capacity(db_args.len() + 1);
+        kids.push(head);
+        for &db in db_args {
+            let var_op = OpWithVar::Node(O::make_db_var(db).expect("higher-order display needs a DB-var-bearing leaf op"));
+            kids.push(recexpr.add(OpChildrenLanguage { op: var_op, children: vec![] }));
+        }
+        recexpr.add(OpChildrenLanguage {
+            op: OpWithVar::Node(O::from_name("app")),
+            children: kids,
+        })
+    }
+
+    /// Inverse of [`Self::wrap_pattern_with_db_apps`]. Peels the single `App`
+    /// this family emits, but only when the subtree really is an eta-wrap:
+    /// every argument is a DB var, the indices strictly descend (the
+    /// `(n-1, …, 0)` order the wrapper writes), and the head is a metavar.
+    /// The head check is what keeps a genuine `(app f $1 $0)` intact.
+    fn unwrap_pattern_db_apps<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], id: Id) -> Id {
+        let node = &nodes[usize::from(id)];
+        if node.op != OpWithVar::Node(O::from_name("app")) || node.children.len() < 2 {
+            return id;
+        }
+        let mut prev: Option<i32> = None;
+        for &c in &node.children[1..] {
+            let Some(db) = nodes[usize::from(c)].op.de_bruijn_index() else { return id };
+            if prev.is_some_and(|p| db >= p) {
+                return id;
+            }
+            prev = Some(db);
+        }
+        if nodes[usize::from(node.children[0])].op.as_var().is_some() { node.children[0] } else { id }
+    }
+
+    /// Render an abstraction body as `(lam<arity> BODY)` — one binder node for
+    /// all `arity` slots — with each `?#k` becoming the de Bruijn leaf that
+    /// points at slot `k`, plus a flat `App` of its captured indices when the
+    /// slot is higher-order.
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
+        let arity = vars.len();
+        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
+        for (k, ids) in vars.iter().enumerate() {
+            for &id in ids {
+                pos_to_k.insert(usize::from(id), k);
+            }
+        }
+        // Local binder depth at each position. `binds_child` returns the slot
+        // count, so a single `Lam(n)` advances depth by `n` in one step.
+        let mut depth: Vec<u32> = vec![0; nodes.len()];
+        for i in 0..nodes.len() {
+            let d = depth[i];
+            let disc = nodes[i].discriminant();
+            for (j, &c) in nodes[i].children().iter().enumerate() {
+                depth[usize::from(c)] = d + disc.binds_child(j);
+            }
+        }
+        let db = |n: i32| O::make_db_var(n).expect("TypeScript requires a DB-var-bearing leaf op");
+        let app = O::from_name("app");
+        let mut out: RecExpr<OpChildrenLanguage<O>> = RecExpr::default();
+        let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
+        for i in (0..nodes.len()).rev() {
+            let new_id = if let Some(&k) = pos_to_k.get(&i) {
+                let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
+                let head = out.add(OpChildrenLanguage { op: db(head_idx), children: vec![] });
+                if variable_indices[k].is_empty() {
+                    head
+                } else {
+                    // Deeper occurrences sit under `depth[i] − var_depth[k]`
+                    // extra binders, so each captured index shifts up by that.
+                    let occ_shift = depth[i] as i32 - var_depth[k] as i32;
+                    let mut kids = Vec::with_capacity(variable_indices[k].len() + 1);
+                    kids.push(head);
+                    for dbidx in variable_indices[k].iter().rev() {
+                        kids.push(out.add(OpChildrenLanguage { op: db(*dbidx + occ_shift), children: vec![] }));
+                    }
+                    out.add(OpChildrenLanguage { op: app.clone(), children: kids })
+                }
+            } else {
+                let new_children: Vec<Id> = nodes[i].children().iter().map(|&c| id_map[usize::from(c)]).collect();
+                let op = match &nodes[i].op {
+                    OpWithVar::Node(o) => o.clone(),
+                    OpWithVar::Var(_) => unreachable!("Var leaf at position not in pos_to_k"),
+                };
+                out.add(OpChildrenLanguage { op, children: new_children })
+            };
+            id_map[i] = new_id;
+        }
+        let body = id_map[0];
+        let root = if arity == 0 {
+            body
+        } else {
+            out.add(OpChildrenLanguage {
+                op: O::from_name(&format!("lam{arity}")),
+                children: vec![body],
+            })
+        };
+        let _ = root;
+        <OpChildrenLanguage<O> as StitchLanguage>::display_recexpr(&out)
     }
 }

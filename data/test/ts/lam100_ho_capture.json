@@ -1,0 +1,6 @@
+[
+  "(app F e (lam100 (app P $50 (app g $99 $0))))",
+  "(app F e (lam100 (app P $50 (app h $0 $99))))",
+  "(app F e (lam100 (app P $50 (app k $99 $99 $0))))",
+  "(app F e (lam100 (app P $50 (app m $0 (app n $99)))))"
+]

@@ -139,6 +139,8 @@ jobs:
           python-version: "3.11"
       - name: oracle self-tests
         run: python3 scripts/test_check_equiv.py
+      - name: oracle self-tests (flat dialect)
+        run: python3 scripts/test_check_equiv_flat.py
       - name: check every expected_outputs/*.out.json
         run: python3 scripts/check_all_outputs.py
 

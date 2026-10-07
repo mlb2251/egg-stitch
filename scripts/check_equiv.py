@@ -24,6 +24,29 @@ This handles lambda-calc outputs (library entries with a `lambda` field).
 OpChildren outputs (no lambdas) are skipped — those would need positional
 `?#k` substitution against the `pattern` field instead.
 
+Runs produced by `--language typescript` use a flat dialect — one `lam{n}`
+binder group instead of n nested binders, one variadic `app` instead of a
+curried chain, `define` as a let — selected with `--flat`. It is desugared to
+the same two-constructor term type at parse time, so β and the e-graph are
+unchanged. The flag is required, not inferred: without it those heads parse as
+ordinary symbols, so the check ends up comparing a different program than the
+one that was actually run. That usually fails loudly (arity and structure
+rarely line up by accident), but it is not guaranteed to: the opaque-symbol
+readings can coincide, and the check would then pass without having checked
+what you think it checked.
+
+The desugaring is deliberately non-injective: distinct flat terms can land on
+the same curried term, so the oracle cannot detect a change along any of these
+three axes —
+    (app f a b)  ==  (app (app f a) b)   under flat=True   (call arity)
+    (lam2 X)     ==  (lam1 (lam1 X))     under flat=True   (binder-group nesting)
+    (foo a b)    ==  (app foo a b)       under flat=True   (op node vs. application —
+                                                             holds because TypeScript is
+                                                             an OpChildrenLanguage, so any
+                                                             TsOp::Sym may carry children)
+Call arity, binder-group nesting, and op-vs-application are pinned instead by
+the byte-exact snapshot fixture — belt and braces, not an oversight.
+
 Term representation (tuples for hashability):
     ("var", n)              — de Bruijn variable $n
     ("sym", s)              — atomic symbol (operator, primitive, library name)
@@ -79,44 +102,90 @@ def atom_to_term(a, pattern=False):
     return ("sym", a)
 
 
-def sexp_to_term(sexp, pattern=False):
+def _flat_binder_group(head):
+    """`lam{n}` → n, the slot count of a flat TypeScript binder group. `None`
+    for any other head. Only canonical spellings count: `lam007` is not `lam7`,
+    and treating it as one would let a misspelled operator check as if it were
+    the real thing."""
+    if head.startswith("lam") and head[3:].isdigit() and head[3:] == str(int(head[3:])):
+        return int(head[3:])
+    return None
+
+
+def sexp_to_term(sexp, pattern=False, flat=False):
     """Mirror egg-stitch's `LambdaCalc::parse_program`: only `lam`/`lambda`/`λ`,
     `@`, and `programs` are special heads; everything else (including the
     literal symbol `app` used by stitch's corpora) is a leaf and the surrounding
-    list curries via structural `@`."""
+    list curries via structural `@`.
+
+    With `flat=True`, parse the flat TypeScript dialect instead: `lam{n}` is a
+    binder *group* of n slots (numbered right-to-left, so it desugars to n
+    nested unary binders), `app` is the application node itself rather than a
+    symbol, and `define` binds its second child (a let). Everything downstream —
+    β, the e-graph, rendering — keeps working on the two-constructor term type.
+    """
     if isinstance(sexp, str):
         return atom_to_term(sexp, pattern)
     if not sexp:
         raise ValueError("empty s-expression list")
     head = sexp[0]
     if isinstance(head, str):
+        if flat:
+            n = _flat_binder_group(head)
+            if n is not None:
+                if len(sexp) != 2:
+                    raise ValueError(f"{head} expects 1 body, got {len(sexp) - 1}")
+                body = sexp_to_term(sexp[1], pattern, flat)
+                for _ in range(n):
+                    body = ("lam", body)
+                return body
+            if head == "app":
+                if len(sexp) < 2:
+                    raise ValueError("app expects at least a callee")
+                cur = sexp_to_term(sexp[1], pattern, flat)
+                for arg in sexp[2:]:
+                    cur = ("app", cur, sexp_to_term(arg, pattern, flat))
+                return cur
+            if head == "define":
+                # No corpus, fixture, or Rust test exercises `define`; this
+                # 2-child (value, body) shape is inferred from
+                # `TsOp::binds_child(Define, 1) == 1`, which would equally hold
+                # for a 3-child `(define name value body)`. Unrecognized arity
+                # raises above rather than guessing, so a wrong inference fails
+                # closed instead of silently checking the wrong thing.
+                if len(sexp) != 3:
+                    raise ValueError(f"define expects 2 args, got {len(sexp) - 1}")
+                value = sexp_to_term(sexp[1], pattern, flat)
+                body = sexp_to_term(sexp[2], pattern, flat)
+                return ("app", ("lam", body), value)
         if head in ("lam", "lambda", "λ"):
             if len(sexp) != 2:
                 raise ValueError(f"lam expects 1 arg, got {len(sexp) - 1}")
-            return ("lam", sexp_to_term(sexp[1], pattern))
+            return ("lam", sexp_to_term(sexp[1], pattern, flat))
         if head == "@":
             if len(sexp) != 3:
                 raise ValueError(f"@ expects 2 args, got {len(sexp) - 1}")
-            return ("app", sexp_to_term(sexp[1], pattern), sexp_to_term(sexp[2], pattern))
+            return ("app", sexp_to_term(sexp[1], pattern, flat), sexp_to_term(sexp[2], pattern, flat))
         if head == "programs":
-            return ("programs", tuple(sexp_to_term(c, pattern) for c in sexp[1:]))
-    cur = sexp_to_term(head, pattern)
+            return ("programs", tuple(sexp_to_term(c, pattern, flat) for c in sexp[1:]))
+    cur = sexp_to_term(head, pattern, flat)
     for arg in sexp[1:]:
-        cur = ("app", cur, sexp_to_term(arg, pattern))
+        cur = ("app", cur, sexp_to_term(arg, pattern, flat))
     return cur
 
 
-def parse_term(s, pattern=False):
+def parse_term(s, pattern=False, flat=False):
     toks = tokenize(s)
     sexp, _ = parse_sexp(toks, 0)
-    return sexp_to_term(sexp, pattern)
+    return sexp_to_term(sexp, pattern, flat)
 
 
 # ---------- rewrite rule parsing ----------
 
-def parse_rewrites(path):
+def parse_rewrites(path, flat=False):
     """Returns a list of (lhs, rhs) pattern pairs. Each `<=>` rule expands to
-    two entries (both directions)."""
+    two entries (both directions). `flat` selects the dialect the rule's LHS/RHS
+    terms are written in — it must match the run's."""
     rules = []
     with open(path) as f:
         for raw in f:
@@ -159,12 +228,12 @@ def parse_rewrites(path):
                 continue
             if "<=>" in body:
                 lhs, rhs = body.split("<=>", 1)
-                lhs_t, rhs_t = parse_term(lhs.strip(), pattern=True), parse_term(rhs.strip(), pattern=True)
+                lhs_t, rhs_t = parse_term(lhs.strip(), pattern=True, flat=flat), parse_term(rhs.strip(), pattern=True, flat=flat)
                 rules.append((lhs_t, rhs_t))
                 rules.append((rhs_t, lhs_t))
             elif "=>" in body:
                 lhs, rhs = body.split("=>", 1)
-                rules.append((parse_term(lhs.strip(), pattern=True), parse_term(rhs.strip(), pattern=True)))
+                rules.append((parse_term(lhs.strip(), pattern=True, flat=flat), parse_term(rhs.strip(), pattern=True, flat=flat)))
             else:
                 raise ValueError(f"rule has no => or <=>: {raw!r}")
     return rules
@@ -308,16 +377,17 @@ def inline_symbols(t, lib):
     return t
 
 
-def build_library(entries):
+def build_library(entries, flat=False):
     """Returns {fn_name → lambda term}, with each entry inlining all earlier ones
-    so the final term has no library references left."""
+    so the final term has no library references left. `flat` selects the dialect
+    the `lambda` strings are written in — it must match the run's."""
     resolved = {}
     for entry in entries:
         name = entry["pattern"].split(":", 1)[0].strip()
         lam_str = entry.get("lambda")
         if lam_str is None:
             continue
-        body = parse_term(lam_str)
+        body = parse_term(lam_str, flat=flat)
         resolved[name] = inline_symbols(body, resolved)
     return resolved
 
@@ -880,19 +950,19 @@ def _check_run_result(path, backend, data, args):
         print(f"{tag}: library has no `lambda` fields (non-lambda-calc run); skipping.")
         return True
 
-    lib = build_library(library_entries)
+    lib = build_library(library_entries, args.flat)
     originals = data["original_programs"]
     rewritten = data["rewritten_programs"]
     if len(originals) != len(rewritten):
         print(f"{tag}: original/rewritten length mismatch ({len(originals)} vs {len(rewritten)})")
         return False
 
-    rules = parse_rewrites(args.rewrites) if args.rewrites else None
+    rules = parse_rewrites(args.rewrites, args.flat) if args.rewrites else None
 
     ok = True
     for i, (o_str, r_str) in enumerate(zip(originals, rewritten)):
-        o = parse_term(o_str)
-        r = inline_symbols(parse_term(r_str), lib)
+        o = parse_term(o_str, flat=args.flat)
+        r = inline_symbols(parse_term(r_str, flat=args.flat), lib)
         if rules is None:
             pair_ok, msg = check_pair_beta(o, r, args.fuel)
         else:
@@ -921,6 +991,7 @@ def main():
     ap.add_argument("--iters", type=int, default=30, help="e-graph mode: max saturation iterations")
     ap.add_argument("--nodes", type=int, default=10_000, help="e-graph mode: max enodes before bailing")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--flat", action="store_true", help="parse the flat TypeScript dialect: `lam{n}` binder groups, variadic `app`, `define` as a let")
     args = ap.parse_args()
     all_ok = True
     for p in args.paths:

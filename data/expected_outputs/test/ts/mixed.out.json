@@ -1,0 +1,83 @@
+{
+  "compression_ratio": 1.3740458015267176,
+  "cost_after_rewrites": 180,
+  "cost_at_end_of_each_iter": [
+    151,
+    139,
+    131
+  ],
+  "final_cost": 131,
+  "heap_sizes_at_end": [
+    0,
+    0,
+    0
+  ],
+  "initial_cost": 180,
+  "library": [
+    {
+      "approx_cost": 136,
+      "arity": 1,
+      "lambda": "(lam1 (app reduce xs z (lam2 (app max (app $2 $1) $0))))",
+      "num_matches": 5,
+      "pattern": "fn_0: (app reduce xs z (lam2 (app max (app ?#0 $1) $0)))",
+      "pattern_size": 11,
+      "usage_matches": 5
+    },
+    {
+      "approx_cost": 116,
+      "arity": 1,
+      "lambda": "(lam1 (define (app load $0) (app use $0 k)))",
+      "num_matches": 4,
+      "pattern": "fn_1: (define (app load ?#0) (app use $0 k))",
+      "pattern_size": 8,
+      "usage_matches": 4
+    },
+    {
+      "approx_cost": 84,
+      "arity": 1,
+      "lambda": "(lam1 (define (app fetch u) (define (app parse $0) (app $2 $1 $0))))",
+      "num_matches": 4,
+      "pattern": "fn_2: (define (app fetch u) (define (app parse $0) (app ?#0 $1 $0)))",
+      "pattern_size": 12,
+      "usage_matches": 4
+    }
+  ],
+  "original_programs": [
+    "(app reduce xs z (lam2 (app max (app f $1) $0)))",
+    "(app reduce xs z (lam2 (app max (app g $1) $0)))",
+    "(app reduce xs z (lam2 (app max (app h $1) $0)))",
+    "(app reduce xs z (lam2 (app max (app k $1) $0)))",
+    "(app reduce xs z (lam2 (app max (app m $1) $0)))",
+    "(define (app load a) (app use $0 k))",
+    "(define (app load b) (app use $0 k))",
+    "(define (app load c) (app use $0 k))",
+    "(define (app load d) (app use $0 k))",
+    "(app F e (lam2 (app P $0 (app g $1 $0))))",
+    "(app F e (lam2 (app P $0 (app h $0 $1))))",
+    "(app F e (lam2 (app P $0 (app k $1 $1 $0))))",
+    "(app F e (lam2 (app P $0 (app m $0 $0 $1))))",
+    "(define (app fetch u) (define (app parse $0) (app render $0)))",
+    "(define (app fetch u) (define (app parse $0) (app log $1 $0)))",
+    "(define (app fetch u) (define (app parse $0) (app save db $0)))",
+    "(define (app fetch u) (define (app parse $0) (app send $1)))"
+  ],
+  "rewritten_programs": [
+    "(app fn_0 f)",
+    "(app fn_0 g)",
+    "(app fn_0 h)",
+    "(app fn_0 k)",
+    "(app fn_0 m)",
+    "(app fn_1 a)",
+    "(app fn_1 b)",
+    "(app fn_1 c)",
+    "(app fn_1 d)",
+    "(app F e (lam2 (app P $0 (app g $1 $0))))",
+    "(app F e (lam2 (app P $0 (app h $0 $1))))",
+    "(app F e (lam2 (app P $0 (app k $1 $1 $0))))",
+    "(app F e (lam2 (app P $0 (app m $0 $0 $1))))",
+    "(app fn_2 (lam2 (app render $0)))",
+    "(app fn_2 (lam2 (app log $1 $0)))",
+    "(app fn_2 (lam2 (app save db $0)))",
+    "(app fn_2 (lam2 (app send $1)))"
+  ]
+}

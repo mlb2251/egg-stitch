@@ -485,8 +485,8 @@ pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F,
 
 /// Total body size including HO-app wrapping: `compute_pattern_size` plus,
 /// for each *syntactic* occurrence of `?#k` with `ho_arity[k] > 0`, the cost
-/// of the `(@ … (@ ?#k $0) … $(h-1))` wrapper — one `app_cost` + one
-/// `sym_var_cost` per binder, per occurrence.
+/// of the η-wrap the family renders around it — `F::ho_occurrence_cost`, which
+/// is the summed node cost of what `F::wrap_pattern_with_db_apps` builds.
 ///
 /// Uses `pattern.var_occurrences[k]`, which is maintained incrementally by
 /// `expand`/`reuse` and counts each parent reference (matching
@@ -499,8 +499,7 @@ pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Patte
     if ho_arity.iter().all(|&h| h == 0) {
         return base;
     }
-    let per_app = weights.app_cost + weights.sym_var_cost;
-    let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.var_occurrences[k] as u32 * ho_arity[k] * per_app).sum();
+    let ho_extra: u32 = (0..pattern.vars.len()).filter(|&k| ho_arity[k] > 0).map(|k| pattern.var_occurrences[k] as u32 * F::ho_occurrence_cost(ho_arity[k], weights)).sum();
     base + ho_extra as usize
 }
 
