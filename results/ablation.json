@@ -10,19 +10,19 @@
       "smc_num_steps": 100,
       "bfs": {
         "baseline": {
-          "time": 0.1399830040994664,
+          "time": 0.1389363952428952,
           "steps": 1601,
           "cr": 1.70471690621774,
           "dnf": false
         },
         "no-lower-bound": {
-          "time": 0.9312192748950163,
+          "time": 0.9426762677332841,
           "steps": 37185,
           "cr": 1.70471690621774,
           "dnf": false
         },
         "no-dominance": {
-          "time": 0.49035638261199405,
+          "time": 0.48969155883611337,
           "steps": 4107,
           "cr": 1.70471690621774,
           "dnf": false
@@ -40,7 +40,7 @@
           "dnf": true
         },
         "var-ordering-l2r": {
-          "time": 0.538000354561001,
+          "time": 0.5329378980422972,
           "steps": 2480,
           "cr": 1.70471690621774,
           "dnf": false
@@ -48,23 +48,23 @@
       },
       "smc": {
         "baseline": {
-          "particles": 31,
-          "time": 0.02620484367347108,
+          "particles": 19,
+          "time": 0.025419940246540686,
           "steps": 15,
           "cr": 1.70471690621774,
           "reached": true
         },
         "add-lower-bound": {
-          "particles": 31,
-          "time": 0.02653680443924297,
+          "particles": 62,
+          "time": 0.02819119148247532,
           "steps": 9,
           "cr": 1.70471690621774,
           "reached": true
         },
         "no-dominance": {
-          "particles": 121,
-          "time": 0.04615164766896518,
-          "steps": 25,
+          "particles": 38,
+          "time": 0.03200969128732679,
+          "steps": 19,
           "cr": 1.70471690621774,
           "reached": true
         },
@@ -87,19 +87,19 @@
       "smc_num_steps": 100,
       "bfs": {
         "baseline": {
-          "time": 6.294901535214802,
+          "time": 6.247572900859975,
           "steps": 6366,
           "cr": 3.0839802399435428,
           "dnf": false
         },
         "no-lower-bound": {
-          "time": 6.062301681176677,
+          "time": 6.072595506977469,
           "steps": 22257,
           "cr": 3.0839802399435428,
           "dnf": false
         },
         "no-dominance": {
-          "time": 8.374572664866369,
+          "time": 8.429466871920967,
           "steps": 8396,
           "cr": 3.0839802399435428,
           "dnf": false
@@ -117,7 +117,7 @@
           "dnf": true
         },
         "var-ordering-l2r": {
-          "time": 13.04315680431489,
+          "time": 13.120860959014887,
           "steps": 13817,
           "cr": 3.0839802399435428,
           "dnf": false
@@ -125,29 +125,29 @@
       },
       "smc": {
         "baseline": {
-          "particles": 8,
-          "time": 0.8366757563709772,
-          "steps": 42,
+          "particles": 13,
+          "time": 0.8625034943021492,
+          "steps": 49,
           "cr": 3.0839802399435428,
           "reached": true
         },
         "add-lower-bound": {
-          "particles": 12,
-          "time": 0.8736274173780201,
+          "particles": 10,
+          "time": 0.8557276012290398,
           "steps": 33,
           "cr": 3.0839802399435428,
           "reached": true
         },
         "no-dominance": {
-          "particles": 16,
-          "time": 0.8911579210548204,
-          "steps": 47,
+          "particles": 13,
+          "time": 0.8953847178645924,
+          "steps": 51,
           "cr": 3.0839802399435428,
           "reached": true
         },
         "add-var-ordering": {
-          "particles": 4887,
-          "time": 0.9705100696289065,
+          "particles": 5923,
+          "time": 0.9369015915244076,
           "steps": 57,
           "cr": 3.0839802399435428,
           "reached": true
@@ -164,19 +164,19 @@
       "smc_num_steps": 100,
       "bfs": {
         "baseline": {
-          "time": 4.040473361945645,
+          "time": 3.6870809444891184,
           "steps": 59,
           "cr": 2.879275092936803,
           "dnf": false
         },
         "no-lower-bound": {
-          "time": 3.0763158921279246,
+          "time": 2.7939451975934078,
           "steps": 59,
           "cr": 2.879275092936803,
           "dnf": false
         },
         "no-dominance": {
-          "time": 4.067809322143,
+          "time": 3.7087742470103695,
           "steps": 59,
           "cr": 2.879275092936803,
           "dnf": false
@@ -188,13 +188,13 @@
           "dnf": true
         },
         "no-var-ordering": {
-          "time": 58.1266806464125,
+          "time": 53.752335541369725,
           "steps": 497,
           "cr": 2.877403176372248,
           "dnf": false
         },
         "var-ordering-l2r": {
-          "time": 3.6702250868445203,
+          "time": 3.448962399295782,
           "steps": 57,
           "cr": 2.879275092936803,
           "dnf": false
@@ -202,29 +202,29 @@
       },
       "smc": {
         "baseline": {
-          "particles": 7681,
-          "time": 8.641661889444611,
-          "steps": 58,
+          "particles": 2795,
+          "time": 10.582571295064112,
+          "steps": 59,
           "cr": 2.879275092936803,
           "reached": true
         },
         "add-lower-bound": {
-          "particles": 4386,
-          "time": 17.902133419891268,
+          "particles": 6523,
+          "time": 13.043573781126758,
           "steps": 58,
-          "cr": 2.8617217808978386,
+          "cr": 2.879275092936803,
           "reached": true
         },
         "no-dominance": {
-          "particles": 4541,
-          "time": 9.317719995100454,
+          "particles": 2556,
+          "time": 9.62963421977157,
           "steps": 58,
-          "cr": 2.879007527181489,
+          "cr": 2.879275092936803,
           "reached": true
         },
         "add-var-ordering": {
-          "particles": 163,
-          "time": 0.8015431942797505,
+          "particles": 135,
+          "time": 0.8497083950972973,
           "steps": 57,
           "cr": 2.877403176372248,
           "reached": true
