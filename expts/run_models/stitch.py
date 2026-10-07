@@ -54,7 +54,7 @@ class Stitch:
     # them). Opt-in so a table that forgets stitch can't take DSRs still trips
     # the assert below.
     ignore_dsrs: bool = field(default=False, repr=False)
-    # See TABLE7_STITCH_NO_MISMATCH_CHECK.
+    # See CIRCUITS_STITCH_NO_MISMATCH_CHECK.
     no_mismatch_check: bool = field(default=False, repr=False)
 
     def __call__(self, rounds: int, input_path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:

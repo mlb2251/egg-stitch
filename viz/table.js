@@ -1,11 +1,11 @@
 "use strict";
 
-// Each page sets window.TABLE_KIND to "table1" or "table2" before loading this script.
-const KIND = window.TABLE_KIND || "table1";
-const TITLE = KIND === "table2" ? "Table 2" : "Table 1";
+// Each page sets window.TABLE_KIND to "babble_comparison_rewrites_single" or "babble_comparison_no_rewrites_single" before loading this script.
+const KIND = window.TABLE_KIND || "babble_comparison_rewrites_single";
+const TITLE = KIND === "babble_comparison_no_rewrites_single" ? "No rewrites" : "Rewrites";
 const RESULTS_PREFIX = `/viz/results/${KIND}`;
-// Table 2 runs without DSRs, so there's no "E-graph min" (cost_after_rewrites) column.
-const SHOW_EGRAPH_MIN = KIND !== "table2";
+// The no-rewrites table runs without DSRs, so there's no "E-graph min" (cost_after_rewrites) column.
+const SHOW_EGRAPH_MIN = KIND !== "babble_comparison_no_rewrites_single";
 
 const DOMAIN_ORDER = ["nuts-bolts", "dials", "wheels", "furniture"];
 const DOMAIN_LABELS = {

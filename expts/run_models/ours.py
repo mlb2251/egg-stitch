@@ -72,7 +72,7 @@ def _run(*, rounds: int, input_path: Path, rewrites_path: str | None,
     ``search_flags`` carries only the runner-specific dials (num_steps,
     particles, temperature, …); the rest is identical between the two
     search modes. ``language`` overrides the ``weighting``-derived default
-    (table7 asks for ``op-children-db``). ``only_use_dsrs_at_start`` switches
+    (the circuits table asks for ``op-children-db``). ``only_use_dsrs_at_start`` switches
     DSRs from live-during-search to a one-shot canonicalisation pass;
     ``iter_limit`` caps e-saturation iterations (None = the binary default,
     100); ``timeout`` caps wall-clock; ``mem_limit`` caps address space.
@@ -169,7 +169,7 @@ class OursBf:
     # the method label unchanged.
     only_use_dsrs_at_start: bool = field(default=False, repr=False)
     no_dsrs: bool = field(default=False, repr=False)
-    # None derives the language from the weighting; table7 pins op-children-db.
+    # None derives the language from the weighting; the circuits table pins op-children-db.
     language: str | None = field(default=None, repr=False)
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)
@@ -206,7 +206,7 @@ class OursSmc:
     num_particles: int = 1000
     temperature: float = 100.0
     max_arity: int = MAX_ARITY
-    # None derives the language from the weighting; table7 pins op-children-db.
+    # None derives the language from the weighting; the circuits table pins op-children-db.
     language: str | None = field(default=None, repr=False)
     iter_limit: int | None = field(default=None, repr=False)
     timeout: float | None = field(default=None, repr=False)

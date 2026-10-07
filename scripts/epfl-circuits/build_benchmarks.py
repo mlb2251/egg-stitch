@@ -3,7 +3,7 @@
 
 Survey every EPFL Combinational Benchmark Suite circuit, write every corpus to
 data/domains/epfl-circuits/, and report which ones score above the median on
-BOTH axes — that subset is what table7 reports. The two axes:
+BOTH axes — that subset is what the circuits table reports. The two axes:
 
   - distinct cone shapes -- structural diversity (variety the DSRs can merge);
   - no-rules compression  -- run egg-stitch with no DSRs; high ratio means real
@@ -105,9 +105,9 @@ def main():
     print(f"\nmedians: distinct_shapes={med_shapes}  no_rules_compression={med_comp:.2f}x")
     print("selected (above both):", ", ".join(sorted(r[0] for r in selected)))
 
-    # Every circuit's corpus is written, not just the selected ones: table7_5
+    # Every circuit's corpus is written, not just the selected ones: circuits_all
     # runs the whole suite to measure what this selection costs. The scores only
-    # decide which five table7 reports, and that set is EPFL_CIRCUITS.members in
+    # decide which five the circuits table reports, and that set is EPFL_CIRCUITS.members in
     # expts/runner.py — update it there if the selection above disagrees.
     os.makedirs(DOMAIN, exist_ok=True)
     for name, _, _, corpus in rows:

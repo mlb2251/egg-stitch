@@ -5,8 +5,8 @@ Turns EPFL benchmark circuits into op-children corpora under
 consumes are written next to the rewrite file. All 20 circuits are committed.
 `build_benchmarks.py` (below) scores them and names the reported set —
 `multiplier`, `square`, `log2`, `hyp`, `voter` — which is mirrored as
-`EPFL_CIRCUITS.members` in `expts/runner.py` and is what `table7` runs;
-`table7_5` runs all 20.
+`EPFL_CIRCUITS.members` in `expts/runner.py` and is what the `circuits` table runs;
+`circuits_all` runs all 20.
 
 ## Pipeline
 1. `fetch_aigs.py`: download source circuits from the EPFL suite
@@ -34,9 +34,9 @@ but-unique control logic and redundant-but-canonical adders both fall flat).
 Selecting on the second axis means the reported set is, by construction, the
 compressible half of the suite, and the cut is close: `log2` and `sin` sit within
 noise of the compression median, so which of the two lands in the set is not
-robust. `table7_5` runs the same roster over all 20 circuits, which is what
+robust. `circuits_all` runs the same roster over all 20 circuits, which is what
 quantifies the gap — expect the margin over the BFS/NR and BFS/MT baselines to
 be roughly half its selected-set size.
 
-The abstraction experiments over the corpora are `table7` (reported set) and
-`table7_5` (all 20) in `expts/tables.py`.
+The abstraction experiments over the corpora are `circuits` (reported set) and
+`circuits_all` (all 20) in `expts/tables.py`.

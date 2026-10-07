@@ -131,7 +131,7 @@ def best_first_all():
 
 
 def dev():
-    table1()
+    babble_comparison_rewrites_single()
     # best_first()
     # egg_stitch(
     #     "data/domains/cogsci/dials.json",
