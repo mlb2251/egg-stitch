@@ -1,12 +1,5 @@
-//! Tests for the `TypeScript` family: a flat n-ary language whose
-//! binders and applications are real (`TsOp::Lam(n)` / `TsOp::App`) rather than
-//! absent as in `OpChildren`.
-//!
-//! The two `*_matches_the_egraph_size_delta` tests are the important ones. Each
-//! cost hook is contractually "the summed node cost of the enodes this family
-//! inserts", and `check_fast_vs_slow` compares that arithmetic against a
-//! rebuilt e-graph — so a cost function that disagrees with its own constructor
-//! is a live bug, not a tuning preference.
+//! Tests for the `TypeScript` family: a flat n-ary language which has
+//! binders (`TsOp::Lam(n)`) and applications (`TsOp::App`) unlike `OpChildren`.
 
 use egg::{Id, RecExpr};
 use egg_stitch::lang::{LanguageFamily, OpChildrenLanguage, OpWithVar, StitchAnalysis, StitchDisc, StitchEgraph, StitchOp, TsOp, TypeScript, Weights};
@@ -23,11 +16,8 @@ fn leaf(g: &mut StitchEgraph<Lang>, name: &str) -> Id {
 
 #[test]
 fn ts_op_round_trips_the_ops_the_family_builds() {
-    // `TypeScript` constructs its binder and application through
-    // `from_name` rather than a dedicated constructor, so a rename on either
-    // side of this round trip would silently downgrade them to opaque symbols:
-    // no compile error, no panic, just wrong costs and nodes that never unify
-    // with the corpus. This test is the guard for that.
+    // `TypeScript` builds `App` and `Lam(n)` via `from_name`, so their names must
+    // round-trip through `to_string`; otherwise they silently become plain symbols.
     assert_eq!(TsOp::from_name("app"), TsOp::App);
     assert_eq!(TsOp::from_name("lam2"), TsOp::Lam(2));
     assert_eq!(TsOp::App.to_string(), "app");
@@ -158,7 +148,7 @@ fn round_trip_ho_arity_2_noncontiguous() {
 
 #[test]
 fn genuine_application_with_non_metavar_head_is_left_alone() {
-    // `(app f $1 $0)` has the exact shape of an eta-wrap, but its head is a
+    // `(app f $1 $0)` has the shape of an eta-wrap, but its head is a
     // regular op rather than a metavar. Collapsing it would silently rewrite a
     // real call into its callee.
     let mut r: RecExpr<PatLang> = RecExpr::default();
@@ -197,9 +187,7 @@ fn metavar_alone_is_left_alone() {
 #[test]
 fn display_pattern_wraps_body_in_one_lam_node() {
     // Pattern body `(app f ?#0)` with arity 1: `?#0` becomes `$0` and the whole
-    // thing is wrapped in a single `lam1`, not a stack of `lam1`s.
-    // Nodes are in `RevExpr` order — root at index 0, children after it —
-    // because that is what `Pattern::display_as_lambda` passes in.
+    // thing is wrapped in a single `lam1`.
     let hole = Id::from(2);
     let nodes: Vec<PatLang> = vec![
         OpChildrenLanguage {
@@ -255,9 +243,9 @@ fn display_pattern_uses_one_lam_node_for_arity_two() {
 
 #[test]
 fn display_pattern_with_zero_arity_has_no_binder() {
-    // A zero-arity abstraction is a closed term: there is no slot to bind, so
-    // the body is returned bare rather than wrapped in a `lam0` that `TsOp`
-    // would parse as `Lam(0)` — a binder that binds nothing.
+    // A zero-arity abstraction is rendered by 'display_pattern_as_lambda'
+    // as its bare body, not `(lam0 ...)`, which would parse back as a `Lam(0)`
+    // binder that binds nothing.
     let nodes: Vec<PatLang> = vec![
         OpChildrenLanguage {
             op: OpWithVar::Node(TsOp::App),
@@ -280,9 +268,8 @@ fn display_pattern_with_zero_arity_has_no_binder() {
 
 #[test]
 fn display_pattern_numbers_slots_right_to_left() {
-    // `(app f ?#0 ?#1)` at arity 2: slot 0 is the *first* parameter and so gets
-    // the *highest* index. Asserting on the exact string is the point — a
-    // swapped `arity - 1 - k` still produces a well-formed `lam2`.
+    // `(app f ?#0 ?#1)` at arity 2 must render as `(lam2 (app f $1 $0))`: slot 0
+    // is the first parameter, so it gets the highest de Bruijn index.
     let h0 = Id::from(2);
     let h1 = Id::from(3);
     let nodes: Vec<PatLang> = vec![
@@ -311,13 +298,9 @@ fn display_pattern_numbers_slots_right_to_left() {
 
 #[test]
 fn display_pattern_shifts_captured_indices_by_occurrence_depth() {
-    // Two occurrences of the same higher-order slot at different binder depths.
-    // Both capture the corpus index `$0`, but the deeper one sits under one
-    // extra `lam1`, so its captured argument must shift up by that delta while
-    // the shallower one does not — this is the `occ_shift` arithmetic, and it
-    // is invisible to any test whose occurrences all sit at `var_depth`.
-    //
-    //   (app (lam1 ?#0) (lam1 (lam1 ?#0)))   with var_depth[0] = 1
+    // `(app (lam1 ?#0) (lam1 (lam1 ?#0)))` with `var_depth[0] = 1`, capturing `$0`.
+    // The deeper occurrence sits under one extra binder, so its captured index
+    // must shift from `$0` to `$1` (`occ_shift`); the shallower one is unshifted.
     let shallow = Id::from(3);
     let deep = Id::from(5);
     let nodes: Vec<PatLang> = vec![

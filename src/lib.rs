@@ -393,10 +393,8 @@ pub enum LanguageChoice {
     /// `Programs` root.
     #[value(name = "lambda-calc")]
     LambdaCalc,
-    /// Flat n-ary nodes with `TsOp` leaves, over the `TypeScript` family.
-    /// Unlike the other flat choices this one has real binders, so `var_depth`
-    /// can be nonzero and higher-order capture is reachable — a binder is one
-    /// `Lam(n)` enode binding `n` slots, and an application is one flat `App`.
+    /// Flat n-ary nodes with `TsOp` leaves. Has 'define' and a flat 'lam' as
+    /// binders. Function applications use a flat 'app'.
     #[value(name = "typescript")]
     TypeScript,
 }

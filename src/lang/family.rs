@@ -69,11 +69,8 @@ pub trait LanguageFamily: Clone + 'static {
     /// Total node-count cost of `n` stacked lambda binders under `weights`.
     fn lams_cost(n: u32, weights: &Weights) -> u32;
 
-    /// Cost of the η-wrap carried by **one** syntactic occurrence of a metavar
-    /// that captures `h > 0` indices — the nodes
-    /// [`Self::wrap_pattern_with_db_apps`] adds around that occurrence, and
-    /// nothing else. `compute_body_size_with_ho` multiplies this by the
-    /// occurrence count.
+    /// Cost of the eta-wrap within the pattern carried by one occurrence of a
+    /// metavariable with `h` indices.
     fn ho_occurrence_cost(h: u32, weights: &Weights) -> u32;
 
     /// In a pattern-side `RecExpr`, wrap `head` in `n` curried applications to
@@ -376,17 +373,8 @@ impl LanguageFamily for LambdaCalc {
     }
 }
 
-/// TypeScript family: flat n-ary nodes like [`OpChildren`], but with real
-/// binders and applications carried by the leaf op (`TsOp::Lam(u32)` /
-/// `TsOp::App`) rather than absent.
-///
-/// Two consequences distinguish its cost model from both existing families,
-/// and both follow from one fact — a flat language keeps arity in the child
-/// vector, so the node count doesn't grow with arity:
-/// - a lambda binding `n` slots is **one** enode, so `lams_cost` is constant
-///   in `n` (`LambdaCalc` stacks `n` nodes and pays `n * lam_cost`);
-/// - an application is **one** enode, so `stub_application_size` is constant
-///   in arity (`LambdaCalc` curries and pays one `App` per argument).
+/// TypeScript family: flat n-ary nodes like OpChildren, but with binders,
+/// flat lambdas, and flat apps.
 #[derive(Clone, Copy, Debug)]
 pub struct TypeScript;
 
@@ -402,8 +390,6 @@ impl LanguageFamily for TypeScript {
         f(op)
     }
 
-    /// `fn_N(a, b)` is one flat `App` whose first child is the callee — the
-    /// variadic form, matching the corpus's `(app f a b)`.
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
         let head = egraph.add(Self::make(O::from_name(name), vec![]));
         let mut kids = Vec::with_capacity(children.len() + 1);
@@ -412,7 +398,8 @@ impl LanguageFamily for TypeScript {
         egraph.add(Self::make(O::from_name("app"), kids))
     }
 
-    /// Callee leaf plus exactly one `App` spine node, whatever the arity.
+    /// Cost of the 'app' leaf + cost of the callee leaf (ex. fn_0)
+    /// This does not depend on the arity of the application.
     fn stub_application_size(_arity: usize, weights: &Weights) -> u32 {
         weights.app_cost + weights.sym_var_cost
     }
@@ -421,9 +408,6 @@ impl LanguageFamily for TypeScript {
         weights.sym_var_cost
     }
 
-    /// Same upper-bound reasoning as `LambdaCalc`: once wrapping is real, a
-    /// wrapped operand can collide with an existing eclass that already has a
-    /// cheaper rewrite, so the fast path only bounds the slow path.
     fn check_fast_vs_slow(fast: i64, slow: i64) {
         assert!(fast >= slow, "Fast rewrite size {} < slow rewrite size {} (TypeScript) — fast path must be an upper bound", fast, slow);
     }
@@ -432,7 +416,7 @@ impl LanguageFamily for TypeScript {
         Self::make(OpWithVar::Var(v), vec![])
     }
 
-    /// One `Lam(n)` enode, not `n` stacked single-binders.
+    /// One `Lam(n)` enode.
     fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
         egraph.add(Self::make(O::from_name(&format!("lam{n}")), vec![child]))
     }
@@ -441,15 +425,14 @@ impl LanguageFamily for TypeScript {
         weights.lam_cost
     }
 
-    /// One flat `App` whatever the arity, plus one DB-var leaf per captured
-    /// index — the same node count `wrap_pattern_with_db_apps` emits.
+    /// One flat `App` plus one DB-var leaf per index.
     fn ho_occurrence_cost(h: u32, weights: &Weights) -> u32 {
         weights.app_cost + h * weights.sym_var_cost
     }
 
-    /// Flat counterpart of `LambdaCalc`'s curried version: one `App` whose
+    /// Flat counterpart of `LambdaCalc`'s curried version: one `app` whose
     /// first child is the head and whose remaining children are the DB-var
-    /// leaves, in the `(n-1, n-2, …, 0)` order the caller supplies.
+    /// leaves in the order `(n-1, n-2, …, 0)`.
     fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<OpChildrenLanguage<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id {
         if db_args.is_empty() {
             return head;

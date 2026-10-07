@@ -1,27 +1,14 @@
 //! End-to-end tests for `--language typescript`: de Bruijn handling across
-//! multi-slot binders (`lam{n}`, `define`) and higher-order capture.
-//!
-//! `typescript_family_test.rs` unit-tests the family hooks one at a time. These
-//! tests run the whole binary (`load_egraph` → search → rewrite → display) on
-//! small hand-written corpora and check the output two ways:
+//! multi-slot binders (`lam{n}`, `define`) and higher-order capture. Corpora
+//! live in `data/test/ts/`. The outputs are checked two ways:
 //!
 //! 1. **Scope invariants**, computed by the tiny s-expression walker at the
-//!    bottom of this file. It encodes the binder rules (`lam{n}` binds n slots
-//!    over its body; `define` binds 1 over its *second* child) independently of
-//!    `TsOp::binds_child`, so a bug there can't hide by agreeing with itself.
-//!    Every library `lambda` must be closed, every rewritten program must have
-//!    the same free variables as its original, and every call site must be one
-//!    flat `(app fn_k …)` carrying exactly `arity_k` arguments.
-//! 2. **Pinned shapes** on corpora small enough to reason about by hand. Each
-//!    pinned string was checked against the oracle, and so was its most likely
-//!    off-by-one mutant (the oracle rejects every one of those mutants).
-//!
-//! Corpora live in `data/test/ts/`, not `data/domains/`: the follow-reaches
-//! sweep feeds `data/domains/` to reference stitch, which can't parse the flat
-//! dialect.
-//!
-//! All conventions follow the settled rightmost rule: in `(lam{n} …)`, `$0` is
-//! the *last* parameter.
+//!    bottom of this file. The invariants are:
+//!    - Every library `lambda` must be closed.
+//!    - Every rewritten program must have the same free variables as its original.
+//!    - Every call site must be one flat `(app fn_k …)` carrying exactly `arity_k`
+//!      arguments.
+//! 2. Asserts on expected outputs for small corpora.
 
 use std::collections::BTreeSet;
 
@@ -111,10 +98,7 @@ fn assert_scope_preserved(run: &Value, label: &str) {
     }
 }
 
-/// Every use of `fn_k` — in rewritten programs and inside later library
-/// bodies — is the callee of one flat `app` with exactly `arity_k` arguments.
-/// Guards the stub shape the β oracle can't see (it reads `(fn_0 a)` and
-/// `(app fn_0 a)` as the same term).
+/// Every use of `fn_k` is the callee of one flat `app` with exactly `arity_k` arguments.
 fn assert_call_sites_flat(run: &Value, label: &str) {
     let arities: Vec<usize> = (0..library(run).len()).map(|i| arity(run, i)).collect();
     let mut terms = programs(run, "rewritten_programs");
@@ -131,13 +115,16 @@ fn assert_call_sites_flat(run: &Value, label: &str) {
     }
 }
 
-/// A lambda with `arity > 0` opens with exactly one `lam{arity}` binder group,
-/// and the search never *invents* a `lam0` (a binder that binds nothing).
-/// A `lam0` copied from the corpus is fine: ts-codec emits one for every
-/// zero-parameter arrow (`() => x`), so it is only suspicious when no original
-/// program contains one.
+/// Every library lambda with `arity > 0` opens with exactly one `lam{arity}`,
+/// and neither the library nor the rewritten programs contain a `lam0` the
+/// corpus didn't have.
 fn assert_binder_groups(run: &Value, label: &str) {
-    let corpus_has_lam0 = programs(run, "original_programs").iter().any(|p| p.contains("(lam0 "));
+    let orig = programs(run, "original_programs");
+    let corpus_has_lam0 = orig.iter().any(|p| p.contains("(lam0 "));
+    for (i, (o, r)) in orig.iter().zip(programs(run, "rewritten_programs")).enumerate() {
+        let (no, nr) = (o.matches("(lam0 ").count(), r.matches("(lam0 ").count());
+        assert!(nr <= no, "{label}: rewritten program {i} has {nr} lam0s, its original only {no}\n  original : {o}\n  rewritten: {r}");
+    }
     for i in 0..library(run).len() {
         let l = lambda(run, i);
         assert!(!l.starts_with("(lam0 "), "{label}: fn_{i} is wrapped in a lam0: {l}");
@@ -152,8 +139,7 @@ fn assert_binder_groups(run: &Value, label: &str) {
 // ─── A. de Bruijn indices across multi-slot binders ─────────────────────────
 
 /// A metavar that lands *inside* a `lam2` sits two binders deep, so its head
-/// index is `$0 + 2 = $2`. An implementation that bumps depth by one per binder
-/// *node* (rather than by `binds_child`) renders `$1`, which the oracle rejects.
+/// index is `$0 + 2 = $2`.
 #[test]
 fn metavar_under_lam2_is_shifted_by_two() {
     let (bf, _) = run_both_checked("lam2_metavar_depth");
@@ -161,13 +147,10 @@ fn metavar_under_lam2_is_shifted_by_two() {
 }
 
 /// Metamorphic sibling of the test above: prepend unused parameters to every
-/// corpus lambda (`lam2` → `lam3`, and the silly widths `lam10`, `lam100`).
-/// Tests the following:
+/// corpus lambda (`lam2` → `lam3`, `lam10`, `lam100`). Tests the following:
 /// 1. Under the rightmost convention the body's own `$1`/`$0` don't move,
 ///    only the abstraction's slot does (`$2` → `$n`).
 /// 2. `lams_cost` is flat in n, so the compression must be identical.
-/// 3. Nothing assumes a single-digit width (`lam100` parses, prints, and
-///    shifts by 100).
 #[test]
 fn widening_a_binder_group_changes_only_the_slot_index() {
     let (l2, _) = run_both_checked("lam2_metavar_depth");
@@ -179,20 +162,9 @@ fn widening_a_binder_group_changes_only_the_slot_index() {
     }
 }
 
-/// Free-variable boundary. Every program repeats a window under its own
-/// `lam1`; inside the window's `lam2`, the varying callee is applied to either
-/// `$1` (the *largest bound* index at depth 2) or `$2` (the *smallest free*
-/// one: it points at the program's `lam1`, outside the window).
-///
-/// - `$1` is bound, so it is baked into the body (arity 1).
-/// - `$2` is free, so it must behave exactly like a symbol that is constant
-///   within a program but differs between programs: the same lambda, the same
-///   cost, and the call site passes it (shifted down by 2, to `$0`) in the
-///   position the symbol twin passes `y{i}`.
-///
-/// A `<=` for `<` in the free-var test would bake `$2` into the body (caught by
-/// the closedness invariant); a shift of 1 instead of 2 would pass `$1` (caught
-/// by the oracle).
+/// Variables bound inside the abstracted window stay in the body, while those
+/// bound outside it are abstracted exactly like symbols, including at the
+/// boundary (the largest bound index vs. the smallest free one).
 #[test]
 fn barely_free_var_is_passed_like_a_symbol() {
     let (bound, _) = run_both_checked("free_var_barely_bound");
@@ -219,18 +191,16 @@ fn thunk_lam0_is_kept_as_structure() {
     assert_eq!(lambda(&bf, 0), "(lam1 (app setTimeout (lam0 (app $0 x)) ms))");
 }
 
-/// `define` binds its *second* child. A slot in the value position (depth 0)
-/// and the body's own `$0` both print as `$0` but point at different binders:
-/// `(lam1 (define (app load $0) (app use $0 k)))`. If `define` bound child 0,
-/// the slot would print as `$1` and the oracle would reject it.
+/// A de Bruijn variable within `define`'s first child isn't shifted by the binder
+/// `define` introduces.
 #[test]
 fn define_value_slot_is_outside_the_let() {
     let (bf, _) = run_both_checked("define_value_slot");
     assert_eq!(lambda(&bf, 0), "(lam1 (define (app load $0) (app use $0 k)))");
 }
 
-/// The other side of the same rule: a slot in the `define` body is one binder
-/// deep, so it is `$1` while the let-bound value stays `$0`.
+/// A de Bruijn variable within `define`'s second child is shifted by the binder
+/// `define` introduces.
 #[test]
 fn define_body_slot_is_inside_the_let() {
     let (bf, _) = run_both_checked("define_body_slot");
@@ -255,12 +225,10 @@ fn free_context_var_never_leaks_into_a_body() {
     }
 }
 
-/// The flat transliteration of lambda-calc `ho_arity2_capture`, and its
-/// contrast case: the hole is *first-order*. It sits in the callee slot of
-/// `(app ?#0 $1)` under the `lam2`, so `$2` is the `lam1` parameter and the
-/// `$1` is literal pattern structure (not an η-wrap), and it is filled by the
-/// closed symbols `g` and `k`, passed bare rather than `lam1`-wrapped.
-/// Best-first only, matching its snapshot.
+/// Flat version of lambda-calc `ho_arity2_capture`. Without currying, a flat
+/// `app` only matches calls with the same number of arguments, so the slot is
+/// filled only by closed symbols and stays first-order (no η-wrap), unlike the
+/// higher-order slot in the lambda-calc version.
 #[test]
 fn flat_arity_mismatch_stays_first_order() {
     let run = run_ts("best-first", "flat_arity_mismatch", &[]);
@@ -276,15 +244,8 @@ fn flat_arity_mismatch_stays_first_order() {
 
 // ─── B. higher-order capture ────────────────────────────────────────────────
 
-/// The two-index path: the hole `(app g $1 $0)` references *both* slots of
-/// the enclosing `lam2`, so `?#0` captures two indices and renders as
-/// `(app $2 $1 $0)`.
-///
-/// Program 1 is the asymmetric one. Its captured term `(app h $0 $1)` has the
-/// arguments flipped, so it can't η-reduce to `h`; the call-site argument has
-/// to be exactly `(lam2 (app h $0 $1))`. Reversing the `db_args` order (or the
-/// slot convention) still gives well-formed output but swaps h's arguments
-/// after β, which the oracle catches.
+/// A higher-order slot that captures both indices of a `lam2` keeps them in
+/// source order, including for a filler that uses them swapped.
 #[test]
 fn two_index_capture_keeps_argument_order() {
     let (bf, smc) = run_both_checked("ho_two_index_capture");
@@ -297,12 +258,10 @@ fn two_index_capture_keeps_argument_order() {
     }
 }
 
-/// The CPS shape: a two-`define` window whose continuation refers to variables
-/// bound *inside* the window. The abstraction must take the rest of the
-/// computation as a callback that re-binds both let-values, e.g.
-/// `(lam1 (define (app fetch u) (define (app parse $0) (app $2 $1 $0))))`.
-/// Which indices a slot captures depends on the capture analysis, so the exact
-/// string isn't pinned: the invariants and the oracle carry this one.
+/// A continuation that uses variables bound by `define`s inside the
+/// abstraction becomes one higher-order slot, with both `define`s kept in the
+/// body. The exact string isn't pinned, since which indices the slot captures
+/// depends on the capture analysis.
 #[test]
 fn continuation_capture_across_define() {
     let (bf, _) = run_both_checked("cps_define_capture");
@@ -310,15 +269,9 @@ fn continuation_capture_across_define() {
     assert!(lambda(&bf, 0).contains("(define (app parse $0)"), "the window should keep both defines: {}", lambda(&bf, 0));
 }
 
-/// Partial η-expansion. Inside a `lam3`, every filler uses the first and last
-/// parameters (`$2`, `$0`) in a different non-trivial way (nested, duplicated,
-/// swapped, under an `if`) and never the middle one. The wrap must capture
-/// only what's used: the body applies `(app $3 $2 $0)` and every call site
-/// passes a `lam2`, with the filler's `$2` renumbered to `$1`.
-///
-/// Full expansion (capture all three, pass a `lam3`) is semantically fine,
-/// so the oracle accepts it; the pinned body and the `lam2` width are what
-/// reject it. The oracle does reject a wrong or swapped captured index.
+/// A higher-order slot captures only the binder indices its fillers use,
+/// skipping unused ones. Full expansion (capturing all three, passing a
+/// `lam3`) still passes the oracle, so the body and `lam2` width are pinned.
 #[test]
 fn partial_capture_skips_unused_binder_slots() {
     let (bf, smc) = run_both_checked("ho_partial_capture");
@@ -331,9 +284,8 @@ fn partial_capture_skips_unused_binder_slots() {
     }
 }
 
-/// The silly-width version of the test above: a `lam100` whose fillers use
-/// only `$99` (first parameter) and `$0` (last). The capture is `[99, 0]`,
-/// 98 slots apart, so the call site is still a `lam2`.
+/// Partial capture works across a wide binder group: using only the first and
+/// last of 100 slots still captures just those two.
 #[test]
 fn partial_capture_under_lam100_spans_the_whole_group() {
     let (bf, _) = run_both_checked("lam100_ho_capture");
@@ -342,11 +294,8 @@ fn partial_capture_under_lam100_spans_the_whole_group() {
     assert_eq!(programs(&bf, "rewritten_programs")[3], "(app fn_0 (lam2 (app m $0 (app n $1))))");
 }
 
-/// η-expansion through `define`'s *value* child. The value of the inner
-/// `define` sits under the outer `define` only, so its depth is 1 (not 2):
-/// the hole renders as `(app $1 $0)`, capturing the outer let. If `define`
-/// were treated as binding its value child, or both children, the head would
-/// be `$2` and the oracle would reject it.
+/// A higher-order slot in a `define`'s value captures the enclosing let, not
+/// the one that `define` introduces.
 #[test]
 fn define_value_slot_captures_the_outer_let() {
     let (bf, smc) = run_both_checked("define_value_capture");
@@ -356,11 +305,8 @@ fn define_value_slot_captures_the_outer_let() {
     }
 }
 
-/// Partial η-expansion across two `define`s. The continuation only ever uses
-/// the *outer* let (`$1`), never the inner one (`$0`). So the capture is `[1]`:
-/// the body applies `(app $2 $1)` and the call sites pass a `lam1`. Compare
-/// `continuation_capture_across_define`, whose programs use both between them
-/// and so capture both.
+/// A continuation slot captures only the `define`-bound variables its fillers
+/// use.
 #[test]
 fn define_continuation_captures_only_the_used_let() {
     let (bf, smc) = run_both_checked("define_partial_capture");
@@ -371,12 +317,9 @@ fn define_continuation_captures_only_the_used_let() {
     }
 }
 
-/// One higher-order slot used at two binder depths: once directly under the
-/// program's `lam1`, once under an extra inner binder. The deeper occurrence's
-/// captured index must shift by that binder's slot count (`occ_shift`). The
-/// `lam2` sibling changes the inner binder to bind two slots, so the shift is
-/// 2 rather than 1. That's the case a "+1 per binder" assumption gets wrong.
-/// Costs must match exactly, since `lams_cost` is flat in n.
+/// A higher-order slot used at two binder depths shifts its deeper captures by
+/// the inner binder's width, so a `lam1` or `lam2` inner binder compresses the
+/// same.
 #[test]
 fn cross_depth_capture_shifts_by_binder_width() {
     let (l1, _) = run_both_checked("cross_depth_lam1");
@@ -388,10 +331,10 @@ fn cross_depth_capture_shifts_by_binder_width() {
 
 // ─── C. pipeline-level ──────────────────────────────────────────────────────
 
-/// Stacked libraries: later bodies may call earlier `fn_k`, which the oracle
-/// inlines transitively and `assert_call_sites_flat` checks for arity.
+/// A run that learns several abstractions keeps every invariant
+/// for each library entry and the programs rewritten with it.
 #[test]
-fn stacked_abstractions_stay_sound() {
+fn multiple_abstractions_stay_sound() {
     for search in ["best-first", "smc"] {
         let run = run_ts_n(search, "mixed", "3", &[]);
         assert!(library(&run).len() >= 2, "{search}: expected a stacked library on the mixed corpus");
@@ -399,10 +342,8 @@ fn stacked_abstractions_stay_sound() {
     }
 }
 
-/// Differential test: lower-bound pruning must never discard the optimum. With
-/// `TsOp`'s flat costs, a `lams_cost` or `ho_occurrence_cost` that over-states
-/// its node count makes the bound unsound, and pruning then changes the
-/// result.
+/// Lower-bound pruning never discards the optimum: best-first finds the same
+/// cost with it on or off.
 #[test]
 fn lower_bound_pruning_preserves_the_optimum() {
     for corpus in ["lam2_metavar_depth", "define_body_slot", "ho_two_index_capture", "cps_define_capture", "cross_depth_lam2", "ho_partial_capture", "define_value_capture", "free_var_barely_free"] {
@@ -413,8 +354,7 @@ fn lower_bound_pruning_preserves_the_optimum() {
 }
 
 /// When best-first exhausts its frontier on a tiny corpus, its answer is
-/// optimal, so SMC can match it but never beat it. SMC beating it means
-/// best-first mis-scored or dropped a candidate.
+/// optimal, so SMC can match it but never beat it.
 #[test]
 fn smc_never_beats_a_converged_best_first() {
     for corpus in ["lam2_metavar_depth", "define_value_slot", "ho_two_index_capture", "cross_depth_lam1"] {
@@ -571,8 +511,8 @@ fn call_site_wraps(run: &Value) -> Vec<Option<usize>> {
         .collect()
 }
 
-/// The walker itself needs a test, or a bug in it would quietly weaken every
-/// invariant above. These are the binder rules the whole file relies on.
+/// The walker itself needs a test, or a bug in it would weaken every
+/// invariant above.
 #[test]
 fn scope_walker_agrees_with_the_binder_rules() {
     let fv = |s: &str| free_vars(&parse(s)).into_iter().collect::<Vec<_>>();

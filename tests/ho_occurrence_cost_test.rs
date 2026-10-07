@@ -1,13 +1,5 @@
 //! Tests for `LanguageFamily::ho_occurrence_cost` — the per-occurrence cost of
-//! the η-wrap that `compute_body_size_with_ho` adds for a higher-order metavar.
-//!
-//! The contract is "the summed node cost of the wrap `wrap_pattern_with_db_apps`
-//! actually builds for that occurrence", so each family's arithmetic is checked
-//! against its own constructor rather than against a hard-coded number alone.
-//! The two shapes genuinely differ: `LambdaCalc` curries, paying one `App` per
-//! captured index, while `TypeScript` emits one flat `App` however many indices
-//! it carries — which is exactly the assumption `compute_body_size_with_ho`
-//! used to bake in for every family.
+//! the eta-wrap added for a higher-order metavar.
 
 use egg::{Id, RecExpr};
 use egg_stitch::cost::compute_recexpr_size;
