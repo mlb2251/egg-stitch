@@ -65,8 +65,12 @@ All other results are read from the cache.
 
 ```bash
 python scripts/clear_table_estitch_results.py
-bash scripts/run_all_tables.sh
+EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
 ```
+
+Only the sweep point each table reports is recomputed, so a run that exceeds the
+default 300s cap can't fall back to a smaller one and would DNF. The 1200s cap
+prevents this.
 
 `git restore results/` restores the original cache.
 
