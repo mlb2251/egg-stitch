@@ -18,12 +18,14 @@ Requires x86-64 and Docker.
 
 ```bash
 docker load < estitch-artifact.tar.gz
-docker run --rm -it estitch-artifact
+mkdir -p estitch-out
+docker run --rm -it -v "$PWD/estitch-out:/out" estitch-artifact
 ```
 
 The working directory is `/artifact/egg-stitch`; babble and Stitch are at
 `/artifact/babble` and `/artifact/stitch`. All tools are prebuilt and no network
-access is needed.
+access is needed. `/out` is `estitch-out/` on the host; see
+[Exporting results](#exporting-results).
 
 ## Example
 
@@ -108,6 +110,18 @@ Interrupted runs resume from the cache.
 - Timings depend on hardware.
 - Tables 2, 3 and 6 cap each run at 300s and 20 GiB, reporting DNF otherwise.
   Runs near the cap may change status on different hardware.
+
+## Exporting results
+
+To view the tables and figures on the host, copy them to `/out`:
+
+```bash
+cp -r figures results /out/ && chown -R --reference=/out /out
+```
+
+They appear in `estitch-out/` on the host. The `chown` gives the files to the
+owner of `estitch-out/`; otherwise they are owned by root. Tables are LaTeX
+`tabular` fragments; figures are PNGs.
 
 ## Layout of `/artifact/egg-stitch`
 
