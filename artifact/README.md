@@ -56,7 +56,7 @@ and figures to `figures/`. Results are cached per (method, domain) under
 | Figure 10 | the four main tables | `curve-grid/` |
 | Figure 11 | `arity_experiment` | `arity/` |
 
-### 1. Recompute E-Stitch cells in the main paper tables (TODO hours)
+### 1. Recompute E-Stitch cells in the main paper tables (~1h)
 
 All other results are read from the cache.
 
@@ -67,7 +67,7 @@ bash scripts/run_all_tables.sh
 
 `git restore results/` restores the original cache.
 
-### 2. Rerun everything (TODO days)
+### 2. Rerun everything (~24h)
 
 ```bash
 rm -rf results/
@@ -85,7 +85,8 @@ Interrupted runs resume from the cache.
   Runs near the cap may change status on different hardware.
 - `molecules`, `circuits` and `circuits_all` require 20 GiB of free memory.
 
-The paper's results were produced on TODO.
+The paper's results, and the times above, were produced on an AMD Ryzen 7 5800X
+(8 cores) with 64 GB of RAM, running Ubuntu 24.04.
 
 ## Layout of `/artifact/egg-stitch`
 
