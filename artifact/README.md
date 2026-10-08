@@ -79,11 +79,16 @@ bash scripts/run_all_tables.sh
 
 Interrupted runs resume from the cache.
 
+### Expected similarities
+
+- BFS should give the same compression as the paper.
+- SMC should give similar compression; it is stochastic, and results are
+  aggregated over 10 runs.
+- Both should generally remain above the baselines.
+
 ### Expected differences
 
 - Timings depend on hardware.
-- Enum and baseline compression ratios are deterministic. SMC results are
-  aggregated over 10 runs and vary slightly.
 - Tables 2, 3 and 6 cap each run at 300s and 20 GiB, reporting DNF otherwise.
   Runs near the cap may change status on different hardware.
 - `molecules`, `circuits` and `circuits_all` require 20 GiB of free memory.
