@@ -3,6 +3,7 @@ FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates curl git python3 python3-venv \
+        libxrender1 libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
