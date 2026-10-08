@@ -45,7 +45,7 @@ python3 -m pip download -q --no-deps --only-binary=:all: --implementation cp \
 rm binary-reqs.txt
 # s-exp-parser only publishes an sdist; it's pure Python, so a locally built wheel works.
 python3 -m pip wheel -q --no-deps "$(grep '^s-exp-parser==' egg-stitch/requirements-lock.txt)" -w wheels
-cp "$here/Dockerfile" .
+cp "$here/Dockerfile" "$here/BUILDING.md" .
 sed -e "s/@ESTITCH_COMMIT@/$estitch_commit/" -e "s/@BABBLE_COMMIT@/$babble_commit/" \
     -e "s/@STITCH_COMMIT@/$stitch_commit/" "$here/README.md" > README.md
 echo "build context ready: $build"
