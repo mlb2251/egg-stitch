@@ -24,8 +24,9 @@ docker run --rm -it -v "$PWD/estitch-out:/out" estitch-artifact
 
 The working directory is `/artifact/egg-stitch`; babble and Stitch are at
 `/artifact/babble` and `/artifact/stitch`. All tools are prebuilt and no network
-access is needed. `/out` is `estitch-out/` on the host; see
-[Exporting results](#exporting-results).
+access is needed. `/out` is `estitch-out/` on the host; each run below ends by
+copying `figures/` (tables as LaTeX `tabular` fragments, figures as PNGs) there.
+The `chown` gives the copies to the owner of `estitch-out/` instead of root.
 
 ## Example
 
@@ -75,6 +76,7 @@ and the second command recomputes them, then regenerates the figures and tables 
 ```bash
 python scripts/clear_table_estitch_results.py
 bash scripts/run_all_tables.sh
+cp -r figures /out/figures-recompute && chown -R --reference=/out /out
 ```
 
 Only the sweep point each table reports is recomputed, so a run that exceeds the
@@ -85,6 +87,7 @@ by prepending e.g., `EXPERIMENT_TIMEOUT=1200` to the `bash` command, as in:
 ```bash
 python scripts/clear_table_estitch_results.py
 EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
+cp -r figures /out/figures-recompute && chown -R --reference=/out /out
 ```
 
 `git restore results/` restores the original cache.
@@ -94,6 +97,7 @@ EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
 ```bash
 rm -rf results/
 bash scripts/run_all_tables.sh
+cp -r figures /out/figures-rerun && chown -R --reference=/out /out
 ```
 
 Interrupted runs resume from the cache.
@@ -110,18 +114,6 @@ Interrupted runs resume from the cache.
 - Timings depend on hardware.
 - Tables 2, 3 and 6 cap each run at 300s and 20 GiB, reporting DNF otherwise.
   Runs near the cap may change status on different hardware.
-
-## Exporting results
-
-To view the tables and figures on the host, copy them to `/out`:
-
-```bash
-cp -r figures results /out/ && chown -R --reference=/out /out
-```
-
-They appear in `estitch-out/` on the host. The `chown` gives the files to the
-owner of `estitch-out/`; otherwise they are owned by root. Tables are LaTeX
-`tabular` fragments; figures are PNGs.
 
 ## Layout of `/artifact/egg-stitch`
 
