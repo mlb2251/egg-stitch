@@ -36,19 +36,18 @@ TABLES = {
 
 
 def table_labels(table: str) -> set[str]:
-    """Cache labels of the E-Stitch cells ``table`` shows: the configured BFS/SMC
-    points, the point the current results kicked down to if any, and the two
-    single-point baselines."""
+    """Cache labels of the E-Stitch cells ``table`` shows: the BFS/SMC points it
+    reports (kicked down from the configured point if that DNFs, in which case the
+    configured point is kept) and the two single-point baselines."""
     enum_point, enum_sweep, smc_sweep = TABLES[table]
-    labels = {f"enum-{enum_point}", f"smc-{TABLE_SMC_PARTICLES}",
-              "enum-dsrs-at-start", "enum-baseline"}
     summary = SUMMARY_RESULTS_DIR / f"{table}.json"
-    if summary.exists():
-        domain_runs = [d["runs"] for d in json.loads(summary.read_text())["domains"].values()]
+    domain_runs = ([d["runs"] for d in json.loads(summary.read_text())["domains"].values()]
+                   if summary.exists() else [])
+    return {"enum-dsrs-at-start", "enum-baseline"} | {
+        f"{method}-{reported_sweep_point(domain_runs, method, sweep, point)}"
         for method, sweep, point in [("enum", enum_sweep, enum_point),
-                                     ("smc", smc_sweep, TABLE_SMC_PARTICLES)]:
-            labels.add(f"{method}-{reported_sweep_point(domain_runs, method, sweep, point)}")
-    return labels
+                                     ("smc", smc_sweep, TABLE_SMC_PARTICLES)]
+    }
 
 
 def main() -> None:
