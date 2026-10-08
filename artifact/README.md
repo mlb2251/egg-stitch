@@ -1,5 +1,8 @@
 # E-Stitch: Top-Down Library Learning with E-Graphs — Artifact
 
+For an updated version of this document, see
+https://github.com/mlb2251/egg-stitch/blob/main/artifact/README.md.
+
 Contains E-Stitch and the two baselines, babble and Stitch, at the commits used
 for the paper:
 
