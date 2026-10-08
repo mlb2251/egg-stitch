@@ -14,6 +14,7 @@ drawing domains plus the dreamcoder benchmarks:
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Sequence
@@ -56,6 +57,9 @@ SMC_PARTICLE_SWEEP: tuple[int, ...] = (20, 50, 100, 200, 500, 1000, 2000, 5000)
 # Plots use the full sweep regardless.
 TABLE_BFS_STEPS = 10000
 TABLE_SMC_PARTICLES = 1000
+
+# Wall-clock cap (seconds, per tool invocation) for the molecules and circuits tables.
+TABLE_TIMEOUT = float(os.environ.get("EXPERIMENT_TIMEOUT", 300))
 
 
 def _sweep_runners(
@@ -261,7 +265,7 @@ def babble_comparison_no_rewrites() -> Path:
 # (best-first that canonicalises with the DSRs once instead of keeping them
 # live). Every algorithm gets a hard wall-clock cap.
 MOLECULES_DOMAINS = MOLECULES.domains
-MOLECULES_TIMEOUT = 300.0  # seconds, per tool invocation
+MOLECULES_TIMEOUT = TABLE_TIMEOUT
 MOLECULES_NUM_ABSTRACTIONS = 4
 # Live DSRs inflate the e-graph with every symmetry-equivalent orientation, so
 # best-first needs far more pops to converge on molecules than the 10k cogsci
@@ -308,7 +312,7 @@ def _require_free_memory(name: str) -> None:
 
 def molecules() -> Path:
     """Run the molecule scramble subset with DSRs, the babble_comparison_rewrites roster + the
-    dsrs-only-at-start baseline, each algorithm capped at 300s and 20 GiB."""
+    dsrs-only-at-start baseline, each algorithm capped at :data:`TABLE_TIMEOUT` and 20 GiB."""
     _require_free_memory("molecules")
     return _run_table(
         domains=MOLECULES_DOMAINS,
@@ -325,7 +329,7 @@ def molecules() -> Path:
 # Stitch), at max-arity 4. babble runs via its ``circuits`` binary (boolean
 # and/or/not over ``$N`` inputs).
 CIRCUITS_DOMAINS = EPFL_CIRCUITS.domains
-CIRCUITS_TIMEOUT = 300.0  # seconds, per tool invocation
+CIRCUITS_TIMEOUT = TABLE_TIMEOUT
 CIRCUITS_NUM_ABSTRACTIONS = 4
 CIRCUITS_MAX_ARITY = 4
 # Cone A's ``$3`` and cone B's ``$3`` are different nets, so an abstraction must
@@ -381,7 +385,7 @@ def _circuits_runners() -> tuple[tuple[str, object], ...]:
 def circuits() -> Path:
     """Run the EPFL circuits with the factoring DSRs: the molecules table's full roster
     (Enum/SMC + babble + the dsrs-only-at-start and no-rules Enum baselines),
-    max-arity 4, 4 abstractions, each capped at 300s and 20 GiB."""
+    max-arity 4, 4 abstractions, each capped at :data:`TABLE_TIMEOUT` and 20 GiB."""
     _require_free_memory("circuits")
     return _run_table(
         domains=CIRCUITS_DOMAINS,
