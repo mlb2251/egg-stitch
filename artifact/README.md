@@ -59,18 +59,31 @@ and figures to `figures/`. Results are cached per (method, domain) under
 | Figure 10 | the four main tables | `curve-grid/` |
 | Figure 11 | `arity_experiment` | `arity/` |
 
+### Check hardware requirements
+
+The paper's results, and the times below, were produced on an AMD Ryzen 7 5800X
+(8 cores) with 64 GB of RAM, running Ubuntu 24.04. `molecules` and `circuits`/`circuits_all` experiments
+require up to 20 GiB of free memory, and limit to 300s per run.
+
 ### 1. Recompute E-Stitch cells in the main paper tables (~1h)
 
-All other results are read from the cache.
+The first command clears all the E-Stitch results reported in the main tables from the cache,
+and the second command recomputes them, then regenerates the figures and tables in the paper.
+
+```bash
+python scripts/clear_table_estitch_results.py
+bash scripts/run_all_tables.sh
+```
+
+Only the sweep point each table reports is recomputed, so a run that exceeds the
+default 300s cap can't fall back to a smaller one and would DNF.
+If you are running on a machine with a slower CPU, you may need to adjust the time limit
+by prepending e.g., `EXPERIMENT_TIMEOUT=1200` to the `bash` command, as in:
 
 ```bash
 python scripts/clear_table_estitch_results.py
 EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
 ```
-
-Only the sweep point each table reports is recomputed, so a run that exceeds the
-default 300s cap can't fall back to a smaller one and would DNF. The 1200s cap
-prevents this.
 
 `git restore results/` restores the original cache.
 
@@ -95,10 +108,6 @@ Interrupted runs resume from the cache.
 - Timings depend on hardware.
 - Tables 2, 3 and 6 cap each run at 300s and 20 GiB, reporting DNF otherwise.
   Runs near the cap may change status on different hardware.
-- `molecules`, `circuits` and `circuits_all` require 20 GiB of free memory.
-
-The paper's results, and the times above, were produced on an AMD Ryzen 7 5800X
-(8 cores) with 64 GB of RAM, running Ubuntu 24.04.
 
 ## Layout of `/artifact/egg-stitch`
 
