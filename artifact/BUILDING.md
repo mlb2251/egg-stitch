@@ -7,8 +7,7 @@
 docker build -t estitch-artifact .
 ```
 
-To regenerate the build context from an egg-stitch checkout, with Stitch
-checked out at its pinned commit alongside it:
+To regenerate the build context from an egg-stitch checkout:
 
 ```bash
 artifact/prepare.sh

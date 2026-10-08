@@ -17,21 +17,16 @@ clone() {
     git -C "$build/$1" checkout -q FETCH_HEAD
 }
 
-stitch_commit=$(pin STITCH_COMMIT stitch)
-# stitch doesn't track its Cargo.lock, so ship the one the reported numbers were built with.
-if [[ $(git -C "$root/../stitch" rev-parse HEAD) != "$stitch_commit" ]]; then
-    echo "../stitch is not at the pinned $stitch_commit; its Cargo.lock may not match" >&2
-    exit 1
-fi
-
 rm -rf "$build"
 mkdir -p "$build"
 estitch_commit=$(git -C "$root" rev-parse HEAD)
 babble_commit=$(pin BABBLE_COMMIT babble)
+stitch_commit=$(pin STITCH_COMMIT stitch)
 clone egg-stitch https://github.com/mlb2251/egg-stitch.git "$estitch_commit"
 clone babble https://github.com/kavigupta/babble.git "$babble_commit"
 clone stitch https://github.com/mlb2251/stitch.git "$stitch_commit"
-cp "$root/../stitch/Cargo.lock" "$build/stitch/"
+# stitch doesn't track its Cargo.lock, so ship the one the reported numbers were built with.
+cp "$here/stitch.Cargo.lock" "$build/stitch/Cargo.lock"
 
 cd "$build"
 cargo vendor --locked --manifest-path egg-stitch/Cargo.toml \
