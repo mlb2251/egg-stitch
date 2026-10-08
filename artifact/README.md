@@ -76,7 +76,7 @@ and the second command recomputes them, then regenerates the figures and tables 
 ```bash
 python scripts/clear_table_estitch_results.py
 bash scripts/run_all_tables.sh
-cp -r figures /out/figures-recompute && chown -R --reference=/out /out
+cp -r figures /out/figures-from-short-run && chown -R --reference=/out /out
 ```
 
 Only the sweep point each table reports is recomputed, so a run that exceeds the
@@ -87,7 +87,7 @@ by prepending e.g., `EXPERIMENT_TIMEOUT=1200` to the `bash` command, as in:
 ```bash
 python scripts/clear_table_estitch_results.py
 EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
-cp -r figures /out/figures-recompute && chown -R --reference=/out /out
+cp -r figures /out/figures-from-short-run && chown -R --reference=/out /out
 ```
 
 `git restore results/` restores the original cache.
@@ -97,7 +97,7 @@ cp -r figures /out/figures-recompute && chown -R --reference=/out /out
 ```bash
 rm -rf results/
 bash scripts/run_all_tables.sh
-cp -r figures /out/figures-rerun && chown -R --reference=/out /out
+cp -r figures /out/figures-from-long-run && chown -R --reference=/out /out
 ```
 
 Interrupted runs resume from the cache.
