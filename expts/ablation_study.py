@@ -2,9 +2,10 @@
 Ablation experiment: how each search optimisation pays off on the single
 hardest experiment of the babble_comparison_rewrites, molecules and circuits tables.
 
-Runs *after* those tables' ``results/<table>.json`` exist. For each of them it:
+For each of those tables it:
 
-1. Picks the hardest single-file domain from the latex tables, hard=BFS took longest.
+1. Uses the domain and BFS point in :data:`ABLATION_PICKS`: the table's hardest
+    single-file domain (longest BFS time) at its reported BFS point.
 2. Establishes a target compression to reach based on the BFS's configuration but run
     for 1 abstraction, multiplied by 0.99.
 3a. Runs BFS ablations with a large step budget and a ``--compression-limit`` stop.
@@ -92,6 +93,15 @@ TABLE_SPECS: dict[str, TableSpec] = {
     "circuits": TableSpec(table="circuits", max_arity=CIRCUITS_MAX_ARITY, iter_limit=CIRCUITS_ITER_LIMIT,
                  language=CIRCUITS_LANGUAGE, timeout=CIRCUITS_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
                  enum_point=TABLE_BFS_STEPS, bfs_sweep=CIRCUITS_BFS_SWEEP),
+}
+
+# (domain, reported BFS point) per table, fixed so that recomputing the tables
+# can't move the ablation onto other inputs. scripts/test_ablation_sync.py checks
+# these are still what hardest_domain and _reported_enum_point pick.
+ABLATION_PICKS: dict[str, tuple[str, int]] = {
+    "babble_comparison_rewrites": ("furniture", 10000),
+    "molecules": ("molecules:hexyl", 100000),
+    "circuits": ("epfl-circuits:square", 2000),
 }
 
 
@@ -297,11 +307,8 @@ def ablation() -> Path:
     set_folder(f"ablation/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {"tables": {}}
     for table, spec in TABLE_SPECS.items():
-        saved = _load_table(spec)
-        # Pin enum_point to the cell the table actually reports (kicked down when
-        # the configured point DNFs), so the hardest pick and target run match it.
-        spec = replace(spec, enum_point=_reported_enum_point(spec, saved))
-        domain = hardest_domain(spec, saved)
+        domain, enum_point = ABLATION_PICKS[table]
+        spec = replace(spec, enum_point=enum_point)
         max_cr, max_egg_cr = max_compression(spec, domain)
         # Target = 99% of max, so an ablation that learns the same-quality
         # abstraction counts as reaching it even if it misses the exact

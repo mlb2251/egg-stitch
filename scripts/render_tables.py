@@ -1137,10 +1137,6 @@ def main() -> None:
                 f"% source: {path}\n"
                 + render(saved, table, presentation=True) + "\n")
             print(f"wrote {pres_path}", file=sys.stderr)
-        # Drop the previous single-PNG-per-table output; the per-domain
-        # files below replace it. Silent if it was already gone.
-        stale = FIGURES_DIR / f"{table}.png"
-        stale.unlink(missing_ok=True)
         domain_dir = FIGURES_DIR / table
         domain_dir.mkdir(exist_ok=True)
         for domain in domains_for_table(table):
