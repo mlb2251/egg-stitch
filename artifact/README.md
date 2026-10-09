@@ -149,8 +149,8 @@ cp -r figures /out/figures-from-ablation-run && chown -R --reference=/out /out
 
 On our machine the ablation's `circuits` target run (BFS on Square, 2000 steps)
 takes 244s of the 300s cap. If it exceeds the cap, the ablation stops and
-`ablation.tex` and `ablation-appendix.tex` are not produced; rerun the commands
-with `EXPERIMENT_TIMEOUT=1200` prepended to the `bash` command.
+`ablation.tex` and `ablation-appendix.tex` are not produced; rerun all of step 2's
+commands with `EXPERIMENT_TIMEOUT=1200` prepended to the `bash` command.
 
 ### 3. Rerun everything (~24h) [Optional]
 
