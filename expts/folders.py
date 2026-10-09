@@ -12,7 +12,7 @@ from pathlib import Path
 
 RESULTS_DIR = Path(__file__).parent.parent / "viz" / "results"
 
-# Summary tableN.json files live here (checked into git, single canonical
+# Summary <table>.json files live here (checked into git, single canonical
 # copy per table). Raw per-file subprocess dumps stay under ``RESULTS_DIR``
 # above, which is .gitignored.
 SUMMARY_RESULTS_DIR = Path(__file__).parent.parent / "results"
