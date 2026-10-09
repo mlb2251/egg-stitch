@@ -36,6 +36,9 @@ babble_commit=$(pin BABBLE_COMMIT babble)
 stitch_commit=$(pin STITCH_COMMIT stitch)
 clone egg-stitch https://github.com/mlb2251/egg-stitch.git "$estitch_commit"
 clone babble https://github.com/kavigupta/babble.git "$babble_commit"
+# babble's DreamCoder benchmark inputs are a submodule with an SSH URL.
+git -C "$build/babble" -c url.https://github.com/.insteadOf=git@github.com: \
+    submodule update -q --init --depth 1
 clone stitch https://github.com/mlb2251/stitch.git "$stitch_commit"
 # stitch doesn't track its Cargo.lock, so ship the one the reported numbers were built with.
 cp "$here/stitch.Cargo.lock" "$build/stitch/Cargo.lock"
