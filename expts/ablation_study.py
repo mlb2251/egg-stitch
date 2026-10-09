@@ -122,9 +122,11 @@ def hardest_domain(spec: TableSpec, saved: dict) -> str:
 # ─── measurement + caching ─────────────────────────────────────────────────
 
 
-def _cache_path(spec: TableSpec, key: str) -> Path:
-    """Per-measurement cache file (delete to force a recompute)."""
-    return SUMMARY_RESULTS_DIR / "ablation" / spec.table / f"{key}.json"
+def _cache_path(spec: TableSpec, domain: str, key: str) -> Path:
+    """Per-measurement cache file (delete to force a recompute). Keyed by the
+    domain and BFS point, which both follow from the table's results."""
+    run = f"{domain.replace(':', '_')}_enum-{spec.enum_point}"
+    return SUMMARY_RESULTS_DIR / "ablation" / spec.table / run / f"{key}.json"
 
 
 def _geomean(vals: list[float]) -> float | None:
@@ -143,7 +145,7 @@ def _measure(runner, domain: str, spec: TableSpec, cache_key: str,
         - dnf: whether any rep DNF'd (True/False)
     """
 
-    cache = _cache_path(spec, cache_key)
+    cache = _cache_path(spec, domain, cache_key)
     if cache.exists():
         with open(cache) as fh:
             return json.load(fh)
