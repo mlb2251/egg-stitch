@@ -14,7 +14,7 @@ for the paper:
 
 ## Setup
 
-Requires x86-64 and Docker.
+Requires an x86-64 host with Docker. Tested on Ubuntu 24.04 with Docker Engine 29.8.2.
 
 ```bash
 docker load < estitch-artifact.tar.gz
