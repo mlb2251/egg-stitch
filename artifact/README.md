@@ -90,6 +90,13 @@ EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-short-run && chown -R --reference=/out /out
 ```
 
+Rendering ends with three `SWEEP-POINT KICK-DOWNS` notices (`circuits` BFS,
+`circuits_all` BFS and SMC). These are expected and match the paper: the
+configured point DNFs on some circuits, so the table reports the largest smaller
+point that finishes on all of them. For `circuits` BFS, that post-kick-down
+point (2,000 steps) is what the commands above recompute; the configured 10,000
+is kept from the cache. `circuits_all` (Table 6, appendix) is not recomputed.
+
 `git restore results/` restores the original cache.
 
 ### 2. Rerun everything (~24h)
@@ -108,10 +115,6 @@ Interrupted runs resume from the cache.
 - SMC should give similar compression; it is stochastic, and results are
   aggregated over 10 runs.
 - Both should generally remain above the baselines.
-- Rendering ends with three `SWEEP-POINT KICK-DOWNS` notices (`circuits` BFS,
-  `circuits_all` BFS and SMC). These are expected: the configured point DNFs on
-  some circuits, so the table reports the largest smaller point that finishes on
-  all of them, as in the paper.
 
 ### Expected differences
 
