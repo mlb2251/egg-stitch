@@ -12,6 +12,24 @@ for the paper:
 | babble | `@BABBLE_COMMIT@` | https://github.com/kavigupta/babble |
 | Stitch | `@STITCH_COMMIT@` | https://github.com/mlb2251/stitch |
 
+## Claims
+
+Sections, tables and figures refer to the paper. Outputs are in `figures/`.
+Step 1 recomputes only E-Stitch's cells in Tables 1–4 and reads everything else
+from the cache; step 2 recomputes the ablation; step 3 recomputes everything.
+
+| # | Claim | Paper | Output | Step |
+| --- | --- | --- | --- | --- |
+| 1 | E-Stitch BFS and SMC get higher compression than Babble on every Babble benchmark, in less time | §7.2, Table 1 | `babble_comparison_rewrites.tex` | 1 |
+| 2 | On molecules, E-Stitch BFS and SMC out-compress Babble, BFS/MT and BFS/NR; Babble does not finish on Hexyl; SMC is much faster than BFS at similar compression | §7.3, Table 2 | `molecules.tex` | 1 |
+| 3 | Per-abstraction search progress of E-Stitch SMC vs BFS/MT on molecules | §7.3, Figure 6 | `molecules/search-progress.png` | 1 |
+| 4 | On circuits, E-Stitch BFS and SMC are far more compressive than BFS/MT and BFS/NR; Babble finishes none; BFS/MT underperforms BFS/NR | §7.4, Table 3 | `circuits.tex` | 1 |
+| 5 | Without rewrites, Stitch is fastest and E-Stitch BFS close behind, at similar compression | §7.5, Table 4 | `babble_comparison_no_rewrites.tex` | 1 |
+| 6 | Every BFS pruning technique matters in at least one domain; equivalence pruning in all; SMC is less sensitive | §7.6, Tables 5, 7 | `ablation.tex`, `ablation-appendix.tex` | 2 |
+
+The soundness and completeness proofs (§4.7, App. D) are on paper and are not
+checked by the artifact.
+
 ## Setup
 
 Requires an x86-64 host with Docker. Tested on Ubuntu 24.04 with Docker Engine 29.8.2.
@@ -93,7 +111,7 @@ falls back to our cached `enum-1000` and the notice reads `10000 -> 1000`. If so
 
   - ignore the circuits BFS cell and audit the rest of the results
   - raise `EXPERIMENT_TIMEOUT` and rerun as described in Section 1.5
-  - run the full experiment as described in Section 2.
+  - run the full experiment as described in Section 3.
 
 ### 1.5. Main paper tables, but with increased time limit (Still ~1h)
 
@@ -110,7 +128,19 @@ cp -r figures /out/figures-from-short-run-increased-time-limit && chown -R --ref
 
 `git restore results/` restores the original cache.
 
-### 2. Rerun everything (~24h) [Optional]
+### 2. Recompute the ablation (~3.5h)
+
+This recomputes Tables 5 and 7 on the domains and BFS points the paper uses
+(Furniture, Hexyl and Square).
+
+```bash
+rm -rf results/ablation
+./run.py ablation
+python scripts/render_ablation.py
+cp -r figures /out/figures-from-ablation-run && chown -R --reference=/out /out
+```
+
+### 3. Rerun everything (~24h) [Optional]
 
 ```bash
 rm -rf results/
