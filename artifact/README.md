@@ -93,8 +93,12 @@ cp -r figures /out/figures-from-short-run && chown -R --reference=/out /out
 Note: there are 3 kick-down notices (where we use lower parameters to fit the
 compute budget). Two are for `circuits_all`, which is not a main table and is not
 recomputed here; the last should read
-`circuits BFS: kicked down 10000 -> 2000 steps (geomean DNF at 10000)`. This is
-expected, and is why `enum-2000` is the cell regenerated.
+
+```
+!!   circuits BFS: kicked down 10000 -> 2000 steps (geomean DNF at 10000)
+```
+
+This is expected, and is why `enum-2000` is the cell regenerated.
 
 `git restore results/` restores the original cache.
 
