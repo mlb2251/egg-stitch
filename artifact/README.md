@@ -133,6 +133,47 @@ Interrupted runs resume from the last (table, method) that finished.
 - Tables 2, 3 and 6 cap each run at 300s and 20 GiB, reporting DNF otherwise.
   Runs near the cap may change status on different hardware.
 
+## Running on your own inputs
+
+A corpus is a JSON list of programs as s-expressions, for example
+`data/domains/examples-paper/corpus_b.json`:
+
+```json
+[
+    "(+ (- a) (* b b))",
+    "(+ (- (* c d)) (* g g))",
+    "(sqrt (+ (* i i) (- h)))",
+    "(exp (* (/ y 2) (/ y 2)))"
+]
+```
+
+A rewrite-rule file has one rule per line, `name: lhs => rhs` (one direction)
+or `name: lhs <=> rhs` (both directions). `?x` is a pattern variable and `//`
+starts a comment. `data/domains/examples-paper/rules.rewrites`:
+
+```
+plus_comm: (+ ?x ?y) <=> (+ ?y ?x)
+add_zero: ?x <=> (+ 0 ?x)
+neg_zero: (- 0) <=> 0
+```
+
+```bash
+cargo run --release -- --search best-first --max-arity 2 \
+    -i data/domains/examples-paper/corpus_b.json \
+    -r data/domains/examples-paper/rules.rewrites \
+    -o out.json
+```
+
+This finds `(+ (- ?#0) (* ?#1 ?#1))` (~1.20×), which needs the rules to match its
+rearranged uses; without `-r` it finds only `(* ?#0 ?#0)` (~1.11×).
+
+- `--language lambda-calc` reads lambda-calculus programs, with `lam` and de
+  Bruijn variables `$0`, `$1`, … (see `data/domains/list/`).
+- `--num-abstractions N` learns N abstractions in sequence.
+- `-o` writes JSON with the learned abstractions (`library`), the rewritten
+  corpus (`rewritten_programs`) and `compression_ratio`.
+- `data/domains/` has more corpora and rule files; `--help` lists all options.
+
 ## Layout of `/artifact/egg-stitch`
 
 - `src/`: E-Stitch (Rust).
