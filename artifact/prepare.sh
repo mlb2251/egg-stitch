@@ -17,6 +17,18 @@ clone() {
     git -C "$build/$1" checkout -q FETCH_HEAD
 }
 
+# The egg-stitch clone comes from GitHub, while the files copied below come from
+# this checkout; refuse to mix them.
+if [[ -n $(git -C "$root" status --porcelain) ]]; then
+    echo "commit or stash local changes first" >&2
+    exit 1
+fi
+git -C "$root" fetch -q origin
+if [[ -z $(git -C "$root" branch -r --contains HEAD) ]]; then
+    echo "push HEAD to origin first" >&2
+    exit 1
+fi
+
 rm -rf "$build"
 mkdir -p "$build"
 estitch_commit=$(git -C "$root" rev-parse HEAD)
