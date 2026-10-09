@@ -118,7 +118,7 @@ bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-long-run && chown -R --reference=/out /out
 ```
 
-Interrupted runs resume from the cache.
+Interrupted runs resume from the last (table, method) that finished.
 
 ### Expected similarities
 
