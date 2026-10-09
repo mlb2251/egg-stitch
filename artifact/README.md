@@ -23,7 +23,7 @@ from the cache; step 2 recomputes the ablation; step 3 recomputes everything.
 | 1 | E-Stitch BFS and SMC get higher compression than Babble on every Babble benchmark, in less time | §7.2, Table 1 | `babble_comparison_rewrites.tex` | 1 |
 | 2 | On molecules, E-Stitch BFS and SMC out-compress Babble, BFS/MT and BFS/NR; Babble does not finish on Hexyl; SMC is much faster than BFS at similar compression | §7.3, Table 2 | `molecules.tex` | 1 |
 | 3 | Per-abstraction search progress of E-Stitch SMC vs BFS/MT on molecules | §7.3, Figure 6 | `molecules/search-progress.png` | 1 |
-| 4 | On circuits, E-Stitch BFS and SMC are far more compressive than BFS/MT and BFS/NR; Babble finishes none; BFS/MT underperforms BFS/NR | §7.4, Table 3 | `circuits.tex` | 1 |
+| 4 | On circuits, E-Stitch BFS and SMC are far more compressive than BFS/MT and BFS/NR; Babble finishes none; BFS/MT generally underperforms BFS/NR | §7.4, Table 3 | `circuits.tex` | 1 |
 | 5 | Without rewrites, Stitch is fastest and E-Stitch BFS close behind, at similar compression | §7.5, Table 4 | `babble_comparison_no_rewrites.tex` | 1 |
 | 6 | Every BFS pruning technique matters in at least one domain; equivalence pruning in all; SMC is less sensitive | §7.6, Tables 5, 7 | `ablation.tex`, `ablation-appendix.tex` | 2 |
 
@@ -95,6 +95,8 @@ require up to 20 GiB of free memory, and limit to 300s per run.
 
 The first command clears all the E-Stitch results reported in the main tables from the cache,
 and the second command recomputes them, then regenerates the figures and tables in the paper.
+(Note that the timing comparisons should not be read literally, as the baselines have not been
+recomputed on your hardware).
 
 ```bash
 rm -rf figures
