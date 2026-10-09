@@ -37,7 +37,7 @@ Requires an x86-64 host with Docker. Tested on Ubuntu 24.04 with Docker Engine 2
 ```bash
 docker load < estitch-artifact.tar.gz
 mkdir -p estitch-out
-docker run --rm -it -v "$PWD/estitch-out:/out" estitch-artifact
+docker run -it --name estitch -v "$PWD/estitch-out:/out" estitch-artifact
 ```
 
 The working directory is `/artifact/egg-stitch`; babble and Stitch are at
@@ -45,6 +45,11 @@ The working directory is `/artifact/egg-stitch`; babble and Stitch are at
 access is needed. `/out` is `estitch-out/` on the host; each run below ends by
 copying `figures/` (tables as LaTeX `tabular` fragments, figures as PNGs) there.
 The `chown` gives the copies to the owner of `estitch-out/` instead of root.
+
+If you exit the container or lose the session, re-enter it with
+`docker start -ai estitch`; finished results are kept. To resume an interrupted
+step, rerun only its `bash scripts/run_all_tables.sh` and `cp` lines, since its
+first lines delete results. `docker rm estitch` deletes the container.
 
 ## Example
 
@@ -151,7 +156,7 @@ bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-long-run && chown -R --reference=/out /out
 ```
 
-Interrupted runs resume from the last (table, method) that finished.
+Interrupted runs resume from the last (table, method) that finished (see Setup).
 
 ### Expected similarities
 
