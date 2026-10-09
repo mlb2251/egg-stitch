@@ -92,6 +92,7 @@ The first command clears all the E-Stitch results reported in the main tables fr
 and the second command recomputes them, then regenerates the figures and tables in the paper.
 
 ```bash
+rm -rf figures
 python scripts/clear_table_estitch_results.py
 bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-short-run && chown -R --reference=/out /out
@@ -120,6 +121,7 @@ Note that this gives the recomputed E-Stitch cells a longer budget than the cach
 and Stitch cells, which were run with 300s.
 
 ```bash
+rm -rf figures
 git restore results/
 python scripts/clear_table_estitch_results.py
 EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
@@ -134,6 +136,7 @@ This recomputes Tables 5 and 7 on the domains and BFS points the paper uses
 (Furniture, Hexyl and Square).
 
 ```bash
+rm -rf figures
 rm -rf results/ablation
 bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-ablation-run && chown -R --reference=/out /out
@@ -142,6 +145,7 @@ cp -r figures /out/figures-from-ablation-run && chown -R --reference=/out /out
 ### 3. Rerun everything (~24h) [Optional]
 
 ```bash
+rm -rf figures
 rm -rf results/
 bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-long-run && chown -R --reference=/out /out
