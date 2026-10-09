@@ -108,6 +108,10 @@ Interrupted runs resume from the cache.
 - SMC should give similar compression; it is stochastic, and results are
   aggregated over 10 runs.
 - Both should generally remain above the baselines.
+- Rendering ends with three `SWEEP-POINT KICK-DOWNS` notices (`circuits` BFS,
+  `circuits_all` BFS and SMC). These are expected: the configured point DNFs on
+  some circuits, so the table reports the largest smaller point that finishes on
+  all of them, as in the paper.
 
 ### Expected differences
 
