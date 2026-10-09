@@ -46,7 +46,7 @@ between runs; `--seed` fixes them. `--help` lists all options.
 ## Reproducing the paper
 
 `bash scripts/run_all_tables.sh` runs every experiment and renders all tables
-and figures to `figures/`. Results are cached per (method, domain) under
+and figures to `figures/`. Results are cached per (table, method) under
 `results/` and reused; the cache used for the paper is included.
 
 | Paper | Experiment | Output in `figures/` |
