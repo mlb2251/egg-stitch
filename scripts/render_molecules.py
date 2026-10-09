@@ -6,7 +6,7 @@ Reads ``results/molecules.json`` (the molecule-subset table; see
 per-iteration cost trajectory this renderer draws:
 
   ``enum-dsrs-at-start`` -- DSRs canonicalise the egraph once, then search
-                            runs rule-free (the "Stitch on E-graph min term"
+                            runs rule-free (the BFS/MT
                             baseline);
   ``smc-1000``           -- DSRs kept live during search (E-Stitch), with the
                             SMC sampler at the canonical 1000-particle point.
@@ -52,8 +52,8 @@ METHOD_MARKERS = {
 }
 
 METHOD_COMMON_NAME = {
-    "DSR-canon": "Stitch on E-Graph min term",
-    "search-DSR": "E-Stitch",
+    "DSR-canon": "E-Stitch BFS/MT [baseline]",
+    "search-DSR": "E-Stitch SMC",
 }
 
 # Font sizes (points) for the combined 2x2 figure. Kept deliberately large
