@@ -35,8 +35,6 @@ estitch_commit=$(git -C "$root" rev-parse HEAD)
 babble_commit=$(pin BABBLE_COMMIT babble)
 stitch_commit=$(pin STITCH_COMMIT stitch)
 clone egg-stitch https://github.com/mlb2251/egg-stitch.git "$estitch_commit"
-# Instructions for coding assistants, not part of the artifact.
-rm "$build/egg-stitch/CLAUDE.md"
 clone babble https://github.com/kavigupta/babble.git "$babble_commit"
 # babble's DreamCoder benchmark inputs are a submodule with an SSH URL.
 git -C "$build/babble" -c url.https://github.com/.insteadOf=git@github.com: \
