@@ -26,8 +26,6 @@ from expts.tables import (  # noqa: E402
 # table -> (enum point, enum sweep, smc sweep). The babble comparisons never kick down from
 # their configured point, so their sweeps are just that point.
 TABLES = {
-    "babble_comparison_rewrites_single": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
-    "babble_comparison_no_rewrites_single": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
     "babble_comparison_rewrites": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
     "babble_comparison_no_rewrites": (TABLE_BFS_STEPS, (TABLE_BFS_STEPS,), (TABLE_SMC_PARTICLES,)),
     "molecules": (MOLECULES_ENUM_POINT, MOLECULES_BFS_SWEEP, SMC_PARTICLE_SWEEP),

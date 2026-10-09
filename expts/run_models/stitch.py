@@ -24,6 +24,7 @@ from ..folders import current_folder_path, unique_path
 # Stitch lives as a sibling clone of this repo.
 STITCH_DIR: Path = (Path(__file__).resolve().parent.parent.parent.parent / "stitch").resolve()
 
+# Bumping this also means replacing artifact/stitch.Cargo.lock with that checkout's Cargo.lock.
 STITCH_COMMIT = "350804b7b35807c78bd21c313785ae5152ae2985"
 
 
