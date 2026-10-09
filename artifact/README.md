@@ -135,8 +135,7 @@ This recomputes Tables 5 and 7 on the domains and BFS points the paper uses
 
 ```bash
 rm -rf results/ablation
-./run.py ablation
-python scripts/render_ablation.py
+bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-ablation-run && chown -R --reference=/out /out
 ```
 
