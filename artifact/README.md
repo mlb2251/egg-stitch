@@ -90,12 +90,11 @@ EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-short-run && chown -R --reference=/out /out
 ```
 
-Rendering ends with three `SWEEP-POINT KICK-DOWNS` notices (`circuits` BFS,
-`circuits_all` BFS and SMC). These are expected and match the paper: the
-configured point DNFs on some circuits, so the table reports the largest smaller
-point that finishes on all of them. For `circuits` BFS, that post-kick-down
-point (2,000 steps) is what the commands above recompute; the configured 10,000
-is kept from the cache. `circuits_all` (Table 6, appendix) is not recomputed.
+Note: there are 3 kick-down notices (where we use lower parameters to fit the
+compute budget). Two are for `circuits_all`, which is not a main table and is not
+recomputed here; the last should read
+`circuits BFS: kicked down 10000 -> 2000 steps (geomean DNF at 10000)`. This is
+expected, and is why `enum-2000` is the cell regenerated.
 
 `git restore results/` restores the original cache.
 
