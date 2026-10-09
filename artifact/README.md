@@ -79,17 +79,6 @@ bash scripts/run_all_tables.sh
 cp -r figures /out/figures-from-short-run && chown -R --reference=/out /out
 ```
 
-Only the sweep point each table reports is recomputed, so a run that exceeds the
-default 300s cap can't fall back to a smaller one and would DNF.
-If you are running on a machine with a slower CPU, you may need to adjust the time limit
-by prepending e.g., `EXPERIMENT_TIMEOUT=1200` to the `bash` command, as in:
-
-```bash
-python scripts/clear_table_estitch_results.py
-EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
-cp -r figures /out/figures-from-short-run && chown -R --reference=/out /out
-```
-
 Note: there are 3 kick-down notices (where we use lower parameters to fit the
 compute budget). Two are for `circuits_all`, which is not a main table and is not
 recomputed here; the last should read
@@ -98,11 +87,30 @@ recomputed here; the last should read
 !!   circuits BFS: kicked down 10000 -> 2000 steps (geomean DNF at 10000)
 ```
 
-This is expected, and is why `enum-2000` is the cell regenerated.
+This is expected, and is why `enum-2000` is the cell regenerated. On `square` it
+takes 268s of the 300s cap on our machine; if it exceeds the cap, the table
+falls back to our cached `enum-1000` and the notice reads `10000 -> 1000`. If so, do one of
+
+  - ignore the circuits BFS cell and audit the rest of the results
+  - raise `EXPERIMENT_TIMEOUT` and rerun as described in Section 1.5
+  - run the full experiment as described in Section 2.
+
+### 1.5. Main paper tables, but with increased time limit (Still ~1h)
+
+To increase the time limit, prepend `EXPERIMENT_TIMEOUT=1200` to the `bash` command.
+Note that this gives the recomputed E-Stitch cells a longer budget than the cached babble
+and Stitch cells, which were run with 300s.
+
+```bash
+git restore results/
+python scripts/clear_table_estitch_results.py
+EXPERIMENT_TIMEOUT=1200 bash scripts/run_all_tables.sh
+cp -r figures /out/figures-from-short-run-increased-time-limit && chown -R --reference=/out /out
+```
 
 `git restore results/` restores the original cache.
 
-### 2. Rerun everything (~24h)
+### 2. Rerun everything (~24h) [Optional]
 
 ```bash
 rm -rf results/
