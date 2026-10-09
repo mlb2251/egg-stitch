@@ -52,7 +52,7 @@ METHOD_MARKERS = {
 }
 
 METHOD_COMMON_NAME = {
-    "DSR-canon": "E-Stitch BFS/MT",
+    "DSR-canon": "E-Stitch BFS/MT [baseline]",
     "search-DSR": "E-Stitch SMC",
 }
 
