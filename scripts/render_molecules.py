@@ -481,12 +481,32 @@ def render_combined(saved: dict, out_path: Path, max_step: int) -> None:
     plt.close(fig)
 
 
+def render_single(saved: dict, domain: str, out_path: Path, max_step: int) -> None:
+    """Render one family's trajectory on its own, with its legend below the plot."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(5.0, 3.4), layout="constrained")
+    handles, labels = plot_domain(ax, saved, domain, max_step)
+    fig.legend(handles, labels, loc="outside lower center", ncols=len(labels),
+               frameon=False, fontsize=TICK_FONTSIZE)
+    fig.savefig(out_path, dpi=400)
+    plt.close(fig)
+
+
 def render_all(saved: dict, out_dir: Path, max_step: int = DEFAULT_MAX_STEP) -> None:
-    """Render the combined 2x2 scramble figure into ``out_dir``."""
+    """Render the combined 2x2 scramble figure and one figure per family
+    (``<family>-progress.png``) into ``out_dir``."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "search-progress.png"
     render_combined(saved, out_path, max_step)
     print(f"wrote {out_path}", file=sys.stderr)
+    for domain in MOLECULES_DOMAINS:
+        if domain not in saved["domains"]:
+            continue
+        family = domain.split(":", 1)[1] if ":" in domain else domain
+        out_path = out_dir / f"{family}-progress.png"
+        render_single(saved, domain, out_path, max_step)
+        print(f"wrote {out_path}", file=sys.stderr)
 
 
 def main() -> None:
