@@ -2,8 +2,8 @@
 //! multi-slot binders (`lam{n}`, `define`) and higher-order capture. Corpora
 //! live in `data/test/ts/`. The outputs are checked two ways:
 //!
-//! 1. **Scope invariants**, computed by the tiny s-expression walker at the
-//!    bottom of this file. The invariants are:
+//! 1. **Scope invariants**, verified using the egg/egg-stitch's parser and
+//!    free-variable rule (`cost::recexpr_fv`). The invariants are:
 //!    - Every library `lambda` must be closed.
 //!    - Every rewritten program must have the same free variables as its original.
 //!    - Every call site must be one flat `(app fn_k …)` carrying exactly `arity_k`
@@ -12,6 +12,9 @@
 
 use std::collections::BTreeSet;
 
+use egg::{Id, RecExpr};
+use egg_stitch::cost::recexpr_fv;
+use egg_stitch::lang::{OpChildrenLanguage, StitchLanguage, TsOp};
 use serde_json::Value;
 
 mod common;
@@ -82,7 +85,7 @@ fn assert_all_invariants(run: &Value, label: &str) {
 fn assert_library_closed(run: &Value, label: &str) {
     for (i, e) in library(run).iter().enumerate() {
         let l = e["lambda"].as_str().expect("lambda");
-        let fv = free_vars(&parse(l));
+        let fv = free_vars(l);
         assert!(fv.is_empty(), "{label}: fn_{i} lambda has free vars {fv:?}: {l}");
     }
 }
@@ -94,7 +97,7 @@ fn assert_scope_preserved(run: &Value, label: &str) {
     let rewr = programs(run, "rewritten_programs");
     assert_eq!(orig.len(), rewr.len(), "{label}: program count changed");
     for (i, (o, r)) in orig.iter().zip(&rewr).enumerate() {
-        assert_eq!(free_vars(&parse(o)), free_vars(&parse(r)), "{label}: program {i} changed its free variables\n  original : {o}\n  rewritten: {r}");
+        assert_eq!(free_vars(o), free_vars(r), "{label}: program {i} changed its free variables\n  original : {o}\n  rewritten: {r}");
     }
 }
 
@@ -104,9 +107,7 @@ fn assert_call_sites_flat(run: &Value, label: &str) {
     let mut terms = programs(run, "rewritten_programs");
     terms.extend((0..arities.len()).map(|i| lambda(run, i)));
     for t in &terms {
-        let mut uses = Vec::new();
-        fn_uses(&parse(t), &mut uses);
-        for u in uses {
+        for u in fn_uses(t) {
             match u {
                 FnUse::Call(k, argc) => assert_eq!(argc, arities[k], "{label}: fn_{k} called with {argc} args, arity is {}: {t}", arities[k]),
                 FnUse::Misplaced(k) => panic!("{label}: fn_{k} appears outside a flat `(app fn_{k} …)`: {t}"),
@@ -277,7 +278,7 @@ fn partial_capture_skips_unused_binder_slots() {
     let (bf, smc) = run_both_checked("ho_partial_capture");
     for (name, run) in [("best-first", &bf), ("smc", &smc)] {
         assert_eq!(lambda(run, 0), "(lam1 (app F e (lam3 (app P $1 (app $3 $2 $0)))))", "{name}");
-        assert_eq!(call_site_wraps(run), vec![Some(2); 4], "{name}: every call site should pass a lam2, not a lam3");
+        assert!(every_call_passes_lam(run, 2), "{name}: every call site should pass a lam2, not a lam3");
         let rewr = programs(run, "rewritten_programs");
         assert_eq!(rewr[1], "(app fn_0 (lam2 (app h $0 (app num_add $1 one))))", "{name}: $2 → $1, $0 stays");
         assert_eq!(rewr[3], "(app fn_0 (lam2 (if (app lt $0 $1) (app m $0) (app m $1))))", "{name}");
@@ -290,7 +291,7 @@ fn partial_capture_skips_unused_binder_slots() {
 fn partial_capture_under_lam100_spans_the_whole_group() {
     let (bf, _) = run_both_checked("lam100_ho_capture");
     assert_eq!(lambda(&bf, 0), "(lam1 (app F e (lam100 (app P $50 (app $100 $99 $0)))))");
-    assert_eq!(call_site_wraps(&bf), vec![Some(2); 4]);
+    assert!(every_call_passes_lam(&bf, 2), "every call site should pass a lam2");
     assert_eq!(programs(&bf, "rewritten_programs")[3], "(app fn_0 (lam2 (app m $0 (app n $1))))");
 }
 
@@ -302,7 +303,7 @@ fn inner_define_value_slot_only_captures_outer_define() {
     let (bf, smc) = run_both_checked("define_value_capture");
     for (name, run) in [("best-first", &bf), ("smc", &smc)] {
         assert_eq!(lambda(run, 0), "(lam1 (define (app fetch u) (define (app $1 $0) (app use $0))))", "{name}");
-        assert_eq!(call_site_wraps(run), vec![Some(1); 4], "{name}");
+        assert!(every_call_passes_lam(run, 1), "{name}: every call site should pass a lam1");
     }
 }
 
@@ -313,7 +314,7 @@ fn define_continuation_captures_only_the_used_let() {
     let (bf, smc) = run_both_checked("define_partial_capture");
     for (name, run) in [("best-first", &bf), ("smc", &smc)] {
         assert_eq!(lambda(run, 0), "(lam1 (define (app fetch u) (define (app parse $0) (app $2 $1))))", "{name}");
-        assert_eq!(call_site_wraps(run), vec![Some(1); 4], "{name}");
+        assert!(every_call_passes_lam(run, 1), "{name}: every call site should pass a lam1");
         assert_eq!(programs(run, "rewritten_programs")[3], "(app fn_0 (lam1 (if (app ok $0) (app send $0) done)))", "{name}");
     }
 }
@@ -343,76 +344,19 @@ fn multiple_abstractions_stay_sound() {
     }
 }
 
-// ─── independent scope walker ───────────────────────────────────────────────
+// ─── scope checks via the egg/egg-stitch's parser and free-variable rule ─────────
 
-/// A parsed flat s-expression.
-#[derive(Debug)]
-enum Sx {
-    Atom(String),
-    List(Vec<Sx>),
+/// A TypeScript-family term, as the search itself represents it.
+type TsExpr = RecExpr<OpChildrenLanguage<TsOp>>;
+
+/// Parses `s` with the crate's TypeScript parser, panicking with `s` on failure.
+fn parse(s: &str) -> TsExpr {
+    OpChildrenLanguage::<TsOp>::parse_program(s).unwrap_or_else(|e| panic!("{e}"))
 }
 
-/// Parses one s-expression (no quoting or comments, which the dialect doesn't use).
-fn parse(s: &str) -> Sx {
-    let toks: Vec<String> = s.replace('(', " ( ").replace(')', " ) ").split_whitespace().map(String::from).collect();
-    let mut pos = 0;
-    let sx = parse_at(&toks, &mut pos);
-    assert_eq!(pos, toks.len(), "trailing tokens in {s:?}");
-    sx
-}
-
-/// Recursive-descent step for [`parse`].
-fn parse_at(toks: &[String], pos: &mut usize) -> Sx {
-    let tok = &toks[*pos];
-    *pos += 1;
-    if tok != "(" {
-        return Sx::Atom(tok.clone());
-    }
-    let mut items = Vec::new();
-    while toks[*pos] != ")" {
-        items.push(parse_at(toks, pos));
-    }
-    *pos += 1;
-    Sx::List(items)
-}
-
-/// Slots that head `head` binds over its `j`-th argument (head excluded):
-/// `lam{n}` binds n over its body, `define` binds 1 over its second child.
-/// Written out here rather than borrowed from `TsOp::binds_child` on purpose.
-fn binds(head: &str, j: usize) -> i32 {
-    match (head, j) {
-        ("define", 1) => 1,
-        (h, 0) => h.strip_prefix("lam").and_then(|n| n.parse().ok()).unwrap_or(0),
-        _ => 0,
-    }
-}
-
-/// Free de Bruijn indices of `sx`, relative to its root.
-fn free_vars(sx: &Sx) -> BTreeSet<i32> {
-    /// Collects free indices of `sx`, which sits under `depth` binders.
-    fn go(sx: &Sx, depth: i32, out: &mut BTreeSet<i32>) {
-        match sx {
-            Sx::Atom(a) => {
-                if let Some(n) = a.strip_prefix('$').and_then(|r| r.parse::<i32>().ok())
-                    && n >= depth
-                {
-                    out.insert(n - depth);
-                }
-            }
-            Sx::List(items) => {
-                let head = match items.first() {
-                    Some(Sx::Atom(h)) => h.as_str(),
-                    _ => "",
-                };
-                for (j, child) in items.iter().skip(1).enumerate() {
-                    go(child, depth + binds(head, j), out);
-                }
-            }
-        }
-    }
-    let mut out = BTreeSet::new();
-    go(sx, 0, &mut out);
-    out
+/// Free de Bruijn indices of `s`, relative to its root, via `cost::recexpr_fv`.
+fn free_vars(s: &str) -> BTreeSet<i32> {
+    recexpr_fv(&parse(s)).pop().unwrap_or_default().into_iter().collect()
 }
 
 /// One occurrence of a library function name.
@@ -423,63 +367,48 @@ enum FnUse {
     Misplaced(usize),
 }
 
-/// `Some(k)` iff `atom` is a library name `fn_k`.
-fn fn_index(atom: &str) -> Option<usize> {
-    atom.strip_prefix("fn_").and_then(|k| k.parse().ok())
-}
-
-/// Collects every [`FnUse`] in `sx`.
-fn fn_uses(sx: &Sx, out: &mut Vec<FnUse>) {
-    match sx {
-        Sx::Atom(a) => out.extend(fn_index(a).map(FnUse::Misplaced)),
-        Sx::List(items) => {
-            let mut rest = &items[..];
-            if let [Sx::Atom(app), Sx::Atom(callee), args @ ..] = items.as_slice()
-                && app == "app"
-                && let Some(k) = fn_index(callee)
-            {
-                out.push(FnUse::Call(k, args.len()));
-                rest = args;
-            }
-            rest.iter().for_each(|c| fn_uses(c, out));
-        }
+/// `Some(k)` iff `op` is a library name `fn_k`.
+fn fn_index(op: &TsOp) -> Option<usize> {
+    match op {
+        TsOp::Sym(s) => s.as_str().strip_prefix("fn_").and_then(|k| k.parse().ok()),
+        _ => None,
     }
 }
 
-/// For each rewritten program that is a top-level call `(app fn_k X …)`, the
-/// binder width `n` if its first argument is an η-wrap `(lam{n} …)`, else
-/// `None`. Lets a test assert how much a higher-order slot captured without
-/// pinning every filler.
-fn call_site_wraps(run: &Value) -> Vec<Option<usize>> {
-    programs(run, "rewritten_programs")
-        .iter()
-        .map(|p| match parse(p) {
-            Sx::List(items) => match items.as_slice() {
-                [Sx::Atom(app), Sx::Atom(callee), Sx::List(arg), ..] if app == "app" && fn_index(callee).is_some() => match arg.first() {
-                    Some(Sx::Atom(h)) => h.strip_prefix("lam").and_then(|n| n.parse().ok()),
-                    _ => None,
-                },
-                _ => None,
-            },
-            Sx::Atom(_) => None,
-        })
-        .collect()
+/// Every [`FnUse`] in `s`, in pre-order. A call recurses only into its arguments.
+fn fn_uses(s: &str) -> Vec<FnUse> {
+    /// Collects the uses under node `id`.
+    fn go(e: &TsExpr, id: Id, out: &mut Vec<FnUse>) {
+        let node = &e[id];
+        out.extend(fn_index(&node.op).map(FnUse::Misplaced));
+        let mut rest = node.children.as_slice();
+        if let (TsOp::App, [callee, args @ ..]) = (&node.op, rest)
+            && e[*callee].children.is_empty()
+            && let Some(k) = fn_index(&e[*callee].op)
+        {
+            out.push(FnUse::Call(k, args.len()));
+            rest = args;
+        }
+        rest.iter().for_each(|&c| go(e, c, out));
+    }
+    let e = parse(s);
+    let mut out = Vec::new();
+    go(&e, Id::from(e.as_ref().len() - 1), &mut out);
+    out
 }
 
-/// The walker itself needs a test, or a bug in it would weaken every
-/// invariant above.
+/// True iff every rewritten program is a call `(app fn_0 (lam{n} …))` whose
+/// first argument is an η-wrap of width `n`. Lets a test assert how much a
+/// higher-order slot captured.
+fn every_call_passes_lam(run: &Value, n: usize) -> bool {
+    programs(run, "rewritten_programs").iter().all(|p| p.starts_with(&format!("(app fn_0 (lam{n} ")))
+}
+
+/// Small tests for the test helper functions. (The binder rules `free_vars` relies on are tested in `tests/fv_analysis_test.rs`.)
 #[test]
-fn scope_walker_agrees_with_the_binder_rules() {
-    let fv = |s: &str| free_vars(&parse(s)).into_iter().collect::<Vec<_>>();
-    assert_eq!(fv("(lam2 (app f $0 $1 $2))"), vec![0], "lam2 binds $0,$1; $2 escapes as $0");
-    assert_eq!(fv("(define $0 $0)"), vec![0], "define's value is outside the let");
-    assert_eq!(fv("(define v $1)"), vec![0], "define's body is inside it");
-    assert_eq!(fv("(app lam2 $0)"), vec![0], "`lam2` as an argument binds nothing");
-    assert_eq!(fv("(lam0 $0)"), vec![0], "lam0 binds nothing");
-    assert_eq!(fv("(lam100 (app f $99 $100))"), vec![0], "multi-digit widths parse");
-    let wraps = call_site_wraps(&serde_json::json!({"rewritten_programs": ["(app fn_0 (lam2 $0))", "(app fn_0 f)", "(lam1 (app fn_0 (lam1 $0)))"]}));
-    assert_eq!(wraps, vec![Some(2), None, None], "only a top-level call's first argument counts");
-    let mut uses = Vec::new();
-    fn_uses(&parse("(app fn_0 (fn_1 a) (app fn_2))"), &mut uses);
-    assert!(matches!(uses.as_slice(), [FnUse::Call(0, 2), FnUse::Misplaced(1), FnUse::Call(2, 0)]));
+fn call_site_helpers_classify_correctly() {
+    assert!(matches!(fn_uses("(app fn_0 (fn_1 a) (app fn_2))").as_slice(), [FnUse::Call(0, 2), FnUse::Misplaced(1), FnUse::Call(2, 0)]));
+    let run = |p: &str| serde_json::json!({ "rewritten_programs": [p] });
+    assert!(every_call_passes_lam(&run("(app fn_0 (lam2 $0))"), 2));
+    assert!(!every_call_passes_lam(&run("(app fn_0 (lam20 $0))"), 2), "lam2 must not match lam20");
 }
