@@ -404,13 +404,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
 /// a replacement leaf (`None` keeps `?#k`). If slot `k` is higher-order, the
 /// leaf is then applied to its captured de Bruijn indices, shifted by the
 /// occurrence's extra depth over `var_depth[k]`.
-pub(crate) fn rebuild_pattern<F: LanguageFamily, O: StitchOp>(
-    nodes: &[F::Apply<OpWithVar<O>>],
-    vars: &[Vec<Id>],
-    var_depth: &[u32],
-    variable_indices: &[Vec<i32>],
-    mut var_head: impl FnMut(usize, u32) -> Option<F::Apply<OpWithVar<O>>>,
-) -> (RecExpr<F::Apply<OpWithVar<O>>>, Id) {
+pub(crate) fn rebuild_pattern<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>], mut var_head: impl FnMut(usize, u32) -> Option<F::Apply<OpWithVar<O>>>) -> (RecExpr<F::Apply<OpWithVar<O>>>, Id) {
     let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
     for (k, ids) in vars.iter().enumerate() {
         for &id in ids {
