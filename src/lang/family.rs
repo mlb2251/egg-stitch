@@ -1,5 +1,4 @@
 use egg::{Id, Language, RecExpr};
-use rustc_hash::FxHashMap;
 
 use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
@@ -101,11 +100,30 @@ pub trait LanguageFamily: Clone + 'static {
         id
     }
 
-    /// Render an abstraction body as `(lam … (lam BODY))` with `vars.len()`
-    /// binders, where each `?#k` becomes a de-Bruijn variable pointing at the
-    /// `k`-th outer wrap-lam. Inlining a call site `(fn_N a_0 … a_{k-1})`
-    /// against the result and β-reducing recovers the original captured term.
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String;
+    /// Wrap `body` in the binders for an `n`-ary abstraction (`n > 0`), appending
+    /// them to `recexpr`, and return the id of the outermost binder.
+    fn wrap_pattern_lams<O: StitchOp>(recexpr: &mut RecExpr<Self::Apply<OpWithVar<O>>>, body: Id, n: u32) -> Id;
+
+    /// Render an abstraction body as a closed lambda term with `vars.len()`
+    /// binders, in this family's binder shape. Each `?#k` becomes the de Bruijn
+    /// variable for the `k`-th outer binder (shifted by its local binder depth),
+    /// applied to its captured indices if the slot is higher-order. Inlining a
+    /// call site `(fn_N a_0 … a_{n-1})` against the result and β-reducing
+    /// recovers the original captured term.
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
+        let arity = vars.len();
+        let (mut out, body) = crate::pattern::rebuild_pattern::<Self, O>(nodes, vars, var_depth, variable_indices, |k, depth| {
+            let idx = (arity - 1 - k) as i32 + depth as i32;
+            // Leaf ops without a DB-var variant (plain `Op`) fall back to a
+            // `$n` symbol, which renders identically.
+            let disc = StitchOp::make_db_var(idx).unwrap_or_else(|| StitchOp::from_name(&format!("${idx}")));
+            Some(Self::make(disc, vec![]))
+        });
+        if arity > 0 {
+            Self::wrap_pattern_lams::<O>(&mut out, body, arity as u32);
+        }
+        <Self::Apply<OpWithVar<O>> as StitchLanguage>::display_recexpr(&out)
+    }
 
     /// Parse a `--follow` pattern string into the internal pattern shape.
     /// Defaults to egg's stock `RecExpr` parser, which is fine for any flat
@@ -172,39 +190,13 @@ impl LanguageFamily for OpChildren {
         panic!("OpChildren has no apps/binders; higher-order display is unreachable here");
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], _var_depth: &[u32], _variable_indices: &[Vec<i32>]) -> String {
-        // OpChildren has no real binders, so `?#k` becomes a `$<arity-1-k>`
-        // symbol leaf and the body is wrapped in `arity` `lam`-headed nodes.
-        let arity = vars.len();
-        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
-        for (k, ids) in vars.iter().enumerate() {
-            for &id in ids {
-                pos_to_k.insert(usize::from(id), k);
-            }
+    fn wrap_pattern_lams<O: StitchOp>(recexpr: &mut RecExpr<OpChildrenLanguage<OpWithVar<O>>>, body: Id, n: u32) -> Id {
+        // No real binders: the body is wrapped in `n` `lam`-headed symbol nodes.
+        let mut current = body;
+        for _ in 0..n {
+            current = recexpr.add(Self::make(OpWithVar::Node(O::from_name("lam")), vec![current]));
         }
-        let mut out: RecExpr<OpChildrenLanguage<O>> = RecExpr::default();
-        let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
-        for i in (0..nodes.len()).rev() {
-            let new_id = if let Some(&k) = pos_to_k.get(&i) {
-                let name = format!("${}", arity - 1 - k);
-                out.add(OpChildrenLanguage { op: O::from_name(&name), children: vec![] })
-            } else {
-                let new_children: Vec<Id> = nodes[i].children.iter().map(|&c| id_map[usize::from(c)]).collect();
-                let op = match &nodes[i].op {
-                    OpWithVar::Node(o) => o.clone(),
-                    OpWithVar::Var(_) => unreachable!("Var leaf at position not in pos_to_k"),
-                };
-                out.add(OpChildrenLanguage { op, children: new_children })
-            };
-            id_map[i] = new_id;
-        }
-        let lam_op = O::from_name("lam");
-        let mut current = id_map[0];
-        for _ in 0..arity {
-            current = out.add(OpChildrenLanguage { op: lam_op.clone(), children: vec![current] });
-        }
-        let _ = current;
-        <OpChildrenLanguage<O> as StitchLanguage>::display_recexpr(&out)
+        current
     }
 }
 
@@ -311,57 +303,12 @@ impl LanguageFamily for LambdaCalc {
         if last_db.is_some() && nodes[usize::from(cur)].discriminant().as_var().is_some() { cur } else { id }
     }
 
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[LambdaCalcLanguage<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
-        let arity = vars.len();
-        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
-        for (k, ids) in vars.iter().enumerate() {
-            for &id in ids {
-                pos_to_k.insert(usize::from(id), k);
-            }
+    fn wrap_pattern_lams<O: StitchOp>(recexpr: &mut RecExpr<LambdaCalcLanguage<OpWithVar<O>>>, body: Id, n: u32) -> Id {
+        let mut current = body;
+        for _ in 0..n {
+            current = recexpr.add(LambdaCalcLanguage::Lam([current]));
         }
-        // Per-position lam depth. We need the *local* depth at each occurrence,
-        // not `var_depth[k]` (which is the max across occurrences after `reuse`).
-        let mut depth: Vec<u32> = vec![0; nodes.len()];
-        for i in 0..nodes.len() {
-            let d = depth[i];
-            let disc = nodes[i].discriminant();
-            for (j, &c) in nodes[i].children().iter().enumerate() {
-                depth[usize::from(c)] = d + disc.binds_child(j);
-            }
-        }
-        let db = |n: i32| O::make_db_var(n).expect("LambdaCalc requires a DB-var-bearing leaf op");
-        let mut out: RecExpr<LambdaCalcLanguage<O>> = RecExpr::default();
-        let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
-        for i in (0..nodes.len()).rev() {
-            let new_id = if let Some(&k) = pos_to_k.get(&i) {
-                let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
-                let mut current = out.add(LambdaCalcLanguage::Leaf(db(head_idx)));
-                // Deeper occurrences sit under `depth[i] − var_depth[k]` extra
-                // binders, so each captured index shifts up by that delta.
-                let occ_shift = depth[i] as i32 - var_depth[k] as i32;
-                for dbidx in variable_indices[k].iter().rev() {
-                    let arg_id = out.add(LambdaCalcLanguage::Leaf(db(*dbidx + occ_shift)));
-                    current = out.add(LambdaCalcLanguage::App([current, arg_id]));
-                }
-                current
-            } else {
-                let new_children: Vec<Id> = nodes[i].children().iter().map(|&c| id_map[usize::from(c)]).collect();
-                let new_node = match &nodes[i] {
-                    LambdaCalcLanguage::Leaf(OpWithVar::Node(o)) => LambdaCalcLanguage::Leaf(o.clone()),
-                    LambdaCalcLanguage::Leaf(OpWithVar::Var(_)) => unreachable!("Var leaf at position not in pos_to_k"),
-                    LambdaCalcLanguage::App(_) => LambdaCalcLanguage::App([new_children[0], new_children[1]]),
-                    LambdaCalcLanguage::Lam(_) => LambdaCalcLanguage::Lam([new_children[0]]),
-                    LambdaCalcLanguage::Programs(_) => LambdaCalcLanguage::Programs(new_children),
-                };
-                out.add(new_node)
-            };
-            id_map[i] = new_id;
-        }
-        let mut current = id_map[0];
-        for _ in 0..arity {
-            current = out.add(LambdaCalcLanguage::Lam([current]));
-        }
-        <LambdaCalcLanguage<O> as StitchLanguage>::display_recexpr(&out)
+        current
     }
 
     fn parse_follow_pattern<O: StitchOp>(s: &str) -> anyhow::Result<crate::revexpr::RevExpr<LambdaCalcLanguage<OpWithVar<O>>>> {
@@ -470,69 +417,8 @@ impl LanguageFamily for TypeScript {
         if nodes[usize::from(node.children[0])].op.as_var().is_some() { node.children[0] } else { id }
     }
 
-    /// Render an abstraction body as `(lam<arity> BODY)` — one binder node for
-    /// all `arity` slots — with each `?#k` becoming the de Bruijn leaf that
-    /// points at slot `k`, plus a flat `App` of its captured indices when the
-    /// slot is higher-order.
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
-        let arity = vars.len();
-        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
-        for (k, ids) in vars.iter().enumerate() {
-            for &id in ids {
-                pos_to_k.insert(usize::from(id), k);
-            }
-        }
-        // Local binder depth at each position. `binds_child` returns the slot
-        // count, so a single `Lam(n)` advances depth by `n` in one step.
-        let mut depth: Vec<u32> = vec![0; nodes.len()];
-        for i in 0..nodes.len() {
-            let d = depth[i];
-            let disc = nodes[i].discriminant();
-            for (j, &c) in nodes[i].children().iter().enumerate() {
-                depth[usize::from(c)] = d + disc.binds_child(j);
-            }
-        }
-        let db = |n: i32| O::make_db_var(n).expect("TypeScript requires a DB-var-bearing leaf op");
-        let app = O::from_name("app");
-        let mut out: RecExpr<OpChildrenLanguage<O>> = RecExpr::default();
-        let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
-        for i in (0..nodes.len()).rev() {
-            let new_id = if let Some(&k) = pos_to_k.get(&i) {
-                let head_idx = ((arity as u32 - 1 - k as u32) + depth[i]) as i32;
-                let head = out.add(OpChildrenLanguage { op: db(head_idx), children: vec![] });
-                if variable_indices[k].is_empty() {
-                    head
-                } else {
-                    // Deeper occurrences sit under `depth[i] − var_depth[k]`
-                    // extra binders, so each captured index shifts up by that.
-                    let occ_shift = depth[i] as i32 - var_depth[k] as i32;
-                    let mut kids = Vec::with_capacity(variable_indices[k].len() + 1);
-                    kids.push(head);
-                    for dbidx in variable_indices[k].iter().rev() {
-                        kids.push(out.add(OpChildrenLanguage { op: db(*dbidx + occ_shift), children: vec![] }));
-                    }
-                    out.add(OpChildrenLanguage { op: app.clone(), children: kids })
-                }
-            } else {
-                let new_children: Vec<Id> = nodes[i].children().iter().map(|&c| id_map[usize::from(c)]).collect();
-                let op = match &nodes[i].op {
-                    OpWithVar::Node(o) => o.clone(),
-                    OpWithVar::Var(_) => unreachable!("Var leaf at position not in pos_to_k"),
-                };
-                out.add(OpChildrenLanguage { op, children: new_children })
-            };
-            id_map[i] = new_id;
-        }
-        let body = id_map[0];
-        let root = if arity == 0 {
-            body
-        } else {
-            out.add(OpChildrenLanguage {
-                op: O::from_name(&format!("lam{arity}")),
-                children: vec![body],
-            })
-        };
-        let _ = root;
-        <OpChildrenLanguage<O> as StitchLanguage>::display_recexpr(&out)
+    /// One flat `lam<n>` binder node for all `n` slots.
+    fn wrap_pattern_lams<O: StitchOp>(recexpr: &mut RecExpr<OpChildrenLanguage<OpWithVar<O>>>, body: Id, n: u32) -> Id {
+        recexpr.add(Self::make(OpWithVar::Node(O::from_name(&format!("lam{n}"))), vec![body]))
     }
 }
