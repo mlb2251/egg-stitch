@@ -8,13 +8,15 @@ mod op;
 mod op_children;
 mod op_db;
 mod op_with_var;
+mod ts_op;
 
-pub use family::{LambdaCalc, LanguageFamily, OpChildren};
+pub use family::{LambdaCalc, LanguageFamily, OpChildren, TypeScript};
 pub use lambda_calc::{LambdaCalcDisc, LambdaCalcLanguage};
 pub use op::{Op, StitchDisc, StitchOp};
 pub use op_children::OpChildrenLanguage;
 pub use op_db::OpDB;
 pub use op_with_var::OpWithVar;
+pub use ts_op::TsOp;
 
 /// Trait covering every language usable with the search machinery.
 ///
@@ -57,10 +59,10 @@ pub struct Weights {
     /// For symbols and variables
     #[arg(long, default_value_t = 1)]
     pub sym_var_cost: u32,
-    /// Cost of an `App` enode in `LambdaCalc`. Unused for `OpChildren`.
+    /// Cost of an `App` enode in `LambdaCalc` and `TypeScript`. Unused for `OpChildren`.
     #[arg(long, default_value_t = 1)]
     pub app_cost: u32,
-    /// Cost of a `Lam` enode in `LambdaCalc`. Unused for `OpChildren`.
+    /// Cost of a `Lam` enode in `LambdaCalc` and `TypeScript`. Unused for `OpChildren`.
     #[arg(long, default_value_t = 1)]
     pub lam_cost: u32,
 }

@@ -393,6 +393,10 @@ pub enum LanguageChoice {
     /// `Programs` root.
     #[value(name = "lambda-calc")]
     LambdaCalc,
+    /// Flat n-ary nodes with `TsOp` leaves. Has 'define' and a flat 'lam' as
+    /// binders. Function applications use a flat 'app'.
+    #[value(name = "typescript")]
+    TypeScript,
 }
 
 /// Tuple returned by [`multiple_step_search`]: `(library, corpus size after DSRs,

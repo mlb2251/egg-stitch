@@ -1,0 +1,35 @@
+{
+  "compression_ratio": 1.45,
+  "cost_after_rewrites": 29,
+  "cost_at_end_of_each_iter": [
+    20
+  ],
+  "final_cost": 20,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 29,
+  "library": [
+    {
+      "approx_cost": 8,
+      "arity": 1,
+      "lambda": "(lam1 (app setTimeout (lam0 (app $0 x)) ms))",
+      "num_matches": 4,
+      "pattern": "fn_0: (app setTimeout (lam0 (app ?#0 x)) ms)",
+      "pattern_size": 7,
+      "usage_matches": 4
+    }
+  ],
+  "original_programs": [
+    "(app setTimeout (lam0 (app f x)) ms)",
+    "(app setTimeout (lam0 (app g x)) ms)",
+    "(app setTimeout (lam0 (app h x)) ms)",
+    "(app setTimeout (lam0 (app k x)) ms)"
+  ],
+  "rewritten_programs": [
+    "(app fn_0 f)",
+    "(app fn_0 g)",
+    "(app fn_0 h)",
+    "(app fn_0 k)"
+  ]
+}

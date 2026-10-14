@@ -1,0 +1,35 @@
+{
+  "compression_ratio": 1.205128205128205,
+  "cost_after_rewrites": 47,
+  "cost_at_end_of_each_iter": [
+    39
+  ],
+  "final_cost": 39,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 47,
+  "library": [
+    {
+      "approx_cost": 11,
+      "arity": 1,
+      "lambda": "(lam1 (define (app fetch u) (define (app parse $0) (app $2 $1 $0))))",
+      "num_matches": 4,
+      "pattern": "fn_0: (define (app fetch u) (define (app parse $0) (app ?#0 $1 $0)))",
+      "pattern_size": 12,
+      "usage_matches": 4
+    }
+  ],
+  "original_programs": [
+    "(define (app fetch u) (define (app parse $0) (app render $0)))",
+    "(define (app fetch u) (define (app parse $0) (app log $1 $0)))",
+    "(define (app fetch u) (define (app parse $0) (app save db $0)))",
+    "(define (app fetch u) (define (app parse $0) (app send $1)))"
+  ],
+  "rewritten_programs": [
+    "(app fn_0 (lam2 (app render $0)))",
+    "(app fn_0 (lam2 (app log $1 $0)))",
+    "(app fn_0 (lam2 (app save db $0)))",
+    "(app fn_0 (lam2 (app send $1)))"
+  ]
+}
