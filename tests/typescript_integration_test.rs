@@ -315,7 +315,7 @@ fn define_continuation_captures_only_the_used_let() {
     for (name, run) in [("best-first", &bf), ("smc", &smc)] {
         assert_eq!(lambda(run, 0), "(lam1 (define (app fetch u) (define (app parse $0) (app $2 $1))))", "{name}");
         assert!(every_call_passes_lam(run, 1), "{name}: every call site should pass a lam1");
-        assert_eq!(programs(run, "rewritten_programs")[3], "(app fn_0 (lam1 (if (app ok $0) (app send $0) done)))", "{name}");
+        assert_eq!(programs(run, "rewritten_programs")[3], "(app fn_0 (lam1 (if (app ok $0) (app send $0) pass)))", "{name}");
     }
 }
 

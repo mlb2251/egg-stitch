@@ -5,7 +5,7 @@ use std::fmt::{self, Display, Formatter};
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub enum TsOp {
     Define,
-    Done, // change to pass
+    Pass,
     App,
     Lam(u32),
     Var(i32),
@@ -16,7 +16,7 @@ impl Display for TsOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Define => f.write_str("define"),
-            Self::Done => f.write_str("done"),
+            Self::Pass => f.write_str("pass"),
             Self::App => f.write_str("app"),
             Self::Lam(n) => write!(f, "lam{n}"),
             Self::Var(n) => write!(f, "${n}"),
@@ -68,7 +68,7 @@ impl StitchOp for TsOp {
         }
         match s {
             "define" => Self::Define,
-            "done" => Self::Done,
+            "pass" => Self::Pass,
             "app" => Self::App,
             _ => Self::Sym(Symbol::from(s)),
         }
