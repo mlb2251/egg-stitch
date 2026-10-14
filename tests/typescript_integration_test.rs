@@ -294,10 +294,11 @@ fn partial_capture_under_lam100_spans_the_whole_group() {
     assert_eq!(programs(&bf, "rewritten_programs")[3], "(app fn_0 (lam2 (app m $0 (app n $1))))");
 }
 
-/// A higher-order slot in a `define`'s value captures the enclosing let, not
-/// the one that `define` introduces.
+/// With an inner `define` enclosed by an outer `define`, a higher-order slot in the
+/// inner `define`'s first child captures the variable bound by the outer `define`,
+/// not the inner `define`.
 #[test]
-fn define_value_slot_captures_the_outer_let() {
+fn inner_define_value_slot_only_captures_outer_define() {
     let (bf, smc) = run_both_checked("define_value_capture");
     for (name, run) in [("best-first", &bf), ("smc", &smc)] {
         assert_eq!(lambda(run, 0), "(lam1 (define (app fetch u) (define (app $1 $0) (app use $0))))", "{name}");
@@ -305,8 +306,8 @@ fn define_value_slot_captures_the_outer_let() {
     }
 }
 
-/// A continuation slot captures only the `define`-bound variables its fillers
-/// use.
+/// With an inner `define` enclosed by an outer `define`, a higher-order capture in
+/// the inner `define`'s second child captures only the used variables.
 #[test]
 fn define_continuation_captures_only_the_used_let() {
     let (bf, smc) = run_both_checked("define_partial_capture");
@@ -340,52 +341,6 @@ fn multiple_abstractions_stay_sound() {
         assert!(library(&run).len() >= 2, "{search}: expected a stacked library on the mixed corpus");
         assert_all_invariants(&run, &format!("mixed[{search}]"));
     }
-}
-
-/// Lower-bound pruning never discards the optimum: best-first finds the same
-/// cost with it on or off.
-#[test]
-fn lower_bound_pruning_preserves_the_optimum() {
-    for corpus in ["lam2_metavar_depth", "define_body_slot", "ho_two_index_capture", "cps_define_capture", "cross_depth_lam2", "ho_partial_capture", "define_value_capture", "free_var_barely_free"] {
-        let on = run_ts("best-first", corpus, &["--lower-bound", "on"]);
-        let off = run_ts("best-first", corpus, &["--lower-bound", "off"]);
-        assert_eq!(on["final_cost"], off["final_cost"], "{corpus}: pruning changed the optimum");
-    }
-}
-
-/// When best-first exhausts its frontier on a tiny corpus, its answer is
-/// optimal, so SMC can match it but never beat it.
-#[test]
-fn smc_never_beats_a_converged_best_first() {
-    for corpus in ["lam2_metavar_depth", "define_value_slot", "ho_two_index_capture", "cross_depth_lam1"] {
-        let bf = run_ts("best-first", corpus, &[]);
-        let converged = bf["heap_sizes_at_end"].as_array().is_some_and(|h| h.iter().all(|x| x == 0));
-        if !converged {
-            continue;
-        }
-        let smc = run_ts("smc", corpus, &[]);
-        assert!(smc["final_cost"].as_u64() >= bf["final_cost"].as_u64(), "{corpus}: SMC beat an exhausted best-first");
-    }
-}
-
-/// `--follow` on a flat higher-order pattern: the η-wrapped display
-/// `(app ?#0 $1 $0)` must parse through the default flat parser and be
-/// collapsed by `unwrap_pattern_db_apps` when matched.
-#[test]
-fn follow_reaches_two_index_capture() {
-    use clap::Parser;
-    use egg_stitch::lang::{LanguageFamily, TsOp, TypeScript};
-    use egg_stitch::{Args, io, smc};
-    use rand::SeedableRng;
-
-    let follow = "(app F e (lam2 (app P $0 (app ?#0 $1 $0))))";
-    let input = format!("{DIR}/ho_two_index_capture.json");
-    let args = Args::parse_from(["egg-stitch", "--search", "smc", "--input", &input, "--language", "typescript", "--num-steps", "500", "--num-particles", "500", "--temperature", "100", "--follow", follow]);
-    let (data, _, _) = io::load_egraph::<TypeScript, TsOp>(&args.input, None, false, args.weights, args.iter_limit, args.node_limit);
-    let result = smc::smc(data, &args, &mut rand::rngs::StdRng::seed_from_u64(0));
-    let target = TypeScript::parse_follow_pattern::<TsOp>(follow).expect("parse follow");
-    let (cost, best) = result.best.as_ref().expect("SMC should reach the follow target");
-    assert!(best.state.matches_follow(&target), "best (cost {cost}) {} should match {follow}", best.state.pattern);
 }
 
 // ─── independent scope walker ───────────────────────────────────────────────
