@@ -380,38 +380,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// `(@ … (@ ?#k $vis[h-1]) … $vis[0])`. Other positions copy through
     /// unchanged.
     pub fn build_with_ho(&self, variable_indices: &[Vec<i32>]) -> RecExpr<F::Apply<OpWithVar<O>>> {
-        // RevExpr id → which metavar k (if any) lives at this position.
-        let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
-        for (k, ids) in self.vars.iter().enumerate() {
-            for &id in ids {
-                pos_to_k.insert(usize::from(id), k);
-            }
-        }
-        // Walk RevExpr from leaves (high indices) to root (index 0), copying
-        // each node into a fresh RecExpr. Children get id-mapped; var positions
-        // get HO-app-wrapped.
-        // Per-occurrence binder depths: a deeper occurrence of `?#k` sits under
-        // `occ_depth − var_depth[k]` extra binders, so each captured index shifts
-        // up by that delta (mirroring `concretize`'s per-occurrence shift).
-        let depths = self.occurrence_depths();
-        let mut out: RecExpr<F::Apply<OpWithVar<O>>> = RecExpr::default();
-        let mut id_map: Vec<Id> = vec![Id::from(0); self.pattern.nodes.len()];
-        for i in (0..self.pattern.nodes.len()).rev() {
-            let node = &self.pattern.nodes[i];
-            let new_children: Vec<Id> = node.children().iter().map(|&c| id_map[usize::from(c)]).collect();
-            let new_node = F::make(node.discriminant(), new_children);
-            let mut new_id = out.add(new_node);
-            if let Some(&k) = pos_to_k.get(&i)
-                && !variable_indices[k].is_empty()
-            {
-                let vis = &variable_indices[k];
-                let occ_shift = depths[i] as i32 - self.var_depth[k] as i32;
-                let db_args: Vec<i32> = vis.iter().rev().map(|&d| d + occ_shift).collect();
-                new_id = F::wrap_pattern_with_db_apps::<O>(&mut out, new_id, &db_args);
-            }
-            id_map[i] = new_id;
-        }
-        out
+        rebuild_pattern::<F, O>(&self.pattern.nodes, &self.vars, &self.var_depth, variable_indices, |_, _| None).0
     }
 
     /// String form of `build_with_ho`. Short-circuits to `to_string()` when no
@@ -428,6 +397,54 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     pub fn display_as_lambda(&self, variable_indices: &[Vec<i32>]) -> String {
         F::display_pattern_as_lambda::<O>(&self.pattern.nodes, &self.vars, &self.var_depth, variable_indices)
     }
+}
+
+/// Copy a `RevExpr` node slice into a new `RecExpr`, returning it and its
+/// root id. At each occurrence of `?#k`, `var_head(k, local_depth)` may supply
+/// a replacement leaf (`None` keeps `?#k`). If slot `k` is higher-order, the
+/// leaf is then applied to its captured de Bruijn indices, shifted by the
+/// occurrence's extra depth over `var_depth[k]`.
+pub(crate) fn rebuild_pattern<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>], mut var_head: impl FnMut(usize, u32) -> Option<F::Apply<OpWithVar<O>>>) -> (RecExpr<F::Apply<OpWithVar<O>>>, Id) {
+    let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
+    for (k, ids) in vars.iter().enumerate() {
+        for &id in ids {
+            pos_to_k.insert(usize::from(id), k);
+        }
+    }
+    // Local binder depth at each position (not `var_depth[k]`, which is the
+    // max across occurrences after `reuse`).
+    let mut depth: Vec<u32> = vec![0; nodes.len()];
+    for i in 0..nodes.len() {
+        let d = depth[i];
+        let disc = nodes[i].discriminant();
+        for (j, &c) in nodes[i].children().iter().enumerate() {
+            depth[usize::from(c)] = d + disc.binds_child(j);
+        }
+    }
+    let mut out: RecExpr<F::Apply<OpWithVar<O>>> = RecExpr::default();
+    let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
+    for i in (0..nodes.len()).rev() {
+        let node = &nodes[i];
+        id_map[i] = match pos_to_k.get(&i) {
+            Some(&k) => {
+                let leaf = var_head(k, depth[i]).unwrap_or_else(|| node.clone());
+                let head = out.add(leaf);
+                if variable_indices[k].is_empty() {
+                    head
+                } else {
+                    let occ_shift = depth[i] as i32 - var_depth[k] as i32;
+                    let db_args: Vec<i32> = variable_indices[k].iter().rev().map(|&d| d + occ_shift).collect();
+                    F::wrap_pattern_with_db_apps::<O>(&mut out, head, &db_args)
+                }
+            }
+            None => {
+                let new_children: Vec<Id> = node.children().iter().map(|&c| id_map[usize::from(c)]).collect();
+                out.add(F::make(node.discriminant(), new_children))
+            }
+        };
+    }
+    let root = id_map.first().copied().unwrap();
+    (out, root)
 }
 
 /// Recursively compare two pattern subtrees for structural equality. Walks from
