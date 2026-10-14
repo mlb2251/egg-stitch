@@ -443,7 +443,7 @@ pub(crate) fn rebuild_pattern<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<
             }
         };
     }
-    let root = id_map.first().copied().unwrap_or(Id::from(0));
+    let root = id_map.first().copied().unwrap();
     (out, root)
 }
 
