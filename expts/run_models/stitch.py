@@ -1,6 +1,8 @@
 """Wrapper around the external stitch compressor.
 
-stitch doesn't accept DSRs, so the runner asserts ``rewrites_path is None``.
+stitch doesn't accept DSRs, so the runner asserts ``rewrites_path is None``
+unless ``ignore_dsrs`` is set — the molecules and circuits tables carry stitch as a
+no-DSR reference point alongside our own no-rules baseline.
 The cost-flag selection keeps stitch's internal scoring lined up with the
 runner's uniform :func:`expts.runner.ast_size`: at ``no-apps`` weighting all
 non-app costs are huge so the fixed App=1 is negligible vs. the node-count
@@ -13,7 +15,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
-from .._build import cargo_build, check_clean_main
+from .._build import cargo_build, check_pinned
 from .._subproc import run as _subproc_run
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
@@ -22,16 +24,18 @@ from ..folders import current_folder_path, unique_path
 # Stitch lives as a sibling clone of this repo.
 STITCH_DIR: Path = (Path(__file__).resolve().parent.parent.parent.parent / "stitch").resolve()
 
+# Bumping this also means replacing artifact/stitch.Cargo.lock with that checkout's Cargo.lock.
+STITCH_COMMIT = "350804b7b35807c78bd21c313785ae5152ae2985"
+
 
 @cache
 def stitch_bin() -> Path:
-    """Verify ``../stitch`` is clean+synced, build, and return the binary path.
+    """Verify ``../stitch`` is a clean checkout of ``STITCH_COMMIT``, build, and return the binary path.
 
-    Lazy + cached so importing this module is cheap and doesn't fetch from
-    origin / shell out to cargo until someone actually wants to invoke
-    stitch.
+    Lazy + cached so importing this module is cheap and doesn't shell out to
+    git / cargo until someone actually wants to invoke stitch.
     """
-    check_clean_main(STITCH_DIR, "git@github.com:mlb2251/stitch.git")
+    check_pinned(STITCH_DIR, STITCH_COMMIT)
     return cargo_build(STITCH_DIR, "compress")
 
 
@@ -47,9 +51,15 @@ class Stitch:
     max_arity: int = MAX_ARITY
     timeout: float | None = field(default=None, repr=False)
     mem_limit: int | None = field(default=None, repr=False)
+    # Run in a DSR table, discarding its rewrites (stitch has no way to use
+    # them). Opt-in so a table that forgets stitch can't take DSRs still trips
+    # the assert below.
+    ignore_dsrs: bool = field(default=False, repr=False)
+    # See CIRCUITS_STITCH_NO_MISMATCH_CHECK.
+    no_mismatch_check: bool = field(default=False, repr=False)
 
     def __call__(self, rounds: int, input_path, rewrites_path: str | None, weighting: Weighting) -> BenchResult:
-        assert rewrites_path is None, "stitch doesn't accept DSRs"
+        assert rewrites_path is None or self.ignore_dsrs, "stitch doesn't accept DSRs"
         cost = "1" if weighting == "apps-equal" else "10000"
         out_path = unique_path(current_folder_path() / f"{input_path.stem}_stitch.json")
         cmd = [
@@ -71,6 +81,8 @@ class Stitch:
         # them natively, so leave stitch unconstrained there.
         if weighting == "no-apps":
             cmd += ["--no-curried-bodies", "--no-curried-metavars"]
+        if self.no_mismatch_check:
+            cmd.append("--no-mismatch-check")
         start = time.time()
         _subproc_run(cmd, timeout=self.timeout, mem_limit=self.mem_limit)
         elapsed = time.time() - start

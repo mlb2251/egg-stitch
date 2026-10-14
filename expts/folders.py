@@ -12,7 +12,7 @@ from pathlib import Path
 
 RESULTS_DIR = Path(__file__).parent.parent / "viz" / "results"
 
-# Summary tableN.json files live here (checked into git, single canonical
+# Summary <table>.json files live here (checked into git, single canonical
 # copy per table). Raw per-file subprocess dumps stay under ``RESULTS_DIR``
 # above, which is .gitignored.
 SUMMARY_RESULTS_DIR = Path(__file__).parent.parent / "results"
@@ -20,7 +20,7 @@ SUMMARY_RESULTS_DIR = Path(__file__).parent.parent / "results"
 
 def summary_results_path(name: str) -> Path:
     """Return the absolute path for a checked-in summary JSON (e.g.
-    ``results/table1.json``), creating the parent folder as needed."""
+    ``results/babble_comparison_rewrites_single.json``), creating the parent folder as needed."""
     SUMMARY_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     return SUMMARY_RESULTS_DIR / name
 

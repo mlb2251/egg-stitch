@@ -2,7 +2,7 @@
 """Render the ablation experiment (``results/ablation.json``) into LaTeX.
 
 Emits two identically-structured tables — one row per ablation, one column per
-domain/algorithm combo (the hardest experiment of tables 3/5/7, each run under
+domain/algorithm combo (the hardest experiment of each table in ``TABLE_SPECS``, each run under
 BFS and SMC — six columns, grouped two-per-domain under a centred header):
 
 * ``figures/ablation.tex`` — the wall-clock (s) to reach the target compression.
@@ -48,7 +48,7 @@ ABLATION_COLUMNS = [
 RULE_AFTER = {"baseline", "no-equivalence"}
 
 # Column order across the three hardest experiments (one domain per table).
-TABLE_ORDER = ["3", "5", "7"]
+TABLE_ORDER = ["babble_comparison_rewrites", "molecules", "circuits"]
 
 # Each BFS/SMC data column is a fixed-width centred column (needs the `array`
 # package). Equal widths keep a domain's two columns balanced, so its centred

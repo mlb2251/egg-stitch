@@ -1,10 +1,11 @@
 """
 Ablation experiment: how each search optimisation pays off on the single
-hardest experiment of tables 3, 5, and 7.
+hardest experiment of the babble_comparison_rewrites, molecules and circuits tables.
 
-Runs *after* ``results/table{3,5,7}.json`` exist. For each of those tables it:
+For each of those tables it:
 
-1. Picks the hardest single-file domain from the latex tables, hard=BFS took longest.
+1. Uses the domain and BFS point in :data:`ABLATION_PICKS`: the table's hardest
+    single-file domain (longest BFS time) at its reported BFS point.
 2. Establishes a target compression to reach based on the BFS's configuration but run
     for 1 abstraction, multiplied by 0.99.
 3a. Runs BFS ablations with a large step budget and a ``--compression-limit`` stop.
@@ -31,8 +32,9 @@ from .render_common import aggregate_time, has_dnf, repeat_cr, reported_sweep_po
 from .run_models import OursBf, OursSmc
 from .runner import input_files, run_method
 from .tables import (
-    BFS_STEP_SWEEP, TABLE5_BFS_SWEEP, TABLE5_ENUM_POINT, TABLE5_TIMEOUT,
-    TABLE7_BFS_SWEEP, TABLE7_ITER_LIMIT, TABLE7_MAX_ARITY, TABLE7_TIMEOUT, TABLE_BFS_STEPS,
+    BFS_STEP_SWEEP, MOLECULES_BFS_SWEEP, MOLECULES_ENUM_POINT, MOLECULES_TIMEOUT,
+    CIRCUITS_BFS_SWEEP, CIRCUITS_ITER_LIMIT, CIRCUITS_LANGUAGE, CIRCUITS_MAX_ARITY, CIRCUITS_TIMEOUT,
+    TABLE_BFS_STEPS,
 )
 
 TARGET_COMPRESSION_FRACTION = 0.99
@@ -66,9 +68,10 @@ SMC_ABLATIONS: dict[str, tuple[str, ...]] = {
 
 @dataclass(frozen=True)
 class TableSpec:
-    table: int
+    table: str
     max_arity: int
     iter_limit: int | None
+    language: str | None
     timeout: float | None
     mem_limit: int | None
     # Configured BFS operating point and its sweep, resolved to the reported cell
@@ -78,26 +81,35 @@ class TableSpec:
 
     @property
     def enum_key(self) -> str:
-        """The ``runs`` key of this table's canonical BFS cell in tableN.json."""
+        """The ``runs`` key of this table's canonical BFS cell in ``results/<table>.json``."""
         return f"enum-{self.enum_point}"
 
 
-TABLE_SPECS: dict[int, TableSpec] = {
-    3: TableSpec(table=3, max_arity=MAX_ARITY, iter_limit=None, timeout=None,
+TABLE_SPECS: dict[str, TableSpec] = {
+    "babble_comparison_rewrites": TableSpec(table="babble_comparison_rewrites", max_arity=MAX_ARITY, iter_limit=None, language=None, timeout=None,
                  mem_limit=None, enum_point=TABLE_BFS_STEPS, bfs_sweep=BFS_STEP_SWEEP),
-    5: TableSpec(table=5, max_arity=MAX_ARITY, iter_limit=None, timeout=TABLE5_TIMEOUT,
-                 mem_limit=MEM_LIMIT_BYTES, enum_point=TABLE5_ENUM_POINT, bfs_sweep=TABLE5_BFS_SWEEP),
-    7: TableSpec(table=7, max_arity=TABLE7_MAX_ARITY, iter_limit=TABLE7_ITER_LIMIT,
-                 timeout=TABLE7_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
-                 enum_point=TABLE_BFS_STEPS, bfs_sweep=TABLE7_BFS_SWEEP),
+    "molecules": TableSpec(table="molecules", max_arity=MAX_ARITY, iter_limit=None, language=None, timeout=MOLECULES_TIMEOUT,
+                 mem_limit=MEM_LIMIT_BYTES, enum_point=MOLECULES_ENUM_POINT, bfs_sweep=MOLECULES_BFS_SWEEP),
+    "circuits": TableSpec(table="circuits", max_arity=CIRCUITS_MAX_ARITY, iter_limit=CIRCUITS_ITER_LIMIT,
+                 language=CIRCUITS_LANGUAGE, timeout=CIRCUITS_TIMEOUT, mem_limit=MEM_LIMIT_BYTES,
+                 enum_point=TABLE_BFS_STEPS, bfs_sweep=CIRCUITS_BFS_SWEEP),
+}
+
+# (domain, reported BFS point) per table, fixed so that recomputing the tables
+# can't move the ablation onto other inputs. scripts/test_ablation_sync.py checks
+# these are still what hardest_domain and _reported_enum_point pick.
+ABLATION_PICKS: dict[str, tuple[str, int]] = {
+    "babble_comparison_rewrites": ("furniture", 10000),
+    "molecules": ("molecules:hexyl", 100000),
+    "circuits": ("epfl-circuits:square", 2000),
 }
 
 
 def _load_table(spec: TableSpec) -> dict:
-    """Load ``results/table{N}.json`` (the ablation runs after that table)."""
-    path = SUMMARY_RESULTS_DIR / f"table{spec.table}.json"
+    """Load ``results/<table>.json`` (the ablation runs after that table)."""
+    path = SUMMARY_RESULTS_DIR / f"{spec.table}.json"
     if not path.exists():
-        raise SystemExit(f"ablation: missing {path}; run table{spec.table} first")
+        raise SystemExit(f"ablation: missing {path}; run {spec.table} first")
     with open(path) as fh:
         return json.load(fh)
 
@@ -122,7 +134,7 @@ def hardest_domain(spec: TableSpec, saved: dict) -> str:
 
 def _cache_path(spec: TableSpec, key: str) -> Path:
     """Per-measurement cache file (delete to force a recompute)."""
-    return SUMMARY_RESULTS_DIR / "ablation" / f"table{spec.table}" / f"{key}.json"
+    return SUMMARY_RESULTS_DIR / "ablation" / spec.table / f"{key}.json"
 
 
 def _geomean(vals: list[float]) -> float | None:
@@ -196,7 +208,7 @@ def _bfs_runner(spec: TableSpec, flags: tuple[str, ...], limit_cr: float | None)
         limit = ("--compression-limit", f"{math.floor(limit_cr * 1e6) / 1e6:.6f}")
     return OursBf(
         num_steps=num_steps, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
-        timeout=timeout, mem_limit=mem, extra_args=flags + limit,
+        language=spec.language, timeout=timeout, mem_limit=mem, extra_args=flags + limit,
     )
 
 
@@ -206,7 +218,7 @@ def _smc_runner(spec: TableSpec, flags: tuple[str, ...], num_particles: int) -> 
     # num_steps/temperature left at OursSmc's defaults, matching the table runs.
     return OursSmc(
         num_particles=num_particles, max_arity=spec.max_arity, iter_limit=spec.iter_limit,
-        timeout=spec.timeout, mem_limit=spec.mem_limit, extra_args=flags,
+        language=spec.language, timeout=spec.timeout, mem_limit=spec.mem_limit, extra_args=flags,
     )
 
 
@@ -267,7 +279,7 @@ def _run_bfs_ablations(spec: TableSpec, domain: str, limit_cr: float) -> dict[st
     for name, flags in BFS_ABLATIONS.items():
         m = _measure(_bfs_runner(spec, flags, limit_cr), domain, spec, f"bfs_{name}")
         out[name] = {"time": m["time"], "steps": m["steps"], "cr": m["cr"], "dnf": m["dnf"]}
-        print(f"  [table{spec.table}] BFS {name}: time={m['time']}, steps={m['steps']}, cr={m['cr']}", flush=True)
+        print(f"  [{spec.table}] BFS {name}: time={m['time']}, steps={m['steps']}, cr={m['cr']}", flush=True)
     return out
 
 
@@ -285,30 +297,27 @@ def _run_smc_ablations(spec: TableSpec, domain: str, target_cr: float) -> dict[s
             out[name] = {"particles": None, "time": None, "steps": None, "cr": None, "reached": False}
         else:
             out[name] = {"particles": particles, "time": m["time"], "steps": m["steps"], "cr": m["cr"], "reached": True}
-        print(f"  [table{spec.table}] SMC {name}: particles={out[name]['particles']}, time={out[name]['time']}", flush=True)
+        print(f"  [{spec.table}] SMC {name}: particles={out[name]['particles']}, time={out[name]['time']}", flush=True)
     return out
 
 
 def ablation() -> Path:
-    """Run the full ablation over tables 3, 5, and 7 and write
+    """Run the full ablation over :data:`TABLE_SPECS` and write
     ``results/ablation.json``. Cheap to re-run: every measurement is cached."""
     set_folder(f"ablation/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
     results: dict = {"tables": {}}
     for table, spec in TABLE_SPECS.items():
-        saved = _load_table(spec)
-        # Pin enum_point to the cell the table actually reports (kicked down when
-        # the configured point DNFs), so the hardest pick and target run match it.
-        spec = replace(spec, enum_point=_reported_enum_point(spec, saved))
-        domain = hardest_domain(spec, saved)
+        domain, enum_point = ABLATION_PICKS[table]
+        spec = replace(spec, enum_point=enum_point)
         max_cr, max_egg_cr = max_compression(spec, domain)
         # Target = 99% of max, so an ablation that learns the same-quality
         # abstraction counts as reaching it even if it misses the exact
         # minimal-body form by a node.
         target_cr = max_cr * TARGET_COMPRESSION_FRACTION
         egg_cr = max_egg_cr * TARGET_COMPRESSION_FRACTION
-        print(f"=== table{table}: hardest={domain}, max CR={max_cr:.4f}, "
+        print(f"=== {table}: hardest={domain}, max CR={max_cr:.4f}, "
               f"target={target_cr:.4f} (egg {egg_cr:.4f}) ===", flush=True)
-        results["tables"][str(table)] = {
+        results["tables"][table] = {
             "domain": domain,
             "max_cr": max_cr,
             "target_cr": target_cr,

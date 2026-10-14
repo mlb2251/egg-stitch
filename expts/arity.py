@@ -1,9 +1,9 @@
 """Arity-scaling experiment: BFS and Stitch search time vs the abstraction-arity
 cap.
 
-Unlike tables 1-7 this varies ``max_arity`` (not steps/particles), learns a
+Unlike the table experiments this varies ``max_arity`` (not steps/particles), learns a
 single abstraction, and runs each tool to convergence. Runs without DSRs
-(Stitch can't take them; matches the no-DSR tables 2/4).
+(Stitch can't take them; matches the no-DSR babble comparisons).
 
 Each ``(method, domain)`` sweeps every arity independently: integers 1..20 plus
 one effectively-unbounded ``1_000_000`` point that lifts the cap entirely.

@@ -25,7 +25,7 @@ from render_tables import (  # noqa: E402
 from expts.tables import BFS_STEP_SWEEP, SMC_PARTICLE_SWEEP, TABLE_BFS_STEPS  # noqa: E402
 
 # cogsci drawing domains with our algebraic drawing DSRs. Same roster shape as
-# table5/7 -- the two ours sweeps (live DSRs) and the dsrs-only-at-start baseline
+# molecules/circuits -- the two ours sweeps (live DSRs) and the dsrs-only-at-start baseline
 # -- but no fourth method: babble can't parse the constant_folding/matmul rules,
 # so it has no column here. The live-vs-at-start contrast is BFS vs BFS/MT.
 DOMAINS = [f"drawings:{d}" for d in ("nuts-bolts", "dials", "wheels", "furniture")]

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
-from .._build import cargo_build, check_clean_main
+from .._build import cargo_build, check_pinned
 from .._subproc import run as _subproc_run
 from ..bench import Abstraction, BenchResult, MAX_ARITY, Weighting
 from ..folders import current_folder_path, unique_path
@@ -32,15 +32,21 @@ EGG_STITCH_DIR: Path = Path(__file__).resolve().parent.parent.parent
 # Babble lives as a sibling clone of this repo.
 BABBLE_DIR: Path = (EGG_STITCH_DIR.parent / "babble").resolve()
 
+# The babble commit every reported number is produced against. Bump it together
+# with dropping the caches the change invalidates: at dd6a1f5 the circuits
+# binary generalizes a cone's `$N` inputs into abstraction parameters instead of
+# baking them into bodies, which egg-stitch's `op-children-db` forbids.
+BABBLE_COMMIT = "dd6a1f5abeb8271071bd80b79371289d2aecdad6"
+
 
 @cache
 def _babble_ready() -> None:
-    """Verify ``../babble`` is on a clean, synced main exactly once per process.
+    """Verify ``../babble`` is a clean checkout of ``BABBLE_COMMIT`` exactly once per process.
 
     Both binaries below build from the same source tree, so we share one
     check between them.
     """
-    check_clean_main(BABBLE_DIR, "git@github.com:kavigupta/babble.git")
+    check_pinned(BABBLE_DIR, BABBLE_COMMIT)
 
 
 @cache
