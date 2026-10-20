@@ -59,7 +59,7 @@ METHOD_COMMON_NAME = {
 # colors and names.
 SLIDE_METHOD_COLORS = {
     "DSR-canon": "#D55E00",
-    "search-DSR": "#9B5DE5",
+    "search-DSR": "#E055B0",
 }
 SLIDE_METHOD_NAME = {
     "DSR-canon": "Stitch over Min-Term",
