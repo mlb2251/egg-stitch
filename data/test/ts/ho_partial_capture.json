@@ -1,0 +1,6 @@
+[
+  "(app F e (lam3 (app P $1 (app g $2 $0))))",
+  "(app F e (lam3 (app P $1 (app h $0 (app num_add $2 one)))))",
+  "(app F e (lam3 (app P $1 (app k (app str_concat $2 $2) $0))))",
+  "(app F e (lam3 (app P $1 (if (app lt $0 $2) (app m $0) (app m $2)))))"
+]

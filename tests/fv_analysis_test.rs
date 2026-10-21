@@ -1,14 +1,16 @@
 //! Tests for the free-variable analysis on `StitchAnalysis`.
 //!
 //! Covers both language families (`OpChildrenLanguage` and `LambdaCalcLanguage`)
-//! parameterised by `OpDB<Op>`, plus the no-binders / no-DB-vars sanity case
+//! parameterised by `OpDB<Op>`, the TypeScript family's multi-slot binders
+//! (`OpChildrenLanguage<TsOp>`), plus the no-binders / no-DB-vars sanity case
 //! using plain `Op` (where `fv` should always be empty).
 
 use egg::Id;
-use egg_stitch::lang::{LambdaCalcLanguage, Op, OpChildrenLanguage, OpDB, StitchAnalysis, StitchLanguage};
+use egg_stitch::lang::{LambdaCalcLanguage, Op, OpChildrenLanguage, OpDB, StitchAnalysis, StitchLanguage, TsOp};
 
 type LamLang = LambdaCalcLanguage<OpDB<Op>>;
 type OcLang = OpChildrenLanguage<OpDB<Op>>;
+type TsLang = OpChildrenLanguage<OpDB<TsOp>>;
 
 fn fv<L: StitchLanguage>(prog: &str) -> Vec<i32> {
     let expr = L::parse_program(prog).unwrap();
@@ -73,6 +75,22 @@ fn lam_partial_binder_keeps_outer_free() {
 #[test]
 fn lam_plain_program_has_empty_fv() {
     assert_eq!(fv::<LamLang>("(+ 1 2)"), Vec::<i32>::new());
+}
+
+// ---- OpChildrenLanguage<TsOp>: multi-slot binders (`lam{n}`, `define`) ----
+
+#[test]
+fn ts_lam_n_binds_n_slots() {
+    assert_eq!(fv::<TsLang>("(lam2 (app f $0 $1 $2))"), vec![0], "lam2 binds $0,$1; $2 escapes as $0");
+    assert_eq!(fv::<TsLang>("(lam100 (app f $99 $100))"), vec![0], "multi-digit widths parse");
+    assert_eq!(fv::<TsLang>("(lam0 $0)"), vec![0], "lam0 binds nothing");
+    assert_eq!(fv::<TsLang>("(app lam2 $0)"), vec![0], "`lam2` as an argument binds nothing");
+}
+
+#[test]
+fn ts_define_binds_only_its_body() {
+    assert_eq!(fv::<TsLang>("(define $0 $0)"), vec![0], "define's value is outside the let");
+    assert_eq!(fv::<TsLang>("(define v $1)"), vec![0], "define's body is inside it");
 }
 
 // ---- Plain Op (no DB-var slot) is unaffected ----

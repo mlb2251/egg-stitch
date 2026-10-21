@@ -319,3 +319,106 @@ impl LanguageFamily for LambdaCalc {
         Ok(LambdaCalcLanguage::<OpWithVar<O>>::parse_program(s)?.into())
     }
 }
+
+/// TypeScript family: flat n-ary nodes like OpChildren, but with binders,
+/// flat lambdas, and flat apps.
+#[derive(Clone, Copy, Debug)]
+pub struct TypeScript;
+
+impl LanguageFamily for TypeScript {
+    type Discriminant<O: StitchOp> = O;
+    type Apply<O: StitchOp> = OpChildrenLanguage<O>;
+
+    fn make<P: StitchOp>(op: P, kids: Vec<Id>) -> OpChildrenLanguage<P> {
+        OpChildrenLanguage { op, children: kids }
+    }
+
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: A, mut f: impl FnMut(A) -> B) -> B {
+        f(op)
+    }
+
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
+        let head = egraph.add(Self::make(O::from_name(name), vec![]));
+        let mut kids = Vec::with_capacity(children.len() + 1);
+        kids.push(head);
+        kids.extend(children);
+        egraph.add(Self::make(O::from_name("app"), kids))
+    }
+
+    /// Cost of the 'app' leaf + cost of the callee leaf (ex. fn_0)
+    /// This does not depend on the arity of the application.
+    fn stub_application_size(_arity: usize, weights: &Weights) -> u32 {
+        weights.app_cost + weights.sym_var_cost
+    }
+
+    fn symbol_cost(weights: &Weights) -> u32 {
+        weights.sym_var_cost
+    }
+
+    fn check_fast_vs_slow(fast: i64, slow: i64) {
+        assert!(fast >= slow, "Fast rewrite size {} < slow rewrite size {} (TypeScript) — fast path must be an upper bound", fast, slow);
+    }
+
+    fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
+        Self::make(OpWithVar::Var(v), vec![])
+    }
+
+    /// One `Lam(n)` enode.
+    fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
+        egraph.add(Self::make(O::from_name(&format!("lam{n}")), vec![child]))
+    }
+
+    fn lams_cost(_n: u32, weights: &Weights) -> u32 {
+        weights.lam_cost
+    }
+
+    /// One flat `App` plus one DB-var leaf per index.
+    fn ho_occurrence_cost(h: u32, weights: &Weights) -> u32 {
+        weights.app_cost + h * weights.sym_var_cost
+    }
+
+    /// Flat counterpart of `LambdaCalc`'s curried version: one `app` whose
+    /// first child is the head and whose remaining children are the DB-var
+    /// leaves in the order `(n-1, n-2, …, 0)`.
+    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<OpChildrenLanguage<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id {
+        if db_args.is_empty() {
+            return head;
+        }
+        let mut kids = Vec::with_capacity(db_args.len() + 1);
+        kids.push(head);
+        for &db in db_args {
+            let var_op = OpWithVar::Node(O::make_db_var(db).expect("higher-order display needs a DB-var-bearing leaf op"));
+            kids.push(recexpr.add(OpChildrenLanguage { op: var_op, children: vec![] }));
+        }
+        recexpr.add(OpChildrenLanguage {
+            op: OpWithVar::Node(O::from_name("app")),
+            children: kids,
+        })
+    }
+
+    /// Inverse of [`Self::wrap_pattern_with_db_apps`]. Peels the single `App`
+    /// this family emits, but only when the subtree really is an eta-wrap:
+    /// every argument is a DB var, the indices strictly descend (the
+    /// `(n-1, …, 0)` order the wrapper writes), and the head is a metavar.
+    /// The head check is what keeps a genuine `(app f $1 $0)` intact.
+    fn unwrap_pattern_db_apps<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], id: Id) -> Id {
+        let node = &nodes[usize::from(id)];
+        if node.op != OpWithVar::Node(O::from_name("app")) || node.children.len() < 2 {
+            return id;
+        }
+        let mut prev: Option<i32> = None;
+        for &c in &node.children[1..] {
+            let Some(db) = nodes[usize::from(c)].op.de_bruijn_index() else { return id };
+            if prev.is_some_and(|p| db >= p) {
+                return id;
+            }
+            prev = Some(db);
+        }
+        if nodes[usize::from(node.children[0])].op.as_var().is_some() { node.children[0] } else { id }
+    }
+
+    /// One flat `lam<n>` binder node for all `n` slots.
+    fn wrap_pattern_lams<O: StitchOp>(recexpr: &mut RecExpr<OpChildrenLanguage<OpWithVar<O>>>, body: Id, n: u32) -> Id {
+        recexpr.add(Self::make(OpWithVar::Node(O::from_name(&format!("lam{n}"))), vec![body]))
+    }
+}

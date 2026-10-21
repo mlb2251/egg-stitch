@@ -1,0 +1,35 @@
+{
+  "compression_ratio": 1.0943396226415094,
+  "cost_after_rewrites": 58,
+  "cost_at_end_of_each_iter": [
+    53
+  ],
+  "final_cost": 53,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 58,
+  "library": [
+    {
+      "approx_cost": 25,
+      "arity": 1,
+      "lambda": "(lam1 (app F e (lam3 (app P $1 (app $3 $2 $0)))))",
+      "num_matches": 4,
+      "pattern": "fn_0: (app F e (lam3 (app P $1 (app ?#0 $2 $0))))",
+      "pattern_size": 11,
+      "usage_matches": 4
+    }
+  ],
+  "original_programs": [
+    "(app F e (lam3 (app P $1 (app g $2 $0))))",
+    "(app F e (lam3 (app P $1 (app h $0 (app num_add $2 one)))))",
+    "(app F e (lam3 (app P $1 (app k (app str_concat $2 $2) $0))))",
+    "(app F e (lam3 (app P $1 (if (app lt $0 $2) (app m $0) (app m $2)))))"
+  ],
+  "rewritten_programs": [
+    "(app fn_0 (lam2 (app g $1 $0)))",
+    "(app fn_0 (lam2 (app h $0 (app num_add $1 one))))",
+    "(app fn_0 (lam2 (app k (app str_concat $1 $1) $0)))",
+    "(app fn_0 (lam2 (if (app lt $0 $1) (app m $0) (app m $1))))"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "compression_ratio": 1.7755102040816326,
+  "cost_after_rewrites": 87,
+  "cost_at_end_of_each_iter": [
+    49
+  ],
+  "final_cost": 49,
+  "heap_sizes_at_end": [
+    0
+  ],
+  "initial_cost": 87,
+  "library": [
+    {
+      "approx_cost": 21,
+      "arity": 2,
+      "lambda": "(lam2 (app reduce xs z (lam2 (app max (app $3 $2) $0))))",
+      "num_matches": 7,
+      "pattern": "fn_0: (app reduce xs z (lam2 (app max (app ?#0 ?#1) $0)))",
+      "pattern_size": 11,
+      "usage_matches": 7
+    }
+  ],
+  "original_programs": [
+    "(lam1 (app foo (app reduce xs z (lam2 (app max (app f y1) $0))) (app reduce xs z (lam2 (app max (app g y1) $0))) (app reduce xs z (lam2 (app max (app h y1) $0)))))",
+    "(lam1 (app baz (app reduce xs z (lam2 (app max (app k y2) $0))) (app reduce xs z (lam2 (app max (app m y2) $0)))))",
+    "(lam1 (app qux (app reduce xs z (lam2 (app max (app n y3) $0))) (app reduce xs z (lam2 (app max (app p y3) $0)))))"
+  ],
+  "rewritten_programs": [
+    "(lam1 (app foo (app fn_0 f y1) (app fn_0 g y1) (app fn_0 h y1)))",
+    "(lam1 (app baz (app fn_0 k y2) (app fn_0 m y2)))",
+    "(lam1 (app qux (app fn_0 n y3) (app fn_0 p y3)))"
+  ]
+}
