@@ -42,7 +42,7 @@ fn main() {
         LanguageChoice::OpChildren => run::<OpChildren, Op>(&args),
         LanguageChoice::OpChildrenDb => run::<OpChildren, OpDB<Op>>(&args),
         LanguageChoice::LambdaCalc => run::<LambdaCalc, OpDB<Op>>(&args),
-        LanguageChoice::TypeScript => run::<TypeScript, TsOp>(&args),
+        LanguageChoice::TypeScript => run::<TypeScript, OpDB<TsOp>>(&args),
     };
 
     let elapsed_secs = start.elapsed().as_secs_f64();

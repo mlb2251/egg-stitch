@@ -8,7 +8,6 @@ pub enum TsOp {
     Pass,
     App,
     Lam(u32),
-    Var(i32),
     Sym(Symbol),
 }
 
@@ -19,7 +18,6 @@ impl Display for TsOp {
             Self::Pass => f.write_str("pass"),
             Self::App => f.write_str("app"),
             Self::Lam(n) => write!(f, "lam{n}"),
-            Self::Var(n) => write!(f, "${n}"),
             Self::Sym(s) => Display::fmt(s, f),
         }
     }
@@ -39,10 +37,7 @@ impl StitchDisc for TsOp {
     }
 
     fn de_bruijn_index(&self) -> Option<i32> {
-        match self {
-            Self::Var(n) => Some(*n),
-            _ => None,
-        }
+        None
     }
 
     fn binds_child(&self, j: usize) -> u32 {
@@ -56,11 +51,6 @@ impl StitchDisc for TsOp {
 
 impl StitchOp for TsOp {
     fn from_name(s: &str) -> Self {
-        if let Some(rest) = s.strip_prefix('$')
-            && let Ok(n) = rest.parse::<i32>()
-        {
-            return Self::Var(n);
-        }
         if let Some(rest) = s.strip_prefix("lam")
             && let Ok(n) = rest.parse::<u32>()
         {
@@ -72,9 +62,5 @@ impl StitchOp for TsOp {
             "app" => Self::App,
             _ => Self::Sym(Symbol::from(s)),
         }
-    }
-
-    fn make_db_var(n: i32) -> Option<Self> {
-        Some(Self::Var(n))
     }
 }

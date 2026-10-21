@@ -10,7 +10,7 @@ use egg_stitch::lang::{LambdaCalcLanguage, Op, OpChildrenLanguage, OpDB, StitchA
 
 type LamLang = LambdaCalcLanguage<OpDB<Op>>;
 type OcLang = OpChildrenLanguage<OpDB<Op>>;
-type TsLang = OpChildrenLanguage<TsOp>;
+type TsLang = OpChildrenLanguage<OpDB<TsOp>>;
 
 fn fv<L: StitchLanguage>(prog: &str) -> Vec<i32> {
     let expr = L::parse_program(prog).unwrap();
