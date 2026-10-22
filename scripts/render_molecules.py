@@ -55,6 +55,16 @@ METHOD_COMMON_NAME = {
     "DSR-canon": "E-Stitch BFS/MT [baseline]",
     "search-DSR": "E-Stitch SMC",
 }
+# The per-family figures are for a talk with a magenta palette, not the paper:
+# they use that talk's results-chart colors and names.
+MAGENTA_TALK_COLORS = {
+    "DSR-canon": "#D55E00",
+    "search-DSR": "#E055B0",
+}
+MAGENTA_TALK_NAMES = {
+    "DSR-canon": "Stitch over Min-Term",
+    "search-DSR": "E-Stitch SMC",
+}
 
 # Font sizes (points) for the combined 2x2 figure. Kept deliberately large
 # relative to the shrunken per-panel size so that, once the whole grid is
@@ -386,7 +396,13 @@ def annotate_series(
     )
 
 
-def plot_domain(ax, saved: dict, domain: str, max_step: int) -> tuple[list, list]:
+def family_name(domain: str) -> str:
+    """``molecules:ester`` -> ``ester``."""
+    return domain.split(":", 1)[1] if ":" in domain else domain
+
+
+def plot_domain(ax, saved: dict, domain: str, max_step: int,
+                colors: dict[str, str], names: dict[str, str]) -> tuple[list, list]:
     """Plot one family's trajectory onto ``ax``.
 
     Returns the legend ``(handles, labels)`` for the series drawn, so that a
@@ -408,16 +424,16 @@ def plot_domain(ax, saved: dict, domain: str, max_step: int) -> tuple[list, list
         (line,) = ax.plot(
             xs,
             ys,
-            color=METHOD_COLORS[method],
+            color=colors[method],
             marker=METHOD_MARKERS[method],
             linewidth=2.0,
             markersize=6,
-            label=METHOD_COMMON_NAME[method],
+            label=names[method],
         )
         handles.append(line)
-        labels.append(METHOD_COMMON_NAME[method])
+        labels.append(names[method])
         annotate_series(
-            ax, xs, ys, point_labels, METHOD_COLORS[method], last_time,
+            ax, xs, ys, point_labels, colors[method], last_time,
             median_ys=median_ys,
         )
 
@@ -435,8 +451,7 @@ def plot_domain(ax, saved: dict, domain: str, max_step: int) -> tuple[list, list
     ax.set_ylim(lo - r * 0.08, hi + r * 0.20)
     ax.yaxis.set_major_locator(MultipleLocator(1))
 
-    family = domain.split(":", 1)[1] if ":" in domain else domain
-    ax.set_title(family.capitalize(), fontsize=TITLE_FONTSIZE)
+    ax.set_title(family_name(domain).capitalize(), fontsize=TITLE_FONTSIZE)
     return handles, labels
 
 
@@ -460,7 +475,8 @@ def render_combined(saved: dict, out_path: Path, max_step: int) -> None:
     legend_handles: list = []
     legend_labels: list = []
     for ax, domain in zip(flat, domains):
-        handles, labels = plot_domain(ax, saved, domain, max_step)
+        handles, labels = plot_domain(ax, saved, domain, max_step,
+                                      METHOD_COLORS, METHOD_COMMON_NAME)
         if len(labels) > len(legend_labels):
             legend_handles, legend_labels = handles, labels
 
@@ -481,12 +497,33 @@ def render_combined(saved: dict, out_path: Path, max_step: int) -> None:
     plt.close(fig)
 
 
+def render_magenta_talk_figure(saved: dict, domain: str, out_path: Path, max_step: int) -> None:
+    """Render one family's trajectory on its own, in the magenta talk palette,
+    with its legend below the plot."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(5.0, 3.4), layout="constrained")
+    handles, labels = plot_domain(ax, saved, domain, max_step,
+                                  MAGENTA_TALK_COLORS, MAGENTA_TALK_NAMES)
+    fig.legend(handles, labels, loc="outside lower center", ncols=len(labels),
+               frameon=False, fontsize=TICK_FONTSIZE)
+    fig.savefig(out_path, dpi=400)
+    plt.close(fig)
+
+
 def render_all(saved: dict, out_dir: Path, max_step: int = DEFAULT_MAX_STEP) -> None:
-    """Render the combined 2x2 scramble figure into ``out_dir``."""
+    """Render the combined 2x2 scramble figure and one magenta-talk figure per
+    family (``<family>-progress-magenta.png``) into ``out_dir``."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "search-progress.png"
     render_combined(saved, out_path, max_step)
     print(f"wrote {out_path}", file=sys.stderr)
+    for domain in MOLECULES_DOMAINS:
+        if domain not in saved["domains"]:
+            continue
+        out_path = out_dir / f"{family_name(domain)}-progress-magenta.png"
+        render_magenta_talk_figure(saved, domain, out_path, max_step)
+        print(f"wrote {out_path}", file=sys.stderr)
 
 
 def main() -> None:
