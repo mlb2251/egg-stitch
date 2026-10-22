@@ -55,13 +55,13 @@ METHOD_COMMON_NAME = {
     "DSR-canon": "E-Stitch BFS/MT [baseline]",
     "search-DSR": "E-Stitch SMC",
 }
-# The per-family figures are for slides, whose results bar chart uses these
-# colors and names.
-SLIDE_METHOD_COLORS = {
+# The per-family figures are for a talk with a magenta palette, not the paper:
+# they use that talk's results-chart colors and names.
+MAGENTA_TALK_COLORS = {
     "DSR-canon": "#D55E00",
     "search-DSR": "#E055B0",
 }
-SLIDE_METHOD_NAME = {
+MAGENTA_TALK_NAMES = {
     "DSR-canon": "Stitch over Min-Term",
     "search-DSR": "E-Stitch SMC",
 }
@@ -497,13 +497,14 @@ def render_combined(saved: dict, out_path: Path, max_step: int) -> None:
     plt.close(fig)
 
 
-def render_single(saved: dict, domain: str, out_path: Path, max_step: int) -> None:
-    """Render one family's trajectory on its own, with its legend below the plot."""
+def render_magenta_talk_figure(saved: dict, domain: str, out_path: Path, max_step: int) -> None:
+    """Render one family's trajectory on its own, in the magenta talk palette,
+    with its legend below the plot."""
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(5.0, 3.4), layout="constrained")
     handles, labels = plot_domain(ax, saved, domain, max_step,
-                                  SLIDE_METHOD_COLORS, SLIDE_METHOD_NAME)
+                                  MAGENTA_TALK_COLORS, MAGENTA_TALK_NAMES)
     fig.legend(handles, labels, loc="outside lower center", ncols=len(labels),
                frameon=False, fontsize=TICK_FONTSIZE)
     fig.savefig(out_path, dpi=400)
@@ -511,8 +512,8 @@ def render_single(saved: dict, domain: str, out_path: Path, max_step: int) -> No
 
 
 def render_all(saved: dict, out_dir: Path, max_step: int = DEFAULT_MAX_STEP) -> None:
-    """Render the combined 2x2 scramble figure and one figure per family
-    (``<family>-progress.png``) into ``out_dir``."""
+    """Render the combined 2x2 scramble figure and one magenta-talk figure per
+    family (``<family>-progress-magenta.png``) into ``out_dir``."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "search-progress.png"
     render_combined(saved, out_path, max_step)
@@ -520,8 +521,8 @@ def render_all(saved: dict, out_dir: Path, max_step: int = DEFAULT_MAX_STEP) -> 
     for domain in MOLECULES_DOMAINS:
         if domain not in saved["domains"]:
             continue
-        out_path = out_dir / f"{family_name(domain)}-progress.png"
-        render_single(saved, domain, out_path, max_step)
+        out_path = out_dir / f"{family_name(domain)}-progress-magenta.png"
+        render_magenta_talk_figure(saved, domain, out_path, max_step)
         print(f"wrote {out_path}", file=sys.stderr)
 
 
