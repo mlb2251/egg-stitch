@@ -79,7 +79,7 @@ To add a snapshot: append a `[[case]]` and run `BLESS=1`. Recipes are keyed by
   each fixture's equivalence-oracle spec (the `oracle` field: `beta` / `beta-flat`
   / `circuit` / `{rules=…}` / `{skip=…}`) — no hand-maintained path lists.
 - `--language typescript` selects the `TypeScript` family: flat n-ary nodes
-  with `TsOp` leaves and working higher-order hooks (one `Lam(n)` enode per
+  over `TsDisc<O>` (structural `define`/`pass`/`app`/`lam{n}` + leaf op `O`, run as `OpDB<Op>`) and working higher-order hooks (one `Lam(n)` enode per
   binder group, one flat `App` per call). Both `lams_cost` and
   `stub_application_size` are constant in arity, because a flat language keeps
   arity in the child vector rather than in a chain of nodes.
