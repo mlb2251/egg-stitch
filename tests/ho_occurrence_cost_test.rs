@@ -3,7 +3,7 @@
 
 use egg::{Id, RecExpr};
 use egg_stitch::cost::compute_recexpr_size;
-use egg_stitch::lang::{LambdaCalc, LambdaCalcLanguage, LanguageFamily, Op, OpChildrenLanguage, OpDB, OpWithVar, TsOp, TypeScript, Weights};
+use egg_stitch::lang::{LambdaCalc, LambdaCalcLanguage, LanguageFamily, Op, OpChildrenLanguage, OpDB, OpWithVar, TsDisc, TypeScript, Weights};
 
 const W: Weights = Weights { sym_var_cost: 2, app_cost: 5, lam_cost: 7 };
 
@@ -23,10 +23,10 @@ fn typescript_charges_one_app_however_many_indices() {
 #[test]
 fn typescript_cost_matches_the_wrap_it_builds() {
     for h in 1..=4u32 {
-        let mut r: RecExpr<OpChildrenLanguage<OpWithVar<OpDB<TsOp>>>> = RecExpr::default();
-        let head = r.add(TypeScript::make_var::<OpDB<TsOp>>(egg::Var::from(0u32)));
+        let mut r: RecExpr<OpChildrenLanguage<TsDisc<OpWithVar<OpDB<Op>>>>> = RecExpr::default();
+        let head = r.add(TypeScript::make_var::<OpDB<Op>>(egg::Var::from(0u32)));
         let db_args: Vec<i32> = (0..h as i32).rev().collect();
-        let wrapped = TypeScript::wrap_pattern_with_db_apps::<OpDB<TsOp>>(&mut r, head, &db_args);
+        let wrapped = TypeScript::wrap_pattern_with_db_apps::<OpDB<Op>>(&mut r, head, &db_args);
         assert_eq!(wrap_size(&r, wrapped, head), TypeScript::ho_occurrence_cost(h, &W), "ho_occurrence_cost({h}) must equal the wrap the family actually builds");
     }
 }

@@ -1,6 +1,6 @@
 use egg::{Id, Language, RecExpr};
 
-use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, TsDisc, Weights};
 
 /// A type-level type constructor `L<_>` for a language family.
 ///
@@ -326,23 +326,29 @@ impl LanguageFamily for LambdaCalc {
 pub struct TypeScript;
 
 impl LanguageFamily for TypeScript {
-    type Discriminant<O: StitchOp> = O;
-    type Apply<O: StitchOp> = OpChildrenLanguage<O>;
+    type Discriminant<O: StitchOp> = TsDisc<O>;
+    type Apply<O: StitchOp> = OpChildrenLanguage<TsDisc<O>>;
 
-    fn make<P: StitchOp>(op: P, kids: Vec<Id>) -> OpChildrenLanguage<P> {
+    fn make<P: StitchOp>(op: TsDisc<P>, kids: Vec<Id>) -> OpChildrenLanguage<TsDisc<P>> {
         OpChildrenLanguage { op, children: kids }
     }
 
-    fn map_discriminant<A: StitchOp, B: StitchOp>(op: A, mut f: impl FnMut(A) -> B) -> B {
-        f(op)
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: TsDisc<A>, mut f: impl FnMut(A) -> B) -> TsDisc<B> {
+        match op {
+            TsDisc::Define => TsDisc::Define,
+            TsDisc::Pass => TsDisc::Pass,
+            TsDisc::App => TsDisc::App,
+            TsDisc::Lam(n) => TsDisc::Lam(n),
+            TsDisc::Node(a) => TsDisc::Node(f(a)),
+        }
     }
 
-    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
-        let head = egraph.add(Self::make(O::from_name(name), vec![]));
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<OpChildrenLanguage<TsDisc<O>>>) -> Id {
+        let head = egraph.add(Self::make(TsDisc::Node(O::from_name(name)), vec![]));
         let mut kids = Vec::with_capacity(children.len() + 1);
         kids.push(head);
         kids.extend(children);
-        egraph.add(Self::make(O::from_name("app"), kids))
+        egraph.add(Self::make(TsDisc::App, kids))
     }
 
     /// Cost of the 'app' leaf + cost of the callee leaf (ex. fn_0)
@@ -359,13 +365,13 @@ impl LanguageFamily for TypeScript {
         assert!(fast >= slow, "Fast rewrite size {} < slow rewrite size {} (TypeScript) — fast path must be an upper bound", fast, slow);
     }
 
-    fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
-        Self::make(OpWithVar::Var(v), vec![])
+    fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<TsDisc<OpWithVar<O>>> {
+        Self::make(TsDisc::Node(OpWithVar::Var(v)), vec![])
     }
 
     /// One `Lam(n)` enode.
-    fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<OpChildrenLanguage<O>>) -> Id {
-        egraph.add(Self::make(O::from_name(&format!("lam{n}")), vec![child]))
+    fn wrap_lams<O: StitchOp>(child: Id, n: u32, egraph: &mut StitchEgraph<OpChildrenLanguage<TsDisc<O>>>) -> Id {
+        egraph.add(Self::make(TsDisc::Lam(n), vec![child]))
     }
 
     fn lams_cost(_n: u32, weights: &Weights) -> u32 {
@@ -380,20 +386,17 @@ impl LanguageFamily for TypeScript {
     /// Flat counterpart of `LambdaCalc`'s curried version: one `app` whose
     /// first child is the head and whose remaining children are the DB-var
     /// leaves in the order `(n-1, n-2, …, 0)`.
-    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<OpChildrenLanguage<OpWithVar<O>>>, head: Id, db_args: &[i32]) -> Id {
+    fn wrap_pattern_with_db_apps<O: StitchOp>(recexpr: &mut egg::RecExpr<OpChildrenLanguage<TsDisc<OpWithVar<O>>>>, head: Id, db_args: &[i32]) -> Id {
         if db_args.is_empty() {
             return head;
         }
         let mut kids = Vec::with_capacity(db_args.len() + 1);
         kids.push(head);
         for &db in db_args {
-            let var_op = OpWithVar::Node(O::make_db_var(db).expect("higher-order display needs a DB-var-bearing leaf op"));
-            kids.push(recexpr.add(OpChildrenLanguage { op: var_op, children: vec![] }));
+            let var_op = TsDisc::make_db_var(db).expect("higher-order display needs a DB-var-bearing leaf op");
+            kids.push(recexpr.add(Self::make(var_op, vec![])));
         }
-        recexpr.add(OpChildrenLanguage {
-            op: OpWithVar::Node(O::from_name("app")),
-            children: kids,
-        })
+        recexpr.add(Self::make(TsDisc::App, kids))
     }
 
     /// Inverse of [`Self::wrap_pattern_with_db_apps`]. Peels the single `App`
@@ -401,9 +404,9 @@ impl LanguageFamily for TypeScript {
     /// every argument is a DB var, the indices strictly descend (the
     /// `(n-1, …, 0)` order the wrapper writes), and the head is a metavar.
     /// The head check is what keeps a genuine `(app f $1 $0)` intact.
-    fn unwrap_pattern_db_apps<O: StitchOp>(nodes: &[OpChildrenLanguage<OpWithVar<O>>], id: Id) -> Id {
+    fn unwrap_pattern_db_apps<O: StitchOp>(nodes: &[OpChildrenLanguage<TsDisc<OpWithVar<O>>>], id: Id) -> Id {
         let node = &nodes[usize::from(id)];
-        if node.op != OpWithVar::Node(O::from_name("app")) || node.children.len() < 2 {
+        if node.op != TsDisc::App || node.children.len() < 2 {
             return id;
         }
         let mut prev: Option<i32> = None;
@@ -418,7 +421,7 @@ impl LanguageFamily for TypeScript {
     }
 
     /// One flat `lam<n>` binder node for all `n` slots.
-    fn wrap_pattern_lams<O: StitchOp>(recexpr: &mut RecExpr<OpChildrenLanguage<OpWithVar<O>>>, body: Id, n: u32) -> Id {
-        recexpr.add(Self::make(OpWithVar::Node(O::from_name(&format!("lam{n}"))), vec![body]))
+    fn wrap_pattern_lams<O: StitchOp>(recexpr: &mut RecExpr<OpChildrenLanguage<TsDisc<OpWithVar<O>>>>, body: Id, n: u32) -> Id {
+        recexpr.add(Self::make(TsDisc::Lam(n), vec![body]))
     }
 }

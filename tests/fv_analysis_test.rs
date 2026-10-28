@@ -2,15 +2,15 @@
 //!
 //! Covers both language families (`OpChildrenLanguage` and `LambdaCalcLanguage`)
 //! parameterised by `OpDB<Op>`, the TypeScript family's multi-slot binders
-//! (`OpChildrenLanguage<TsOp>`), plus the no-binders / no-DB-vars sanity case
+//! (`OpChildrenLanguage<TsDisc<OpDB<Op>>>`), plus the no-binders / no-DB-vars sanity case
 //! using plain `Op` (where `fv` should always be empty).
 
 use egg::Id;
-use egg_stitch::lang::{LambdaCalcLanguage, Op, OpChildrenLanguage, OpDB, StitchAnalysis, StitchLanguage, TsOp};
+use egg_stitch::lang::{LambdaCalcLanguage, Op, OpChildrenLanguage, OpDB, StitchAnalysis, StitchLanguage, TsDisc};
 
 type LamLang = LambdaCalcLanguage<OpDB<Op>>;
 type OcLang = OpChildrenLanguage<OpDB<Op>>;
-type TsLang = OpChildrenLanguage<OpDB<TsOp>>;
+type TsLang = OpChildrenLanguage<TsDisc<OpDB<Op>>>;
 
 fn fv<L: StitchLanguage>(prog: &str) -> Vec<i32> {
     let expr = L::parse_program(prog).unwrap();
@@ -77,7 +77,7 @@ fn lam_plain_program_has_empty_fv() {
     assert_eq!(fv::<LamLang>("(+ 1 2)"), Vec::<i32>::new());
 }
 
-// ---- OpChildrenLanguage<TsOp>: multi-slot binders (`lam{n}`, `define`) ----
+// ---- OpChildrenLanguage<TsDisc<OpDB<Op>>>: multi-slot binders (`lam{n}`, `define`) ----
 
 #[test]
 fn ts_lam_n_binds_n_slots() {

@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 
 use egg::{Id, RecExpr};
 use egg_stitch::cost::recexpr_fv;
-use egg_stitch::lang::{OpChildrenLanguage, StitchLanguage, TsOp};
+use egg_stitch::lang::{Op, OpChildrenLanguage, OpDB, StitchLanguage, TsDisc};
 use serde_json::Value;
 
 mod common;
@@ -347,11 +347,11 @@ fn multiple_abstractions_stay_sound() {
 // ─── scope checks via the egg/egg-stitch's parser and free-variable rule ─────────
 
 /// A TypeScript-family term, as the search itself represents it.
-type TsExpr = RecExpr<OpChildrenLanguage<TsOp>>;
+type TsExpr = RecExpr<OpChildrenLanguage<TsDisc<OpDB<Op>>>>;
 
 /// Parses `s` with the crate's TypeScript parser, panicking with `s` on failure.
 fn parse(s: &str) -> TsExpr {
-    OpChildrenLanguage::<TsOp>::parse_program(s).unwrap_or_else(|e| panic!("{e}"))
+    OpChildrenLanguage::<TsDisc<OpDB<Op>>>::parse_program(s).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Free de Bruijn indices of `s`, relative to its root, via `cost::recexpr_fv`.
@@ -368,9 +368,9 @@ enum FnUse {
 }
 
 /// `Some(k)` iff `op` is a library name `fn_k`.
-fn fn_index(op: &TsOp) -> Option<usize> {
+fn fn_index(op: &TsDisc<OpDB<Op>>) -> Option<usize> {
     match op {
-        TsOp::Sym(s) => s.as_str().strip_prefix("fn_").and_then(|k| k.parse().ok()),
+        TsDisc::Node(OpDB::Node(Op::Sym(s))) => s.as_str().strip_prefix("fn_").and_then(|k| k.parse().ok()),
         _ => None,
     }
 }
@@ -382,7 +382,7 @@ fn fn_uses(s: &str) -> Vec<FnUse> {
         let node = &e[id];
         out.extend(fn_index(&node.op).map(FnUse::Misplaced));
         let mut rest = node.children.as_slice();
-        if let (TsOp::App, [callee, args @ ..]) = (&node.op, rest)
+        if let (TsDisc::App, [callee, args @ ..]) = (&node.op, rest)
             && e[*callee].children.is_empty()
             && let Some(k) = fn_index(&e[*callee].op)
         {

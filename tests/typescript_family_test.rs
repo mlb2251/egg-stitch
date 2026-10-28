@@ -1,37 +1,52 @@
 //! Tests for the `TypeScript` family: a flat n-ary language which has
-//! binders (`TsOp::Lam(n)`) and applications (`TsOp::App`) unlike `OpChildren`.
+//! binders (`TsDisc::Lam(n)`) and applications (`TsDisc::App`) unlike `OpChildren`.
 
 use egg::{Id, RecExpr};
-use egg_stitch::lang::{LanguageFamily, OpChildrenLanguage, OpDB, OpWithVar, StitchAnalysis, StitchDisc, StitchEgraph, StitchOp, TsOp, TypeScript, Weights};
+use egg_stitch::lang::{LanguageFamily, Op, OpChildrenLanguage, OpDB, OpWithVar, StitchAnalysis, StitchDisc, StitchEgraph, StitchOp, TsDisc, TypeScript, Weights};
 
-type Lang = OpChildrenLanguage<TsOp>;
+type Lang = OpChildrenLanguage<TsDisc<OpDB<Op>>>;
 
 fn egraph(weights: Weights) -> StitchEgraph<Lang> {
     StitchEgraph::new(StitchAnalysis::new(weights))
 }
 
 fn leaf(g: &mut StitchEgraph<Lang>, name: &str) -> Id {
-    g.add(OpChildrenLanguage { op: TsOp::from_name(name), children: vec![] })
+    g.add(OpChildrenLanguage { op: TsDisc::from_name(name), children: vec![] })
+}
+
+/// Program-side discriminant under test.
+type D = TsDisc<OpDB<Op>>;
+
+#[test]
+fn ts_disc_round_trips_structural_ops() {
+    // The parser and `display_recexpr` must agree on the structural spellings,
+    // or parsed programs silently get `Node` symbols where binders belong.
+    for (name, op) in [("app", D::App), ("lam2", D::Lam(2)), ("define", D::Define), ("pass", D::Pass)] {
+        assert_eq!(D::from_name(name), op);
+        assert_eq!(op.to_string(), name);
+    }
+    assert_eq!(D::from_name("$3"), D::Node(OpDB::Var(3)), "DB vars are delegated to the leaf op");
+    assert_eq!(D::make_db_var(3), Some(D::Node(OpDB::Var(3))));
 }
 
 #[test]
-fn ts_op_round_trips_the_ops_the_family_builds() {
-    // `TypeScript` builds `App` and `Lam(n)` via `from_name`, so their names must
-    // round-trip through `to_string`; otherwise they silently become plain symbols.
-    assert_eq!(TsOp::from_name("app"), TsOp::App);
-    assert_eq!(TsOp::from_name("lam2"), TsOp::Lam(2));
-    assert_eq!(TsOp::App.to_string(), "app");
-    assert_eq!(TsOp::Lam(2).to_string(), "lam2");
+fn ts_disc_delegates_leaf_queries_to_the_leaf_op() {
+    // Pattern side: `?x` and `$n` live inside `Node`, so `as_var` /
+    // `de_bruijn_index` must look through it.
+    let mv: TsDisc<OpWithVar<OpDB<Op>>> = TsDisc::from_name("?x");
+    assert_eq!(mv.as_var(), Some("?x".parse().unwrap()));
+    assert_eq!(D::from_name("$4").de_bruijn_index(), Some(4));
+    assert_eq!(D::App.de_bruijn_index(), None);
 }
 
 #[test]
 fn wrap_lams_adds_one_node_that_binds_n() {
     let mut g = egraph(Weights::default());
     let body = leaf(&mut g, "x");
-    let wrapped = TypeScript::wrap_lams::<TsOp>(body, 3, &mut g);
+    let wrapped = TypeScript::wrap_lams::<OpDB<Op>>(body, 3, &mut g);
     assert_ne!(wrapped, g.find(body), "wrap must produce a new eclass");
     let node = g[wrapped].nodes.first().expect("wrapped eclass is non-empty").clone();
-    assert_eq!(node.op, TsOp::Lam(3), "one Lam(3) node, not three Lam(1)s");
+    assert_eq!(node.op, TsDisc::Lam(3), "one Lam(3) node, not three Lam(1)s");
     assert_eq!(node.children.len(), 1);
     assert_eq!(node.op.binds_child(0), 3);
 }
@@ -51,7 +66,7 @@ fn lams_cost_matches_the_egraph_size_delta() {
         let mut g = egraph(w);
         let body = leaf(&mut g, "x");
         let before = g[body].data.size;
-        let wrapped = TypeScript::wrap_lams::<TsOp>(body, n, &mut g);
+        let wrapped = TypeScript::wrap_lams::<OpDB<Op>>(body, n, &mut g);
         let delta = g[wrapped].data.size - before;
         assert_eq!(delta, TypeScript::lams_cost(n, &w), "lams_cost({n}) must equal the size the e-graph actually grew by");
     }
@@ -72,7 +87,7 @@ fn stub_application_size_matches_the_egraph_size_delta() {
         let mut g = egraph(w);
         let kids: Vec<Id> = (0..arity).map(|i| leaf(&mut g, &format!("a{i}"))).collect();
         let kid_total: u32 = kids.iter().map(|&k| g[k].data.size).sum();
-        let stub = TypeScript::add_stub_application::<TsOp>("fn_0", kids, &mut g);
+        let stub = TypeScript::add_stub_application::<OpDB<Op>>("fn_0", kids, &mut g);
         let spine = g[stub].data.size - kid_total;
         assert_eq!(spine, TypeScript::stub_application_size(arity, &w), "stub_application_size({arity}) must equal the spine the e-graph actually grew by");
     }
@@ -83,38 +98,37 @@ fn stub_application_is_one_flat_app_over_the_callee() {
     let mut g = egraph(Weights::default());
     let a = leaf(&mut g, "a");
     let b = leaf(&mut g, "b");
-    let stub = TypeScript::add_stub_application::<TsOp>("fn_0", vec![a, b], &mut g);
+    let stub = TypeScript::add_stub_application::<OpDB<Op>>("fn_0", vec![a, b], &mut g);
     let node = g[stub].nodes.first().expect("stub eclass is non-empty").clone();
-    assert_eq!(node.op, TsOp::App, "a call is an App node, not a head-as-op node");
+    assert_eq!(node.op, TsDisc::App, "a call is an App node, not a head-as-op node");
     assert_eq!(node.children.len(), 3, "children are [callee, a, b] — flat, not curried");
-    assert_eq!(g[node.children[0]].nodes.first().unwrap().op, TsOp::from_name("fn_0"));
+    assert_eq!(g[node.children[0]].nodes.first().unwrap().op, TsDisc::from_name("fn_0"));
 }
 
-type PatLang = OpChildrenLanguage<OpWithVar<OpDB<TsOp>>>;
+type PatLang = OpChildrenLanguage<TsDisc<OpWithVar<OpDB<Op>>>>;
 
-
-fn pat_leaf(r: &mut RecExpr<PatLang>, op: OpWithVar<OpDB<TsOp>>) -> Id {
+fn pat_leaf(r: &mut RecExpr<PatLang>, op: TsDisc<OpWithVar<OpDB<Op>>>) -> Id {
     r.add(OpChildrenLanguage { op, children: vec![] })
 }
 
 fn metavar_head(r: &mut RecExpr<PatLang>, k: u32) -> Id {
-    pat_leaf(r, OpWithVar::Var(egg::Var::from(k)))
+    pat_leaf(r, TsDisc::Node(OpWithVar::Var(egg::Var::from(k))))
 }
 
 fn round_trip(db_args: &[i32]) {
     let mut r: RecExpr<PatLang> = RecExpr::default();
     let head = metavar_head(&mut r, 0);
-    let wrapped = TypeScript::wrap_pattern_with_db_apps::<OpDB<TsOp>>(&mut r, head, db_args);
-    assert_eq!(TypeScript::unwrap_pattern_db_apps::<OpDB<TsOp>>(r.as_ref(), wrapped), head, "unwrap should recover the metavar head for db_args = {db_args:?}");
+    let wrapped = TypeScript::wrap_pattern_with_db_apps::<OpDB<Op>>(&mut r, head, db_args);
+    assert_eq!(TypeScript::unwrap_pattern_db_apps::<OpDB<Op>>(r.as_ref(), wrapped), head, "unwrap should recover the metavar head for db_args = {db_args:?}");
 }
 
 #[test]
 fn wrap_pattern_builds_one_flat_app() {
     let mut r: RecExpr<PatLang> = RecExpr::default();
     let head = metavar_head(&mut r, 0);
-    let wrapped = TypeScript::wrap_pattern_with_db_apps::<OpDB<TsOp>>(&mut r, head, &[1, 0]);
+    let wrapped = TypeScript::wrap_pattern_with_db_apps::<OpDB<Op>>(&mut r, head, &[1, 0]);
     let node = &r.as_ref()[usize::from(wrapped)];
-    assert_eq!(node.op, OpWithVar::Node(OpDB::Node(TsOp::App)), "one App node, not a curried chain");
+    assert_eq!(node.op, TsDisc::App, "one App node, not a curried chain");
     assert_eq!(node.children.len(), 3, "children are [head, $1, $0]");
     assert_eq!(node.children[0], head);
 }
@@ -123,7 +137,7 @@ fn wrap_pattern_builds_one_flat_app() {
 fn wrap_pattern_with_no_args_is_the_identity() {
     let mut r: RecExpr<PatLang> = RecExpr::default();
     let head = metavar_head(&mut r, 0);
-    assert_eq!(TypeScript::wrap_pattern_with_db_apps::<OpDB<TsOp>>(&mut r, head, &[]), head);
+    assert_eq!(TypeScript::wrap_pattern_with_db_apps::<OpDB<Op>>(&mut r, head, &[]), head);
 }
 
 #[test]
@@ -153,14 +167,11 @@ fn genuine_application_with_non_metavar_head_is_left_alone() {
     // regular op rather than a metavar. Collapsing it would silently rewrite a
     // real call into its callee.
     let mut r: RecExpr<PatLang> = RecExpr::default();
-    let f = pat_leaf(&mut r, OpWithVar::Node(OpDB::Node(TsOp::from_name("f"))));
-    let v1 = pat_leaf(&mut r, OpWithVar::Var(1.into()));
-    let v0 = pat_leaf(&mut r, OpWithVar::Var(0.into()));
-    let app = r.add(OpChildrenLanguage {
-        op: OpWithVar::Node(OpDB::Node(TsOp::App)),
-        children: vec![f, v1, v0],
-    });
-    assert_eq!(TypeScript::unwrap_pattern_db_apps::<OpDB<TsOp>>(r.as_ref(), app), app);
+    let f = pat_leaf(&mut r, TsDisc::from_name("f"));
+    let v1 = pat_leaf(&mut r, TsDisc::from_name("$1"));
+    let v0 = pat_leaf(&mut r, TsDisc::from_name("$0"));
+    let app = r.add(OpChildrenLanguage { op: TsDisc::App, children: vec![f, v1, v0] });
+    assert_eq!(TypeScript::unwrap_pattern_db_apps::<OpDB<Op>>(r.as_ref(), app), app);
 }
 
 #[test]
@@ -169,20 +180,17 @@ fn ascending_db_args_are_not_an_eta_wrap() {
     // some other term that happens to be var-headed; leave it alone.
     let mut r: RecExpr<PatLang> = RecExpr::default();
     let head = metavar_head(&mut r, 0);
-    let v0 = pat_leaf(&mut r, OpWithVar::Var(0.into()));
-    let v1 = pat_leaf(&mut r, OpWithVar::Var(1.into()));
-    let app = r.add(OpChildrenLanguage {
-        op: OpWithVar::Node(OpDB::Node(TsOp::App)),
-        children: vec![head, v0, v1],
-    });
-    assert_eq!(TypeScript::unwrap_pattern_db_apps::<OpDB<TsOp>>(r.as_ref(), app), app);
+    let v0 = pat_leaf(&mut r, TsDisc::from_name("$0"));
+    let v1 = pat_leaf(&mut r, TsDisc::from_name("$1"));
+    let app = r.add(OpChildrenLanguage { op: TsDisc::App, children: vec![head, v0, v1] });
+    assert_eq!(TypeScript::unwrap_pattern_db_apps::<OpDB<Op>>(r.as_ref(), app), app);
 }
 
 #[test]
 fn metavar_alone_is_left_alone() {
     let mut r: RecExpr<PatLang> = RecExpr::default();
     let head = metavar_head(&mut r, 0);
-    assert_eq!(TypeScript::unwrap_pattern_db_apps::<OpDB<TsOp>>(r.as_ref(), head), head);
+    assert_eq!(TypeScript::unwrap_pattern_db_apps::<OpDB<Op>>(r.as_ref(), head), head);
 }
 
 #[test]
@@ -191,21 +199,15 @@ fn display_pattern_wraps_body_in_one_lam_node() {
     // thing is wrapped in a single `lam1`.
     let hole = Id::from(2);
     let nodes: Vec<PatLang> = vec![
+        OpChildrenLanguage { op: TsDisc::App, children: vec![Id::from(1), hole] },
+        OpChildrenLanguage { op: TsDisc::from_name("f"), children: vec![] },
         OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::App)),
-            children: vec![Id::from(1), hole],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::from_name("f"))),
-            children: vec![],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Var(egg::Var::from(0u32)),
+            op: TsDisc::Node(OpWithVar::Var(egg::Var::from(0u32))),
             children: vec![],
         },
     ];
 
-    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<TsOp>>(&nodes, &[vec![hole]], &[0], &[vec![]]);
+    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<Op>>(&nodes, &[vec![hole]], &[0], &[vec![]]);
 
     assert!(rendered.starts_with("(lam1 "), "expected a single lam1 wrapper, got {rendered}");
     assert!(!rendered.contains("lam1 (lam1"), "binders must not be stacked, got {rendered}");
@@ -218,25 +220,19 @@ fn display_pattern_uses_one_lam_node_for_arity_two() {
     let h0 = Id::from(2);
     let h1 = Id::from(3);
     let nodes: Vec<PatLang> = vec![
+        OpChildrenLanguage { op: TsDisc::App, children: vec![Id::from(1), h0, h1] },
+        OpChildrenLanguage { op: TsDisc::from_name("f"), children: vec![] },
         OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::App)),
-            children: vec![Id::from(1), h0, h1],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::from_name("f"))),
+            op: TsDisc::Node(OpWithVar::Var(egg::Var::from(0u32))),
             children: vec![],
         },
         OpChildrenLanguage {
-            op: OpWithVar::Var(egg::Var::from(0u32)),
-            children: vec![],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Var(egg::Var::from(1u32)),
+            op: TsDisc::Node(OpWithVar::Var(egg::Var::from(1u32))),
             children: vec![],
         },
     ];
 
-    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<TsOp>>(&nodes, &[vec![h0], vec![h1]], &[0, 0], &[vec![], vec![]]);
+    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<Op>>(&nodes, &[vec![h0], vec![h1]], &[0, 0], &[vec![], vec![]]);
 
     assert!(rendered.starts_with("(lam2 "), "expected a single lam2 wrapper, got {rendered}");
     assert!(!rendered.contains("lam1"), "arity-2 must be one lam2, not nested lam1s, got {rendered}");
@@ -249,20 +245,14 @@ fn display_pattern_with_zero_arity_has_no_binder() {
     // binder that binds nothing.
     let nodes: Vec<PatLang> = vec![
         OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::App)),
+            op: TsDisc::App,
             children: vec![Id::from(1), Id::from(2)],
         },
-        OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::from_name("f"))),
-            children: vec![],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::from_name("x"))),
-            children: vec![],
-        },
+        OpChildrenLanguage { op: TsDisc::from_name("f"), children: vec![] },
+        OpChildrenLanguage { op: TsDisc::from_name("x"), children: vec![] },
     ];
 
-    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<TsOp>>(&nodes, &[], &[], &[]);
+    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<Op>>(&nodes, &[], &[], &[]);
 
     assert_eq!(rendered, "(app f x)", "arity 0 must render the body unwrapped");
 }
@@ -274,25 +264,19 @@ fn display_pattern_numbers_slots_right_to_left() {
     let h0 = Id::from(2);
     let h1 = Id::from(3);
     let nodes: Vec<PatLang> = vec![
+        OpChildrenLanguage { op: TsDisc::App, children: vec![Id::from(1), h0, h1] },
+        OpChildrenLanguage { op: TsDisc::from_name("f"), children: vec![] },
         OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::App)),
-            children: vec![Id::from(1), h0, h1],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::from_name("f"))),
+            op: TsDisc::Node(OpWithVar::Var(egg::Var::from(0u32))),
             children: vec![],
         },
         OpChildrenLanguage {
-            op: OpWithVar::Var(egg::Var::from(0u32)),
-            children: vec![],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Var(egg::Var::from(1u32)),
+            op: TsDisc::Node(OpWithVar::Var(egg::Var::from(1u32))),
             children: vec![],
         },
     ];
 
-    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<TsOp>>(&nodes, &[vec![h0], vec![h1]], &[0, 0], &[vec![], vec![]]);
+    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<Op>>(&nodes, &[vec![h0], vec![h1]], &[0, 0], &[vec![], vec![]]);
 
     assert_eq!(rendered, "(lam2 (app f $1 $0))", "slot k must render as $(arity - 1 - k)");
 }
@@ -306,32 +290,23 @@ fn display_pattern_shifts_captured_indices_by_occurrence_depth() {
     let deep = Id::from(5);
     let nodes: Vec<PatLang> = vec![
         OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::App)),
+            op: TsDisc::App,
             children: vec![Id::from(1), Id::from(2)],
         },
+        OpChildrenLanguage { op: TsDisc::Lam(1), children: vec![shallow] },
+        OpChildrenLanguage { op: TsDisc::Lam(1), children: vec![Id::from(4)] },
         OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::Lam(1))),
-            children: vec![shallow],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::Lam(1))),
-            children: vec![Id::from(4)],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Var(egg::Var::from(0u32)),
+            op: TsDisc::Node(OpWithVar::Var(egg::Var::from(0u32))),
             children: vec![],
         },
+        OpChildrenLanguage { op: TsDisc::Lam(1), children: vec![deep] },
         OpChildrenLanguage {
-            op: OpWithVar::Node(OpDB::Node(TsOp::Lam(1))),
-            children: vec![deep],
-        },
-        OpChildrenLanguage {
-            op: OpWithVar::Var(egg::Var::from(0u32)),
+            op: TsDisc::Node(OpWithVar::Var(egg::Var::from(0u32))),
             children: vec![],
         },
     ];
 
-    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<TsOp>>(&nodes, &[vec![shallow, deep]], &[1], &[vec![0]]);
+    let rendered = TypeScript::display_pattern_as_lambda::<OpDB<Op>>(&nodes, &[vec![shallow, deep]], &[1], &[vec![0]]);
 
     assert!(rendered.contains("(app $1 $0)"), "the occurrence at var_depth captures $0 unshifted, got {rendered}");
     assert!(rendered.contains("(app $2 $1)"), "the occurrence one binder deeper captures $1, got {rendered}");
