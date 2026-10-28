@@ -81,7 +81,7 @@ fn collect_fixtures(dir: &Path, out: &mut BTreeSet<String>) {
         if path.is_dir() {
             collect_fixtures(&path, out);
         } else if path.to_str().is_some_and(|p| p.ends_with(".out.json")) {
-            out.insert(path.to_string_lossy().into_owned());
+            out.insert(path.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/"));
         }
     }
 }

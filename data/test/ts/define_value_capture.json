@@ -1,0 +1,6 @@
+[
+  "(define (app fetch u) (define (app parse $0) (app use $0)))",
+  "(define (app fetch u) (define (app decode $0 utf8) (app use $0)))",
+  "(define (app fetch u) (define (app num_add $0 (app len $0)) (app use $0)))",
+  "(define (app fetch u) (define (if (app ok $0) $0 fallback) (app use $0)))"
+]
