@@ -31,6 +31,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 from expts.tables import MOLECULES_DOMAINS, MOLECULES_SMC_POINT  # noqa: E402
+from paper_palette import ATOM_COLORS, METHOD_COLORS as PAPER_METHOD_COLORS  # noqa: E402
 
 RESULTS_PATH = PROJECT_ROOT / "results" / "molecules.json"
 DEFAULT_OUT_DIR = PROJECT_ROOT / "figures" / "molecules"
@@ -43,8 +44,8 @@ METHOD_DATA_KEY = {
 }
 METHODS = ("DSR-canon", "search-DSR")
 METHOD_COLORS = {
-    "DSR-canon": "#6300CC",
-    "search-DSR": "#d55e00",
+    "DSR-canon": PAPER_METHOD_COLORS["enum-dsrs-at-start"],
+    "search-DSR": PAPER_METHOD_COLORS["smc"],
 }
 METHOD_MARKERS = {
     "DSR-canon": "o",
@@ -253,7 +254,7 @@ def autocrop(image: np.ndarray, margin: int = 2) -> np.ndarray:
     return image[y0 : y1 + 1, x0 : x1 + 1]
 
 
-def render_molecule_diagram(entry: ExprNode):
+def render_molecule_diagram(entry: ExprNode, atom_colors: dict):
     """Build a skeletal molecular diagram for a learned library entry.
 
     Returns a matplotlib ``OffsetImage`` of the RDKit depiction, cropped to its
@@ -278,6 +279,7 @@ def render_molecule_diagram(entry: ExprNode):
     opts.clearBackground = False  # transparent background
     opts.fixedBondLength = BOND_LENGTH_PX
     opts.bondLineWidth = 2
+    opts.updateAtomPalette(atom_colors)
     rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol)
     drawer.FinishDrawing()
 
@@ -285,13 +287,14 @@ def render_molecule_diagram(entry: ExprNode):
     return OffsetImage(image, zoom=DIAGRAM_ZOOM)
 
 
-def annotate_diagram(ax, x: float, y: float, entry: ExprNode, offset_y: int) -> None:
+def annotate_diagram(ax, x: float, y: float, entry: ExprNode, offset_y: int,
+                     atom_colors: dict) -> None:
     """Attach a compact molecular diagram to a data point."""
     from matplotlib.offsetbox import AnnotationBbox
 
     ax.add_artist(
         AnnotationBbox(
-            render_molecule_diagram(entry),
+            render_molecule_diagram(entry, atom_colors),
             (x, y),
             xybox=(0, offset_y),
             xycoords="data",
@@ -369,6 +372,7 @@ def annotate_series(
     time_value: float,
     *,
     median_ys: list[float],
+    atom_colors: dict,
 ) -> None:
     """Annotate a series with molecular diagrams and a final time callout."""
 
@@ -381,7 +385,7 @@ def annotate_series(
         if label:
             offset = 18
             yoff = offset if above_median else -offset
-            annotate_diagram(ax, x, y, label, yoff)
+            annotate_diagram(ax, x, y, label, yoff, atom_colors)
 
     ax.annotate(
         f"t={time_value:.2f}s",
@@ -402,7 +406,8 @@ def family_name(domain: str) -> str:
 
 
 def plot_domain(ax, saved: dict, domain: str, max_step: int,
-                colors: dict[str, str], names: dict[str, str]) -> tuple[list, list]:
+                colors: dict[str, str], names: dict[str, str],
+                atom_colors: dict) -> tuple[list, list]:
     """Plot one family's trajectory onto ``ax``.
 
     Returns the legend ``(handles, labels)`` for the series drawn, so that a
@@ -435,6 +440,7 @@ def plot_domain(ax, saved: dict, domain: str, max_step: int,
         annotate_series(
             ax, xs, ys, point_labels, colors[method], last_time,
             median_ys=median_ys,
+            atom_colors=atom_colors,
         )
 
     ax.set_xlim(-0.2, max_step + 1.4)
@@ -476,7 +482,7 @@ def render_combined(saved: dict, out_path: Path, max_step: int) -> None:
     legend_labels: list = []
     for ax, domain in zip(flat, domains):
         handles, labels = plot_domain(ax, saved, domain, max_step,
-                                      METHOD_COLORS, METHOD_COMMON_NAME)
+                                      METHOD_COLORS, METHOD_COMMON_NAME, ATOM_COLORS)
         if len(labels) > len(legend_labels):
             legend_handles, legend_labels = handles, labels
 
@@ -504,7 +510,8 @@ def render_magenta_talk_figure(saved: dict, domain: str, out_path: Path, max_ste
 
     fig, ax = plt.subplots(figsize=(5.0, 3.4), layout="constrained")
     handles, labels = plot_domain(ax, saved, domain, max_step,
-                                  MAGENTA_TALK_COLORS, MAGENTA_TALK_NAMES)
+                                  MAGENTA_TALK_COLORS, MAGENTA_TALK_NAMES,
+                                  atom_colors={})
     fig.legend(handles, labels, loc="outside lower center", ncols=len(labels),
                frameon=False, fontsize=TICK_FONTSIZE)
     fig.savefig(out_path, dpi=400)

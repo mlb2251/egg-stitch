@@ -17,14 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from expts.render_common import aggregate_cr, aggregate_time, has_dnf  # noqa: E402
 from render_tables import METHOD_PLOT_LABELS  # noqa: E402
-from render_molecules import METHOD_COLORS as _MOL_COLORS  # noqa: E402
+from paper_palette import BLACK, METHOD_COLORS as PAPER_METHOD_COLORS, tint  # noqa: E402
 
-# Reuse the molecules figure's palette: E-Stitch (our BFS) in orange, Stitch in
-# purple, so the two figures read as one colour scheme.
-METHOD_COLORS = {"enum": _MOL_COLORS["search-DSR"], "stitch": _MOL_COLORS["DSR-canon"]}
+METHOD_COLORS = {m: PAPER_METHOD_COLORS[m] for m in ("enum", "stitch")}
 
-# Presentation-figure blue, used to shade the optimal-abstraction arity range.
-OPTIMAL_COLOR = "#80cdff"
+# Gray, not a palette hue, so the shading can't be read as a method.
+OPTIMAL_COLOR = tint(BLACK, 30)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_JSON = PROJECT_ROOT / "results" / "arity.json"
