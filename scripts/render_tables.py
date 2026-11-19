@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from render_molecules import render_all as render_molecules  # noqa: E402
+from paper_palette import METHOD_COLORS as PAPER_METHOD_COLORS  # noqa: E402
 from expts.render_common import (  # noqa: E402
     aggregate_methods_cr,
     aggregate_methods_time,
@@ -122,43 +123,9 @@ TABLES_WITH_EGRAPH_MIN = {"babble_comparison_rewrites_single", "babble_compariso
 # today.
 NO_DSR_COUNTERPART: dict[str, str] = {"babble_comparison_rewrites": "babble_comparison_no_rewrites"}
 
-# Plot styling: each method gets a color, each domain a marker. Keeping these
-# as module-level dicts makes it easy to extend with new methods/domains.
-THEME_COLORS = [
-    "#80cdff",  # blue
-    "#ffca80",  # orange
-    "#60e37a",  # green
-    "#ff80b1",  # pink
-    "#bd80ff",  # purple
-    "#000000",  # black
-]
-
-
-def modify_color(color: str, saturation_change: float, value_change: float):
-    """Scale HSV saturation (toward full) and value of ``color``.
-
-    Saturation transforms as ``s -> 1 - (1 - s) * saturation_change``, so
-    ``saturation_change < 1`` pushes the color closer to fully saturated;
-    ``value_change`` is a straight multiplier on V.
-    """
-    import matplotlib.colors as mcolors
-    hsv = mcolors.rgb_to_hsv(mcolors.ColorConverter().to_rgb(color))
-    hsv[1] = 1 - (1 - hsv[1]) * saturation_change
-    hsv[2] *= value_change
-    return mcolors.hsv_to_rgb(hsv)
-
-
-def line_color(i: int):
-    """Color for the i-th plotted series — darker, more saturated than theme."""
-    return modify_color(THEME_COLORS[i], 0.5, 0.9)
-
-
-# Plot uses a "line" variant of the pastel theme for readability on white. The
-# dsrs-only-at-start baseline (DSR tables only, where Stitch isn't plotted)
-# gets its own color past the four base series.
-METHOD_COLORS = {m: line_color(i) for i, m in enumerate(METHODS)}
-METHOD_COLORS[BASELINE_METHOD] = line_color(4)
-METHOD_COLORS[NO_RULES_METHOD] = line_color(5)
+# Plot styling: each method gets a color (shared with every other paper
+# figure, see paper_palette.py), each domain a marker.
+METHOD_COLORS = PAPER_METHOD_COLORS
 DOMAIN_PLOT_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -721,9 +688,6 @@ class FamilySpec:
         them; only the bits that genuinely differ are args.
         """
         methods = ["enum", "smc", "enum-dsrs-at-start", *(e[0] for e in extras)]
-        # Base methods take color slots 0/1/3; extras fill 2 then 4, 5, ... so a
-        # single-extra roster (circuits) keeps its original slot-2 color.
-        extra_slots = [2, 4, 5][: len(extras)]
         # Table columns keep the BFS/MT and BFS/NR baselines rightmost (babble,
         # a real method, follows SMC). Plots are unaffected — they have no
         # left-to-right ranking, so their series order stays as built above.
@@ -754,12 +718,7 @@ class FamilySpec:
             },
             sweep_for_method={"enum": enum_sweep, "smc": smc_sweep},
             sweep_point={"enum": enum_point, "smc": TABLE_SMC_PARTICLES},
-            method_colors={
-                "enum": line_color(0),
-                "smc": line_color(1),
-                "enum-dsrs-at-start": line_color(3),
-                **{e[0]: line_color(slot) for e, slot in zip(extras, extra_slots)},
-            },
+            method_colors={m: METHOD_COLORS[m] for m in methods},
             method_plot_labels={
                 "enum": "E-Stitch: BFS",
                 "smc": "E-Stitch: SMC",
