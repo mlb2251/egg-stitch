@@ -122,7 +122,7 @@ def _draw_curves(ax, axb, methods: dict[str, dict]) -> None:
         # each labelled with its convergence time in seconds.
         for a, t in big_pts:
             axb.plot([a], [t], "o", color=color, markersize=7, zorder=3)
-            axb.annotate(f"{t:.0f}s", (a, t), textcoords="offset points",
+            axb.annotate(f"{t:.0f}\N{NARROW NO-BREAK SPACE}s", (a, t), textcoords="offset points",
                          xytext=(8, 0), ha="left", va="center", fontsize=7,
                          color=color, zorder=4)
 
