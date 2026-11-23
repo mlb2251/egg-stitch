@@ -388,7 +388,7 @@ def annotate_series(
             annotate_diagram(ax, x, y, label, yoff, atom_colors)
 
     ax.annotate(
-        f"t={time_value:.2f}s",
+        f"t={time_value:.2f}\N{NARROW NO-BREAK SPACE}s",
         xy=(xs[-1], ys[-1]),
         xytext=(8, 0),
         textcoords="offset points",
