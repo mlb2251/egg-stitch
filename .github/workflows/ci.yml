@@ -124,6 +124,14 @@ jobs:
           python-version: "3.11"
       - name: cross-depth-reuse-then-leaf-DB-var regression
         run: ./tests/cross_depth_reuse_then_db_var_regression.sh
+      - name: cross-depth reuse, then lam, then db var
+        run: INPUT=./data/domains/ho-bugs/cross_depth_reuse_then_lam_db_var.json ./tests/cross_depth_reuse_then_db_var_regression.sh
+      - name: cross-depth reuse, then lam, then ho capture
+        run: INPUT=./data/domains/ho-bugs/cross_depth_reuse_then_lam_ho_capture.json ./tests/cross_depth_reuse_then_db_var_regression.sh
+      - name: cross-depth reuse, then lam, then inline
+        run: INPUT=./data/domains/ho-bugs/cross_depth_reuse_then_lam_inline.json ./tests/cross_depth_reuse_then_db_var_regression.sh
+      - name: cross-depth reuse that raises the LCA
+        run: INPUT=./data/domains/ho-bugs/cross_depth_reuse_lca_raise.json ./tests/cross_depth_reuse_then_db_var_regression.sh
 
   # External equivalence-oracle checks. The checker is pure Python and lives
   # under `scripts/`; it reads each fixture's `original_programs` and

@@ -1,0 +1,10 @@
+[
+  "(foo (lam (g0 $0)) (lam (lam (g0 $0))))",
+  "(foo (lam (g1 $0)) (lam (lam (g1 $0))))",
+  "(foo (lam (g2 $0)) (lam (lam (g2 $0))))",
+  "(foo (lam (g3 $0)) (lam (lam (g3 $0))))",
+  "(foo (lam (g4 $0)) (lam (lam (g4 $0))))",
+  "(foo (lam (g5 $0)) (lam (lam (g5 $0))))",
+  "(foo (lam (g6 $0)) (lam (lam (g6 $0))))",
+  "(foo (lam (g7 $0)) (lam (lam (g7 $0))))"
+]

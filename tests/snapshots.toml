@@ -714,6 +714,46 @@ args = ["--language", "lambda-calc"]
 oracle = "beta"
 
 [[case]]
+name = "stitch/cross_depth_reuse_then_lam_db_var"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_reuse_then_lam_db_var.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/cross_depth_reuse_then_lam_ho_capture"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_reuse_then_lam_ho_capture.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/cross_depth_reuse_then_lam_inline"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_reuse_then_lam_inline.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/cross_depth_reuse_lca_raise"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_reuse_lca_raise.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
+name = "stitch/cross_depth_common_binder"
+kind = "stitch"
+input = "data/domains/ho-bugs/cross_depth_common_binder.json"
+backends = "both"
+args = ["--language", "lambda-calc"]
+oracle = "beta"
+
+[[case]]
 name = "stitch/self_loop_arith_unify"
 kind = "stitch"
 input = "data/test/arith_unify.json"

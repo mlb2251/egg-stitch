@@ -202,10 +202,10 @@ fn display_pattern_with_zero_arity_has_no_binder() {
 }
 
 #[test]
-fn display_pattern_shifts_captured_indices_by_occurrence_depth() {
+fn display_pattern_keeps_own_path_captured_indices() {
     // `(app (lam1 ?#0) (lam1 (lam1 ?#0)))` with `var_depth[0] = 1`, capturing `$0`.
-    // The deeper occurrence sits under one extra binder, so its captured index
-    // must shift from `$0` to `$1` (`occ_shift`); the shallower one is unshifted.
+    // `$0` names each occurrence's own `lam1` (below the LCA `app`), so it stays
+    // `$0` at the deeper occurrence; only the head `$k` shifts with depth.
     let shallow = Id::from(3);
     let deep = Id::from(5);
     let nodes: Vec<PatternLang> = vec![
@@ -229,5 +229,5 @@ fn display_pattern_shifts_captured_indices_by_occurrence_depth() {
     let rendered = TypeScript::display_pattern_as_lambda::<OpDB<Op>>(&nodes, &[vec![shallow, deep]], &[1], &[vec![0]]);
 
     assert!(rendered.contains("(app $1 $0)"), "the occurrence at var_depth captures $0 unshifted, got {rendered}");
-    assert!(rendered.contains("(app $2 $1)"), "the occurrence one binder deeper captures $1, got {rendered}");
+    assert!(rendered.contains("(app $2 $0)"), "the occurrence one binder deeper still captures $0, got {rendered}");
 }

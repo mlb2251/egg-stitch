@@ -2,8 +2,8 @@
 //!
 //! When a metavar reused across binder depths is concretized, the captured
 //! value (tracked at the shallow depth) is lifted to each deeper occurrence's
-//! depth — only its *free* indices move; indices bound inside the fragment
-//! stay put. [`shift_db_disc`] does this for a single leaf discriminant (used
+//! depth: only free indices at or above the var's cutoff (see
+//! `pattern::var_cutoffs`) move. [`shift_db_disc`] does this for a single leaf discriminant (used
 //! by `Pattern::expand` for literal expansions); [`shift_extraction`] does it
 //! for a whole postorder fragment (used by `Pattern::concretize`).
 
@@ -11,26 +11,26 @@ use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchOp};
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
 
-/// Shifts the De Bruijn index carried by a leaf discriminant up by `delta`,
-/// leaving structural discriminants and non-DB leaves untouched.
-pub(crate) fn shift_db_disc<F: LanguageFamily, O: StitchOp>(disc: F::Discriminant<O>, delta: i32) -> F::Discriminant<O> {
+/// Shifts the De Bruijn index carried by a leaf discriminant up by `delta` if
+/// it is `>= cutoff`, leaving structural discriminants and non-DB leaves untouched.
+pub(crate) fn shift_db_disc<F: LanguageFamily, O: StitchOp>(disc: F::Discriminant<O>, delta: i32, cutoff: u32) -> F::Discriminant<O> {
     if delta == 0 {
         return disc;
     }
     F::map_discriminant(disc, |leaf: O| match leaf.de_bruijn_index() {
-        Some(i) => O::make_db_var(i + delta).expect("DB-var leaf must reconstruct after shift"),
-        None => leaf,
+        Some(i) if i >= cutoff as i32 => O::make_db_var(i + delta).expect("DB-var leaf must reconstruct after shift"),
+        _ => leaf,
     })
 }
 
 /// Capture-aware copy of postorder `extraction` (root last): free DB indices
-/// shift up by `delta`, indices bound inside the extraction stay. Returns the
-/// new list and its root. Memoised on `(id, cutoff)`; cutoff bumps under each
-/// `binds_child` slot, matching `enode_fv`.
-pub(crate) fn shift_extraction<F: LanguageFamily, O: StitchOp>(extraction: &[F::Apply<OpWithVar<O>>], root: Id, delta: i32) -> (Vec<F::Apply<OpWithVar<O>>>, Id) {
+/// `>= cutoff` shift up by `delta`, the rest stay. Returns the new list and its
+/// root. Memoised on `(id, cutoff)`; cutoff bumps under each `binds_child`
+/// slot, matching `enode_fv`.
+pub(crate) fn shift_extraction<F: LanguageFamily, O: StitchOp>(extraction: &[F::Apply<OpWithVar<O>>], root: Id, delta: i32, cutoff: u32) -> (Vec<F::Apply<OpWithVar<O>>>, Id) {
     let mut out: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
     let mut memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
-    let r = shift_extraction_rec::<F, O>(extraction, root, 0, delta, &mut out, &mut memo);
+    let r = shift_extraction_rec::<F, O>(extraction, root, cutoff, delta, &mut out, &mut memo);
     (out, r)
 }
 
@@ -79,7 +79,7 @@ mod tests {
     fn shifted(s: &str, delta: i32) -> String {
         let expr: RecExpr<Pat> = Pat::parse_program(s).expect("parse");
         let root = Id::from(expr.as_ref().len() - 1);
-        let (out, out_root) = shift_extraction::<LambdaCalc, OpDB<Op>>(expr.as_ref(), root, delta);
+        let (out, out_root) = shift_extraction::<LambdaCalc, OpDB<Op>>(expr.as_ref(), root, delta, 0);
         let out_expr: RecExpr<Pat> = out.into();
         assert_eq!(usize::from(out_root), out_expr.as_ref().len() - 1, "root must be the last node");
         Pat::display_recexpr(&out_expr)

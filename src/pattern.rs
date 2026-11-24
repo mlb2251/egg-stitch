@@ -3,6 +3,7 @@ use crate::revexpr::RevExpr;
 use crate::shift::{shift_db_disc, shift_extraction};
 use egg::{Id, Language, RecExpr};
 use rustc_hash::FxHashMap;
+use std::ops::Range;
 
 /// A partially-built pattern, parameterized by a language family `F` (the
 /// type-level constructor `L<_>`) and a leaf-Op `O` for the program side.
@@ -86,6 +87,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         // Per-occurrence structural depths, snapshotted before any mutation.
         let depths = self.occurrence_depths();
+        let cutoff = var_cutoffs::<F, O>(&self.pattern.nodes, &self.vars, &self.var_depth)[var_idx];
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_occ = self.var_occurrences.remove(var_idx);
@@ -145,7 +147,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         // occurrence's depth — a no-op unless it's a cross-depth shift-variant.
         for var_id in var_positions {
             let delta = depths[usize::from(var_id)] as i32 - parent_depth as i32;
-            let disc = shift_db_disc::<F, O>(target_disc.clone(), delta);
+            let disc = shift_db_disc::<F, O>(target_disc.clone(), delta, cutoff);
             let mut new_children = Vec::with_capacity(num_children);
             for j in 0..num_children {
                 self.pattern.nodes.push(var_node::<F, O>((var_idx + j) as u32));
@@ -295,6 +297,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     pub fn concretize(&mut self, var_idx: usize, extraction: &[F::Apply<OpWithVar<O>>], root: Id) {
         let depths = self.occurrence_depths();
         let ref_depth = self.var_depth[var_idx];
+        let cutoff = var_cutoffs::<F, O>(&self.pattern.nodes, &self.vars, &self.var_depth)[var_idx];
         let var_positions = self.vars.remove(var_idx);
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
@@ -311,7 +314,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         debug_assert_eq!(usize::from(root), extraction.len() - 1, "concretize: root must be the last extraction node");
         for &var_id in &var_positions {
             let delta = depths[usize::from(var_id)] as i32 - ref_depth as i32;
-            let (shifted, shifted_root) = shift_extraction::<F, O>(extraction, root, delta);
+            let (shifted, shifted_root) = shift_extraction::<F, O>(extraction, root, delta, cutoff);
             self.splice_extraction_at(var_id, &shifted, shifted_root);
         }
     }
@@ -348,16 +351,23 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Parents-before-children walk (a `RevExpr` keeps parents below children);
     /// unambiguous since the pattern is a pure tree (one parent per id).
     fn occurrence_depths(&self) -> Vec<u32> {
-        let nodes = &self.pattern.nodes;
-        let mut depth = vec![0u32; nodes.len()];
-        for i in 0..nodes.len() {
-            let d = depth[i];
-            let disc = nodes[i].discriminant();
-            for (j, &c) in nodes[i].children().iter().enumerate() {
-                depth[usize::from(c)] = d + disc.binds_child(j);
-            }
-        }
-        depth
+        tree_parents_and_depths::<F, O>(&self.pattern.nodes).1
+    }
+
+    /// For `reuse(i, j)`: the merged var's cutoff, and per side the range of
+    /// indices its capture must not have free. A side whose occurrences span
+    /// several depths shifted indices in `[c_side, c)` as common binders, which
+    /// the merge reclassifies as own-path (literal).
+    pub fn reuse_cutoffs(&self, i: usize, j: usize) -> (u32, [Range<u32>; 2]) {
+        let (parent, depth) = tree_parents_and_depths::<F, O>(&self.pattern.nodes);
+        let both: Vec<Id> = self.vars[i].iter().chain(&self.vars[j]).copied().collect();
+        let c = self.var_depth[i].min(self.var_depth[j]) - lca_depth(&parent, &depth, &both);
+        let side = |k: usize| {
+            let spans = self.vars[k].iter().any(|&id| depth[usize::from(id)] > self.var_depth[k]);
+            let c_k = self.var_depth[k] - lca_depth(&parent, &depth, &self.vars[k]);
+            if spans { c_k..c } else { c..c }
+        };
+        (c, [side(i), side(j)])
     }
 
     /// `depth[k]` = the fewest edges from the pattern root to any occurrence of `?#k`.
@@ -399,11 +409,56 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     }
 }
 
+/// Parent (`usize::MAX` at the root) and enclosing binder count of every node
+/// of a pure-tree pattern (a `RevExpr` keeps parents below children).
+fn tree_parents_and_depths<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>]) -> (Vec<usize>, Vec<u32>) {
+    let mut parent = vec![usize::MAX; nodes.len()];
+    let mut depth = vec![0u32; nodes.len()];
+    for i in 0..nodes.len() {
+        let disc = nodes[i].discriminant();
+        for (j, &c) in nodes[i].children().iter().enumerate() {
+            parent[usize::from(c)] = i;
+            depth[usize::from(c)] = depth[i] + disc.binds_child(j);
+        }
+    }
+    (parent, depth)
+}
+
+/// Enclosing binder count of the lowest common ancestor of `ids` (of the node
+/// itself for a single id).
+fn lca_depth(parent: &[usize], depth: &[u32], ids: &[Id]) -> u32 {
+    let mut x = usize::from(ids[0]);
+    let mut chain = vec![x];
+    while parent[x] != usize::MAX {
+        x = parent[x];
+        chain.push(x);
+    }
+    let pos: FxHashMap<usize, usize> = chain.iter().enumerate().map(|(k, &x)| (x, k)).collect();
+    let mut top = 0;
+    for &id in &ids[1..] {
+        let mut y = usize::from(id);
+        while !pos.contains_key(&y) {
+            y = parent[y];
+        }
+        top = top.max(pos[&y]);
+    }
+    depth[chain[top]]
+}
+
+/// Per var, the cutoff `c = var_depth - (binders above the LCA of its
+/// occurrences)`. An index `>= c` at the shallowest occurrence names a binder
+/// common to every occurrence, so it shifts by the depth difference; one below
+/// `c` names a binder on the occurrence's own path, so it stays literal.
+pub(crate) fn var_cutoffs<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32]) -> Vec<u32> {
+    let (parent, depth) = tree_parents_and_depths::<F, O>(nodes);
+    vars.iter().zip(var_depth).map(|(ids, &d)| d - lca_depth(&parent, &depth, ids)).collect()
+}
+
 /// Copy a `RevExpr` node slice into a new `RecExpr`, returning it and its
 /// root id. At each occurrence of `?#k`, `var_head(k, local_depth)` may supply
 /// a replacement leaf (`None` keeps `?#k`). If slot `k` is higher-order, the
-/// leaf is then applied to its captured de Bruijn indices, shifted by the
-/// occurrence's extra depth over `var_depth[k]`.
+/// leaf is then applied to its captured de Bruijn indices, those at or above
+/// the var's cutoff shifted by the occurrence's extra depth over `var_depth[k]`.
 pub(crate) fn rebuild_pattern<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>], mut var_head: impl FnMut(usize, u32) -> Option<F::Apply<OpWithVar<O>>>) -> (RecExpr<F::Apply<OpWithVar<O>>>, Id) {
     let mut pos_to_k: FxHashMap<usize, usize> = FxHashMap::default();
     for (k, ids) in vars.iter().enumerate() {
@@ -421,6 +476,7 @@ pub(crate) fn rebuild_pattern<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<
             depth[usize::from(c)] = d + disc.binds_child(j);
         }
     }
+    let cutoffs = var_cutoffs::<F, O>(nodes, vars, var_depth);
     let mut out: RecExpr<F::Apply<OpWithVar<O>>> = RecExpr::default();
     let mut id_map: Vec<Id> = vec![Id::from(0); nodes.len()];
     for i in (0..nodes.len()).rev() {
@@ -433,7 +489,7 @@ pub(crate) fn rebuild_pattern<F: LanguageFamily, O: StitchOp>(nodes: &[F::Apply<
                     head
                 } else {
                     let occ_shift = depth[i] as i32 - var_depth[k] as i32;
-                    let db_args: Vec<i32> = variable_indices[k].iter().rev().map(|&d| d + occ_shift).collect();
+                    let db_args: Vec<i32> = variable_indices[k].iter().rev().map(|&d| if d >= cutoffs[k] as i32 { d + occ_shift } else { d }).collect();
                     F::wrap_pattern_with_db_apps::<O>(&mut out, head, &db_args)
                 }
             }
