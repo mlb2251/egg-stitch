@@ -478,9 +478,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// cursor.
     ///
     /// Concretizations are applied in descending `var_idx` order so earlier
-    /// indices don't shift mid-loop. Cross-depth vars inline too: `concretize`
-    /// shifts the extraction to each occurrence's depth (sound — every surviving
-    /// cross-depth reuse is a genuine shift-variant).
+    /// indices don't shift mid-loop. Cross-depth vars inline too: a useless
+    /// capture has only pattern-bound fv, which `shift_equal` keeps literal at
+    /// every occurrence.
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
         let mut targets: Vec<(usize, Id)> = (0..self.pattern.vars.len()).filter(|&k| !self.pattern.var_frozen[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {

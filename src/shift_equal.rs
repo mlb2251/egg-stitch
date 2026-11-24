@@ -25,35 +25,29 @@ pub fn shift_clamp<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> u32 {
     (max_db + 1).max(0) as u32
 }
 
-/// Shift-aware equality of two captured e-class ids at depths `da` and `db`.
-/// Returns true when both captures represent the same underlying value at
-/// different binder contexts. `clamp` bounds the binder depth tracked in the
+/// Shift-aware equality of two captured e-class ids at depths `da` and `db`:
+/// true iff the deeper capture is `Shift_{|da - db|, min(da, db)}` of the
+/// shallower one. `clamp` bounds the binder depth tracked in the
 /// recursion key (see [`shift_clamp`]); pass `shift_clamp(egraph)`.
 pub fn shift_equal<L: StitchLanguage>(a: Id, b: Id, da: u32, db: u32, egraph: &StitchEgraph<L>, clamp: u32) -> bool {
     let a = egraph.find(a);
     let b = egraph.find(b);
-    let (lo, hi) = (da.min(db), da.max(db));
-    if a == b {
-        // Same captured e-class at both sites. At equal depth it's trivially the
-        // same value. Across a depth gap it is shift-equal-to-itself only when
-        // *closed*: a free index `$i` names a different binder at each depth
-        // (`$i` ≠ `$i + s`), so a non-closed same-e-class capture is NOT a
-        // genuine shift-variant.
-        return da == db || egraph[a].data.fv.is_empty();
-    }
     if da == db {
-        return false;
+        return a == b;
     }
     let (deeper, shallower) = if da > db { (a, b) } else { (b, a) };
     let mut ctx = ShiftEqCtx {
         egraph,
-        s: hi - lo,
+        s: da.abs_diff(db),
         clamp,
         memo: FxHashMap::default(),
         stack: FxHashSet::default(),
     };
     let mut tainted = false;
-    ctx.shift_eq_struct(deeper, shallower, 0, &mut tainted)
+    // Cutoff is the shallow depth, not 0: a pattern-bound index must name the
+    // same relative binder at every occurrence, because binders a later expand
+    // adds under this var sit at the same offset at each occurrence.
+    ctx.shift_eq_struct(deeper, shallower, da.min(db), &mut tainted)
 }
 
 /// Recursion state for shift-equality: the e-graph, the shift `s`, the
@@ -71,7 +65,7 @@ struct ShiftEqCtx<'a, L: StitchLanguage> {
 
 impl<'a, L: StitchLanguage> ShiftEqCtx<'a, L> {
     /// True iff `deeper` is the shift-up-by-`s` form of `shallower`, where
-    /// `init_depth` counts the binders entered so far within the recursion.
+    /// indices below `init_depth` are bound and left unshifted.
     ///
     /// When the two ids are the *same* e-class, that holds only if the `+s`
     /// shift is the identity on it — i.e. it has no free index relative to the
@@ -105,9 +99,7 @@ impl<'a, L: StitchLanguage> ShiftEqCtx<'a, L> {
             // Same e-class on both sides: it is shift-equal to itself across the
             // gap only when the `+s` shift is the identity on it. Every free
             // index (`>= init_depth`) is relabeled to `+s`, so this holds iff
-            // there is no free index — i.e. all fv are bound within the
-            // recursion (`< init_depth`). This is exactly the top-level
-            // `fv.is_empty()` test, lifted to the current recursion frame.
+            // there is no free index, i.e. all fv are `< init_depth`.
             return self.egraph[deeper].data.fv.iter().all(|&i| i < init_depth as i32);
         }
         let key = (deeper, shallower, init_depth);
@@ -191,24 +183,25 @@ mod tests {
         eg.add(LambdaCalcLanguage::App([f, x]))
     }
 
-    /// A non-closed same-e-class capture is NOT shift-equal across a depth gap:
-    /// `$0`@3 and `$0`@1 name different binders (`$0` ≠ `$0 + 2`), so the merge
-    /// must be rejected. Equal depth or a closed value is fine.
+    /// A same-e-class capture is shift-equal across a depth gap iff every fv is
+    /// below the shallow depth: `$0`@2 vs `$0`@0 is free at the shallow site
+    /// (`$0` ≠ `$0 + 2`), while `$0`@3 vs `$0`@1 is pattern-bound and unshifted.
     #[test]
-    fn same_eclass_cross_depth_requires_closed() {
+    fn same_eclass_cross_depth_requires_pattern_bound_fv() {
         let mut eg: StitchEgraph<Lam> = egg::EGraph::default();
         let v0 = db(&mut eg, 0); // `$0`, fv {0}
         let closed = sym(&mut eg, "c"); // closed leaf, fv {}
         eg.rebuild();
         let c = shift_clamp(&eg);
-        assert!(!shift_equal(v0, v0, 3, 1, &eg, c), "non-closed same-e-class, depth gap → reject");
-        assert!(!shift_equal(v0, v0, 1, 3, &eg, c), "argument order is symmetric");
+        assert!(!shift_equal(v0, v0, 2, 0, &eg, c), "free same-e-class, depth gap → reject");
+        assert!(!shift_equal(v0, v0, 0, 2, &eg, c), "argument order is symmetric");
+        assert!(shift_equal(v0, v0, 3, 1, &eg, c), "pattern-bound `$0` stays `$0` at the deeper site");
         assert!(shift_equal(v0, v0, 2, 2, &eg, c), "equal depth, same e-class → equal");
         assert!(shift_equal(closed, closed, 3, 1, &eg, c), "closed value is shift-invariant");
     }
 
     /// A genuine shift-variant — distinct e-classes related by the depth gap —
-    /// IS shift-equal; an unrelated index is not.
+    /// IS shift-equal; an unrelated index, or a shifted pattern-bound one, is not.
     #[test]
     fn genuine_shift_variant_leaf() {
         let mut eg: StitchEgraph<Lam> = egg::EGraph::default();
@@ -217,17 +210,15 @@ mod tests {
         let v1 = db(&mut eg, 1);
         eg.rebuild();
         let c = shift_clamp(&eg);
-        // `$2` = `$0` shifted up by gap (3-1)=2 → shift-equal.
-        assert!(shift_equal(v2, v0, 3, 1, &eg, c), "$2@3 is $0@1 shifted by 2");
-        // `$1` is not `$0` shifted by 2.
-        assert!(!shift_equal(v1, v0, 3, 1, &eg, c), "$1 ≠ $0 + 2");
-        // Same gap, the relationship must match the gap exactly.
-        assert!(shift_equal(v1, v0, 2, 1, &eg, c), "$1@2 is $0@1 shifted by 1");
+        assert!(shift_equal(v2, v0, 2, 0, &eg, c), "$2@2 is $0@0 shifted by 2");
+        assert!(!shift_equal(v1, v0, 2, 0, &eg, c), "$1 ≠ $0 + 2");
+        assert!(shift_equal(v1, v0, 1, 0, &eg, c), "$1@1 is $0@0 shifted by 1");
+        assert!(!shift_equal(v2, v0, 3, 1, &eg, c), "$0@1 is pattern-bound, so it must stay $0");
     }
 
     /// A capture with a binder: a DB index bound *inside* the term must match
-    /// exactly, only the free ones shift. `(lam ($0 $2))` vs `(lam ($0 $1))`
-    /// across a gap of 1 — the bound `$0` matches, the free `$2`/`$1` shifts.
+    /// exactly, only the free ones shift. In `(lam ($0 $2))`@1 vs
+    /// `(lam ($0 $1))`@0 the bound `$0` matches and the free `$2`/`$1` shifts.
     #[test]
     fn shift_variant_under_binder() {
         let mut eg: StitchEgraph<Lam> = egg::EGraph::default();
@@ -248,9 +239,8 @@ mod tests {
         eg.rebuild();
         let c = shift_clamp(&eg);
         // gap 1: free part shifts ($2 = $1 + 1), bound `$0` matches → shift-equal.
-        assert!(shift_equal(d, s, 2, 1, &eg, c), "(lam ($0 $2))@2 is (lam ($0 $1))@1 shifted by 1");
-        // same e-class `(lam ($0 $1))` (fv {0}, non-closed) across a gap → reject.
-        assert!(!shift_equal(s, s, 2, 1, &eg, c), "non-closed same e-class across a gap");
+        assert!(shift_equal(d, s, 1, 0, &eg, c), "(lam ($0 $2))@1 is (lam ($0 $1))@0 shifted by 1");
+        assert!(!shift_equal(s, s, 1, 0, &eg, c), "same e-class with a free index across a gap");
     }
 
     /// A closed compound (`(lam $0)` is closed) is shift-invariant: the same
