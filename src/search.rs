@@ -8,6 +8,7 @@ use crate::shift_equal::shift_equal;
 use clap::ValueEnum;
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
+use std::ops::Range;
 use std::time::{Duration, Instant};
 
 /// Which order the freeze rule ranks a pattern's metavariables in (applied by
@@ -114,6 +115,13 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         }
         skip
     }
+}
+
+/// Reuse predicate for captures `a` at depth `da` and `b` at depth `db`, given
+/// `Pattern::reuse_cutoffs`' merged cutoff and per-side forbidden fv ranges.
+fn reuse_compatible<F: LanguageFamily, O: StitchOp>(a: Id, b: Id, da: u32, db: u32, (c, [ra, rb]): &(u32, [Range<u32>; 2]), shared: &SharedSearchData<F, O>) -> bool {
+    let avoids = |id: Id, r: &Range<u32>| !shared.egraph[id].data.fv.iter().any(|&i| i >= 0 && r.contains(&(i as u32)));
+    avoids(a, ra) && avoids(b, rb) && shift_equal(a, b, da, db, *c, &shared.egraph, shared.shift_clamp)
 }
 
 /// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
@@ -365,10 +373,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// whose kept-eclass fv lands in `[min_depth, merged_depth)` are
     /// representable at the deep site but unbound at the shallow one — those
     /// are dropped. Same-depth reuse has an empty gap.
-    fn build_subset_matches_reuse(parent_matches: &[MatchAtEClass], var_idx: usize, second_var_idx: usize, shallow_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
-        let keep_idx = var_idx.min(second_var_idx);
-        let drop_idx = var_idx.max(second_var_idx);
-        let deep_idx = if shallow_idx == var_idx { second_var_idx } else { var_idx };
+    /// `cut` is `Pattern::reuse_cutoffs(shallow_idx, deep_idx)`.
+    fn build_subset_matches_reuse(parent_matches: &[MatchAtEClass], shallow_idx: usize, deep_idx: usize, min_depth: u32, merged_depth: u32, cut: &(u32, [Range<u32>; 2]), shared: &SharedSearchData<F, O>) -> (Vec<MatchAtEClass>, usize) {
+        let keep_idx = shallow_idx.min(deep_idx);
+        let drop_idx = shallow_idx.max(deep_idx);
         rebuild_matches(
             parent_matches,
             |m| {
@@ -377,7 +385,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // Build the joint (slots, filtered rows) over the factor(s)
                 // carrying the two coupled slots, then collapse keep/drop and
                 // re-decompose.
-                let pred = |a: egg::Id, b: egg::Id| shift_equal(a, b, min_depth, merged_depth, &shared.egraph, shared.shift_clamp);
+                let pred = |a: egg::Id, b: egg::Id| reuse_compatible(a, b, min_depth, merged_depth, cut, shared);
                 let (joint_slots, joint_rows): (Vec<usize>, Vec<Vec<Id>>) = if sf == df {
                     let f = &m.factors[sf];
                     let rows = f.rows.iter().filter(|r| pred(r[sp], r[dp])).cloned().collect();
@@ -478,9 +486,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// cursor.
     ///
     /// Concretizations are applied in descending `var_idx` order so earlier
-    /// indices don't shift mid-loop. Cross-depth vars inline too: a useless
-    /// capture has only pattern-bound fv, which `shift_equal` keeps literal at
-    /// every occurrence.
+    /// indices don't shift mid-loop. Cross-depth vars inline too: `concretize`
+    /// shifts the extraction to each occurrence's depth (sound — every surviving
+    /// cross-depth reuse is a genuine shift-variant).
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
         let mut targets: Vec<(usize, Id)> = (0..self.pattern.vars.len()).filter(|&k| !self.pattern.var_frozen[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {
@@ -615,7 +623,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // `pattern.reuse` collapses them.
                 let d_a = self.pattern.var_depth[var_idx];
                 let d_b = self.pattern.var_depth[second_var_idx];
-                let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
+                let (shallow_idx, deep_idx) = if d_a <= d_b { (var_idx, second_var_idx) } else { (second_var_idx, var_idx) };
+                let cut = self.pattern.reuse_cutoffs(shallow_idx, deep_idx);
                 new_pattern.reuse(var_idx, second_var_idx);
                 // Sequencing rule: a non-dominant reuse freezes the merged var.
                 // Re-expanding it would re-derive (via the reuse↔expand diamond)
@@ -630,7 +639,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 if self.freeze_rule && freeze_reused {
                     new_pattern.var_frozen[var_idx.min(second_var_idx)] = true;
                 }
-                Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
+                Self::build_subset_matches_reuse(&self.matches, shallow_idx, deep_idx, d_a.min(d_b), d_a.max(d_b), &cut, shared)
             }
         };
         SearchState {
@@ -906,7 +915,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 // filter scaled by the other factors' product; when they're in
                 // different factors it's a filtered cross-product of the two,
                 // scaled by the rest. Avoids materialising the product.
-                let pred = |a: Id, b: Id| shift_equal(a, b, di, dj, &shared.egraph, shared.shift_clamp);
+                let cut = self.pattern.reuse_cutoffs(i, j);
+                let pred = |a: Id, b: Id| reuse_compatible(a, b, di, dj, &cut, shared);
                 let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
                     let (fi, pi) = m.locate_slot(i);
                     let (fj, pj) = m.locate_slot(j);

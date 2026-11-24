@@ -34,9 +34,11 @@ fn walk<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>
                 e.insert(fid);
                 true
             }
-            // A reused state metavar covers the same slot at every occurrence;
-            // compare the follow subtrees modulo their η-wraps
-            // (`unwrap_pattern_db_apps`): equal iff they wrap the same metavar.
+            // A reused state metavar covers the same slot at every occurrence,
+            // but a cross-depth HO capture renders each occurrence's η-wrap with
+            // a depth-shifted db index (`(?#k $0)` shallow vs `(?#k $1)` deep), so
+            // the wraps aren't subtree-equal. Collapse both through
+            // `unwrap_pattern_db_apps` first: equal iff they wrap the same metavar.
             std::collections::hash_map::Entry::Occupied(e) => {
                 let prev = F::unwrap_pattern_db_apps::<O>(&follow.nodes, *e.get());
                 let cur = F::unwrap_pattern_db_apps::<O>(&follow.nodes, fid);

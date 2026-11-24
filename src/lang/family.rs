@@ -110,9 +110,9 @@ pub trait LanguageFamily: Clone + 'static {
     /// applied to its captured indices if the slot is higher-order. Inlining a
     /// call site `(fn_N a_0 … a_{n-1})` against the result and β-reducing
     /// recovers the original captured term.
-    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], variable_indices: &[Vec<i32>]) -> String {
+    fn display_pattern_as_lambda<O: StitchOp>(nodes: &[Self::Apply<OpWithVar<O>>], vars: &[Vec<Id>], var_depth: &[u32], variable_indices: &[Vec<i32>]) -> String {
         let arity = vars.len();
-        let (mut out, body) = crate::pattern::rebuild_pattern::<Self, O>(nodes, vars, variable_indices, |k, depth| {
+        let (mut out, body) = crate::pattern::rebuild_pattern::<Self, O>(nodes, vars, var_depth, variable_indices, |k, depth| {
             let idx = (arity - 1 - k) as i32 + depth as i32;
             // Leaf ops without a DB-var variant (plain `Op`) fall back to a
             // `$n` symbol, which renders identically.

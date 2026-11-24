@@ -18,6 +18,7 @@ pub mod results;
 pub mod revexpr;
 pub mod search;
 pub mod shared;
+pub mod shift;
 pub mod shift_equal;
 pub mod smc;
 
